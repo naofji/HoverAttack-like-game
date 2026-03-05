@@ -7,7 +7,8 @@ import {
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
     COLOR_NORMAL_BLOCK, COLOR_NORMAL_BLOCK_BORDER,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
-    COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER
+    COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
+    LANDMINE_COUNT, LANDMINE_WIDTH, LANDMINE_HEIGHT
 } from '../utils/Constants.js';
 
 // --- Block rendering styles (lookup table) ---
@@ -33,6 +34,7 @@ export class Map {
         this.height = MAP_HEIGHT;
         this.grid = [];
         this.blockHP = [];
+        this.landmineSpawns = []; // Pixel coordinates for landmine placement
 
         this._generate();
     }
@@ -72,6 +74,9 @@ export class Map {
 
         // Step 6: Sprinkle hard blocks
         this._placeHardBlocks();
+
+        // Step 7: Determine landmine spawn positions
+        this.landmineSpawns = this._findLandminePositions();
     }
 
     _isBorder(r, c) {
@@ -81,24 +86,31 @@ export class Map {
 
     _smoothStep() {
         const newGrid = [];
+        const newHP = [];
         for (let r = 0; r < this.rows; r++) {
             newGrid[r] = [];
+            newHP[r] = [];
             for (let c = 0; c < this.cols; c++) {
                 if (this._isBorder(r, c)) {
                     newGrid[r][c] = this.grid[r][c];
+                    newHP[r][c] = this.blockHP[r][c];
                     continue;
                 }
                 const neighbors = this._countNeighbors(r, c);
                 if (neighbors >= 5) {
                     newGrid[r][c] = BLOCK_NORMAL;
+                    newHP[r][c] = 1;
                 } else if (neighbors <= 3) {
                     newGrid[r][c] = BLOCK_EMPTY;
+                    newHP[r][c] = 0;
                 } else {
                     newGrid[r][c] = this.grid[r][c];
+                    newHP[r][c] = this.blockHP[r][c];
                 }
             }
         }
         this.grid = newGrid;
+        this.blockHP = newHP;
     }
 
     _countNeighbors(r, c) {
@@ -170,6 +182,44 @@ export class Map {
                 }
             }
         }
+    }
+
+    /**
+     * Find valid floor positions for landmine placement.
+     * A valid position is an empty tile with a solid tile directly below it.
+     * Returns an array of {x, y} pixel coordinates.
+     */
+    _findLandminePositions() {
+        const candidates = [];
+        // Exclude borders and the start area (top-left 15x12 tiles)
+        for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
+            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
+                // Skip start area
+                if (r < 14 && c < 16) continue;
+                // Empty tile with solid floor below
+                if (this.grid[r][c] === BLOCK_EMPTY &&
+                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+
+        // Shuffle and pick LANDMINE_COUNT positions
+        const spawns = [];
+        const count = Math.min(LANDMINE_COUNT, candidates.length);
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (let i = 0; i < count; i++) {
+            const tile = candidates[i];
+            // Place centered on the tile floor
+            spawns.push({
+                x: tile.c * TILE_SIZE + (TILE_SIZE - LANDMINE_WIDTH) / 2,
+                y: (tile.r + 1) * TILE_SIZE - LANDMINE_HEIGHT // Sit on top of the floor tile
+            });
+        }
+        return spawns;
     }
 
     // ------------------------------------------

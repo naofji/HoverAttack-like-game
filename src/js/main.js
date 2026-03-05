@@ -15,6 +15,7 @@ import { Carrier } from './entities/Carrier.js';
 import { Missile } from './entities/Missile.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, createExplosion } from './entities/Particle.js';
+import { Landmine } from './entities/Landmine.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 
@@ -38,6 +39,7 @@ const Game = {
     carrier: null,
     projectiles: [],  // missiles + grenades
     particles: [],
+    landmines: [],
 
     // Game state
     score: 0,
@@ -73,6 +75,9 @@ const Game = {
             this.carrier.y - 24
         );
         this.player.docked = true;
+
+        // Create landmines from map spawn data
+        this._spawnLandmines();
 
         // Camera follows player
         this.camera.follow(this.player);
@@ -162,6 +167,34 @@ const Game = {
             this.particles[i].update();
             if (!this.particles[i].alive) {
                 this.particles.splice(i, 1);
+            }
+        }
+
+        // --- Update landmines ---
+        for (let i = this.landmines.length - 1; i >= 0; i--) {
+            const mine = this.landmines[i];
+            mine.update();
+
+            // Player collision
+            if (this.player && this.player.alive && !this.player.docked &&
+                this.player.invincibleTimer <= 0 && mine.collidesWith(this.player)) {
+                mine.detonate(this.player);
+            }
+
+            // Projectile collision (missiles/grenades can trigger mines)
+            if (mine.alive) {
+                for (const proj of this.projectiles) {
+                    if (proj.alive && !proj.exploded && mine.collidesWithPoint(proj.x, proj.y)) {
+                        mine.detonate(null); // Sympathetic detonation, no player damage
+                        proj.alive = false;
+                        proj.exploded = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!mine.alive) {
+                this.landmines.splice(i, 1);
             }
         }
 
@@ -298,6 +331,11 @@ const Game = {
             particle.draw(ctx);
         }
 
+        // Landmines (drawn on top of map, below player)
+        for (const mine of this.landmines) {
+            mine.draw(ctx);
+        }
+
         ctx.restore();
 
         // --- Draw HUD (screen-space) ---
@@ -341,6 +379,7 @@ const Game = {
         this.missionsCompleted = 0;
         this.projectiles = [];
         this.particles = [];
+        this.landmines = [];
         this.gameState = 'playing';
 
         // Regenerate map
@@ -357,6 +396,9 @@ const Game = {
         this.player.docked = true;
         this.camera.follow(this.player);
         this.camera.snapToTarget();
+
+        // Recreate landmines
+        this._spawnLandmines();
     },
 
     // ==========================================
@@ -372,6 +414,14 @@ const Game = {
     /** Add to score */
     addScore(points) {
         this.score += points;
+    },
+
+    /** Create Landmine entities from the map's spawn data */
+    _spawnLandmines() {
+        this.landmines = [];
+        for (const pos of this.map.landmineSpawns) {
+            this.landmines.push(new Landmine(this, pos.x, pos.y));
+        }
     },
 
     // ==========================================

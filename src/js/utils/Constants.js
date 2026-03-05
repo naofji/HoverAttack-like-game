@@ -81,6 +81,14 @@ export const HUD_BG_COLOR = 'rgba(0, 0, 0, 0.85)';
 export const PARTICLE_LIFETIME = 40; // frames
 export const EXPLOSION_PARTICLE_COUNT = 36;
 
+// --- Landmine (Trap) ---
+export const LANDMINE_WIDTH = 12;
+export const LANDMINE_HEIGHT = 6;
+export const LANDMINE_DAMAGE = 25;
+export const LANDMINE_KNOCKBACK_VY = -6;  // Upward launch on detonation
+export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
+export const LANDMINE_COUNT = 60;          // Number to scatter across the map
+
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
