@@ -8,7 +8,7 @@ import {
     PLAYER_MAX_FALLING_SPEED,
     MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT
 } from '../utils/Constants.js';
-import { EnemyBullet } from './EnemyBullet.js';
+import { Missile } from './Missile.js';
 import { Grenade } from './Grenade.js';
 
 export class EnemyAttacker {
@@ -175,8 +175,9 @@ export class EnemyAttacker {
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
         } else {
-            // Fire enemy bullet (missile-like)
-            this.game.enemyBullets.push(new EnemyBullet(this.game, muzzleX, muzzleY, angle));
+            // Fire enemy missile (with trail, red color)
+            const missile = new Missile(this.game, muzzleX, muzzleY, angle, false);
+            this.game.projectiles.push(missile);
         }
 
         this.fireTimer = this.config.fireInterval;

@@ -226,19 +226,46 @@ const Game = {
             }
         }
 
-        // --- Player projectiles vs enemies collision ---
+        // --- Projectile collision ---
         for (const proj of this.projectiles) {
             if (!proj.alive || proj.exploded) continue;
-            for (const enemy of this.enemies) {
-                if (!enemy.alive) continue;
-                // AABB check
-                if (proj.x > enemy.x && proj.x < enemy.x + enemy.width &&
-                    proj.y > enemy.y && proj.y < enemy.y + enemy.height) {
-                    enemy.takeDamage(proj instanceof Missile ? 15 : 30);
-                    this.spawnExplosion(proj.x, proj.y, 12);
-                    proj.alive = false;
-                    proj.exploded = true;
-                    break;
+
+            if (proj.isPlayerOwned || proj.isPlayerOwned === undefined) {
+                // Player projectiles vs enemies
+                for (const enemy of this.enemies) {
+                    if (!enemy.alive) continue;
+                    if (proj.x > enemy.x && proj.x < enemy.x + enemy.width &&
+                        proj.y > enemy.y && proj.y < enemy.y + enemy.height) {
+                        enemy.takeDamage(proj instanceof Missile ? 15 : 30);
+                        this.spawnExplosion(proj.x, proj.y, 12);
+                        proj.alive = false;
+                        proj.exploded = true;
+                        break;
+                    }
+                }
+            } else {
+                // Enemy projectiles vs player
+                const player = this.player;
+                if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
+                    if (proj.x > player.x && proj.x < player.x + player.width &&
+                        proj.y > player.y && proj.y < player.y + player.height) {
+                        player.takeDamage(15);
+                        this.spawnExplosion(proj.x, proj.y, 8);
+                        proj.alive = false;
+                        proj.exploded = true;
+                        continue;
+                    }
+                }
+                // Enemy projectiles vs carrier
+                const carrier = this.carrier;
+                if (carrier && carrier.alive) {
+                    if (proj.x > carrier.x && proj.x < carrier.x + carrier.width &&
+                        proj.y > carrier.y && proj.y < carrier.y + carrier.height) {
+                        carrier.takeDamage(10);
+                        this.spawnExplosion(proj.x, proj.y, 8);
+                        proj.alive = false;
+                        proj.exploded = true;
+                    }
                 }
             }
         }
