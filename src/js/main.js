@@ -16,6 +16,8 @@ import { Missile } from './entities/Missile.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, createExplosion } from './entities/Particle.js';
 import { Landmine } from './entities/Landmine.js';
+import { EnemyTank } from './entities/EnemyTank.js';
+import { EnemyBullet } from './entities/EnemyBullet.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 
@@ -40,6 +42,8 @@ const Game = {
     projectiles: [],  // missiles + grenades
     particles: [],
     landmines: [],
+    enemies: [],
+    enemyBullets: [],
 
     // Game state
     score: 0,
@@ -78,6 +82,9 @@ const Game = {
 
         // Create landmines from map spawn data
         this._spawnLandmines();
+
+        // Create enemy tanks from map spawn data
+        this._spawnEnemies();
 
         // Camera follows player
         this.camera.follow(this.player);
@@ -200,6 +207,39 @@ const Game = {
 
         // --- Update map ---
         this.map.update();
+
+        // --- Update enemies ---
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            this.enemies[i].update();
+            if (!this.enemies[i].alive) {
+                this.enemies.splice(i, 1);
+            }
+        }
+
+        // --- Update enemy bullets ---
+        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
+            this.enemyBullets[i].update();
+            if (!this.enemyBullets[i].alive) {
+                this.enemyBullets.splice(i, 1);
+            }
+        }
+
+        // --- Player projectiles vs enemies collision ---
+        for (const proj of this.projectiles) {
+            if (!proj.alive || proj.exploded) continue;
+            for (const enemy of this.enemies) {
+                if (!enemy.alive) continue;
+                // AABB check
+                if (proj.x > enemy.x && proj.x < enemy.x + enemy.width &&
+                    proj.y > enemy.y && proj.y < enemy.y + enemy.height) {
+                    enemy.takeDamage(proj instanceof Missile ? 15 : 30);
+                    this.spawnExplosion(proj.x, proj.y, 12);
+                    proj.alive = false;
+                    proj.exploded = true;
+                    break;
+                }
+            }
+        }
 
         // --- End frame input tracking ---
         this.input.endFrame();
@@ -336,6 +376,16 @@ const Game = {
             mine.draw(ctx);
         }
 
+        // Enemies
+        for (const enemy of this.enemies) {
+            enemy.draw(ctx);
+        }
+
+        // Enemy bullets
+        for (const bullet of this.enemyBullets) {
+            bullet.draw(ctx);
+        }
+
         ctx.restore();
 
         // --- Draw HUD (screen-space) ---
@@ -380,6 +430,8 @@ const Game = {
         this.projectiles = [];
         this.particles = [];
         this.landmines = [];
+        this.enemies = [];
+        this.enemyBullets = [];
         this.gameState = 'playing';
 
         // Regenerate map
@@ -399,6 +451,9 @@ const Game = {
 
         // Recreate landmines
         this._spawnLandmines();
+
+        // Recreate enemies
+        this._spawnEnemies();
     },
 
     // ==========================================
@@ -421,6 +476,15 @@ const Game = {
         this.landmines = [];
         for (const pos of this.map.landmineSpawns) {
             this.landmines.push(new Landmine(this, pos.x, pos.y));
+        }
+    },
+
+    /** Create EnemyTank entities from the map's spawn data */
+    _spawnEnemies() {
+        this.enemies = [];
+        this.enemyBullets = [];
+        for (const pos of this.map.enemyTankSpawns) {
+            this.enemies.push(new EnemyTank(this, pos.x, pos.y));
         }
     },
 

@@ -8,7 +8,8 @@ import {
     COLOR_NORMAL_BLOCK, COLOR_NORMAL_BLOCK_BORDER,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
-    LANDMINE_COUNT, LANDMINE_WIDTH, LANDMINE_HEIGHT
+    LANDMINE_COUNT, LANDMINE_WIDTH, LANDMINE_HEIGHT,
+    ENEMY_TANK_COUNT, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT
 } from '../utils/Constants.js';
 
 // --- Block rendering styles (lookup table) ---
@@ -35,6 +36,7 @@ export class Map {
         this.grid = [];
         this.blockHP = [];
         this.landmineSpawns = []; // Pixel coordinates for landmine placement
+        this.enemyTankSpawns = []; // Pixel coordinates for enemy tank placement
 
         this._generate();
     }
@@ -77,6 +79,9 @@ export class Map {
 
         // Step 7: Determine landmine spawn positions
         this.landmineSpawns = this._findLandminePositions();
+
+        // Step 8: Determine enemy tank spawn positions
+        this.enemyTankSpawns = this._findEnemyTankPositions();
     }
 
     _isBorder(r, c) {
@@ -217,6 +222,43 @@ export class Map {
             spawns.push({
                 x: tile.c * TILE_SIZE + (TILE_SIZE - LANDMINE_WIDTH) / 2,
                 y: (tile.r + 1) * TILE_SIZE - LANDMINE_HEIGHT // Sit on top of the floor tile
+            });
+        }
+        return spawns;
+    }
+
+    /**
+     * Find valid positions for enemy hover tanks.
+     * Needs an empty tile (and empty tile above) with solid floor below.
+     * Returns an array of {x, y} pixel coordinates.
+     */
+    _findEnemyTankPositions() {
+        const candidates = [];
+        for (let r = BORDER_THICKNESS + 1; r < this.rows - BORDER_THICKNESS; r++) {
+            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
+                // Skip start area (larger exclusion zone)
+                if (r < 16 && c < 20) continue;
+                // Need empty tile + empty tile above + solid floor below
+                if (this.grid[r][c] === BLOCK_EMPTY &&
+                    this.grid[r - 1][c] === BLOCK_EMPTY &&
+                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+
+        // Shuffle and pick ENEMY_TANK_COUNT positions
+        const spawns = [];
+        const count = Math.min(ENEMY_TANK_COUNT, candidates.length);
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (let i = 0; i < count; i++) {
+            const tile = candidates[i];
+            spawns.push({
+                x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_TANK_WIDTH) / 2,
+                y: (tile.r + 1) * TILE_SIZE - ENEMY_TANK_HEIGHT // Hover just above the floor
             });
         }
         return spawns;

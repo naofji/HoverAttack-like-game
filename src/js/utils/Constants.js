@@ -89,6 +89,24 @@ export const LANDMINE_KNOCKBACK_VY = -6;  // Upward launch on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
 export const LANDMINE_COUNT = 60;          // Number to scatter across the map
 
+// --- Enemy Tank (Hover) ---
+export const ENEMY_TANK_WIDTH = 16;
+export const ENEMY_TANK_HEIGHT = 12;
+export const ENEMY_TANK_HP = 30;
+export const ENEMY_TANK_SPEED = 0.5;
+export const ENEMY_TANK_SIGHT_RANGE = 200;   // px - detection range for player
+export const ENEMY_TANK_FIRE_INTERVAL = 90;  // frames between shots (~1.5s)
+export const ENEMY_TANK_SCORE = 200;
+export const ENEMY_TANK_COUNT = 30;          // Number to scatter across the map
+export const ENEMY_TANK_MAX_FALLING_SPEED = 3;
+
+// --- Enemy Bullet ---
+export const ENEMY_BULLET_SPEED = 3;
+export const ENEMY_BULLET_RADIUS = 2;
+export const ENEMY_BULLET_DAMAGE_PLAYER = 15;
+export const ENEMY_BULLET_DAMAGE_CARRIER = 10;
+export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
+
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
