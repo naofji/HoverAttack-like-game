@@ -130,18 +130,38 @@ export class EnemyAttacker {
     _chasePlayer(player) {
         if (!player) return;
         const dx = player.x - this.x;
+        const dy = player.y - this.y;
 
-        // Move towards player
-        if (Math.abs(dx) > 8) {
-            this.vx = dx > 0 ? this.maxSpeed : -this.maxSpeed;
-        } else {
-            this.vx = 0;
+        const mType = this.config.movementType || 'stop_and_shoot';
+
+        if (mType === 'stop_and_shoot') {
+            if (Math.abs(dx) > 16) {
+                this.vx = dx > 0 ? this.maxSpeed : -this.maxSpeed;
+            } else {
+                this.vx = 0;
+            }
+            if (this.onGround && this.jumpCooldown <= 0 && dy < -16) {
+                this._jump();
+            }
         }
+        else if (mType === 'pace_and_jump') {
+            this.vx = this.patrolDir * this.maxSpeed;
+            if (Math.random() < 0.02) { // 2% chance to turn toward player each frame
+                this.patrolDir = dx > 0 ? 1 : -1;
+            }
+        }
+        else if (mType === 'chase_and_jump') {
+            if (Math.abs(dx) > 4) {
+                this.patrolDir = dx > 0 ? 1 : -1;
+            }
+            this.vx = this.patrolDir * this.maxSpeed;
 
-        // Jump if player is above or wall ahead
-        const playerAbove = player.y < this.y - 16;
-        if (this.onGround && this.jumpCooldown <= 0 && playerAbove) {
-            this._jump();
+            if (this.onGround && this.jumpCooldown <= 0) {
+                // Jump frequently or if player is above
+                if (dy < -16 || Math.random() < 0.02) {
+                    this._jump();
+                }
+            }
         }
     }
 
@@ -164,7 +184,14 @@ export class EnemyAttacker {
 
         const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
         const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
-        const angle = Math.atan2(dy, dx);
+        let angle = Math.atan2(dy, dx);
+
+        const accuracy = this.config.aimAccuracy !== undefined ? this.config.aimAccuracy : 1.0;
+
+        if (Math.random() > accuracy) {
+            // add random spread up to +/- ~30 degrees (0.5 radians)
+            angle += (Math.random() - 0.5) * 1.0;
+        }
 
         const muzzleX = this.x + this.width / 2 + Math.cos(angle) * 10;
         const muzzleY = this.y + this.height / 2 + Math.sin(angle) * 6;
@@ -203,22 +230,36 @@ export class EnemyAttacker {
             }
             this.vx = 0;
 
+            const mType = this.config.movementType || 'stop_and_shoot';
             // Try to jump over the wall
             if (this.onGround && this.jumpCooldown <= 0) {
                 this._jump();
-            } else if (this.aiState === 'patrol') {
-                this.patrolDir *= -1; // Reverse patrol
+            } else if (this.aiState === 'patrol' || mType === 'pace_and_jump' || mType === 'chase_and_jump') {
+                this.patrolDir *= -1; // Reverse patrol direction
             }
         }
 
-        // --- Cliff check (patrol mode only) ---
-        if (this.aiState === 'patrol' && this.onGround && !hitWall) {
+        // --- Cliff check ---
+        if (this.onGround && !hitWall) {
+            const isPatrolling = (this.aiState === 'patrol');
+            const mType = this.config.movementType;
+
             const frontX = this.patrolDir > 0
                 ? this.x + this.width + 2
                 : this.x - 2;
             const feetY = this.y + this.height + 4;
+
             if (!map.isSolidAtPixel(frontX, feetY)) {
-                this.patrolDir *= -1; // Reverse at edge
+                if (isPatrolling) {
+                    this.patrolDir *= -1; // Reverse at edge when patrolling naturally
+                } else {
+                    if (mType === 'pace_and_jump' && this.jumpCooldown <= 0) {
+                        this._jump(); // Jump over gap!
+                    } else if (mType === 'pace_and_jump') {
+                        this.patrolDir *= -1; // Turn back if can't jump
+                    }
+                    // For chase_and_jump or stop_and_shoot, just fall down
+                }
             }
         }
 

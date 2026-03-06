@@ -121,6 +121,8 @@ export const ENEMY_ATTACKER_TYPES = {
         score: 100,
         spawnWeight: 60,      // 60%
         usesGrenades: false,
+        aimAccuracy: 0.5,
+        movementType: 'pace_and_jump',
         bodyColor: '#55CCDD',
         headColor: '#44AABB',
         visorColor: '#FFFFFF',
@@ -137,6 +139,8 @@ export const ENEMY_ATTACKER_TYPES = {
         score: 300,
         spawnWeight: 25,      // 25%
         usesGrenades: false,
+        aimAccuracy: 0.0,
+        movementType: 'stop_and_shoot',
         bodyColor: '#44AA44',
         headColor: '#338833',
         visorColor: '#FFFF66',
@@ -154,6 +158,8 @@ export const ENEMY_ATTACKER_TYPES = {
         spawnWeight: 15,      // 15%
         usesGrenades: true,
         grenadeChance: 0.25,  // 25% chance to throw grenade instead of missile
+        aimAccuracy: 0.7,
+        movementType: 'chase_and_jump',
         bodyColor: '#CC3333',
         headColor: '#AA2222',
         visorColor: '#FFCC00',
