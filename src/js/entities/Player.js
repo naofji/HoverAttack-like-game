@@ -172,9 +172,9 @@ export class Player {
             hitHMap = true;
             this.x -= this.vx;
             if (this.vx > 0) {
-                this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.01;
+                this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
             } else if (this.vx < 0) {
-                this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.01;
+                this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
             }
             this.vx = 0;
         }
@@ -291,6 +291,8 @@ export class Player {
             { x: this.x + this.width - 2, y: this.y + this.height - 1 }, // bottom-right
             { x: this.x + this.width / 2, y: this.y + 2 },  // mid-top
             { x: this.x + this.width / 2, y: this.y + this.height - 1 }, // mid-bottom
+            { x: this.x + 2, y: this.y + this.height / 2 },  // mid-left
+            { x: this.x + this.width - 2, y: this.y + this.height / 2 }, // mid-right
         ];
         for (const p of points) {
             if (map.isSolidAtPixel(p.x, p.y)) return true;

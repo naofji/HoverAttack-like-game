@@ -107,6 +107,60 @@ export const ENEMY_BULLET_DAMAGE_PLAYER = 15;
 export const ENEMY_BULLET_DAMAGE_CARRIER = 10;
 export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
 
+// --- Enemy Attacker (Humanoid) ---
+export const ENEMY_ATTACKER_TOTAL_COUNT = 40;
+export const ENEMY_ATTACKER_TYPES = {
+    standard: {
+        name: 'standard',
+        hp: 15,
+        speed: 0.9,
+        jumpForce: -4.0,
+        fireInterval: 120,    // 2 seconds
+        sightRange: 180,
+        score: 100,
+        spawnWeight: 60,      // 60%
+        usesGrenades: false,
+        bodyColor: '#55CCDD',
+        headColor: '#44AABB',
+        visorColor: '#FFFFFF',
+        backpackColor: '#338899',
+        exhaustColor: '#33DDEE',
+    },
+    heavy: {
+        name: 'heavy',
+        hp: 80,
+        speed: 0.5,
+        jumpForce: -3.0,
+        fireInterval: 90,     // 1.5 seconds
+        sightRange: 150,
+        score: 300,
+        spawnWeight: 25,      // 25%
+        usesGrenades: false,
+        bodyColor: '#44AA44',
+        headColor: '#338833',
+        visorColor: '#FFFF66',
+        backpackColor: '#226622',
+        exhaustColor: '#66FF66',
+    },
+    rival: {
+        name: 'rival',
+        hp: 50,
+        speed: 1.75,
+        jumpForce: -6.0,
+        fireInterval: 75,     // 1.25 seconds
+        sightRange: 250,
+        score: 500,
+        spawnWeight: 15,      // 15%
+        usesGrenades: true,
+        grenadeChance: 0.25,  // 25% chance to throw grenade instead of missile
+        bodyColor: '#CC3333',
+        headColor: '#AA2222',
+        visorColor: '#FFCC00',
+        backpackColor: '#882222',
+        exhaustColor: '#FF6644',
+    },
+};
+
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';

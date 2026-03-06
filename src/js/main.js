@@ -6,7 +6,8 @@ import { Input } from './utils/Input.js';
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
-    HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT
+    HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+    ENEMY_ATTACKER_TYPES
 } from './utils/Constants.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
@@ -18,6 +19,7 @@ import { Particle, createExplosion } from './entities/Particle.js';
 import { Landmine } from './entities/Landmine.js';
 import { EnemyTank } from './entities/EnemyTank.js';
 import { EnemyBullet } from './entities/EnemyBullet.js';
+import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 
@@ -479,12 +481,28 @@ const Game = {
         }
     },
 
-    /** Create EnemyTank entities from the map's spawn data */
+    /** Create EnemyTank and EnemyAttacker entities from the map's spawn data */
     _spawnEnemies() {
         this.enemies = [];
         this.enemyBullets = [];
+
+        // Spawn hover tanks
         for (const pos of this.map.enemyTankSpawns) {
             this.enemies.push(new EnemyTank(this, pos.x, pos.y));
+        }
+
+        // Spawn humanoid attackers with weighted random type selection
+        const types = Object.values(ENEMY_ATTACKER_TYPES);
+        const totalWeight = types.reduce((sum, t) => sum + t.spawnWeight, 0);
+        for (const pos of this.map.enemyAttackerSpawns) {
+            // Weighted random pick
+            let roll = Math.random() * totalWeight;
+            let chosen = types[0];
+            for (const t of types) {
+                roll -= t.spawnWeight;
+                if (roll <= 0) { chosen = t; break; }
+            }
+            this.enemies.push(new EnemyAttacker(this, pos.x, pos.y, chosen));
         }
     },
 

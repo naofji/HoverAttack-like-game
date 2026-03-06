@@ -9,7 +9,8 @@ import {
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     LANDMINE_COUNT, LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    ENEMY_TANK_COUNT, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT
+    ENEMY_TANK_COUNT, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
+    ENEMY_ATTACKER_TOTAL_COUNT, PLAYER_WIDTH, PLAYER_HEIGHT
 } from '../utils/Constants.js';
 
 // --- Block rendering styles (lookup table) ---
@@ -37,6 +38,7 @@ export class Map {
         this.blockHP = [];
         this.landmineSpawns = []; // Pixel coordinates for landmine placement
         this.enemyTankSpawns = []; // Pixel coordinates for enemy tank placement
+        this.enemyAttackerSpawns = []; // Pixel coordinates for enemy attacker placement
 
         this._generate();
     }
@@ -82,6 +84,9 @@ export class Map {
 
         // Step 8: Determine enemy tank spawn positions
         this.enemyTankSpawns = this._findEnemyTankPositions();
+
+        // Step 9: Determine enemy attacker spawn positions
+        this.enemyAttackerSpawns = this._findEnemyAttackerPositions();
     }
 
     _isBorder(r, c) {
@@ -259,6 +264,40 @@ export class Map {
             spawns.push({
                 x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_TANK_WIDTH) / 2,
                 y: (tile.r + 1) * TILE_SIZE - ENEMY_TANK_HEIGHT // Hover just above the floor
+            });
+        }
+        return spawns;
+    }
+
+    /**
+     * Find valid positions for enemy attackers (humanoid robots).
+     * Needs 2 empty tiles above a solid floor for the 24px tall body.
+     */
+    _findEnemyAttackerPositions() {
+        const candidates = [];
+        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS; r++) {
+            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
+                if (r < 16 && c < 20) continue; // Skip start area
+                // Need 2 empty tiles above solid floor
+                if (this.grid[r][c] === BLOCK_EMPTY &&
+                    this.grid[r - 1][c] === BLOCK_EMPTY &&
+                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+
+        const spawns = [];
+        const count = Math.min(ENEMY_ATTACKER_TOTAL_COUNT, candidates.length);
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (let i = 0; i < count; i++) {
+            const tile = candidates[i];
+            spawns.push({
+                x: tile.c * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) / 2,
+                y: (tile.r + 1) * TILE_SIZE - PLAYER_HEIGHT
             });
         }
         return spawns;
