@@ -149,6 +149,51 @@ export class HUD {
             ctx.fillRect(hpX, hpY, hpW * hpRatio, hpH);
             ctx.strokeStyle = '#666';
             ctx.strokeRect(hpX, hpY, hpW, hpH);
+
+            // --- Carrier Direction Arrow ---
+            const cam = this.game.camera;
+            // Check if carrier center is outside the camera view
+            const cx = carrier.x + carrier.width / 2;
+            const cy = carrier.y + carrier.height / 2;
+            const isOffScreen =
+                cx < cam.x ||
+                cx > cam.x + w ||
+                cy < cam.y ||
+                cy > cam.y + this.game.canvas.height;
+
+            if (isOffScreen && (!player || !player.docked)) {
+                // Determine screen center relative to world
+                const screenCenterX = cam.x + w / 2;
+                const screenCenterY = cam.y + this.game.canvas.height / 2;
+
+                // Angle from screen center to carrier
+                const angle = Math.atan2(cy - screenCenterY, cx - screenCenterX);
+
+                // Place arrow near the edge of the screen, accounting for HUD
+                const radiusX = (w / 2) - 30;
+                const radiusY = (this.game.canvas.height / 2) - Math.max(HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT) - 30;
+
+                // Calculate display position in screen coordinates
+                const arrowX = w / 2 + Math.cos(angle) * radiusX;
+                const arrowY = this.game.canvas.height / 2 + Math.sin(angle) * radiusY;
+
+                // Draw yellow triangle pointing in `angle` direction
+                ctx.translate(arrowX, arrowY);
+                ctx.rotate(angle);
+
+                ctx.fillStyle = '#FFFF00'; // Yellow
+                ctx.beginPath();
+                ctx.moveTo(10, 0);     // Tip
+                ctx.lineTo(-8, 8);     // Bottom right
+                ctx.lineTo(-4, 0);     // Inner indent
+                ctx.lineTo(-8, -8);    // Bottom left
+                ctx.closePath();
+                ctx.fill();
+
+                // Reset transform
+                ctx.rotate(-angle);
+                ctx.translate(-arrowX, -arrowY);
+            }
         }
 
         ctx.restore();

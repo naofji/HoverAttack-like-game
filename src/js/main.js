@@ -52,6 +52,7 @@ const Game = {
     score: 0,
     missionsCompleted: 0,
     gameState: 'playing', // 'playing', 'gameover', 'paused'
+    showMiniMap: false,
 
     // ==========================================
     init() {
@@ -130,6 +131,11 @@ const Game = {
     // ==========================================
     update(deltaTime) {
         if (this.gameState !== 'playing') return;
+
+        // --- MiniMap Toggle ---
+        if (this.input.isKeyPressed('KeyM')) {
+            this.showMiniMap = !this.showMiniMap;
+        }
 
         // --- Docking / Undocking ---
         this._handleDocking();
@@ -424,7 +430,59 @@ const Game = {
         // --- Game Over overlay ---
         if (this.gameState === 'gameover') {
             this._drawGameOver(ctx);
+        } else if (this.showMiniMap) {
+            this._drawMiniMap(ctx);
         }
+    },
+
+    _drawMiniMap(ctx) {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const mm = this.map.miniMapCanvas;
+
+        if (!mm) return;
+
+        // Center of the screen
+        const mmX = (w - mm.width) / 2;
+        const mmY = (h - mm.height) / 2;
+
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+
+        // Draw the cached static map
+        ctx.drawImage(mm, mmX, mmY);
+
+        // Draw border
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mmX, mmY, mm.width, mm.height);
+
+        ctx.globalAlpha = 1.0;
+
+        // Helper to draw a dot
+        const drawDot = (worldX, worldY, color, size = 2) => {
+            const px = mmX + (worldX / TILE_SIZE) * this.map.miniMapScale;
+            const py = mmY + (worldY / TILE_SIZE) * this.map.miniMapScale;
+            ctx.fillStyle = color;
+            ctx.fillRect(px - size / 2, py - size / 2, size, size);
+        };
+
+        // Carrier (Blue square)
+        if (this.carrier && this.carrier.alive) {
+            drawDot(this.carrier.x + this.carrier.width / 2, this.carrier.y + this.carrier.height / 2, '#0088FF', 5);
+        }
+
+        // Enemies (Red squares)
+        for (const enemy of this.enemies) {
+            if (enemy.alive) drawDot(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, '#FF3333', 3);
+        }
+
+        // Player (White square)
+        if (this.player && this.player.alive && !this.player.docked) {
+            drawDot(this.player.x + this.player.width / 2, this.player.y + this.player.height / 2, '#FFFFFF', 4);
+        }
+
+        ctx.restore();
     },
 
     _drawGameOver(ctx) {

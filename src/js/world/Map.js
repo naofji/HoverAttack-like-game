@@ -87,6 +87,9 @@ export class Map {
 
         // Step 9: Determine enemy attacker spawn positions
         this.enemyAttackerSpawns = this._findEnemyAttackerPositions();
+
+        // Step 10: Generate off-screen mini-map
+        this._generateMiniMap();
     }
 
     _isBorder(r, c) {
@@ -336,6 +339,33 @@ export class Map {
             }
         }
         return destroyed;
+    }
+
+    // ------------------------------------------
+    // Mini-Map Generation
+    // ------------------------------------------
+
+    _generateMiniMap() {
+        this.miniMapScale = 2; // 2 pixels per tile
+        this.miniMapCanvas = document.createElement('canvas');
+        this.miniMapCanvas.width = this.cols * this.miniMapScale;
+        this.miniMapCanvas.height = this.rows * this.miniMapScale;
+        const ctx = this.miniMapCanvas.getContext('2d');
+
+        // Draw background
+        ctx.fillStyle = COLOR_CAVE_BG;
+        ctx.fillRect(0, 0, this.miniMapCanvas.width, this.miniMapCanvas.height);
+
+        // Draw static blocks
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                const block = this.grid[r][c];
+                if (block === BLOCK_EMPTY) continue;
+
+                ctx.fillStyle = BLOCK_STYLES[block].fill;
+                ctx.fillRect(c * this.miniMapScale, r * this.miniMapScale, this.miniMapScale, this.miniMapScale);
+            }
+        }
     }
 
     // ------------------------------------------
