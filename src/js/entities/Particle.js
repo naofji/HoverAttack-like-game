@@ -104,3 +104,28 @@ export function createExplosion(x, y, count) {
 
     return particles;
 }
+
+// --------------------------------------------
+// Factory: Damage Sparks
+// --------------------------------------------
+const SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500'];
+
+export function createSparks(x, y) {
+    const particles = [];
+    const count = 3 + Math.floor(Math.random() * 3); // 3 to 5 sparks
+
+    for (let i = 0; i < count; i++) {
+        // Upwards spread
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+        const speed = 1.5 + Math.random() * 2.5;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        const color = SPARK_COLORS[Math.floor(Math.random() * SPARK_COLORS.length)];
+        const size = 2;
+        const lifetime = 10 + Math.floor(Math.random() * 10);
+
+        particles.push(new Particle(x, y, vx, vy, color, size, lifetime));
+    }
+
+    return particles;
+}

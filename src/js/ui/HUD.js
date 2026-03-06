@@ -6,7 +6,7 @@ import {
     CANVAS_WIDTH,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     HUD_FONT, HUD_COLOR, HUD_BG_COLOR,
-    HOVER_MAX_FUEL, PLAYER_MAX_HP
+    HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP
 } from '../utils/Constants.js';
 
 export class HUD {
@@ -125,6 +125,21 @@ export class HUD {
         if (player && player.alive) {
             const hpRatio = player.hp / PLAYER_MAX_HP;
             const hpX = 160;
+            const hpY = bottomY + 6;
+            const hpW = 50;
+            const hpH = 6;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(hpX, hpY, hpW, hpH);
+            ctx.fillStyle = hpRatio > 0.5 ? '#00DD00' : hpRatio > 0.2 ? '#DDAA00' : '#DD0000';
+            ctx.fillRect(hpX, hpY, hpW * hpRatio, hpH);
+            ctx.strokeStyle = '#666';
+            ctx.strokeRect(hpX, hpY, hpW, hpH);
+        }
+
+        // HP bar for carrier
+        if (carrier && carrier.alive) {
+            const hpRatio = carrier.hp / CARRIER_MAX_HP;
+            const hpX = 500;
             const hpY = bottomY + 6;
             const hpW = 50;
             const hpH = 6;

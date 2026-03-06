@@ -87,6 +87,7 @@ export const LANDMINE_HEIGHT = 6;
 export const LANDMINE_DAMAGE = 25;
 export const LANDMINE_KNOCKBACK_VY = -6;  // Upward launch on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
+export const LANDMINE_BLAST_RADIUS = 50;   // Area of effect damage radius (~3 tiles)
 export const LANDMINE_COUNT = 60;          // Number to scatter across the map
 
 // --- Enemy Tank (Hover) ---

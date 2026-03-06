@@ -7,7 +7,8 @@ import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
-    ENEMY_ATTACKER_TYPES
+    ENEMY_ATTACKER_TYPES,
+    LANDMINE_BLAST_RADIUS
 } from './utils/Constants.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
@@ -15,7 +16,7 @@ import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Missile } from './entities/Missile.js';
 import { Grenade } from './entities/Grenade.js';
-import { Particle, createExplosion } from './entities/Particle.js';
+import { Particle, createExplosion, createSparks } from './entities/Particle.js';
 import { Landmine } from './entities/Landmine.js';
 import { EnemyTank } from './entities/EnemyTank.js';
 import { EnemyBullet } from './entities/EnemyBullet.js';
@@ -148,10 +149,7 @@ const Game = {
             if (!this.player.alive && this.player.lives > 0) {
                 this._respawnPlayer();
             } else if (!this.player.alive && this.player.lives <= 0) {
-                // Check if carrier also dead
-                if (!this.carrier.alive && this.carrier.lives <= 0) {
-                    this.gameState = 'gameover';
-                }
+                this.gameState = 'gameover';
             }
         }
 
@@ -187,14 +185,14 @@ const Game = {
             // Player collision
             if (this.player && this.player.alive && !this.player.docked &&
                 this.player.invincibleTimer <= 0 && mine.collidesWith(this.player)) {
-                mine.detonate(this.player);
+                mine.detonate();
             }
 
             // Projectile collision (missiles/grenades can trigger mines)
             if (mine.alive) {
                 for (const proj of this.projectiles) {
                     if (proj.alive && !proj.exploded && mine.collidesWithPoint(proj.x, proj.y)) {
-                        mine.detonate(null); // Sympathetic detonation, no player damage
+                        mine.detonate();
                         proj.alive = false;
                         proj.exploded = true;
                         break;
@@ -492,6 +490,28 @@ const Game = {
     /** Spawn explosion particles at position */
     spawnExplosion(x, y, count) {
         const newParticles = createExplosion(x, y, count);
+        this.particles.push(...newParticles);
+
+        // Any explosion triggers nearby mines
+        if (this.landmines) {
+            for (const mine of this.landmines) {
+                if (mine.alive) {
+                    const ex = mine.x + mine.width / 2;
+                    const ey = mine.y + mine.height / 2;
+                    const dx = ex - x;
+                    const dy = ey - y;
+                    if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) {
+                        // Detonate on next frame/tick to avoid deep call stacks
+                        mine.detonate();
+                    }
+                }
+            }
+        }
+    },
+
+    /** Spawn damage sparks at position */
+    spawnSparks(x, y) {
+        const newParticles = createSparks(x, y);
         this.particles.push(...newParticles);
     },
 

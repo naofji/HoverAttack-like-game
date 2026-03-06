@@ -6,7 +6,8 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     LANDMINE_DAMAGE, LANDMINE_KNOCKBACK_VY,
     LANDMINE_BLINK_INTERVAL,
-    EXPLOSION_PARTICLE_COUNT
+    EXPLOSION_PARTICLE_COUNT,
+    LANDMINE_BLAST_RADIUS
 } from '../utils/Constants.js';
 
 export class Landmine {
@@ -51,10 +52,9 @@ export class Landmine {
     }
 
     /**
-     * Detonate the mine: spawn explosion, optionally damage a player.
-     * @param {Player|null} target - The entity to deal damage/knockback to, or null for sympathetic detonation.
+     * Detonate the mine: spawn explosion, deal AoE damage, and trigger chain reactions.
      */
-    detonate(target) {
+    detonate() {
         if (!this.alive) return;
         this.alive = false;
 
@@ -63,14 +63,33 @@ export class Landmine {
         const cy = this.y + this.height / 2;
         this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
 
-        // Damage and knockback the target
-        if (target && target.alive) {
-            target.takeDamage(LANDMINE_DAMAGE);
-            target.vy = LANDMINE_KNOCKBACK_VY;
-            // Also give a small horizontal push away from center
-            const pushDir = (target.x + target.width / 2) > cx ? 1 : -1;
-            target.vx = pushDir * 3;
-        }
+        const applyAoE = (entity) => {
+            if (!entity || !entity.alive || entity === this) return;
+            // Use center of entity
+            const ex = entity.x + entity.width / 2;
+            const ey = entity.y + entity.height / 2;
+            const dx = ex - cx;
+            const dy = ey - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist <= LANDMINE_BLAST_RADIUS) {
+                if (typeof entity.takeDamage === 'function') {
+                    entity.takeDamage(LANDMINE_DAMAGE);
+                    if (entity.vy !== undefined) entity.vy = LANDMINE_KNOCKBACK_VY;
+                    if (entity.vx !== undefined) {
+                        const pushDir = dx > 0 ? 1 : -1;
+                        entity.vx = pushDir * 3;
+                    }
+                } else if (typeof entity.detonate === 'function') {
+                    entity.detonate(); // Chain reaction
+                }
+            }
+        };
+
+        applyAoE(this.game.player);
+        applyAoE(this.game.carrier);
+        for (const enemy of this.game.enemies) applyAoE(enemy);
+        for (const mine of this.game.landmines) applyAoE(mine);
     }
 
     draw(ctx) {
