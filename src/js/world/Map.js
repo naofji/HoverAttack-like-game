@@ -74,10 +74,10 @@ export class Map {
         this.rooms.push({ centerR: this.rows - 12 + 4, centerC: this.cols - 15 + 6 });
 
         // Step 4: Scatter random rooms (Chambers)
-        const numRooms = 25 + Math.floor(Math.random() * 10);
+        const numRooms = 20 + Math.floor(Math.random() * 8); // Slightly fewer rooms, but larger
         for (let i = 0; i < numRooms; i++) {
-            const w = 4 + Math.floor(Math.random() * 8); // Width 4-11
-            const h = 4 + Math.floor(Math.random() * 8); // Height 4-11
+            const w = 8 + Math.floor(Math.random() * 12); // Width 8-19 (was 4-11)
+            const h = 8 + Math.floor(Math.random() * 12); // Height 8-19 (was 4-11)
             const c = BORDER_THICKNESS + Math.floor(Math.random() * (this.cols - BORDER_THICKNESS * 2 - w));
             const r = BORDER_THICKNESS + Math.floor(Math.random() * (this.rows - BORDER_THICKNESS * 2 - h));
 
@@ -183,8 +183,8 @@ export class Map {
             const bestTo = unconnected.splice(bestToIdx, 1)[0];
 
             // Carve a tunnel between bestFrom and bestTo
-            // Varying tunnel width between 2 and 4
-            const tunnelWidth = 2 + Math.floor(Math.random() * 3);
+            // Varying tunnel width between 3 and 5 for larger feel
+            const tunnelWidth = 3 + Math.floor(Math.random() * 3);
             this._carveTunnelPath(bestFrom.centerR, bestFrom.centerC, bestTo.centerR, bestTo.centerC, tunnelWidth);
 
             connected.push(bestTo);
