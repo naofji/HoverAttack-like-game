@@ -15,6 +15,8 @@ export class Carrier {
         this.game = game;
         this.x = x;
         this.y = y;
+        this.spawnX = x;
+        this.spawnY = y;
         this.width = CARRIER_WIDTH;
         this.height = CARRIER_HEIGHT;
         this.vx = 0;
@@ -175,11 +177,19 @@ export class Carrier {
         this.alive = false;
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 25);
         this.lives--;
+
+        // Force undock player if docked
+        const player = this.game.player;
+        if (player && player.alive && player.docked) {
+            player.docked = false;
+            player.vy = -3; // Throw player slightly up into the air
+            player.walkFrame = 2; // Standing straight
+        }
     }
 
-    respawn(x, y) {
-        this.x = x;
-        this.y = y;
+    respawn() {
+        this.x = this.spawnX;
+        this.y = this.spawnY;
         this.vx = 0;
         this.vy = 0;
         this.hp = CARRIER_MAX_HP;

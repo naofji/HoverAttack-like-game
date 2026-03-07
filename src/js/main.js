@@ -144,7 +144,16 @@ const Game = {
         this._handleShooting();
 
         // --- Update carrier ---
-        if (this.carrier) this.carrier.update();
+        if (this.carrier) {
+            this.carrier.update();
+
+            // Check carrier respawn
+            if (!this.carrier.alive && this.carrier.lives > 0) {
+                this._respawnCarrier();
+            } else if (!this.carrier.alive && this.carrier.lives <= 0) {
+                this.gameState = 'gameover';
+            }
+        }
 
         // --- Update player ---
         if (this.player) {
@@ -364,6 +373,17 @@ const Game = {
                 this.carrier.x + this.carrier.width / 2 - this.player.width / 2,
                 this.carrier.y - this.player.height
             );
+        }
+    },
+
+    _respawnCarrier() {
+        if (this.carrier) {
+            // Respawn carrier at its original spawn coordinates
+            this.carrier.respawn();
+
+            // Camera immediately snaps back to carrier location
+            this.camera.follow(this.carrier);
+            this.camera.snapToTarget();
         }
     },
 

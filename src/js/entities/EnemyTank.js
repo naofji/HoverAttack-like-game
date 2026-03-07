@@ -133,15 +133,37 @@ export class EnemyTank {
         if (this.fireTimer > 0) return;
 
         const player = this.game.player;
-        if (!player || !player.alive) return;
+        const carrier = this.game.carrier;
+        let target = null;
+        let minDist = ENEMY_TANK_SIGHT_RANGE;
 
-        // Calculate distance to player
-        const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
-        const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Check if player is a valid target
+        if (player && player.alive && !player.docked) {
+            const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+            const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= minDist) {
+                minDist = dist;
+                target = player;
+            }
+        }
 
-        if (dist <= ENEMY_TANK_SIGHT_RANGE) {
-            // Fire at player
+        // Check if carrier is a valid target (carrier is wide, so use center distance)
+        if (carrier && carrier.alive) {
+            const dx = (carrier.x + carrier.width / 2) - (this.x + this.width / 2);
+            const dy = (carrier.y + carrier.height / 2) - (this.y + this.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            // If player is docked, we prioritize carrier anyway since player is invalid
+            if (dist <= minDist) {
+                minDist = dist;
+                target = carrier;
+            }
+        }
+
+        if (target) {
+            // Fire at target
+            const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+            const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
             const angle = Math.atan2(dy, dx);
             const bulletX = this.x + this.width / 2 + Math.cos(angle) * 8;
             const bulletY = this.y + this.height / 2 + Math.sin(angle) * 4;

@@ -30,7 +30,7 @@ export const PLAYER_HEIGHT = 24;
 export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
 export const PLAYER_MAX_FALLING_SPEED = 8.0;  // Terminal velocity for falling
-export const PLAYER_STUN_FALL_SPEED = 7.0;    // Falling speed that triggers landing stun
+export const PLAYER_STUN_FALL_SPEED = 8.0;    // Falling speed that triggers landing stun
 export const PLAYER_STUN_DURATION = 40;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
 export const PLAYER_BURST_FORCE = -6.0;
@@ -135,7 +135,7 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 0.5,
         jumpForce: -3.0,
         fireInterval: 90,     // 1.5 seconds
-        sightRange: 150,
+        sightRange: 300,
         score: 300,
         spawnWeight: 25,      // 25%
         usesGrenades: false,

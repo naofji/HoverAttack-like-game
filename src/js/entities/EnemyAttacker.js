@@ -47,11 +47,11 @@ export class EnemyAttacker {
         if (!this.alive) return;
 
         this.hovering = false; // Reset hover state each frame
-        const player = this.game.player;
-        const playerDist = this._distToPlayer();
+        const target = this._getClosestTarget();
+        const targetDist = target ? this._distToTarget(target) : Infinity;
 
         // --- AI Decision ---
-        if (player && player.alive && !player.docked && playerDist <= this.config.sightRange) {
+        if (target && targetDist <= this.config.sightRange) {
             this.aiState = 'chase';
         } else {
             this.aiState = 'patrol';
@@ -59,7 +59,7 @@ export class EnemyAttacker {
 
         // --- Movement ---
         if (this.aiState === 'chase') {
-            this._chasePlayer(player);
+            this._chaseTarget(target);
         } else {
             this._patrol();
         }
@@ -87,9 +87,9 @@ export class EnemyAttacker {
         if (this.vx > 0.1) this.facingRight = true;
         else if (this.vx < -0.1) this.facingRight = false;
 
-        // --- Face player when chasing ---
-        if (this.aiState === 'chase' && player && player.alive) {
-            this.facingRight = player.x > this.x;
+        // --- Face target when chasing ---
+        if (this.aiState === 'chase' && target) {
+            this.facingRight = (target.x + target.width / 2) > (this.x + this.width / 2);
         }
 
         // --- Walk animation ---
@@ -117,11 +117,43 @@ export class EnemyAttacker {
     // AI
     // ------------------------------------------
 
-    _distToPlayer() {
+    _getClosestTarget() {
+        // Evaluate player and carrier to find the primary target
         const player = this.game.player;
-        if (!player || !player.alive) return Infinity;
-        const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
-        const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+        const carrier = this.game.carrier;
+
+        // If player is docked, target the carrier instead
+        if (player && player.alive && player.docked && carrier && carrier.alive) {
+            return carrier;
+        }
+
+        let target = null;
+        let minDist = Infinity;
+
+        // Check player
+        if (player && player.alive && !player.docked) {
+            const d = this._distToTarget(player);
+            if (d < minDist) {
+                minDist = d;
+                target = player;
+            }
+        }
+
+        // Check carrier
+        if (carrier && carrier.alive) {
+            const d = this._distToTarget(carrier);
+            if (d < minDist) {
+                target = carrier;
+            }
+        }
+
+        return target;
+    }
+
+    _distToTarget(target) {
+        if (!target) return Infinity;
+        const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+        const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
         return Math.sqrt(dx * dx + dy * dy);
     }
 
@@ -129,10 +161,13 @@ export class EnemyAttacker {
         this.vx = this.patrolDir * this.maxSpeed * 0.5; // Walk slowly when patrolling
     }
 
-    _chasePlayer(player) {
-        if (!player) return;
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
+    _chaseTarget(target) {
+        if (!target) return;
+        // Aim for the center of the target
+        const targetX = target.x + target.width / 2;
+        const targetY = target.y + target.height / 2;
+        const dx = targetX - (this.x + this.width / 2);
+        const dy = targetY - (this.y + this.height / 2);
 
         const mType = this.config.movementType || 'stop_and_shoot';
 
@@ -191,11 +226,13 @@ export class EnemyAttacker {
             return;
         }
 
-        const player = this.game.player;
-        if (!player || !player.alive) return;
+        const target = this._getClosestTarget();
+        if (!target) return;
 
-        const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
-        const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+        const targetX = target.x + target.width / 2;
+        const targetY = target.y + target.height / 2;
+        const dx = targetX - (this.x + this.width / 2);
+        const dy = targetY - (this.y + this.height / 2);
         let angle = Math.atan2(dy, dx);
 
         const accuracy = this.config.aimAccuracy !== undefined ? this.config.aimAccuracy : 1.0;
