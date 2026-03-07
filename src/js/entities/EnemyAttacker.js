@@ -6,6 +6,7 @@ import {
     TILE_SIZE, GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     PLAYER_MAX_FALLING_SPEED,
+    HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
     MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT
 } from '../utils/Constants.js';
 import { Missile } from './Missile.js';
@@ -37,10 +38,13 @@ export class EnemyAttacker {
         this.aiState = 'patrol'; // 'patrol' or 'chase'
         this.jumpCooldown = 0;
 
-        // Animation
+        // Animation & State
         this.walkFrame = 2;
         this.walkTimer = 0;
         this.hovering = false;
+
+        // Hover fuel support (used if movementType allows hovering)
+        this.hoverFuel = HOVER_MAX_FUEL;
     }
 
     update() {
@@ -62,6 +66,11 @@ export class EnemyAttacker {
             this._chaseTarget(target);
         } else {
             this._patrol();
+        }
+
+        // --- Hover Fuel Recovery ---
+        if (this.onGround) {
+            this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + HOVER_FUEL_RECOVERY);
         }
 
         // --- Gravity ---
@@ -202,9 +211,10 @@ export class EnemyAttacker {
                 }
             } else {
                 // Airborne: hover if player is above or just to stay airborne longer
-                if (dy < -8 || (this.vy > 0 && Math.random() < 0.1)) {
+                if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() < 0.1))) {
                     this.hovering = true;
                     this.vy -= 0.6; // Hover upward thrust
+                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                     // Cap rising speed
                     if (this.vy < -4.0) this.vy = -4.0;
                 }

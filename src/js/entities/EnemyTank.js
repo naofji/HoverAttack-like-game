@@ -68,19 +68,17 @@ export class EnemyTank {
     _moveAndCollide() {
         const map = this.game.map;
 
-        // --- Horizontal ---
+        // --- Horizontal & Step Up ---
         this.x += this.vx;
         if (this._collidesWithMap()) {
-            // Try to climb a 1-tile step
+            // Hit a wall. Try to step up 1 tile (16px).
             this.y -= TILE_SIZE;
-            const canClimb = !this._collidesWithMap();
-            this.y += TILE_SIZE;
-
-            if (canClimb) {
-                this.y -= 3; // Smooth step up
+            if (!this._collidesWithMap()) {
+                // Successfully stepped up! (Keep vy=0 to avoid bounce)
                 this.vy = 0;
             } else {
-                // Can't climb — reverse patrol direction
+                // Wall is too high. Cannot step up. Reverse direction.
+                this.y += TILE_SIZE;
                 this.x -= this.vx;
                 this.vx = 0;
                 this.patrolDir *= -1;
@@ -90,14 +88,23 @@ export class EnemyTank {
         // Horizontal Entity Collision
         this._checkHorizontalEntities();
 
-        // --- Check for cliffs (don't walk off edges) ---
-        const frontX = this.patrolDir > 0
-            ? this.x + this.width + 2
-            : this.x - 2;
-        const feetY = this.y + this.height + 4;
-        if (!map.isSolidAtPixel(frontX, feetY)) {
-            // No ground ahead — reverse
-            this.patrolDir *= -1;
+        // --- Check for cliffs / Step Down ---
+        if (this.vy === 0) { // Only check if we are on the ground (vy=0 indicates grounded before this frame)
+            const frontX = this.patrolDir > 0 ? this.x + this.width + 2 : this.x - 2;
+            const currentFloorY = this.y + this.height + 2;
+
+            if (!map.isSolidAtPixel(frontX, currentFloorY)) {
+                // Ground directly ahead is empty. Check if there is a floor 1 step down.
+                const stepDownFloorY = currentFloorY + TILE_SIZE;
+
+                if (!map.isSolidAtPixel(frontX, stepDownFloorY)) {
+                    // Drop is 2 or more blocks deep! Turn around to avoid falling into a pit.
+                    this.x -= this.vx;
+                    this.vx = 0;
+                    this.patrolDir *= -1;
+                }
+                // Else: It's a 1-block step down. Do nothing, let the tank walk off and fall 1 tile naturally.
+            }
         }
 
         // --- Vertical ---

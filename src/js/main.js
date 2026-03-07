@@ -611,9 +611,33 @@ const Game = {
         this.enemies = [];
         this.enemyBullets = [];
 
+        // Helper function to find a non-overlapping spawn offset
+        const resolveOverlap = (baseX, baseY) => {
+            let x = baseX;
+            let y = baseY;
+            // Try to find a clear spot by nudging left or right up to 3 times
+            for (let attempt = 0; attempt < 10; attempt++) {
+                let isOverlapping = false;
+                for (const e of this.enemies) {
+                    // Check if centers are too close (e.g. < 24px)
+                    const dx = (e.x + e.width / 2) - (x + 12); // assume ~24px width
+                    const dy = (e.y + e.height / 2) - (y + 8);
+                    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) {
+                        isOverlapping = true;
+                        break;
+                    }
+                }
+                if (!isOverlapping) return { x, y }; // Found a good spot
+                // Nudge left or right randomly
+                x += (Math.random() < 0.5 ? -1 : 1) * 16;
+            }
+            return { x, y }; // Fallback to whatever we have if it's too crowded
+        };
+
         // Spawn hover tanks
         for (const pos of this.map.enemyTankSpawns) {
-            this.enemies.push(new EnemyTank(this, pos.x, pos.y));
+            const adjustedPos = resolveOverlap(pos.x, pos.y);
+            this.enemies.push(new EnemyTank(this, adjustedPos.x, adjustedPos.y));
         }
 
         // Spawn humanoid attackers with weighted random type selection
@@ -627,7 +651,8 @@ const Game = {
                 roll -= t.spawnWeight;
                 if (roll <= 0) { chosen = t; break; }
             }
-            this.enemies.push(new EnemyAttacker(this, pos.x, pos.y, chosen));
+            const adjustedPos = resolveOverlap(pos.x, pos.y);
+            this.enemies.push(new EnemyAttacker(this, adjustedPos.x, adjustedPos.y, chosen));
         }
     },
 
