@@ -87,6 +87,9 @@ export class EnemyTank {
             }
         }
 
+        // Horizontal Entity Collision
+        this._checkHorizontalEntities();
+
         // --- Check for cliffs (don't walk off edges) ---
         const frontX = this.patrolDir > 0
             ? this.x + this.width + 2
@@ -108,6 +111,60 @@ export class EnemyTank {
                 this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
             }
             this.vy = 0;
+        }
+
+        // Vertical Entity Collision
+        if (this.vy > 0) {
+            this._checkVerticalEntities();
+        }
+    }
+
+    _checkHorizontalEntities() {
+        const entities = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) entities.push(player);
+
+        for (const entity of entities) {
+            if (entity === this || !entity.alive) continue;
+
+            if (this.x < entity.x + entity.width &&
+                this.x + this.width > entity.x &&
+                this.y < entity.y + entity.height &&
+                this.y + this.height > entity.y) {
+
+                if (this.vx > 0) {
+                    this.x = entity.x - this.width;
+                    this.vx = 0;
+                } else if (this.vx < 0) {
+                    this.x = entity.x + entity.width;
+                    this.vx = 0;
+                }
+
+                this.patrolDir *= -1;
+            }
+        }
+    }
+
+    _checkVerticalEntities() {
+        const entities = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) entities.push(player);
+
+        for (const entity of entities) {
+            if (entity === this || !entity.alive) continue;
+
+            const myBottom = this.y + this.height;
+            const myPrevBottom = myBottom - this.vy;
+            const eTop = entity.y;
+
+            if (this.x + this.width > entity.x && this.x < entity.x + entity.width) {
+                if (myPrevBottom <= eTop + 4 && myBottom >= eTop) {
+                    this.y = eTop - this.height;
+                    this.vy = 0;
+                    this.x += entity.vx || 0;
+                    break;
+                }
+            }
         }
     }
 

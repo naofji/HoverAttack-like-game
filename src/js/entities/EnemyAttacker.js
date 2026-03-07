@@ -268,9 +268,10 @@ export class EnemyAttacker {
 
         // --- Horizontal ---
         this.x += this.vx;
-        let hitWall = false;
+        // Horizontal Map Collision
+        let hitHMap = false;
         if (this._collidesWithMap()) {
-            hitWall = true;
+            hitHMap = true;
             this.x -= this.vx;
             if (this.vx > 0) {
                 this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;

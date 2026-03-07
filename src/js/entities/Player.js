@@ -208,6 +208,25 @@ export class Player {
             }
         }
 
+        // Horizontal Enemy Collision
+        for (const enemy of this.game.enemies) {
+            if (!enemy.alive) continue;
+            // Check horizontal overlap (assuming vertical is overlapping)
+            if (this.x < enemy.x + enemy.width &&
+                this.x + this.width > enemy.x &&
+                this.y < enemy.y + enemy.height &&
+                this.y + this.height > enemy.y) {
+
+                if (this.vx > 0) { // Moving right into enemy
+                    this.x = enemy.x - this.width;
+                    this.vx = 0;
+                } else if (this.vx < 0) { // Moving left into enemy
+                    this.x = enemy.x + enemy.width;
+                    this.vx = 0;
+                }
+            }
+        }
+
         // Vertical collision
         this.y += this.vy;
         this.onGround = false;
@@ -265,6 +284,30 @@ export class Player {
             }
         }
 
+        // 3. Check Enemy Vertical Collision
+        if (!this.onGround && this.vy > 0) {
+            for (const enemy of this.game.enemies) {
+                if (!enemy.alive) continue;
+
+                const pBottom = this.y + this.height;
+                const pPrevBottom = pBottom - this.vy;
+                const eTop = enemy.y;
+
+                if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width) {
+                    // Falling onto the enemy
+                    if (pPrevBottom <= eTop + 4 && pBottom >= eTop) {
+                        this.y = eTop - this.height;
+                        this.onGround = true;
+                        this.walkFrame = 2;
+                        this.vy = 0;
+                        // Move with enemy horizontally if standing on it
+                        this.x += enemy.vx || 0;
+                        break; // Landed on one enemy, no need to check others
+                    }
+                }
+            }
+        }
+
         // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)
         // This prevents the "not grounded" flicker when standing on a surface,
         // but it must NOT trigger when moving upward (vy < 0) otherwise slow hover gets stuck to the ground.
@@ -277,6 +320,19 @@ export class Player {
                 this.vy = 0;
                 // Snap to surface
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
+            } else {
+                // Also check if standing on an enemy directly below
+                for (const enemy of this.game.enemies) {
+                    if (!enemy.alive) continue;
+                    if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width) {
+                        if (Math.abs(probeY - enemy.y) < 2) {
+                            this.onGround = true;
+                            this.vy = 0;
+                            this.y = enemy.y - this.height;
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
