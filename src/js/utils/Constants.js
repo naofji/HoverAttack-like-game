@@ -53,11 +53,15 @@ export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
 export const MISSILE_LIFETIME = 180; // frames
 
-export const GRENADE_SPEED = 5;
-export const GRENADE_GRAVITY = 0.10;
+export const GRENADE_SPEED = 6;
+export const GRENADE_GRAVITY = 0.20;
+export const GRENADE_BOUNCE = 0.5;
+export const GRENADE_FRICTION = 0.96;
 export const GRENADE_INITIAL_COUNT = 12;
-export const GRENADE_BLAST_RADIUS = 2; // in tiles
-export const GRENADE_LIFETIME = 300; // frames
+export const GRENADE_BLAST_RADIUS = 2; // in tiles for map destruction
+export const GRENADE_DAMAGE_RADIUS = 60; // in pixels for entity damage
+export const GRENADE_DAMAGE = 80;
+export const GRENADE_LIFETIME = 120; // 2 seconds at 60fps
 export const GRENADE_EXPLOSION_COUNT = 300;
 
 // --- Carrier ---
@@ -131,7 +135,7 @@ export const ENEMY_ATTACKER_TYPES = {
     },
     heavy: {
         name: 'heavy',
-        hp: 80,
+        hp: 60,
         speed: 0.5,
         jumpForce: -3.0,
         fireInterval: 90,     // 1.5 seconds
@@ -149,15 +153,15 @@ export const ENEMY_ATTACKER_TYPES = {
     },
     rival: {
         name: 'rival',
-        hp: 50,
-        speed: 1.75,
+        hp: 40,
+        speed: 1.20,
         jumpForce: -6.0,
         fireInterval: 75,     // 1.25 seconds
         sightRange: 400,
         score: 500,
         spawnWeight: 15,      // 15%
         usesGrenades: true,
-        grenadeChance: 0.25,  // 25% chance to throw grenade instead of missile
+        grenadeChance: 0.15,  // 15% chance to throw grenade instead of missile
         aimAccuracy: 0.8,
         movementType: 'chase_and_jump',
         bodyColor: '#CC3333',

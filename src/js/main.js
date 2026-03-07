@@ -243,21 +243,21 @@ const Game = {
         for (const proj of this.projectiles) {
             if (!proj.alive || proj.exploded) continue;
 
-            if (proj.isPlayerOwned || proj.isPlayerOwned === undefined) {
-                // Player projectiles vs enemies
+            if (proj instanceof Missile) {
+                // Player missiles vs enemies (instant contact hit)
                 for (const enemy of this.enemies) {
                     if (!enemy.alive) continue;
                     if (proj.x > enemy.x && proj.x < enemy.x + enemy.width &&
                         proj.y > enemy.y && proj.y < enemy.y + enemy.height) {
-                        enemy.takeDamage(proj instanceof Missile ? 15 : 30);
+                        enemy.takeDamage(15);
                         this.spawnExplosion(proj.x, proj.y, 12);
                         proj.alive = false;
                         proj.exploded = true;
                         break;
                     }
                 }
-            } else {
-                // Enemy projectiles vs player
+            } else if (proj instanceof Missile) {
+                // Enemy missiles vs player
                 const player = this.player;
                 if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
                     if (proj.x > player.x && proj.x < player.x + player.width &&
@@ -269,7 +269,7 @@ const Game = {
                         continue;
                     }
                 }
-                // Enemy projectiles vs carrier
+                // Enemy missiles vs carrier
                 const carrier = this.carrier;
                 if (carrier && carrier.alive) {
                     if (proj.x > carrier.x && proj.x < carrier.x + carrier.width &&
