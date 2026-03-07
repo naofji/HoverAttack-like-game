@@ -68,44 +68,46 @@ export class EnemyTank {
     _moveAndCollide() {
         const map = this.game.map;
 
-        // --- Horizontal & Step Up ---
-        this.x += this.vx;
-        if (this._collidesWithMap()) {
-            // Hit a wall. Try to step up 1 tile (16px).
-            this.y -= TILE_SIZE;
-            if (!this._collidesWithMap()) {
-                // Successfully stepped up! (Keep vy=0 to avoid bounce)
-                this.vy = 0;
+        // --- Predictive Navigation (User Rules) ---
+        if (this.vy === 0) { // Only decide path when firmly on the ground
+            const frontX = this.patrolDir > 0 ? this.x + this.width + 1 : this.x - 1;
+            const tx = Math.floor(frontX / TILE_SIZE);
+            const ty = Math.floor((this.y + this.height - 1) / TILE_SIZE); // Tank body Y
+
+            const isSolid = (cx, cy) => {
+                return map.isSolidAtPixel(cx * TILE_SIZE + TILE_SIZE / 2, cy * TILE_SIZE + TILE_SIZE / 2);
+            };
+
+            const blockFront = isSolid(tx, ty);
+            const blockDown1 = isSolid(tx, ty + 1);
+            const blockDown2 = isSolid(tx, ty + 2);
+            const blockUp = isSolid(tx, ty - 1);
+
+            if (!blockFront && (blockDown1 || blockDown2)) {
+                // 1) Front empty, and either 1-level down or 2-level down is solid => go straight
+            } else if (blockFront && !blockUp) {
+                // 2) Front solid, and above it is empty => step up 1 block and go straight
+                // The user says "1マス分ジャンプして" (jump 1 block)
+                this.y -= TILE_SIZE;
             } else {
-                // Wall is too high. Cannot step up. Reverse direction.
-                this.y += TILE_SIZE;
-                this.x -= this.vx;
-                this.vx = 0;
+                // 3) Otherwise (e.g. wall too high, or cliff too deep) => turn around
                 this.patrolDir *= -1;
+                this.vx = this.patrolDir * ENEMY_TANK_SPEED;
             }
+        }
+
+        // --- Apply Horizontal Movement ---
+        this.x += this.vx;
+
+        // Safety Fallback (in case of strange map overlaps)
+        if (this._collidesWithMap()) {
+            this.x -= this.vx;
+            this.vx = 0;
+            this.patrolDir *= -1;
         }
 
         // Horizontal Entity Collision
         this._checkHorizontalEntities();
-
-        // --- Check for cliffs / Step Down ---
-        if (this.vy === 0) { // Only check if we are on the ground (vy=0 indicates grounded before this frame)
-            const frontX = this.patrolDir > 0 ? this.x + this.width + 2 : this.x - 2;
-            const currentFloorY = this.y + this.height + 2;
-
-            if (!map.isSolidAtPixel(frontX, currentFloorY)) {
-                // Ground directly ahead is empty. Check if there is a floor 1 step down.
-                const stepDownFloorY = currentFloorY + TILE_SIZE;
-
-                if (!map.isSolidAtPixel(frontX, stepDownFloorY)) {
-                    // Drop is 2 or more blocks deep! Turn around to avoid falling into a pit.
-                    this.x -= this.vx;
-                    this.vx = 0;
-                    this.patrolDir *= -1;
-                }
-                // Else: It's a 1-block step down. Do nothing, let the tank walk off and fall 1 tile naturally.
-            }
-        }
 
         // --- Vertical ---
         this.y += this.vy;
