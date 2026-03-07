@@ -65,19 +65,30 @@ export class Map {
         // Object to track all rooms for tunneling
         this.rooms = [];
 
-        // Step 2: Carve start area (top-left)
-        this._carveRoom(3, 3, 12, 10);
-        this.rooms.push({ centerR: 3 + 5, centerC: 3 + 6 });
+        // Step 2: Carve large designated areas
+        // Start area (top-left) - Much larger
+        this._carveRoom(3, 3, 20, 16);
+        this.rooms.push({ centerR: 3 + 8, centerC: 3 + 10 });
 
-        // Step 3: Carve goal area (bottom-right)
-        this._carveRoom(this.cols - 15, this.rows - 12, 12, 9);
-        this.rooms.push({ centerR: this.rows - 12 + 4, centerC: this.cols - 15 + 6 });
+        // Boss / Goal area (bottom-right) - Huge room
+        const bossW = 30;
+        const bossH = 22;
+        this._carveRoom(this.cols - 3 - bossW, this.rows - 3 - bossH, bossW, bossH);
+        this.rooms.push({ centerR: this.rows - 3 - Math.floor(bossH / 2), centerC: this.cols - 3 - Math.floor(bossW / 2) });
+
+        // Random large enemy area
+        const enemyW = 28;
+        const enemyH = 20;
+        const enemyC = BORDER_THICKNESS + Math.floor(this.cols * 0.3 + Math.random() * (this.cols * 0.4 - enemyW));
+        const enemyR = BORDER_THICKNESS + Math.floor(this.rows * 0.3 + Math.random() * (this.rows * 0.4 - enemyH));
+        this._carveRoom(enemyC, enemyR, enemyW, enemyH);
+        this.rooms.push({ centerR: enemyR + Math.floor(enemyH / 2), centerC: enemyC + Math.floor(enemyW / 2) });
 
         // Step 4: Scatter random rooms (Chambers)
-        const numRooms = 20 + Math.floor(Math.random() * 8); // Slightly fewer rooms, but larger
+        const numRooms = 35 + Math.floor(Math.random() * 15); // More rooms (35-49)
         for (let i = 0; i < numRooms; i++) {
-            const w = 8 + Math.floor(Math.random() * 12); // Width 8-19 (was 4-11)
-            const h = 8 + Math.floor(Math.random() * 12); // Height 8-19 (was 4-11)
+            const w = 20 + Math.floor(Math.random() * 25); // Width 20-44
+            const h = 20 + Math.floor(Math.random() * 25); // Height 20-44
             const c = BORDER_THICKNESS + Math.floor(Math.random() * (this.cols - BORDER_THICKNESS * 2 - w));
             const r = BORDER_THICKNESS + Math.floor(Math.random() * (this.rows - BORDER_THICKNESS * 2 - h));
 
@@ -107,18 +118,59 @@ export class Map {
         }
 
         // Ensure start area remains somewhat clear after smoothing
-        this._carveRoom(4, 4, 8, 6);
+        this._carveRoom(4, 4, 10, 8);
 
-        // Step 8: Sprinkle hard blocks
+        // Step 8: Platform generation for large empty spaces
+        this._generatePlatforms();
+
+        // Step 9: Sprinkle hard blocks
         this._placeHardBlocks();
 
-        // Step 9: Determine entity spawn positions
+        // Step 10: Determine entity spawn positions
         this.landmineSpawns = this._findLandminePositions();
         this.enemyTankSpawns = this._findEnemyTankPositions();
         this.enemyAttackerSpawns = this._findEnemyAttackerPositions();
 
-        // Step 10: Generate off-screen mini-map
+        // Step 11: Generate off-screen mini-map
         this._generateMiniMap();
+    }
+
+    _generatePlatforms() {
+        // Look for wide vertical open spaces and place horizontal platforms
+        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS - 3; r++) {
+            for (let c = BORDER_THICKNESS + 2; c < this.cols - BORDER_THICKNESS - 5; c++) {
+                // Check if current tile is empty, and there's plenty of space above/below it
+                if (this._isAreaEmpty(r - 2, c, 5, 5)) {
+                    // With a certain probability, generate a floating platform here
+                    if (Math.random() < 0.25) { // Frequent platforms
+                        const platWidth = 4 + Math.floor(Math.random() * 7); // width 4 to 10
+                        const platHeight = 1 + Math.floor(Math.random() * 2); // thickness 1 to 2
+
+                        for (let pr = r; pr < r + platHeight; pr++) {
+                            for (let pc = c; pc < c + platWidth; pc++) {
+                                // Double check boundaries
+                                if (pr < this.rows - BORDER_THICKNESS && pc < this.cols - BORDER_THICKNESS) {
+                                    this.grid[pr][pc] = BLOCK_NORMAL;
+                                    this.blockHP[pr][pc] = 1;
+                                }
+                            }
+                        }
+                        // Skip ahead so we don't immediately generate another overlapping platform
+                        c += platWidth + 2;
+                    }
+                }
+            }
+        }
+    }
+
+    _isAreaEmpty(startR, startC, height, width) {
+        for (let r = startR; r < startR + height; r++) {
+            for (let c = startC; c < startC + width; c++) {
+                if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+                if (this.grid[r][c] !== BLOCK_EMPTY) return false;
+            }
+        }
+        return true;
     }
 
     _isBorder(r, c) {
@@ -183,8 +235,8 @@ export class Map {
             const bestTo = unconnected.splice(bestToIdx, 1)[0];
 
             // Carve a tunnel between bestFrom and bestTo
-            // Varying tunnel width between 3 and 5 for larger feel
-            const tunnelWidth = 3 + Math.floor(Math.random() * 3);
+            // Varying tunnel width between 6 and 11 for massive connecting halls
+            const tunnelWidth = 6 + Math.floor(Math.random() * 6);
             this._carveTunnelPath(bestFrom.centerR, bestFrom.centerC, bestTo.centerR, bestTo.centerC, tunnelWidth);
 
             connected.push(bestTo);
@@ -420,7 +472,7 @@ export class Map {
         for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS; r++) {
             for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
                 if (r < 16 && c < 20) continue; // Skip start area
-                // Need 2 empty tiles above solid floor
+                // Need 2 empty tiles above solid floor (blocks or platforms)
                 if (this.grid[r][c] === BLOCK_EMPTY &&
                     this.grid[r - 1][c] === BLOCK_EMPTY &&
                     r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
