@@ -93,7 +93,7 @@ export const LANDMINE_COUNT = 60;          // Number to scatter across the map
 // --- Enemy Tank (Hover) ---
 export const ENEMY_TANK_WIDTH = 16;
 export const ENEMY_TANK_HEIGHT = 12;
-export const ENEMY_TANK_HP = 30;
+export const ENEMY_TANK_HP = 10;
 export const ENEMY_TANK_SPEED = 0.5;
 export const ENEMY_TANK_SIGHT_RANGE = 200;   // px - detection range for player
 export const ENEMY_TANK_FIRE_INTERVAL = 90;  // frames between shots (~1.5s)
@@ -153,7 +153,7 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 1.75,
         jumpForce: -6.0,
         fireInterval: 75,     // 1.25 seconds
-        sightRange: 250,
+        sightRange: 400,
         score: 500,
         spawnWeight: 15,      // 15%
         usesGrenades: true,
@@ -176,5 +176,5 @@ export const COLOR_HARD_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#555555';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#3a3a3a';
 export const COLOR_CAVE_BG = '#1a0a00';
-export const COLOR_CROSSHAIR = 'rgba(255, 50, 50, 0.8)';
+export const COLOR_CROSSHAIR = 'rgba(255, 255, 0, 0.8)';
 export const COLOR_HOVER_EXHAUST = 'rgba(0, 255, 255, 0.6)';
