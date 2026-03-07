@@ -231,6 +231,9 @@ const Game = {
             }
         }
 
+        // --- End of frame input cleanup ---
+        this.input.endFrame(this.camera);
+
         // --- Update enemy bullets ---
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
             this.enemyBullets[i].update();
@@ -339,10 +342,10 @@ const Game = {
         // Cannot fire weapons while crouching or stunned
         if (player.crouching || player.stunTimer > 0) return;
 
-        const mouseWorld = this.input.getMouseWorld(this.camera);
+        const targetWorld = this.input.getTargetWorld(this.camera);
         const px = player.x + player.width / 2;
         const py = player.y + player.height / 2;
-        const angle = Math.atan2(mouseWorld.y - py, mouseWorld.x - px);
+        const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
 
         // Left click or Space: Missile
         const fireMissile = this.input.mouse.left || this.input.isKeyDown('Space');

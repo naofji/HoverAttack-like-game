@@ -94,7 +94,7 @@ export class Player {
         // --- Burst & Hover (W or Shift key) ---
         this.hovering = false;
         if (this.hoverCooldown > 0) this.hoverCooldown--;
-        const burstHoverHeld = input.isKeyDown('KeyW') || input.isKeyDown('ShiftLeft') || input.isKeyDown('ShiftRight');
+        const burstHoverHeld = input.isKeyDown('KeyW'); // Shift is now for lock-on
         // Cannot burst/hover if stunned or manually crouching
         if (burstHoverHeld && !this.crouching) {
             if (this.onGround && this.hoverFuel >= BURST_MIN_FUEL) {
@@ -131,9 +131,9 @@ export class Player {
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
 
         // --- Facing direction (based on mouse aim) ---
-        const mouseWorld = input.getMouseWorld(this.game.camera);
+        const targetWorld = input.getTargetWorld(this.game.camera);
         const centerX = this.x + this.width / 2;
-        this.facingRight = mouseWorld.x >= centerX;
+        this.facingRight = targetWorld.x >= centerX;
 
         // --- Movement & Collision ---
         this._moveAndCollide();
@@ -557,7 +557,7 @@ export class Player {
     }
 
     _drawBazooka(ctx, x, y, crouchOffset) {
-        const mouseWorld = this.game.input.getMouseWorld(this.game.camera);
+        const targetWorld = this.game.input.getTargetWorld(this.game.camera);
         const cx = x + this.width / 2;
         const cy = y + 6 + crouchOffset;
 

@@ -17,6 +17,11 @@ export class Input {
         this.mouse = { x: 0, y: 0, left: false, right: false };
         this.prevMouse = { left: false, right: false };
 
+        // Lock-on state
+        this.crosshairLocked = false;
+        this.lockedWorldX = 0;
+        this.lockedWorldY = 0;
+
         this._setupListeners();
     }
 
@@ -82,8 +87,26 @@ export class Input {
         };
     }
 
+    /** Get target world coordinates (either locked or current mouse) */
+    getTargetWorld(camera) {
+        if (this.crosshairLocked) {
+            return { x: this.lockedWorldX, y: this.lockedWorldY };
+        }
+        return this.getMouseWorld(camera);
+    }
+
     /** Call at end of each frame to track previous state */
-    endFrame() {
+    endFrame(camera) {
+        // Toggle Lock-on with Shift key
+        if (this.isKeyPressed('ShiftLeft') || this.isKeyPressed('ShiftRight')) {
+            this.crosshairLocked = !this.crosshairLocked;
+            if (this.crosshairLocked && camera) {
+                const world = this.getMouseWorld(camera);
+                this.lockedWorldX = world.x;
+                this.lockedWorldY = world.y;
+            }
+        }
+
         this.prevKeys = { ...this.keys };
         this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
     }

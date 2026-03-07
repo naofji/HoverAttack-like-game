@@ -53,16 +53,16 @@ export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
 export const MISSILE_LIFETIME = 180; // frames
 
-export const GRENADE_SPEED = 6;
+export const GRENADE_SPEED = 5;
 export const GRENADE_GRAVITY = 0.20;
-export const GRENADE_BOUNCE = 0.5;
-export const GRENADE_FRICTION = 0.96;
+export const GRENADE_BOUNCE = 0.2;
+export const GRENADE_FRICTION = 0.9;
 export const GRENADE_INITIAL_COUNT = 12;
 export const GRENADE_BLAST_RADIUS = 2; // in tiles for map destruction
-export const GRENADE_DAMAGE_RADIUS = 60; // in pixels for entity damage
+export const GRENADE_DAMAGE_RADIUS = 40; // in pixels for entity damage
 export const GRENADE_DAMAGE = 80;
-export const GRENADE_LIFETIME = 120; // 2 seconds at 60fps
-export const GRENADE_EXPLOSION_COUNT = 300;
+export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
+export const GRENADE_EXPLOSION_COUNT = 150;
 
 // --- Carrier ---
 export const CARRIER_WIDTH = 64;
@@ -161,7 +161,7 @@ export const ENEMY_ATTACKER_TYPES = {
         score: 500,
         spawnWeight: 15,      // 15%
         usesGrenades: true,
-        grenadeChance: 0.15,  // 15% chance to throw grenade instead of missile
+        grenadeChance: 0.05,  // 5% chance to throw grenade instead of missile
         aimAccuracy: 0.8,
         movementType: 'chase_and_jump',
         bodyColor: '#CC3333',

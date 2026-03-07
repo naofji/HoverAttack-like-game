@@ -10,13 +10,24 @@ export class Crosshair {
     }
 
     draw(ctx) {
-        const mx = this.game.input.mouse.x;
-        const my = this.game.input.mouse.y;
+        const input = this.game.input;
+        const camera = this.game.camera;
+
+        let mx, my;
+        if (input.crosshairLocked) {
+            mx = input.lockedWorldX - camera.x;
+            my = input.lockedWorldY - camera.y;
+        } else {
+            mx = input.mouse.x;
+            my = input.mouse.y;
+        }
+
         const size = 12;
         const gap = 3;
 
-        ctx.strokeStyle = COLOR_CROSSHAIR;
-        ctx.lineWidth = 1.5;
+        // Change color when locked
+        ctx.strokeStyle = input.crosshairLocked ? '#FFFF00' : COLOR_CROSSHAIR;
+        ctx.lineWidth = input.crosshairLocked ? 2.5 : 1.5;
 
         // Horizontal lines
         ctx.beginPath();
@@ -32,7 +43,7 @@ export class Crosshair {
         ctx.stroke();
 
         // Center dot
-        ctx.fillStyle = COLOR_CROSSHAIR;
+        ctx.fillStyle = ctx.strokeStyle;
         ctx.fillRect(mx - 1, my - 1, 2, 2);
 
         ctx.lineWidth = 1;
