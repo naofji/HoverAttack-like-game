@@ -68,8 +68,13 @@ export class EnemyTank {
     _moveAndCollide() {
         const map = this.game.map;
 
+        // --- Determine if on ground ---
+        this.y += 1;
+        const grounded = this._collidesWithMap();
+        this.y -= 1;
+
         // --- Predictive Navigation (User Rules) ---
-        if (this.vy === 0) { // Only decide path when firmly on the ground
+        if (grounded) { // Only decide path when firmly on the ground
             const frontX = this.patrolDir > 0 ? this.x + this.width + 1 : this.x - 1;
             const tx = Math.floor(frontX / TILE_SIZE);
             const ty = Math.floor((this.y + this.height - 1) / TILE_SIZE); // Tank body Y

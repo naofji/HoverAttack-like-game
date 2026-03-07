@@ -115,13 +115,13 @@ export const ENEMY_ATTACKER_TYPES = {
         name: 'standard',
         hp: 15,
         speed: 0.9,
-        jumpForce: -4.0,
+        jumpForce: -6.5,
         fireInterval: 120,    // 2 seconds
-        sightRange: 180,
+        sightRange: 300,
         score: 100,
         spawnWeight: 60,      // 60%
         usesGrenades: false,
-        aimAccuracy: 0.5,
+        aimAccuracy: 0.6,
         movementType: 'pace_and_jump',
         bodyColor: '#55CCDD',
         headColor: '#44AABB',
@@ -135,11 +135,11 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 0.5,
         jumpForce: -3.0,
         fireInterval: 90,     // 1.5 seconds
-        sightRange: 300,
+        sightRange: 500,
         score: 300,
         spawnWeight: 25,      // 25%
         usesGrenades: false,
-        aimAccuracy: 0.0,
+        aimAccuracy: 0.4,
         movementType: 'stop_and_shoot',
         bodyColor: '#44AA44',
         headColor: '#338833',
@@ -158,7 +158,7 @@ export const ENEMY_ATTACKER_TYPES = {
         spawnWeight: 15,      // 15%
         usesGrenades: true,
         grenadeChance: 0.25,  // 25% chance to throw grenade instead of missile
-        aimAccuracy: 0.7,
+        aimAccuracy: 0.8,
         movementType: 'chase_and_jump',
         bodyColor: '#CC3333',
         headColor: '#AA2222',
