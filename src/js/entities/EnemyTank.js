@@ -94,6 +94,15 @@ export class EnemyTank {
                 // 2) Front solid, and above it is empty => step up 1 block and go straight
                 // The user says "1マス分ジャンプして" (jump 1 block)
                 this.y -= TILE_SIZE;
+
+                // Nudge X over the ledge so it doesn't fall back down immediately
+                // By placing the right/left edge 1.0 pixel into the new block, it guarantees
+                // vertical collision will detect the block under it on this frame.
+                if (this.patrolDir > 0) {
+                    this.x = (tx * TILE_SIZE) - this.width + 1.0;
+                } else {
+                    this.x = (tx * TILE_SIZE) + TILE_SIZE - 1.0;
+                }
             } else {
                 // 3) Otherwise (e.g. wall too high, or cliff too deep) => turn around
                 this.patrolDir *= -1;
@@ -211,23 +220,29 @@ export class EnemyTank {
         // Check if player is a valid target
         if (player && player.alive && !player.docked) {
             const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
-            const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= minDist) {
-                minDist = dist;
-                target = player;
+            // Only target if in the front 180-degree arc
+            if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
+                const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= minDist) {
+                    minDist = dist;
+                    target = player;
+                }
             }
         }
 
         // Check if carrier is a valid target (carrier is wide, so use center distance)
         if (carrier && carrier.alive) {
             const dx = (carrier.x + carrier.width / 2) - (this.x + this.width / 2);
-            const dy = (carrier.y + carrier.height / 2) - (this.y + this.height / 2);
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            // If player is docked, we prioritize carrier anyway since player is invalid
-            if (dist <= minDist) {
-                minDist = dist;
-                target = carrier;
+            // Only target if in the front 180-degree arc
+            if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
+                const dy = (carrier.y + carrier.height / 2) - (this.y + this.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                // If player is docked, we prioritize carrier anyway since player is invalid
+                if (dist <= minDist) {
+                    minDist = dist;
+                    target = carrier;
+                }
             }
         }
 
