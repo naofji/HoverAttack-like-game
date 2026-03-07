@@ -137,14 +137,14 @@ export class Map {
 
     _generatePlatforms() {
         // Look for wide vertical open spaces and place horizontal platforms
-        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS - 3; r++) {
-            for (let c = BORDER_THICKNESS + 2; c < this.cols - BORDER_THICKNESS - 5; c++) {
-                // Check if current tile is empty, and there's plenty of space above/below it
-                if (this._isAreaEmpty(r - 2, c, 5, 5)) {
-                    // With a certain probability, generate a floating platform here
-                    if (Math.random() < 0.25) { // Frequent platforms
-                        const platWidth = 4 + Math.floor(Math.random() * 7); // width 4 to 10
-                        const platHeight = 1 + Math.floor(Math.random() * 2); // thickness 1 to 2
+        for (let r = BORDER_THICKNESS + 3; r < this.rows - BORDER_THICKNESS - 4; r++) {
+            for (let c = BORDER_THICKNESS + 3; c < this.cols - BORDER_THICKNESS - 7; c++) {
+                // Check if current tile is empty, and there's plenty of space above/below it (7x7 area)
+                if (this._isAreaEmpty(r - 3, c, 7, 7)) {
+                    // With a low probability, generate a floating platform here
+                    if (Math.random() < 0.06) { // Sparse platforms
+                        const platWidth = 4 + Math.floor(Math.random() * 6); // width 4 to 9
+                        const platHeight = 1; // thickness 1 (thinner)
 
                         for (let pr = r; pr < r + platHeight; pr++) {
                             for (let pc = c; pc < c + platWidth; pc++) {

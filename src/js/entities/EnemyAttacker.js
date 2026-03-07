@@ -40,11 +40,13 @@ export class EnemyAttacker {
         // Animation
         this.walkFrame = 2;
         this.walkTimer = 0;
+        this.hovering = false;
     }
 
     update() {
         if (!this.alive) return;
 
+        this.hovering = false; // Reset hover state each frame
         const player = this.game.player;
         const playerDist = this._distToPlayer();
 
@@ -156,10 +158,20 @@ export class EnemyAttacker {
             }
             this.vx = this.patrolDir * this.maxSpeed;
 
-            if (this.onGround && this.jumpCooldown <= 0) {
-                // Jump frequently or if player is above
-                if (dy < -16 || Math.random() < 0.02) {
-                    this._jump();
+            if (this.onGround) {
+                if (this.jumpCooldown <= 0) {
+                    // Jump frequently or if player is above
+                    if (dy < -16 || Math.random() < 0.05) {
+                        this._jump();
+                    }
+                }
+            } else {
+                // Airborne: hover if player is above or just to stay airborne longer
+                if (dy < -8 || (this.vy > 0 && Math.random() < 0.1)) {
+                    this.hovering = true;
+                    this.vy -= 0.6; // Hover upward thrust
+                    // Cap rising speed
+                    if (this.vy < -4.0) this.vy = -4.0;
                 }
             }
         }
@@ -367,6 +379,19 @@ export class EnemyAttacker {
 
         // --- Legs ---
         this._drawLegs(ctx);
+
+        // --- Hover Exhaust ---
+        if (this.hovering) {
+            for (let i = 0; i < 3; i++) {
+                const px = 2 + Math.random() * 4;
+                const py = 14 + Math.random() * 6;
+                const size = 1 + Math.random() * 3;
+                ctx.fillStyle = '#00FFFF'; // constant cyan color for hover
+                ctx.globalAlpha = 0.3 + Math.random() * 0.4;
+                ctx.fillRect(px, py, size, size);
+            }
+            ctx.globalAlpha = 1.0;
+        }
 
         // --- Gun barrel (simple) ---
         ctx.fillStyle = '#777777';
