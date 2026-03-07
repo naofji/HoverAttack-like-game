@@ -181,6 +181,7 @@ export class EnemyTank {
     // ------------------------------------------
 
     takeDamage(amount) {
+        if (!this.alive) return;
         this.hp -= amount;
         this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {

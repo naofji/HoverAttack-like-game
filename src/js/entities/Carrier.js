@@ -166,6 +166,7 @@ export class Carrier {
     // ------------------------------------------
 
     takeDamage(amount) {
+        if (!this.alive) return;
         this.hp -= amount;
         this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {
@@ -188,8 +189,8 @@ export class Carrier {
     }
 
     respawn() {
-        this.x = this.spawnX;
-        this.y = this.spawnY;
+        this.x = (this.spawnX !== undefined) ? this.spawnX : (5 * 16);
+        this.y = (this.spawnY !== undefined) ? this.spawnY : (5 * 16);
         this.vx = 0;
         this.vy = 0;
         this.hp = CARRIER_MAX_HP;
