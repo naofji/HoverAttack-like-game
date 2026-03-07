@@ -290,7 +290,7 @@ export class EnemyAttacker {
         }
 
         // --- Cliff check ---
-        if (this.onGround && !hitWall) {
+        if (this.onGround && !hitHMap) {
             const isPatrolling = (this.aiState === 'patrol');
             const mType = this.config.movementType;
 
@@ -313,6 +313,11 @@ export class EnemyAttacker {
             }
         }
 
+        // Horizontal Entity Collision
+        if (!hitHMap) {
+            this._checkHorizontalEntities();
+        }
+
         // --- Vertical ---
         this.y += this.vy;
         this.onGround = false;
@@ -330,6 +335,11 @@ export class EnemyAttacker {
             this.vy = 0;
         }
 
+        // Vertical Entity Collision
+        if (!this.onGround && this.vy > 0) {
+            this._checkVerticalEntities();
+        }
+
         // --- Ground probe ---
         if (!this.onGround && this.vy >= 0 && this.vy < 0.5) {
             const probeY = this.y + this.height + 1;
@@ -339,6 +349,58 @@ export class EnemyAttacker {
                 this.onGround = true;
                 this.vy = 0;
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
+            }
+        }
+    }
+
+    _checkHorizontalEntities() {
+        const entities = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) entities.push(player);
+
+        for (const entity of entities) {
+            if (entity === this || !entity.alive) continue;
+
+            if (this.x < entity.x + entity.width &&
+                this.x + this.width > entity.x &&
+                this.y < entity.y + entity.height &&
+                this.y + this.height > entity.y) {
+
+                if (this.vx > 0) {
+                    this.x = entity.x - this.width;
+                    this.vx = 0;
+                } else if (this.vx < 0) {
+                    this.x = entity.x + entity.width;
+                    this.vx = 0;
+                }
+
+                if (this.aiState === 'patrol') {
+                    this.patrolDir *= -1;
+                }
+            }
+        }
+    }
+
+    _checkVerticalEntities() {
+        const entities = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) entities.push(player);
+
+        for (const entity of entities) {
+            if (entity === this || !entity.alive) continue;
+
+            const myBottom = this.y + this.height;
+            const myPrevBottom = myBottom - this.vy;
+            const eTop = entity.y;
+
+            if (this.x + this.width > entity.x && this.x < entity.x + entity.width) {
+                if (myPrevBottom <= eTop + 4 && myBottom >= eTop) {
+                    this.y = eTop - this.height;
+                    this.onGround = true;
+                    this.vy = 0;
+                    this.x += entity.vx || 0;
+                    break;
+                }
             }
         }
     }
