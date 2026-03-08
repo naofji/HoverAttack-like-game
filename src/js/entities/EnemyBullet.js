@@ -8,6 +8,7 @@ import {
     ENEMY_BULLET_DAMAGE_PLAYER, ENEMY_BULLET_DAMAGE_CARRIER,
     ENEMY_BULLET_LIFETIME
 } from '../utils/Constants.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class EnemyBullet {
     constructor(game, x, y, angle) {
@@ -19,6 +20,9 @@ export class EnemyBullet {
         this.radius = ENEMY_BULLET_RADIUS;
         this.alive = true;
         this.lifetime = ENEMY_BULLET_LIFETIME;
+
+        // Play firing sound
+        audioManager.playEnemyFire();
     }
 
     update() {

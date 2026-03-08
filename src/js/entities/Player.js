@@ -15,6 +15,7 @@ import {
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST
 } from '../utils/Constants.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -103,6 +104,7 @@ export class Player {
                 this.onGround = false;
                 this.hoverFuel -= BURST_FUEL_CONSUMPTION;
                 this.hoverCooldown = HOVER_COOLDOWN_AFTER_BURST;
+                audioManager.playBurst();
             } else if (this.hoverCooldown <= 0 && this.hoverFuel > 0) {
                 // In air after cooldown: hover (consumes fuel)
                 const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
@@ -111,7 +113,13 @@ export class Player {
                 this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                 if (this.hoverFuel < 0) this.hoverFuel = 0;
                 this.hovering = true;
+                // Play hover sound with pitch based on fuel/thrust
+                audioManager.playHover(fuelRatio);
             }
+        }
+
+        if (!this.hovering) {
+            audioManager.stopHover();
         }
 
         // --- Hover fuel auto-recovery when not hovering ---

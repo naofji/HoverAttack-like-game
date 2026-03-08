@@ -10,6 +10,7 @@ import {
     BASE_LASER_COOLDOWN
 } from '../utils/Constants.js';
 import { BaseLaser } from './BaseLaser.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class EnemyBase {
     constructor(game, x, y) {
@@ -65,6 +66,7 @@ export class EnemyBase {
             if (target) {
                 this.attackState = 'charging';
                 this.chargeTimer = 0;
+                audioManager.playLaserCharge();
             }
         } else if (this.attackState === 'charging') {
             this.chargeTimer++;
@@ -135,6 +137,7 @@ export class EnemyBase {
 
         const laser = new BaseLaser(this.game, centerX, centerY, angle);
         this.game.enemyBullets.push(laser); // Put in enemyBullets so it gets updated and drawn
+        audioManager.playLaserFire();
         console.log("ENEMY BASE FIRED LASER!");
     }
 

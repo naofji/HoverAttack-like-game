@@ -35,6 +35,7 @@ import { EnemyBase } from './entities/EnemyBase.js';
 import { Flag } from './entities/Flag.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
+import { audioManager } from './audio/AudioManager.js';
 
 // ============================================
 // Game Object
@@ -433,6 +434,7 @@ const Game = {
                 this.projectiles.push(new Missile(this, muzzleX, muzzleY, angle, true));
                 player.missiles--;
                 player.missileCooldown = 15; // 0.25s cooldown between shots
+                audioManager.playMissile();
             }
         }
 
@@ -442,6 +444,7 @@ const Game = {
             const muzzleY = py + Math.sin(angle) * 10;
             this.projectiles.push(new Grenade(this, muzzleX, muzzleY, angle));
             player.grenades--;
+            audioManager.playExplosion(false); // Small "thump" or explosion for launch
         }
     },
 
@@ -761,6 +764,9 @@ const Game = {
     spawnExplosion(x, y, size) {
         const newParticles = createExplosion(x, y, size);
         this.particles.push(...newParticles);
+
+        // Play explosion sound (large if size > 10)
+        audioManager.playExplosion(size > 10);
 
         // Any explosion triggers nearby mines
         if (this.landmines) {
