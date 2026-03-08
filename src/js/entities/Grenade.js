@@ -19,6 +19,7 @@ export class Grenade {
         this.alive = true;
         this.lifetime = GRENADE_LIFETIME;
         this.rotation = 0;
+        this.isPlayerOwned = true; // Default to player owned
     }
 
     update() {
@@ -87,42 +88,42 @@ export class Grenade {
         }
 
         // --- Entity Area Damage (AoE) ---
+        if (this.isPlayerOwned) {
+            // Player grenade: Damages enemies only (No friendly fire)
+            for (const enemy of this.game.enemies) {
+                if (!enemy.alive) continue;
+                const dx = (enemy.x + enemy.width / 2) - this.x;
+                const dy = (enemy.y + enemy.height / 2) - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Damage enemies
-        for (const enemy of this.game.enemies) {
-            if (!enemy.alive) continue;
-            const dx = (enemy.x + enemy.width / 2) - this.x;
-            const dy = (enemy.y + enemy.height / 2) - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < GRENADE_DAMAGE_RADIUS) {
-                // Linear falloff or flat damage? Flat for now as per simple mechanics
-                enemy.takeDamage(GRENADE_DAMAGE);
+                if (dist < GRENADE_DAMAGE_RADIUS) {
+                    enemy.takeDamage(GRENADE_DAMAGE);
+                }
             }
-        }
-
-        // Damage Player
-        const player = this.game.player;
-        if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
-            const dx = (player.x + player.width / 2) - this.x;
-            const dy = (player.y + player.height / 2) - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < GRENADE_DAMAGE_RADIUS) {
-                player.takeDamage(GRENADE_DAMAGE / 2); // Less damage to player
+        } else {
+            // Enemy grenade: Damages player and carrier only (No friendly fire for enemies)
+            const player = this.game.player;
+            if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
+                const dx = (player.x + player.width / 2) - this.x;
+                const dy = (player.y + player.height / 2) - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < GRENADE_DAMAGE_RADIUS) {
+                    player.takeDamage(GRENADE_DAMAGE / 2); // Less damage to player
+                }
             }
-        }
 
-        // Damage Carrier
-        const carrier = this.game.carrier;
-        if (carrier && carrier.alive) {
-            const dx = (carrier.x + carrier.width / 2) - this.x;
-            const dy = (carrier.y + carrier.height / 2) - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < GRENADE_DAMAGE_RADIUS) {
-                carrier.takeDamage(GRENADE_DAMAGE / 4);
+            const carrier = this.game.carrier;
+            if (carrier && carrier.alive) {
+                const dx = (carrier.x + carrier.width / 2) - this.x;
+                const dy = (carrier.y + carrier.height / 2) - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < GRENADE_DAMAGE_RADIUS) {
+                    carrier.takeDamage(GRENADE_DAMAGE / 4);
+                }
             }
         }
     }
+
 
     draw(ctx) {
         if (!this.alive) return;

@@ -5,12 +5,12 @@
 export const CANVAS_WIDTH = 800;
 export const CANVAS_HEIGHT = 600;
 
-// --- Tile / Map ---
+// --- Tile / Map Base Constants ---
 export const TILE_SIZE = 16;
-export const MAP_COLS = 300;
-export const MAP_ROWS = 150;
-export const MAP_WIDTH = MAP_COLS * TILE_SIZE;
-export const MAP_HEIGHT = MAP_ROWS * TILE_SIZE;
+export const MIN_MAP_COLS = 100;
+export const MIN_MAP_ROWS = 60;
+export const MAX_MAP_COLS = 300;
+export const MAX_MAP_ROWS = 150;
 
 // Block types
 export const BLOCK_EMPTY = 0;
@@ -30,7 +30,7 @@ export const PLAYER_HEIGHT = 24;
 export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
 export const PLAYER_MAX_FALLING_SPEED = 8.0;  // Terminal velocity for falling
-export const PLAYER_STUN_FALL_SPEED = 8.0;    // Falling speed that triggers landing stun
+export const PLAYER_STUN_FALL_SPEED = 7.0;    // Falling speed that triggers landing stun
 export const PLAYER_STUN_DURATION = 40;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
 export const PLAYER_BURST_FORCE = -6.0;
@@ -137,7 +137,7 @@ export const ENEMY_ATTACKER_TYPES = {
         name: 'heavy',
         hp: 60,
         speed: 0.5,
-        jumpForce: -3.0,
+        jumpForce: -5.0,
         fireInterval: 90,     // 1.5 seconds
         sightRange: 500,
         score: 300,
@@ -171,6 +171,39 @@ export const ENEMY_ATTACKER_TYPES = {
         exhaustColor: '#FF6644',
     },
 };
+
+// --- Enemy Drone (Aerial) ---
+export const ENEMY_DRONE_HP = 5;            // Weak armor
+export const ENEMY_DRONE_SPEED = 4.0;       // Dashing speed
+export const ENEMY_DRONE_SPEED_Y_MAX = 3.0; // Dashing vertical speed
+export const ENEMY_DRONE_SIGHT_RANGE = 500; // Wide sight range
+export const ENEMY_DRONE_FIRE_INTERVAL = 150; // 2.5 seconds
+export const ENEMY_DRONE_SCORE = 150;
+export const ENEMY_DRONE_COUNT = 15;        // Number to spawn in air spaces
+export const ENEMY_DRONE_WIDTH = 24;
+export const ENEMY_DRONE_HEIGHT = 16;
+export const ENEMY_DRONE_HOVER_DIST_Y = 120; // Maintain this vertical distance from player
+export const ENEMY_DRONE_HOVER_DIST_X = 180; // Maintain this horizontal distance from player
+export const ENEMY_DRONE_GRENADE_CHANCE = 0.10; // 10% chance to drop grenade
+
+// --- Enemy Turret (Stationary) ---
+export const ENEMY_TURRET_HP = 30;              // About 2 missiles
+export const ENEMY_TURRET_WIDTH = 24;
+export const ENEMY_TURRET_HEIGHT = 24;
+export const ENEMY_TURRET_SIGHT_RANGE = 450;
+export const ENEMY_TURRET_SCORE = 200;
+export const ENEMY_TURRET_COUNT = 10;           // Number to spawn
+export const ENEMY_TURRET_BURST_COUNT = 5;      // Bullets per burst
+export const ENEMY_TURRET_BURST_DELAY = 10;     // Ticks between burst shots
+export const ENEMY_TURRET_COOLDOWN = 120;       // Ticks between bursts (2 seconds)
+
+// --- Enemy Main Base (Win Condition) ---
+export const ENEMY_BASE_SCORE = 10000;
+export const ENEMY_BASE_WIDTH = 32;
+export const ENEMY_BASE_HEIGHT = 48;
+export const ENEMY_BASE_SHIELDS = 3;            // Layers of defense
+export const ENEMY_BASE_HP = 1;                 // Final core HP
+
 
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';

@@ -96,17 +96,7 @@ export class Input {
     }
 
     /** Call at end of each frame to track previous state */
-    endFrame(camera) {
-        // Toggle Lock-on with Shift key
-        if (this.isKeyPressed('ShiftLeft') || this.isKeyPressed('ShiftRight')) {
-            this.crosshairLocked = !this.crosshairLocked;
-            if (this.crosshairLocked && camera) {
-                const world = this.getMouseWorld(camera);
-                this.lockedWorldX = world.x;
-                this.lockedWorldY = world.y;
-            }
-        }
-
+    endFrame() {
         this.prevKeys = { ...this.keys };
         this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
     }

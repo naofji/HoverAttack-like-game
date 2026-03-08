@@ -2,6 +2,14 @@
 // Main Game Entry Point
 // ============================================
 
+window.onerror = function (msg, url, loc) {
+    const div = document.createElement('div');
+    div.style.position = 'absolute'; div.style.zIndex = '9999'; div.style.background = 'red';
+    div.style.color = 'white'; div.style.padding = '10px'; div.style.fontSize = '20px';
+    div.textContent = `ERROR: ${msg.toString()} at ${loc}`;
+    document.body.appendChild(div);
+};
+
 import { Input } from './utils/Input.js';
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
@@ -21,6 +29,9 @@ import { Landmine } from './entities/Landmine.js';
 import { EnemyTank } from './entities/EnemyTank.js';
 import { EnemyBullet } from './entities/EnemyBullet.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
+import { EnemyDrone } from './entities/EnemyDrone.js';
+import { EnemyTurret } from './entities/EnemyTurret.js';
+import { EnemyBase } from './entities/EnemyBase.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 
@@ -51,7 +62,7 @@ const Game = {
     // Game state
     score: 0,
     missionsCompleted: 0,
-    gameState: 'playing', // 'playing', 'gameover', 'paused'
+    gameState: 'title', // 'title', 'playing', 'gameover', 'paused', 'mission_clear'
     showMiniMap: false,
 
     // ==========================================
@@ -65,7 +76,7 @@ const Game = {
 
         // Initialize systems
         this.input = new Input(this.canvas);
-        this.map = new Map(this);
+        this.map = new Map(this, this.missionsCompleted);
         this.camera = new Camera(this);
         this.hud = new HUD(this);
         this.crosshair = new Crosshair(this);
@@ -130,7 +141,31 @@ const Game = {
     // UPDATE
     // ==========================================
     update(deltaTime) {
-        if (this.gameState !== 'playing') return;
+        // --- Always update input state even if not playing ---
+        // Toggle Lock-on with Shift key (moved from Input.js)
+        if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
+            this.input.crosshairLocked = !this.input.crosshairLocked;
+            if (this.input.crosshairLocked) {
+                const world = this.input.getMouseWorld(this.camera);
+                this.input.lockedWorldX = world.x;
+                this.input.lockedWorldY = world.y;
+                console.log('Crosshair Locked at:', world.x, world.y);
+            } else {
+                console.log('Crosshair Unlocked');
+            }
+        }
+
+        // --- Title Screen Input ---
+        if (this.gameState === 'title') {
+            if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
+                this.gameState = 'playing';
+            }
+            return;
+        }
+
+        if (this.gameState !== 'playing') {
+            return;
+        }
 
         // --- MiniMap Toggle ---
         if (this.input.isKeyPressed('KeyM')) {
@@ -231,8 +266,12 @@ const Game = {
             }
         }
 
-        // --- End of frame input cleanup ---
-        this.input.endFrame(this.camera);
+        // --- Check Misson Clear Condition ---
+        if (this.base && !this.base.alive && this.gameState === 'playing') {
+            this.gameState = 'mission_clear';
+            this.missionsCompleted++;
+            console.log('MISSION COMPLETE!');
+        }
 
         // --- Update enemy bullets ---
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
@@ -246,7 +285,7 @@ const Game = {
         for (const proj of this.projectiles) {
             if (!proj.alive || proj.exploded) continue;
 
-            if (proj instanceof Missile) {
+            if (proj instanceof Missile && proj.isPlayerOwned) {
                 // Player missiles vs enemies (instant contact hit)
                 for (const enemy of this.enemies) {
                     if (!enemy.alive) continue;
@@ -259,7 +298,7 @@ const Game = {
                         break;
                     }
                 }
-            } else if (proj instanceof Missile) {
+            } else if (proj instanceof Missile && !proj.isPlayerOwned) {
                 // Enemy missiles vs player
                 const player = this.player;
                 if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
@@ -286,10 +325,9 @@ const Game = {
             }
         }
 
-        // --- End frame input tracking ---
+        // --- End of frame input cleanup ---
         this.input.endFrame();
     },
-
     // ==========================================
     // DOCKING LOGIC
     // ==========================================
@@ -400,6 +438,11 @@ const Game = {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+        if (this.gameState === 'title') {
+            this._drawTitleScreen(ctx);
+            return;
+        }
+
         // --- Draw game world (camera-transformed) ---
         ctx.save();
         ctx.translate(-this.camera.x, -this.camera.y);
@@ -453,8 +496,68 @@ const Game = {
         // --- Game Over overlay ---
         if (this.gameState === 'gameover') {
             this._drawGameOver(ctx);
+        } else if (this.gameState === 'mission_clear') {
+            this._drawMissionClear(ctx);
         } else if (this.showMiniMap) {
             this._drawMiniMap(ctx);
+        }
+    },
+
+    _drawTitleScreen(ctx) {
+        const ASCII_LOGO = [
+            "    __  ______ _    ____________     ___  _______________   ________ __",
+            "   / / / / __ \\ |  / / ____/ __ \\   /   |/_  __/_  __/   | / ____/ //_/",
+            "  / /_/ / / / / | / / __/ / /_/ /  / /| | / /   / / / /| |/ /   / ,<  ",
+            " / __  / /_/ /| |/ / /___/ _, _/  / ___ |/ /   / / / ___ / /___/ /| |  ",
+            "/_/ /_/\\____/ |___/_____/_/ |_|  /_/  |_/_/   /_/ /_/  |_\\____/_/ |_|  "
+        ];
+
+        ctx.fillStyle = '#00FF00'; // Retro green
+        ctx.font = 'bold 16px "Courier New", monospace';
+        ctx.textAlign = 'left';
+
+        // Approx character width for 16px Courier New is ~9.6px
+        const logoWidth = 72 * 9.6;
+        const startX = (this.canvas.width - logoWidth) / 2;
+        const startY = this.canvas.height / 3 - 40;
+
+        for (let i = 0; i < ASCII_LOGO.length; i++) {
+            ctx.fillText(ASCII_LOGO[i], startX, startY + (i * 18));
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '20px "Courier New", monospace';
+        ctx.textAlign = 'center';
+
+        // Blinking text
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.fillText('Press [W] or [Click] to Start', this.canvas.width / 2, this.canvas.height / 2 + 60);
+        }
+
+        // Render instructions
+        ctx.fillStyle = '#AAAAAA';
+        ctx.font = '14px "Courier New", monospace';
+        ctx.fillText('Move: A/D | Launch/Burst: W | Hover: W (Hold) | Shoot: L-Click | Grenade: R-Click', this.canvas.width / 2, this.canvas.height - 60);
+        ctx.fillText('Map: M | Lock-on: Shift | Dock: S', this.canvas.width / 2, this.canvas.height - 40);
+    },
+
+    _drawMissionClear(ctx) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = '#00FF00';
+        ctx.font = '30px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('MISSION COMPLETE', this.canvas.width / 2, this.canvas.height / 2 - 20);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '16px "Courier New", monospace';
+        ctx.fillText('Press [W] or [Click] to continue', this.canvas.width / 2, this.canvas.height / 2 + 20);
+
+        // Allow next mission
+        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
+            this.gameState = 'playing';
+            this._nextMission();
         }
     },
 
@@ -540,10 +643,42 @@ const Game = {
         this.landmines = [];
         this.enemies = [];
         this.enemyBullets = [];
+        this.base = null;
         this.gameState = 'playing';
 
         // Regenerate map
-        this.map = new Map(this);
+        this.map = new Map(this, this.missionsCompleted);
+        this.hud = new HUD(this);
+
+        const spawnPos = this._findSpawnPosition(5, 5, 12, 10);
+        this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
+        this.player = new Player(
+            this,
+            this.carrier.x + this.carrier.width / 2 - 10,
+            this.carrier.y - 24
+        );
+        this.player.docked = true;
+        this.camera.follow(this.player);
+        this.camera.snapToTarget();
+
+        // Recreate landmines
+        this._spawnLandmines();
+
+        // Recreate enemies
+        this._spawnEnemies();
+    },
+
+    _nextMission() {
+        this.projectiles = [];
+        this.particles = [];
+        this.landmines = [];
+        this.enemies = [];
+        this.enemyBullets = [];
+        this.base = null;
+        this.gameState = 'playing';
+
+        // Regenerate map
+        this.map = new Map(this, this.missionsCompleted);
         this.hud = new HUD(this);
 
         const spawnPos = this._findSpawnPosition(5, 5, 12, 10);
@@ -643,19 +778,53 @@ const Game = {
             this.enemies.push(new EnemyTank(this, adjustedPos.x, adjustedPos.y));
         }
 
-        // Spawn humanoid attackers with weighted random type selection
-        const types = Object.values(ENEMY_ATTACKER_TYPES);
-        const totalWeight = types.reduce((sum, t) => sum + t.spawnWeight, 0);
+        // Filter available attacker types based on missionsCompleted
+        // Mission 1 (0): None (handled by Map.js)
+        // Mission 2 (1): Standard only
+        // Mission 3+ (2+): Standard + Heavy
+        // Mission 4+ (3+): Standard + Heavy + Rival
+        const availableTypes = {};
+        let totalWeight = 0;
+
+        for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
+            if (key === 'heavy' && this.missionsCompleted < 2) continue;
+            if (key === 'rival' && this.missionsCompleted < 3) continue;
+
+            availableTypes[key] = type;
+            totalWeight += type.spawnWeight;
+        }
+
+        // Attackers (Humanoids)
         for (const pos of this.map.enemyAttackerSpawns) {
-            // Weighted random pick
-            let roll = Math.random() * totalWeight;
-            let chosen = types[0];
-            for (const t of types) {
-                roll -= t.spawnWeight;
-                if (roll <= 0) { chosen = t; break; }
+            let rnd = Math.random() * totalWeight;
+            let selectedTypeKey = 'standard';
+
+            for (const [key, typeDef] of Object.entries(availableTypes)) {
+                if (rnd < typeDef.spawnWeight) {
+                    selectedTypeKey = key;
+                    break;
+                }
+                rnd -= typeDef.spawnWeight;
             }
             const adjustedPos = resolveOverlap(pos.x, pos.y);
-            this.enemies.push(new EnemyAttacker(this, adjustedPos.x, adjustedPos.y, chosen));
+            this.enemies.push(new EnemyAttacker(this, adjustedPos.x, adjustedPos.y, availableTypes[selectedTypeKey]));
+        }
+
+        // Spawn aerial drones
+        for (const pos of this.map.enemyDroneSpawns) {
+            // Drones hover, so overlapping is less of an issue, but staggering helps
+            this.enemies.push(new EnemyDrone(this, pos.x, pos.y));
+        }
+
+        // Spawn stationary turrets
+        for (const pos of this.map.enemyTurretSpawns) {
+            this.enemies.push(new EnemyTurret(this, pos.x, pos.y, pos.isCeiling));
+        }
+
+        // Spawn Main Base at the very end
+        if (this.map.enemyBaseSpawn) {
+            this.base = new EnemyBase(this, this.map.enemyBaseSpawn.x, this.map.enemyBaseSpawn.y);
+            this.enemies.push(this.base);
         }
     },
 
@@ -671,6 +840,9 @@ const Game = {
 
         this.update(deltaTime);
         this.draw();
+
+        // Clear input state after drawing (which might process input for menus/screens)
+        this.input.endFrame();
 
         requestAnimationFrame(this.loop.bind(this));
     }

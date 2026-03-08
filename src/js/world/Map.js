@@ -3,15 +3,18 @@
 // ============================================
 
 import {
-    TILE_SIZE, MAP_COLS, MAP_ROWS, MAP_WIDTH, MAP_HEIGHT,
+    MIN_MAP_COLS, MIN_MAP_ROWS, MAX_MAP_COLS, MAX_MAP_ROWS,
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
     COLOR_NORMAL_BLOCK, COLOR_NORMAL_BLOCK_BORDER,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
-    LANDMINE_COUNT, LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    ENEMY_TANK_COUNT, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
-    ENEMY_ATTACKER_TOTAL_COUNT, PLAYER_WIDTH, PLAYER_HEIGHT,
-    COLOR_CAVE_BG
+    PLAYER_WIDTH, PLAYER_HEIGHT,
+    ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
+    ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT,
+    ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
+    ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT,
+    COLOR_CAVE_BG, TILE_SIZE,
+    LANDMINE_WIDTH, LANDMINE_HEIGHT
 } from '../utils/Constants.js';
 
 // --- Block rendering styles (lookup table) ---
@@ -29,17 +32,51 @@ const HARD_BLOCK_CHANCE = 0.06;
 const HARD_BLOCK_HP = 3;
 
 export class Map {
-    constructor(game) {
+    constructor(game, missionLevel = 0) {
         this.game = game;
-        this.cols = MAP_COLS;
-        this.rows = MAP_ROWS;
-        this.width = MAP_WIDTH;
-        this.height = MAP_HEIGHT;
+        this.missionLevel = missionLevel;
+
+        // Scale map size based on mission level (levels 0 to 4 correspond to Mission 1 to 5)
+        // Cap the scaling factor at level 4 (Mission 5)
+        const scaleLevel = Math.min(this.missionLevel, 4);
+        const scaleFactor = scaleLevel / 4; // 0.0 to 1.0
+
+        this.cols = Math.floor(MIN_MAP_COLS + (MAX_MAP_COLS - MIN_MAP_COLS) * scaleFactor);
+        this.rows = Math.floor(MIN_MAP_ROWS + (MAX_MAP_ROWS - MIN_MAP_ROWS) * scaleFactor);
+
+        this.width = this.cols * TILE_SIZE;
+        this.height = this.rows * TILE_SIZE;
+
+        // Dynamic target counts based on map size relative to max size
+        const areaRatio = (this.cols * this.rows) / (MAX_MAP_COLS * MAX_MAP_ROWS);
+
+        // Base counts at max size (Mission 5 equivalents)
+        const maxTanks = 30;
+        const maxLandmines = 60;
+        const maxAttackers = 40;
+        const maxDrones = 20;
+        const maxTurrets = 12;
+
+        this.targetTankCount = Math.max(4, Math.floor(maxTanks * areaRatio));
+        this.targetLandmineCount = Math.max(12, Math.floor(maxLandmines * areaRatio));
+
+        // Attackers start from Mission 2 (missionLevel 1)
+        this.targetAttackerCount = (this.missionLevel >= 1) ? Math.max(5, Math.floor(maxAttackers * areaRatio)) : 0;
+
+        // Drones start from Mission 4 (missionLevel 3)
+        this.targetDroneCount = (this.missionLevel >= 3) ? Math.max(5, Math.floor(maxDrones * areaRatio)) : 0;
+
+        // Turrets start from Mission 3 (missionLevel 2)
+        this.targetTurretCount = (this.missionLevel >= 2) ? Math.max(3, Math.floor(maxTurrets * areaRatio)) : 0;
+
         this.grid = [];
         this.blockHP = [];
-        this.landmineSpawns = []; // Pixel coordinates for landmine placement
-        this.enemyTankSpawns = []; // Pixel coordinates for enemy tank placement
-        this.enemyAttackerSpawns = []; // Pixel coordinates for enemy attacker placement
+        this.landmineSpawns = [];
+        this.enemyTankSpawns = [];
+        this.enemyAttackerSpawns = [];
+        this.enemyDroneSpawns = [];
+        this.enemyTurretSpawns = [];
+        this.enemyBaseSpawn = null;
 
         this._generate();
     }
@@ -85,10 +122,14 @@ export class Map {
         this.rooms.push({ centerR: enemyR + Math.floor(enemyH / 2), centerC: enemyC + Math.floor(enemyW / 2) });
 
         // Step 4: Scatter random rooms (Chambers)
-        const numRooms = 35 + Math.floor(Math.random() * 15); // More rooms (35-49)
+        const baseRooms = 15;
+        const scalingRooms = 35;
+        const numRooms = baseRooms + Math.floor(scalingRooms * ((this.cols * this.rows) / (MAX_MAP_COLS * MAX_MAP_ROWS)));
+
         for (let i = 0; i < numRooms; i++) {
-            const w = 20 + Math.floor(Math.random() * 25); // Width 20-44
-            const h = 20 + Math.floor(Math.random() * 25); // Height 20-44
+            // Room sizes also scale slightly
+            const w = 15 + Math.floor(Math.random() * 20);
+            const h = 15 + Math.floor(Math.random() * 20);
             const c = BORDER_THICKNESS + Math.floor(Math.random() * (this.cols - BORDER_THICKNESS * 2 - w));
             const r = BORDER_THICKNESS + Math.floor(Math.random() * (this.rows - BORDER_THICKNESS * 2 - h));
 
@@ -120,6 +161,9 @@ export class Map {
         // Ensure start area remains somewhat clear after smoothing
         this._carveRoom(4, 4, 10, 8);
 
+        // Carve Main Base Area (far right)
+        this._carveMainBaseRoom();
+
         // Step 8: Platform generation for large empty spaces
         this._generatePlatforms();
 
@@ -130,6 +174,9 @@ export class Map {
         this.landmineSpawns = this._findLandminePositions();
         this.enemyTankSpawns = this._findEnemyTankPositions();
         this.enemyAttackerSpawns = this._findEnemyAttackerPositions();
+        this.enemyDroneSpawns = this._findEnemyDronePositions();
+        this.enemyTurretSpawns = this._findEnemyTurretPositions();
+        this._addMainBaseDefenders(); // Force add defenders specifically around the base
 
         // Step 11: Generate off-screen mini-map
         this._generateMiniMap();
@@ -410,7 +457,7 @@ export class Map {
 
         // Shuffle and pick LANDMINE_COUNT positions
         const spawns = [];
-        const count = Math.min(LANDMINE_COUNT, candidates.length);
+        const count = Math.min(this.targetLandmineCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -448,7 +495,7 @@ export class Map {
 
         // Shuffle and pick ENEMY_TANK_COUNT positions
         const spawns = [];
-        const count = Math.min(ENEMY_TANK_COUNT, candidates.length);
+        const count = Math.min(this.targetTankCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -482,7 +529,7 @@ export class Map {
         }
 
         const spawns = [];
-        const count = Math.min(ENEMY_ATTACKER_TOTAL_COUNT, candidates.length);
+        const count = Math.min(this.targetAttackerCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -492,6 +539,221 @@ export class Map {
             spawns.push({
                 x: tile.c * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) / 2,
                 y: (tile.r + 1) * TILE_SIZE - PLAYER_HEIGHT
+            });
+        }
+        return spawns;
+    }
+
+    /**
+     * Find valid positions for enemy drones (aerial).
+     * Needs ample empty space (e.g., 3x3 empty blocks) so they spawn hovering in the air.
+     */
+    _findEnemyDronePositions() {
+        const candidates = [];
+        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS - 2; r++) {
+            for (let c = BORDER_THICKNESS + 2; c < this.cols - BORDER_THICKNESS - 2; c++) {
+                if (r < 16 && c < 20) continue; // Skip start area
+                // Need a 3x3 empty area to ensure it spawns floating in an open space
+                if (this._isAreaEmpty(r - 1, c - 1, 3, 3)) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+
+        const spawns = [];
+        const count = Math.min(this.targetDroneCount, candidates.length);
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (let i = 0; i < count; i++) {
+            const tile = candidates[i];
+            spawns.push({
+                x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_DRONE_WIDTH) / 2,
+                y: tile.r * TILE_SIZE + (TILE_SIZE - ENEMY_DRONE_HEIGHT) / 2
+            });
+        }
+        return spawns;
+    }
+
+    _carveMainBaseRoom() {
+        // Deepest part of the map
+        const centerR = Math.floor(this.rows / 2);
+        const centerC = this.cols - 12;
+
+        // Ensure there is a tunnel connecting to it
+        this._carveTunnelPath(centerR, centerC, centerR, centerC - 20, 6);
+
+        // Carve the main large room
+        this._carveRoom(centerC - 8, centerR - 10, 16, 20);
+
+        // Build a strong floor platform for the base
+        const floorR = centerR + 8;
+        for (let c = centerC - 6; c <= centerC + 6; c++) {
+            this.grid[floorR][c] = BLOCK_INDESTRUCTIBLE;
+            this.blockHP[floorR][c] = 999;
+        }
+
+        // Platforms for turrets - staggered based on mission level
+        // 1. Ceiling platforms (Always 2 from Mission 1)
+        this.grid[centerR - 4][centerC - 6] = BLOCK_INDESTRUCTIBLE;
+        this.blockHP[centerR - 4][centerC - 6] = 999;
+        this.grid[centerR - 4][centerC + 6] = BLOCK_INDESTRUCTIBLE;
+        this.blockHP[centerR - 4][centerC + 6] = 999;
+
+        // 2. Middle floor platform (From Mission 3)
+        if (this.missionLevel >= 2) {
+            this.grid[centerR + 2][centerC] = BLOCK_INDESTRUCTIBLE;
+            this.blockHP[centerR + 2][centerC] = 999;
+        }
+
+        // 3. Side floor platforms (From Mission 4)
+        if (this.missionLevel >= 3) {
+            // Left side platform
+            this.grid[centerR + 4][centerC - 4] = BLOCK_INDESTRUCTIBLE;
+            this.blockHP[centerR + 4][centerC - 4] = 999;
+            // Right side platform
+            this.grid[centerR + 4][centerC + 4] = BLOCK_INDESTRUCTIBLE;
+            this.blockHP[centerR + 4][centerC + 4] = 999;
+        }
+
+        // Add some hard blocks for cover
+        this.grid[floorR - 1][centerC - 7] = BLOCK_HARD;
+        this.blockHP[floorR - 1][centerC - 7] = HARD_BLOCK_HP;
+        this.grid[floorR - 2][centerC - 7] = BLOCK_HARD;
+        this.blockHP[floorR - 2][centerC - 7] = HARD_BLOCK_HP;
+
+        // Save spawn location for the Main Base (base rests on the indestructible floor)
+        this.enemyBaseSpawn = {
+            x: centerC * TILE_SIZE - (ENEMY_BASE_WIDTH / 2),
+            y: floorR * TILE_SIZE - ENEMY_BASE_HEIGHT
+        };
+        this.enemyBaseCenter = { r: centerR, c: centerC, floorR: floorR };
+    }
+
+    _addMainBaseDefenders() {
+        if (!this.enemyBaseCenter) return;
+
+        const { r, c, floorR } = this.enemyBaseCenter;
+
+        // Add Turrets on the indestructible spots we created - Staggered by MissionLevel
+        // Ceiling turrets (Always 2)
+        this.enemyTurretSpawns.push({
+            x: (c - 6) * TILE_SIZE,
+            y: (r - 4 + 1) * TILE_SIZE,
+            isCeiling: true
+        });
+        this.enemyTurretSpawns.push({
+            x: (c + 6) * TILE_SIZE,
+            y: (r - 4 + 1) * TILE_SIZE,
+            isCeiling: true
+        });
+
+        // Floor turret on the middle platform (Mission 3 only)
+        if (this.missionLevel === 2) {
+            this.enemyTurretSpawns.push({
+                x: c * TILE_SIZE,
+                y: (r + 2 - 1) * TILE_SIZE,
+                isCeiling: false
+            });
+        }
+
+        // Floor turrets on side platforms (Mission 4+)
+        if (this.missionLevel >= 3) {
+            this.enemyTurretSpawns.push({
+                x: (c - 4) * TILE_SIZE,
+                y: (r + 4 - 1) * TILE_SIZE,
+                isCeiling: false
+            });
+            this.enemyTurretSpawns.push({
+                x: (c + 4) * TILE_SIZE,
+                y: (r + 4 - 1) * TILE_SIZE,
+                isCeiling: false
+            });
+        }
+
+        // Add a few tanks
+        this.enemyTankSpawns.push({
+            x: (c - 4) * TILE_SIZE,
+            y: (floorR - 1) * TILE_SIZE - ENEMY_TANK_HEIGHT
+        });
+        this.enemyTankSpawns.push({
+            x: (c + 4) * TILE_SIZE,
+            y: (floorR - 1) * TILE_SIZE - ENEMY_TANK_HEIGHT
+        });
+
+        // Add some drones (Mission 4+)
+        if (this.missionLevel >= 3) {
+            this.enemyDroneSpawns.push({
+                x: (c - 3) * TILE_SIZE,
+                y: (r - 6) * TILE_SIZE
+            });
+            this.enemyDroneSpawns.push({
+                x: (c + 3) * TILE_SIZE,
+                y: (r - 6) * TILE_SIZE
+            });
+        }
+    }
+
+    /**
+     * Find valid positions for enemy turrets (stationary).
+     * Needs a solid floor OR solid ceiling.
+     */
+    _findEnemyTurretPositions() {
+        const floorCandidates = [];
+        const ceilingCandidates = [];
+
+        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS - 2; r++) {
+            for (let c = BORDER_THICKNESS + 2; c < this.cols - BORDER_THICKNESS - 2; c++) {
+                if (r < 16 && c < 20) continue; // Skip start area
+
+                // Floor mount: this tile is empty, left and right are empty, below is solid
+                if (this.grid[r][c] === BLOCK_EMPTY &&
+                    this.grid[r][c - 1] === BLOCK_EMPTY &&
+                    this.grid[r][c + 1] === BLOCK_EMPTY &&
+                    this.grid[r + 1][c] !== BLOCK_EMPTY) {
+                    floorCandidates.push({ r, c, isCeiling: false });
+                }
+
+                // Ceiling mount: this tile is empty, left and right are empty, above is solid
+                if (this.grid[r][c] === BLOCK_EMPTY &&
+                    this.grid[r][c - 1] === BLOCK_EMPTY &&
+                    this.grid[r][c + 1] === BLOCK_EMPTY &&
+                    this.grid[r - 1][c] !== BLOCK_EMPTY) {
+                    ceilingCandidates.push({ r, c, isCeiling: true });
+                }
+            }
+        }
+
+        // Combine all candidates
+        const allCandidates = [...floorCandidates, ...ceilingCandidates];
+
+        const spawns = [];
+        const count = Math.min(this.targetTurretCount, allCandidates.length);
+
+        // Shuffle candidates
+        for (let i = allCandidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allCandidates[i], allCandidates[j]] = [allCandidates[j], allCandidates[i]];
+        }
+
+        for (let i = 0; i < count; i++) {
+            const tile = allCandidates[i];
+            let yPos = tile.r * TILE_SIZE;
+
+            // Adjust Y based on mounting
+            if (tile.isCeiling) {
+                // Attached to top of tile
+                yPos = tile.r * TILE_SIZE;
+            } else {
+                // Attached to bottom of tile
+                yPos = tile.r * TILE_SIZE + TILE_SIZE - ENEMY_TURRET_HEIGHT;
+            }
+
+            spawns.push({
+                x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_TURRET_WIDTH) / 2,
+                y: yPos,
+                isCeiling: tile.isCeiling
             });
         }
         return spawns;
@@ -564,11 +826,13 @@ export class Map {
     // ------------------------------------------
 
     isSolid(r, c) {
+        if (isNaN(r) || isNaN(c)) return true;
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return true;
         return this.grid[r][c] !== BLOCK_EMPTY;
     }
 
     isSolidAtPixel(x, y) {
+        if (isNaN(x) || isNaN(y)) return true;
         return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     }
 

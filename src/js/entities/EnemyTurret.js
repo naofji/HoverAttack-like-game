@@ -1,0 +1,221 @@
+// ============================================
+// EnemyTurret - Stationary gun turret mounted on floor or ceiling
+// ============================================
+
+import {
+    ENEMY_TURRET_HP, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
+    ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
+    ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
+    TILE_SIZE
+} from '../utils/Constants.js';
+import { EnemyBullet } from './EnemyBullet.js';
+
+export class EnemyTurret {
+    constructor(game, x, y, isCeilingMounted = false) {
+        this.game = game;
+        this.x = x;
+        this.y = y;
+        this.width = ENEMY_TURRET_WIDTH;
+        this.height = ENEMY_TURRET_HEIGHT;
+        this.hp = ENEMY_TURRET_HP;
+        this.alive = true;
+        this.isCeilingMounted = isCeilingMounted;
+
+        // Visual aiming angle
+        this.targetAngle = isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
+        this.currentAngle = this.targetAngle;
+
+        // AI State
+        this.state = 'idle'; // 'idle', 'bursting', 'cooldown'
+        this.cooldownTimer = Math.floor(Math.random() * ENEMY_TURRET_COOLDOWN); // Randomize initial offset
+
+        // Burst scaling: Mission 5 (index 4) and above get 8 rounds
+        this.maxBurstCount = (this.game.missionsCompleted >= 4) ? 8 : ENEMY_TURRET_BURST_COUNT;
+
+        this.burstCount = 0;
+        this.burstTimer = 0;
+
+        // Visual recoil
+        this.recoil = 0;
+    }
+
+    update() {
+        if (!this.alive) return;
+
+        // Visuals
+        if (this.recoil > 0) this.recoil *= 0.8;
+
+        const target = this._findTarget();
+
+        // Aiming
+        if (target) {
+            const cx = this.x + this.width / 2;
+            const cy = this.y + this.height / 2;
+            const tx = target.x + target.width / 2;
+            const ty = target.y + target.height / 2;
+            this.targetAngle = Math.atan2(ty - cy, tx - cx);
+
+            // Limit traverse angle if needed, or let it turn freely
+            this.currentAngle = this.targetAngle; // Instant aim for now
+        } else {
+            // Return to rest position slowly
+            const restAngle = this.isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
+            this.currentAngle += (restAngle - this.currentAngle) * 0.05;
+        }
+
+        // State Machine
+        if (this.state === 'idle') {
+            if (this.cooldownTimer > 0) {
+                this.cooldownTimer--;
+            } else if (target) {
+                this.state = 'bursting';
+                this.burstCount = this.maxBurstCount;
+                this.burstTimer = 0; // Fire immediately
+            }
+        } else if (this.state === 'bursting') {
+            if (this.burstTimer <= 0) {
+                // Shoot one bullet of the burst
+                this._executeAttack();
+                this.burstCount--;
+                this.burstTimer = ENEMY_TURRET_BURST_DELAY;
+
+                if (this.burstCount <= 0) {
+                    this.state = 'cooldown';
+                    this.cooldownTimer = ENEMY_TURRET_COOLDOWN;
+                }
+            } else {
+                this.burstTimer--;
+            }
+        } else if (this.state === 'cooldown') {
+            this.cooldownTimer--;
+            if (this.cooldownTimer <= 0) {
+                this.state = 'idle';
+            }
+        }
+    }
+
+    _findTarget() {
+        const player = this.game.player;
+        const target = (player && player.alive && !player.docked) ? player : this.game.carrier;
+
+        if (target && target.alive) {
+            const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+            const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < ENEMY_TURRET_SIGHT_RANGE && this._hasLineOfSight(target)) {
+                return target;
+            }
+        }
+        return null;
+    }
+
+    _hasLineOfSight(target) {
+        const map = this.game.map;
+        const x1 = this.x + this.width / 2;
+        const y1 = this.y + this.height / 2;
+        const x2 = target.x + target.width / 2;
+        const y2 = target.y + target.height / 2;
+
+        const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+        const steps = Math.ceil(dist / (TILE_SIZE / 2));
+
+        for (let i = 1; i < steps; i++) {
+            const tx = x1 + (x2 - x1) * (i / steps);
+            const ty = y1 + (y2 - y1) * (i / steps);
+            if (map.isSolidAtPixel(tx, ty)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    _executeAttack() {
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        // Muzzle position offset by barrel length and recoil
+        const barrelLength = 12 - this.recoil;
+        const muzzleX = cx + Math.cos(this.currentAngle) * barrelLength;
+        const muzzleY = cy + Math.sin(this.currentAngle) * barrelLength;
+
+        // Inaccuracy
+        const inaccuracy = (Math.random() - 0.5) * 0.1;
+        const finalAngle = this.currentAngle + inaccuracy;
+
+        const bullet = new EnemyBullet(this.game, muzzleX, muzzleY, finalAngle);
+        this.game.enemyBullets.push(bullet);
+
+        this.recoil = 4; // Visual recoil kickback
+    }
+
+    takeDamage(amount) {
+        if (!this.alive) return;
+        this.hp -= amount;
+        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
+        if (this.hp <= 0) {
+            this.die();
+        }
+    }
+
+    die() {
+        this.alive = false;
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 30);
+        this.game.addScore(ENEMY_TURRET_SCORE);
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+
+        const drawX = Math.round(this.x);
+        const drawY = Math.round(this.y);
+        const cx = drawX + this.width / 2;
+        const cy = drawY + this.height / 2;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // --- Draw Base ---
+        ctx.fillStyle = '#555555';
+        ctx.strokeStyle = '#222222';
+        ctx.lineWidth = 2;
+
+        if (this.isCeilingMounted) {
+            // Mounted to ceiling (top edge)
+            ctx.fillRect(-10, -12, 20, 8);
+            ctx.strokeRect(-10, -12, 20, 8);
+            // Arm connecting base to pivot
+            ctx.fillRect(-4, -4, 8, 4);
+        } else {
+            // Mounted to floor (bottom edge)
+            ctx.fillRect(-10, 4, 20, 8);
+            ctx.strokeRect(-10, 4, 20, 8);
+            // Arm connecting base to pivot
+            ctx.fillRect(-4, 0, 8, 4);
+        }
+
+        // --- Draw Rotating Turret Head ---
+        ctx.rotate(this.currentAngle);
+
+        // Barrel
+        ctx.fillStyle = '#888888';
+        const barrelLength = 14 - this.recoil;
+        ctx.fillRect(4, -2, barrelLength, 4);
+        ctx.strokeRect(4, -2, barrelLength, 4);
+
+        // Main pivot body (Circle)
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#667788';
+        ctx.fill();
+        ctx.stroke();
+
+        // Warning light
+        ctx.fillStyle = (this.state === 'bursting') ? '#FF2222' : '#FFCC00';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}

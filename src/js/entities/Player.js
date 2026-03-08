@@ -561,7 +561,7 @@ export class Player {
         const cx = x + this.width / 2;
         const cy = y + 6 + crouchOffset;
 
-        let rawAngle = Math.atan2(mouseWorld.y - cy, mouseWorld.x - cx);
+        let rawAngle = Math.atan2(targetWorld.y - cy, targetWorld.x - cx);
         if (!this.facingRight) {
             rawAngle = Math.PI - rawAngle;
         }
