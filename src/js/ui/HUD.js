@@ -22,51 +22,56 @@ export class HUD {
 
         ctx.save();
 
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+
         // ====== TOP BAR ======
         ctx.fillStyle = HUD_BG_COLOR;
         ctx.fillRect(0, 0, w, HUD_TOP_HEIGHT);
 
-        ctx.font = 'bold 16px "Courier New", monospace';
+        ctx.font = HUD_FONT;
 
         // Title
         ctx.fillStyle = '#00CCFF';
-        ctx.fillText('HOVER ATTACK', 12, 16);
+        ctx.fillText('HOVER ATTACK', 12, HUD_TOP_HEIGHT / 4);
 
         // Score
         ctx.fillStyle = HUD_COLOR;
         const scoreStr = 'SCORE ' + String(this.game.score).padStart(7, '0');
-        ctx.fillText(scoreStr, w - 200, 16);
+        ctx.fillText(scoreStr, w - 140, HUD_TOP_HEIGHT / 2);
 
         // Resource row
         ctx.font = HUD_FONT;
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('GRENADE', 12, 34);
+        ctx.fillText('GRENADE', 12, HUD_TOP_HEIGHT * 0.75);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 85, 34);
+        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 85, HUD_TOP_HEIGHT * 0.75);
 
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('MISSILE', 130, 34);
+        ctx.fillText('MISSILE', 130, HUD_TOP_HEIGHT * 0.75);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.missiles : 0).padStart(3, ' '), 205, 34);
+        ctx.fillText(String(player ? player.missiles : 0).padStart(3, ' '), 205, HUD_TOP_HEIGHT * 0.75);
 
         // Hover gauge
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('HOVER', 280, 34);
+        ctx.fillText('HOVER', 280, HUD_TOP_HEIGHT * 0.75);
         const fuelRatio = player ? player.hoverFuel / HOVER_MAX_FUEL : 0;
-        const barX = 340;
-        const barY = 26;
-        const barW = 150;
+        const barW = 200;
         const barH = 10;
+        const barX = 330;
+        const barY = HUD_TOP_HEIGHT * 0.75 - barH / 2;
         // Background
         ctx.fillStyle = '#333333';
         ctx.fillRect(barX, barY, barW, barH);
         // Fuel bar
-        if (fuelRatio > 0.3) {
-            ctx.fillStyle = '#00FF88';
-        } else if (fuelRatio > 0.1) {
+        if (fuelRatio > 0.8) {
+            ctx.fillStyle = '#00FFFF';
+        } else if (fuelRatio > 0.5) {
+            ctx.fillStyle = '#00FF00';
+        } else if (fuelRatio > 0.3) {
             ctx.fillStyle = '#FFAA00';
         } else {
-            ctx.fillStyle = '#FF3333';
+            ctx.fillStyle = '#FF0000';
         }
         ctx.fillRect(barX, barY, barW * fuelRatio, barH);
         // Border
@@ -101,33 +106,33 @@ export class HUD {
         const centis = Math.floor((elapsed % 1000) / 10);
         const timeStr = `TIME ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centis).padStart(2, '0')}`;
         ctx.fillStyle = HUD_COLOR;
-        ctx.fillText(timeStr, 12, bottomY + 16);
+        ctx.fillText(timeStr, 12, bottomY + HUD_BOTTOM_HEIGHT / 2);
 
         // ATTACKER
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('ATTACKER', 230, bottomY + 16);
+        ctx.fillText('ATTACKER', 160, bottomY + HUD_BOTTOM_HEIGHT / 2);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.lives : 0), 320, bottomY + 16);
+        ctx.fillText(String(player ? player.lives : 0), 240, bottomY + HUD_BOTTOM_HEIGHT / 2);
 
         // CARRIER
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('CARRIER', 400, bottomY + 16);
+        ctx.fillText('CARRIER', 360, bottomY + HUD_BOTTOM_HEIGHT / 2);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(carrier ? carrier.lives : 0), 480, bottomY + 16);
+        ctx.fillText(String(carrier ? carrier.lives : 0), 430, bottomY + HUD_BOTTOM_HEIGHT / 2);
 
         // MISSION
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('MISSION', 560, bottomY + 16);
+        ctx.fillText('MISSION', 560, bottomY + HUD_BOTTOM_HEIGHT / 2);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(this.game.missionsCompleted || 0), 640, bottomY + 16);
+        ctx.fillText(String(this.game.missionsCompleted + 1 || 1), 640, bottomY + HUD_BOTTOM_HEIGHT / 2);
 
         // HP bar for player (small bar near bottom-left)
         if (player && player.alive) {
             const hpRatio = player.hp / PLAYER_MAX_HP;
-            const hpX = 160;
-            const hpY = bottomY + 6;
             const hpW = 50;
-            const hpH = 6;
+            const hpH = 8;
+            const hpX = 256;
+            const hpY = bottomY + HUD_BOTTOM_HEIGHT / 2 - hpH / 2;
             ctx.fillStyle = '#333';
             ctx.fillRect(hpX, hpY, hpW, hpH);
             ctx.fillStyle = hpRatio > 0.5 ? '#00DD00' : hpRatio > 0.2 ? '#DDAA00' : '#DD0000';
@@ -139,10 +144,10 @@ export class HUD {
         // HP bar for carrier
         if (carrier && carrier.alive) {
             const hpRatio = carrier.hp / CARRIER_MAX_HP;
-            const hpX = 500;
-            const hpY = bottomY + 6;
             const hpW = 50;
-            const hpH = 6;
+            const hpH = 8;
+            const hpX = 446;
+            const hpY = bottomY + HUD_BOTTOM_HEIGHT / 2 - hpH / 2;
             ctx.fillStyle = '#333';
             ctx.fillRect(hpX, hpY, hpW, hpH);
             ctx.fillStyle = hpRatio > 0.5 ? '#00DD00' : hpRatio > 0.2 ? '#DDAA00' : '#DD0000';

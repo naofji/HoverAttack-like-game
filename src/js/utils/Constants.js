@@ -2,13 +2,13 @@
 // Game Constants
 // ============================================
 
-export const CANVAS_WIDTH = 800;
-export const CANVAS_HEIGHT = 600;
+export const CANVAS_WIDTH = 1024;
+export const CANVAS_HEIGHT = 768;
 
 // --- Tile / Map Base Constants ---
 export const TILE_SIZE = 16;
-export const MIN_MAP_COLS = 100;
-export const MIN_MAP_ROWS = 60;
+export const MIN_MAP_COLS = 150;
+export const MIN_MAP_ROWS = 75;
 export const MAX_MAP_COLS = 300;
 export const MAX_MAP_ROWS = 150;
 
@@ -31,7 +31,7 @@ export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
 export const PLAYER_MAX_FALLING_SPEED = 8.0;  // Terminal velocity for falling
 export const PLAYER_STUN_FALL_SPEED = 7.0;    // Falling speed that triggers landing stun
-export const PLAYER_STUN_DURATION = 40;       // Duration of stun in frames (60 = 1 sec)
+export const PLAYER_STUN_DURATION = 20;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
 export const PLAYER_BURST_FORCE = -6.0;
 export const HOVER_THRUST = -0.50;
@@ -77,7 +77,7 @@ export const CAMERA_LERP = 0.08;
 // --- HUD ---
 export const HUD_TOP_HEIGHT = 30;
 export const HUD_BOTTOM_HEIGHT = 24;
-export const HUD_FONT = '14px "Courier New", monospace';
+export const HUD_FONT = 'bold 16px "Courier New", monospace';
 export const HUD_COLOR = '#00FF00';
 export const HUD_BG_COLOR = 'rgba(0, 0, 0, 0.85)';
 
@@ -99,7 +99,7 @@ export const ENEMY_TANK_WIDTH = 16;
 export const ENEMY_TANK_HEIGHT = 12;
 export const ENEMY_TANK_HP = 10;
 export const ENEMY_TANK_SPEED = 0.5;
-export const ENEMY_TANK_SIGHT_RANGE = 200;   // px - detection range for player
+export const ENEMY_TANK_SIGHT_RANGE = CANVAS_WIDTH * 0.4;   // px - detection range for player
 export const ENEMY_TANK_FIRE_INTERVAL = 90;  // frames between shots (~1.5s)
 export const ENEMY_TANK_SCORE = 200;
 export const ENEMY_TANK_COUNT = 30;          // Number to scatter across the map
@@ -121,7 +121,7 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 0.9,
         jumpForce: -6.5,
         fireInterval: 120,    // 2 seconds
-        sightRange: 300,
+        sightRange: CANVAS_WIDTH * 0.4,
         score: 100,
         spawnWeight: 60,      // 60%
         usesGrenades: false,
@@ -139,7 +139,7 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 0.5,
         jumpForce: -5.0,
         fireInterval: 90,     // 1.5 seconds
-        sightRange: 500,
+        sightRange: CANVAS_WIDTH * 0.6,
         score: 300,
         spawnWeight: 25,      // 25%
         usesGrenades: false,
@@ -157,7 +157,7 @@ export const ENEMY_ATTACKER_TYPES = {
         speed: 1.20,
         jumpForce: -6.0,
         fireInterval: 75,     // 1.25 seconds
-        sightRange: 400,
+        sightRange: CANVAS_WIDTH * 0.5,
         score: 500,
         spawnWeight: 15,      // 15%
         usesGrenades: true,
@@ -176,8 +176,8 @@ export const ENEMY_ATTACKER_TYPES = {
 export const ENEMY_DRONE_HP = 5;            // Weak armor
 export const ENEMY_DRONE_SPEED = 4.0;       // Dashing speed
 export const ENEMY_DRONE_SPEED_Y_MAX = 3.0; // Dashing vertical speed
-export const ENEMY_DRONE_SIGHT_RANGE = 500; // Wide sight range
-export const ENEMY_DRONE_FIRE_INTERVAL = 150; // 2.5 seconds
+export const ENEMY_DRONE_SIGHT_RANGE = CANVAS_WIDTH * 0.7; // Wide sight range
+export const ENEMY_DRONE_FIRE_INTERVAL = 120; // 2 seconds
 export const ENEMY_DRONE_SCORE = 150;
 export const ENEMY_DRONE_COUNT = 15;        // Number to spawn in air spaces
 export const ENEMY_DRONE_WIDTH = 24;
@@ -190,7 +190,7 @@ export const ENEMY_DRONE_GRENADE_CHANCE = 0.10; // 10% chance to drop grenade
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles
 export const ENEMY_TURRET_WIDTH = 24;
 export const ENEMY_TURRET_HEIGHT = 24;
-export const ENEMY_TURRET_SIGHT_RANGE = 450;
+export const ENEMY_TURRET_SIGHT_RANGE = CANVAS_WIDTH * 0.5;
 export const ENEMY_TURRET_SCORE = 200;
 export const ENEMY_TURRET_COUNT = 10;           // Number to spawn
 export const ENEMY_TURRET_BURST_COUNT = 5;      // Bullets per burst
@@ -199,15 +199,30 @@ export const ENEMY_TURRET_COOLDOWN = 120;       // Ticks between bursts (2 secon
 
 // --- Enemy Main Base (Win Condition) ---
 export const ENEMY_BASE_SCORE = 10000;
-export const ENEMY_BASE_WIDTH = 32;
-export const ENEMY_BASE_HEIGHT = 48;
+export const ENEMY_BASE_WIDTH = 24;
+export const ENEMY_BASE_HEIGHT = 32;
 export const ENEMY_BASE_SHIELDS = 3;            // Layers of defense
 export const ENEMY_BASE_HP = 1;                 // Final core HP
+
+// --- Flag (Capture Condition) ---
+export const FLAG_WIDTH = 12;
+export const FLAG_HEIGHT = 20;
+export const FLAG_SCORE = 5000;
+export const FLAG_COLOR = '#FF0000';
+
+// --- Enemy Base Laser ---
+export const BASE_LASER_RANGE = CANVAS_WIDTH * 0.5;
+export const BASE_LASER_CHARGE_TIME = 40; // frames
+export const BASE_LASER_COOLDOWN = 90;  // frames
+export const BASE_LASER_SPEED = 12;
+export const BASE_LASER_DAMAGE = 15;
 
 
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
+export const COLOR_HUD_TEXT = '#00CCFF';
+export const COLOR_LASER = '#00FFAA';
 export const COLOR_HARD_BLOCK = '#2a6496';
 export const COLOR_HARD_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#555555';

@@ -4,8 +4,12 @@ import {
     ENEMY_BASE_SCORE,
     ENEMY_BASE_SHIELDS,
     ENEMY_BASE_HP,
-    TILE_SIZE
+    TILE_SIZE,
+    BASE_LASER_RANGE,
+    BASE_LASER_CHARGE_TIME,
+    BASE_LASER_COOLDOWN
 } from '../utils/Constants.js';
+import { BaseLaser } from './BaseLaser.js';
 
 export class EnemyBase {
     constructor(game, x, y) {
@@ -32,6 +36,12 @@ export class EnemyBase {
 
         // Animation state
         this.coreAnimTimer = 0;
+
+        // Laser Attack State
+        this.attackState = 'idle'; // 'idle', 'charging', 'cooldown'
+        this.chargeTimer = 0;
+        this.cooldownTimer = 0;
+        this.chargeParticles = [];
     }
 
     update() {
@@ -40,9 +50,92 @@ export class EnemyBase {
         // Animate the core
         this.coreAnimTimer += 1;
 
+        // Update Laser State
+        this._updateLaser();
+
         // Keep bounds updated
         this.bounds.x = this.x;
         this.bounds.y = this.y;
+    }
+
+    _updateLaser() {
+        const target = this._findTarget();
+
+        if (this.attackState === 'idle') {
+            if (target) {
+                this.attackState = 'charging';
+                this.chargeTimer = 0;
+            }
+        } else if (this.attackState === 'charging') {
+            this.chargeTimer++;
+
+            // Spawn random intake particles
+            if (this.chargeTimer % 2 === 0) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 60 + Math.random() * 40;
+                this.chargeParticles.push({
+                    x: Math.cos(angle) * dist,
+                    y: Math.sin(angle) * dist,
+                    life: 30
+                });
+            }
+
+            // Update charge particles
+            for (let i = this.chargeParticles.length - 1; i >= 0; i--) {
+                const p = this.chargeParticles[i];
+                p.x *= 0.9; // move towards center (0,0 relative to core)
+                p.y *= 0.9;
+                p.life--;
+                if (p.life <= 0) this.chargeParticles.splice(i, 1);
+            }
+
+            if (this.chargeTimer >= BASE_LASER_CHARGE_TIME) {
+                this._fireLaser(target);
+                this.attackState = 'cooldown';
+                this.cooldownTimer = 0;
+                this.chargeParticles = [];
+            }
+        } else if (this.attackState === 'cooldown') {
+            this.cooldownTimer++;
+            if (this.cooldownTimer >= BASE_LASER_COOLDOWN) {
+                this.attackState = 'idle';
+            }
+        }
+    }
+
+    _findTarget() {
+        // Find closest between player and carrier
+        const candidates = [];
+        if (this.game.player && this.game.player.alive && !this.game.player.docked) candidates.push(this.game.player);
+        if (this.game.carrier && this.game.carrier.alive) candidates.push(this.game.carrier);
+
+        let bestTarget = null;
+        let minDist = BASE_LASER_RANGE;
+
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+
+        for (const c of candidates) {
+            const dx = c.x + c.width / 2 - centerX;
+            const dy = c.y + c.height / 2 - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < minDist) {
+                minDist = dist;
+                bestTarget = c;
+            }
+        }
+        return bestTarget;
+    }
+
+    _fireLaser(target) {
+        if (!target) return;
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+        const angle = Math.atan2(target.y + target.height / 2 - centerY, target.x + target.width / 2 - centerX);
+
+        const laser = new BaseLaser(this.game, centerX, centerY, angle);
+        this.game.enemyBullets.push(laser); // Put in enemyBullets so it gets updated and drawn
+        console.log("ENEMY BASE FIRED LASER!");
     }
 
     takeDamage(amount) {
@@ -222,6 +315,15 @@ export class EnemyBase {
             ctx.beginPath();
             ctx.arc(safeCoreX, safeCoreY, coreRadius * 0.5, 0, Math.PI * 2);
             ctx.fill();
+
+            // Draw Charge Particles
+            if (this.attackState === 'charging') {
+                ctx.fillStyle = '#00FFAA';
+                for (const p of this.chargeParticles) {
+                    const size = 1 + (p.life / 30) * 2;
+                    ctx.fillRect(safeCoreX + p.x - size / 2, safeCoreY + p.y - size / 2, size, size);
+                }
+            }
         } catch (e) {
             console.error("Gradient error in base:", e);
         }

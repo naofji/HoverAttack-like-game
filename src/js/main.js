@@ -32,6 +32,7 @@ import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { EnemyDrone } from './entities/EnemyDrone.js';
 import { EnemyTurret } from './entities/EnemyTurret.js';
 import { EnemyBase } from './entities/EnemyBase.js';
+import { Flag } from './entities/Flag.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 
@@ -58,6 +59,7 @@ const Game = {
     landmines: [],
     enemies: [],
     enemyBullets: [],
+    flag: null,
 
     // Game state
     score: 0,
@@ -106,6 +108,7 @@ const Game = {
         this.camera.snapToTarget();
 
         console.log('Hover Attack Ready!');
+        window.Game = this;
 
         // Start game loop
         requestAnimationFrame(this.loop.bind(this));
@@ -267,16 +270,51 @@ const Game = {
         }
 
         // --- Check Misson Clear Condition ---
-        if (this.base && !this.base.alive && this.gameState === 'playing') {
-            this.gameState = 'mission_clear';
-            this.missionsCompleted++;
-            console.log('MISSION COMPLETE!');
+        if (this.base && !this.base.alive && !this.flag && this.gameState === 'playing') {
+            // Spawn flag at base position
+            this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, this.base.y + this.base.height - 20);
+            console.log('Base destroyed! Flag spawned.');
+        }
+
+        if (this.flag) {
+            this.flag.update();
+            // Check capture by player
+            if (this.player && this.player.alive && !this.player.docked) {
+                if (this.flag.collidesWith(this.player)) {
+                    this.score += this.flag.scoreValue;
+                    this.flag = null;
+                    this.gameState = 'mission_clear';
+                    this.missionsCompleted++;
+                    console.log('FLAG CAPTURED! MISSION COMPLETE!');
+                }
+            }
         }
 
         // --- Update enemy bullets ---
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-            this.enemyBullets[i].update();
-            if (!this.enemyBullets[i].alive) {
+            const bullet = this.enemyBullets[i];
+            bullet.update();
+
+            if (bullet.alive) {
+                // Check collision with player
+                if (this.player && this.player.alive && !this.player.docked && this.player.invincibleTimer <= 0) {
+                    if (this._checkLaserHit(bullet, this.player)) {
+                        const damage = bullet.isBaseLaser ? 50 : 10;
+                        this.player.takeDamage(damage);
+                        if (!bullet.isBaseLaser) bullet.alive = false;
+                    }
+                }
+                // Check collision with carrier
+                if (this.carrier && this.carrier.alive) {
+                    if (this._checkLaserHit(bullet, this.carrier)) {
+                        const damage = bullet.isBaseLaser ? 50 : 10;
+                        this.carrier.takeDamage(damage);
+                        if (!bullet.isBaseLaser) bullet.alive = false;
+                    }
+                }
+            }
+
+            if (!bullet.alive) {
                 this.enemyBullets.splice(i, 1);
             }
         }
@@ -485,6 +523,11 @@ const Game = {
             bullet.draw(ctx);
         }
 
+        // Flag
+        if (this.flag) {
+            this.flag.draw(ctx);
+        }
+
         ctx.restore();
 
         // --- Draw HUD (screen-space) ---
@@ -644,6 +687,7 @@ const Game = {
         this.enemies = [];
         this.enemyBullets = [];
         this.base = null;
+        this.flag = null;
         this.gameState = 'playing';
 
         // Regenerate map
@@ -675,6 +719,7 @@ const Game = {
         this.enemies = [];
         this.enemyBullets = [];
         this.base = null;
+        this.flag = null;
         this.gameState = 'playing';
 
         // Regenerate map
@@ -704,8 +749,17 @@ const Game = {
     // ==========================================
 
     /** Spawn explosion particles at position */
-    spawnExplosion(x, y, count) {
-        const newParticles = createExplosion(x, y, count);
+    _checkLaserHit(bullet, target) {
+        // Broad phase box check
+        if (bullet.x > target.x && bullet.x < target.x + target.width &&
+            bullet.y > target.y && bullet.y < target.y + target.height) {
+            return true;
+        }
+        return false;
+    },
+
+    spawnExplosion(x, y, size) {
+        const newParticles = createExplosion(x, y, size);
         this.particles.push(...newParticles);
 
         // Any explosion triggers nearby mines
