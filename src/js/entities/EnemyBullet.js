@@ -5,7 +5,6 @@
 import {
     TILE_SIZE,
     ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS,
-    ENEMY_BULLET_DAMAGE_PLAYER, ENEMY_BULLET_DAMAGE_CARRIER,
     ENEMY_BULLET_LIFETIME
 } from '../utils/Constants.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -44,27 +43,7 @@ export class EnemyBullet {
             return;
         }
 
-        // --- Player collision ---
-        const player = this.game.player;
-        if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
-            if (this.x > player.x && this.x < player.x + player.width &&
-                this.y > player.y && this.y < player.y + player.height) {
-                player.takeDamage(ENEMY_BULLET_DAMAGE_PLAYER);
-                this.alive = false;
-                return;
-            }
-        }
-
-        // --- Carrier collision ---
-        const carrier = this.game.carrier;
-        if (carrier && carrier.alive) {
-            if (this.x > carrier.x && this.x < carrier.x + carrier.width &&
-                this.y > carrier.y && this.y < carrier.y + carrier.height) {
-                carrier.takeDamage(ENEMY_BULLET_DAMAGE_CARRIER);
-                this.alive = false;
-                return;
-            }
-        }
+        // Player/Carrier collision is handled by CollisionManager
     }
 
     draw(ctx) {

@@ -9,6 +9,7 @@ import {
     CARRIER_MAX_FALLING_SPEED,
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
+import { collidesWithMap } from '../utils/Physics.js';
 
 export class Carrier {
     constructor(game, x, y) {
@@ -120,7 +121,7 @@ export class Carrier {
     }
 
     _collidesWithMap() {
-        const map = this.game.map;
+        // Carrier uses extra bottom check points for its wider hull
         const points = [
             { x: this.x + 2, y: this.y + 2 },
             { x: this.x + this.width - 2, y: this.y + 2 },
@@ -131,10 +132,7 @@ export class Carrier {
             { x: this.x + this.width / 4, y: this.y + this.height - 1 },
             { x: this.x + this.width * 3 / 4, y: this.y + this.height - 1 },
         ];
-        for (const p of points) {
-            if (map.isSolidAtPixel(p.x, p.y)) return true;
-        }
-        return false;
+        return collidesWithMap(this, this.game.map, points);
     }
 
     // ------------------------------------------
@@ -168,7 +166,7 @@ export class Carrier {
     takeDamage(amount) {
         if (!this.alive) return;
         this.hp -= amount;
-        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
+        this.game.spawnHeavyDamage(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {
             this.die();
         }

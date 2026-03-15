@@ -15,6 +15,7 @@ import {
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST
 } from '../utils/Constants.js';
+import { collidesWithMap, getDefaultCheckPoints } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class Player {
@@ -55,6 +56,11 @@ export class Player {
 
     update() {
         if (!this.alive) return;
+        
+        // --- Timers that should run even while docked ---
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
+        if (this.missileCooldown > 0) this.missileCooldown--;
+
         if (this.docked) return; // Handled by carrier
 
         const input = this.game.input;
@@ -165,8 +171,7 @@ export class Player {
         }
 
         // --- Timers ---
-        if (this.invincibleTimer > 0) this.invincibleTimer--;
-        if (this.missileCooldown > 0) this.missileCooldown--;
+        // (timers running while docked are decremented at the top of this method)
     }
 
     _moveAndCollide() {
@@ -346,29 +351,14 @@ export class Player {
     }
 
     _collidesWithMap() {
-        const map = this.game.map;
-        // Check corners and midpoints of bounding box
-        const points = [
-            { x: this.x + 2, y: this.y + 2 },             // top-left
-            { x: this.x + this.width - 2, y: this.y + 2 }, // top-right
-            { x: this.x + 2, y: this.y + this.height - 1 }, // bottom-left
-            { x: this.x + this.width - 2, y: this.y + this.height - 1 }, // bottom-right
-            { x: this.x + this.width / 2, y: this.y + 2 },  // mid-top
-            { x: this.x + this.width / 2, y: this.y + this.height - 1 }, // mid-bottom
-            { x: this.x + 2, y: this.y + this.height / 2 },  // mid-left
-            { x: this.x + this.width - 2, y: this.y + this.height / 2 }, // mid-right
-        ];
-        for (const p of points) {
-            if (map.isSolidAtPixel(p.x, p.y)) return true;
-        }
-        return false;
+        return collidesWithMap(this, this.game.map);
     }
 
     takeDamage(amount) {
         if (!this.alive || this.invincibleTimer > 0) return;
 
         this.hp -= amount;
-        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
+        this.game.spawnHeavyDamage(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {
             this.die();
         }
@@ -379,6 +369,11 @@ export class Player {
         // Spawn explosion particles
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15);
         this.lives--;
+
+        // Release lock-on when dead
+        if (this.game.input) {
+            this.game.input.crosshairLocked = false;
+        }
     }
 
     respawn(x, y) {
@@ -386,6 +381,7 @@ export class Player {
         this.y = y;
         this.vx = 0;
         this.vy = 0;
+        this.onGround = false;
         this.hp = PLAYER_MAX_HP;
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
@@ -393,6 +389,18 @@ export class Player {
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
+        
+        // Reset states to prevent bugs across lives
+        this.hovering = false;
+        this.crouching = false;
+        this.stunTimer = 0;
+        this.hoverCooldown = 0;
+        this.missileCooldown = 0;
+        this.walkFrame = 2; // Default standing
+        this.walkTimer = 0;
+        
+        // Ensure sounds are stopped
+        audioManager.stopHover();
     }
 
     /** Resupply all resources (when docking) */

@@ -1,5 +1,5 @@
 // ============================================
-// Main Game Entry Point
+// Main Game Entry Point - v1.0
 // ============================================
 
 window.onerror = function (msg, url, loc) {
@@ -15,7 +15,6 @@ import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
-    ENEMY_ATTACKER_TYPES,
     LANDMINE_BLAST_RADIUS
 } from './utils/Constants.js';
 import { Map } from './world/Map.js';
@@ -24,17 +23,14 @@ import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Missile } from './entities/Missile.js';
 import { Grenade } from './entities/Grenade.js';
-import { Particle, createExplosion, createSparks } from './entities/Particle.js';
-import { Landmine } from './entities/Landmine.js';
-import { EnemyTank } from './entities/EnemyTank.js';
-import { EnemyBullet } from './entities/EnemyBullet.js';
-import { EnemyAttacker } from './entities/EnemyAttacker.js';
-import { EnemyDrone } from './entities/EnemyDrone.js';
-import { EnemyTurret } from './entities/EnemyTurret.js';
-import { EnemyBase } from './entities/EnemyBase.js';
+import { createExplosion, createSparks } from './entities/Particle.js';
 import { Flag } from './entities/Flag.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
+import { ScreenRenderer } from './ui/ScreenRenderer.js';
+import { CollisionManager } from './systems/CollisionManager.js';
+import { SpawnManager } from './systems/SpawnManager.js';
+import { GameStateManager } from './systems/GameStateManager.js';
 import { audioManager } from './audio/AudioManager.js';
 
 // ============================================
@@ -51,6 +47,12 @@ const Game = {
     camera: null,
     hud: null,
     crosshair: null,
+
+    // Managers
+    collisionManager: null,
+    spawnManager: null,
+    stateManager: null,
+    screenRenderer: null,
 
     // Entities
     player: null,
@@ -75,7 +77,7 @@ const Game = {
         this.canvas.width = CANVAS_WIDTH;
         this.canvas.height = CANVAS_HEIGHT;
 
-        console.log('Hover Attack Initializing...');
+        console.log('Hover Attack v1.0 Initializing...');
 
         // Initialize systems
         this.input = new Input(this.canvas);
@@ -84,8 +86,14 @@ const Game = {
         this.hud = new HUD(this);
         this.crosshair = new Crosshair(this);
 
+        // Initialize managers
+        this.collisionManager = new CollisionManager(this);
+        this.spawnManager = new SpawnManager(this);
+        this.stateManager = new GameStateManager(this);
+        this.screenRenderer = new ScreenRenderer(this);
+
         // Find safe spawn position in the start area
-        const spawnPos = this._findSpawnPosition(5, 5, 12, 10);
+        const spawnPos = this.spawnManager.findSpawnPosition(5, 5, 12, 10);
 
         // Create carrier first (player spawns on top)
         this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
@@ -98,17 +106,15 @@ const Game = {
         );
         this.player.docked = true;
 
-        // Create landmines from map spawn data
-        this._spawnLandmines();
-
-        // Create enemy tanks from map spawn data
-        this._spawnEnemies();
+        // Create landmines and enemies from map spawn data
+        this.spawnManager.spawnLandmines();
+        this.spawnManager.spawnEnemies();
 
         // Camera follows player
         this.camera.follow(this.player);
         this.camera.snapToTarget();
 
-        console.log('Hover Attack Ready!');
+        console.log('Hover Attack v1.0 Ready!');
         window.Game = this;
 
         // Start game loop
@@ -116,46 +122,17 @@ const Game = {
     },
 
     // ==========================================
-    // Find empty spawn position within a tile region
-    // ==========================================
-    _findSpawnPosition(startC, startR, searchW, searchH) {
-        for (let r = startR; r < startR + searchH; r++) {
-            for (let c = startC; c < startC + searchW; c++) {
-                // Need 3 wide x 2 tall empty space with floor below
-                if (!this.map.isSolid(r, c) &&
-                    !this.map.isSolid(r, c + 1) &&
-                    !this.map.isSolid(r, c + 2) &&
-                    !this.map.isSolid(r - 1, c) &&
-                    !this.map.isSolid(r - 1, c + 1) &&
-                    !this.map.isSolid(r - 1, c + 2) &&
-                    this.map.isSolid(r + 1, c) &&
-                    this.map.isSolid(r + 1, c + 1)) {
-                    return {
-                        x: c * TILE_SIZE,
-                        y: (r - 1) * TILE_SIZE
-                    };
-                }
-            }
-        }
-        // Fallback: just place in the carved start area
-        return { x: 5 * TILE_SIZE, y: 5 * TILE_SIZE };
-    },
-
-    // ==========================================
     // UPDATE
     // ==========================================
     update(deltaTime) {
         // --- Always update input state even if not playing ---
-        // Toggle Lock-on with Shift key (moved from Input.js)
+        // Toggle Lock-on with Shift key
         if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
             this.input.crosshairLocked = !this.input.crosshairLocked;
             if (this.input.crosshairLocked) {
                 const world = this.input.getMouseWorld(this.camera);
                 this.input.lockedWorldX = world.x;
                 this.input.lockedWorldY = world.y;
-                console.log('Crosshair Locked at:', world.x, world.y);
-            } else {
-                console.log('Crosshair Unlocked');
             }
         }
 
@@ -163,6 +140,7 @@ const Game = {
         if (this.gameState === 'title') {
             if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
                 this.gameState = 'playing';
+                audioManager.startBGM();
             }
             return;
         }
@@ -186,24 +164,20 @@ const Game = {
         if (this.carrier) {
             this.carrier.update();
 
-            // Check carrier respawn
             if (!this.carrier.alive && this.carrier.lives > 0) {
-                this._respawnCarrier();
+                this.stateManager.respawnCarrier();
             } else if (!this.carrier.alive && this.carrier.lives <= 0) {
-                this.gameState = 'gameover';
+                this._triggerGameOver();
             }
         }
 
         // --- Update player ---
         if (this.player) {
-            if (!this.player.docked) {
-                this.player.update();
-            }
-            // Check respawn
+            this.player.update();
             if (!this.player.alive && this.player.lives > 0) {
-                this._respawnPlayer();
+                this.stateManager.respawnPlayer();
             } else if (!this.player.alive && this.player.lives <= 0) {
-                this.gameState = 'gameover';
+                this._triggerGameOver();
             }
         }
 
@@ -270,103 +244,32 @@ const Game = {
             }
         }
 
-        // --- Check Misson Clear Condition ---
+        // --- Check Mission Clear Condition ---
         if (this.base && !this.base.alive && !this.flag && this.gameState === 'playing') {
-            // Spawn flag at base position
             this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, this.base.y + this.base.height - 20);
-            console.log('Base destroyed! Flag spawned.');
         }
 
         if (this.flag) {
             this.flag.update();
-            // Check capture by player
             if (this.player && this.player.alive && !this.player.docked) {
                 if (this.flag.collidesWith(this.player)) {
                     this.score += this.flag.scoreValue;
                     this.flag = null;
                     this.gameState = 'mission_clear';
                     this.missionsCompleted++;
-                    console.log('FLAG CAPTURED! MISSION COMPLETE!');
+                    audioManager.stopBGM();
+                    audioManager.playSuccess();
                 }
             }
         }
 
-        // --- Update enemy bullets ---
-        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-            const bullet = this.enemyBullets[i];
-            bullet.update();
-
-            if (bullet.alive) {
-                // Check collision with player
-                if (this.player && this.player.alive && !this.player.docked && this.player.invincibleTimer <= 0) {
-                    if (this._checkLaserHit(bullet, this.player)) {
-                        const damage = bullet.isBaseLaser ? 50 : 10;
-                        this.player.takeDamage(damage);
-                        if (!bullet.isBaseLaser) bullet.alive = false;
-                    }
-                }
-                // Check collision with carrier
-                if (this.carrier && this.carrier.alive) {
-                    if (this._checkLaserHit(bullet, this.carrier)) {
-                        const damage = bullet.isBaseLaser ? 50 : 10;
-                        this.carrier.takeDamage(damage);
-                        if (!bullet.isBaseLaser) bullet.alive = false;
-                    }
-                }
-            }
-
-            if (!bullet.alive) {
-                this.enemyBullets.splice(i, 1);
-            }
-        }
-
-        // --- Projectile collision ---
-        for (const proj of this.projectiles) {
-            if (!proj.alive || proj.exploded) continue;
-
-            if (proj instanceof Missile && proj.isPlayerOwned) {
-                // Player missiles vs enemies (instant contact hit)
-                for (const enemy of this.enemies) {
-                    if (!enemy.alive) continue;
-                    if (proj.x > enemy.x && proj.x < enemy.x + enemy.width &&
-                        proj.y > enemy.y && proj.y < enemy.y + enemy.height) {
-                        enemy.takeDamage(15);
-                        this.spawnExplosion(proj.x, proj.y, 12);
-                        proj.alive = false;
-                        proj.exploded = true;
-                        break;
-                    }
-                }
-            } else if (proj instanceof Missile && !proj.isPlayerOwned) {
-                // Enemy missiles vs player
-                const player = this.player;
-                if (player && player.alive && !player.docked && player.invincibleTimer <= 0) {
-                    if (proj.x > player.x && proj.x < player.x + player.width &&
-                        proj.y > player.y && proj.y < player.y + player.height) {
-                        player.takeDamage(15);
-                        this.spawnExplosion(proj.x, proj.y, 8);
-                        proj.alive = false;
-                        proj.exploded = true;
-                        continue;
-                    }
-                }
-                // Enemy missiles vs carrier
-                const carrier = this.carrier;
-                if (carrier && carrier.alive) {
-                    if (proj.x > carrier.x && proj.x < carrier.x + carrier.width &&
-                        proj.y > carrier.y && proj.y < carrier.y + carrier.height) {
-                        carrier.takeDamage(10);
-                        this.spawnExplosion(proj.x, proj.y, 8);
-                        proj.alive = false;
-                        proj.exploded = true;
-                    }
-                }
-            }
-        }
+        // --- Collision detection (centralized) ---
+        this.collisionManager.update();
 
         // --- End of frame input cleanup ---
         this.input.endFrame();
     },
+
     // ==========================================
     // DOCKING LOGIC
     // ==========================================
@@ -389,13 +292,9 @@ const Game = {
 
         // Undock (W key)
         if (this.input.isKeyPressed('KeyW') && player.docked) {
-            // Check if standing up would immediately collide with ceiling
-            // The player's visual height expands, but logical height is always PLAYER_HEIGHT
-            // We give a small upward boost (-3 vy). Check if space above is clear.
             let headClear = true;
-            const checkY = player.y - 4; // Check just above the player
+            const checkY = player.y - 4;
 
-            // Check top-left and top-right corners for the space they are about to occupy
             if (this.map.isSolidAtPixel(player.x + 2, checkY) ||
                 this.map.isSolidAtPixel(player.x + player.width - 2, checkY)) {
                 headClear = false;
@@ -403,8 +302,8 @@ const Game = {
 
             if (headClear) {
                 player.docked = false;
-                player.vy = -3; // Small upward boost on launch
-                player.walkFrame = 2; // Standing straight
+                player.vy = -3;
+                player.walkFrame = 2;
             }
         }
     },
@@ -433,7 +332,7 @@ const Game = {
                 const muzzleY = py + Math.sin(angle) * 12;
                 this.projectiles.push(new Missile(this, muzzleX, muzzleY, angle, true));
                 player.missiles--;
-                player.missileCooldown = 15; // 0.25s cooldown between shots
+                player.missileCooldown = 15;
                 audioManager.playMissile();
             }
         }
@@ -444,28 +343,7 @@ const Game = {
             const muzzleY = py + Math.sin(angle) * 10;
             this.projectiles.push(new Grenade(this, muzzleX, muzzleY, angle));
             player.grenades--;
-            audioManager.playExplosion(false); // Small "thump" or explosion for launch
-        }
-    },
-
-    // ==========================================
-    _respawnPlayer() {
-        if (this.carrier && this.carrier.alive) {
-            this.player.respawn(
-                this.carrier.x + this.carrier.width / 2 - this.player.width / 2,
-                this.carrier.y - this.player.height
-            );
-        }
-    },
-
-    _respawnCarrier() {
-        if (this.carrier) {
-            // Respawn carrier at its original spawn coordinates
-            this.carrier.respawn();
-
-            // Camera immediately snaps back to carrier location
-            this.camera.follow(this.carrier);
-            this.camera.snapToTarget();
+            audioManager.playExplosion(false);
         }
     },
 
@@ -480,7 +358,7 @@ const Game = {
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (this.gameState === 'title') {
-            this._drawTitleScreen(ctx);
+            this.screenRenderer.drawTitleScreen(ctx);
             return;
         }
 
@@ -511,7 +389,7 @@ const Game = {
             particle.draw(ctx);
         }
 
-        // Landmines (drawn on top of map, below player)
+        // Landmines
         for (const mine of this.landmines) {
             mine.draw(ctx);
         }
@@ -539,212 +417,23 @@ const Game = {
         // --- Draw crosshair (screen-space) ---
         this.crosshair.draw(ctx);
 
-        // --- Game Over overlay ---
+        // --- Overlays ---
         if (this.gameState === 'gameover') {
-            this._drawGameOver(ctx);
+            this.screenRenderer.drawGameOver(ctx);
+            if (this.input.isKeyPressed('KeyR')) {
+                this.stateManager.restart();
+                audioManager.startBGM();
+            }
         } else if (this.gameState === 'mission_clear') {
-            this._drawMissionClear(ctx);
+            this.screenRenderer.drawMissionClear(ctx);
+            if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
+                this.gameState = 'playing';
+                this.stateManager.nextMission();
+                audioManager.startBGM();
+            }
         } else if (this.showMiniMap) {
-            this._drawMiniMap(ctx);
+            this.screenRenderer.drawMiniMap(ctx);
         }
-    },
-
-    _drawTitleScreen(ctx) {
-        const ASCII_LOGO = [
-            "    __  ______ _    ____________     ___  _______________   ________ __",
-            "   / / / / __ \\ |  / / ____/ __ \\   /   |/_  __/_  __/   | / ____/ //_/",
-            "  / /_/ / / / / | / / __/ / /_/ /  / /| | / /   / / / /| |/ /   / ,<  ",
-            " / __  / /_/ /| |/ / /___/ _, _/  / ___ |/ /   / / / ___ / /___/ /| |  ",
-            "/_/ /_/\\____/ |___/_____/_/ |_|  /_/  |_/_/   /_/ /_/  |_\\____/_/ |_|  "
-        ];
-
-        ctx.fillStyle = '#00FF00'; // Retro green
-        ctx.font = 'bold 16px "Courier New", monospace';
-        ctx.textAlign = 'left';
-
-        // Approx character width for 16px Courier New is ~9.6px
-        const logoWidth = 72 * 9.6;
-        const startX = (this.canvas.width - logoWidth) / 2;
-        const startY = this.canvas.height / 3 - 40;
-
-        for (let i = 0; i < ASCII_LOGO.length; i++) {
-            ctx.fillText(ASCII_LOGO[i], startX, startY + (i * 18));
-        }
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px "Courier New", monospace';
-        ctx.textAlign = 'center';
-
-        // Blinking text
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.fillText('Press [W] or [Click] to Start', this.canvas.width / 2, this.canvas.height / 2 + 60);
-        }
-
-        // Render instructions
-        ctx.fillStyle = '#AAAAAA';
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Move: A/D | Launch/Burst: W | Hover: W (Hold) | Shoot: L-Click | Grenade: R-Click', this.canvas.width / 2, this.canvas.height - 60);
-        ctx.fillText('Map: M | Lock-on: Shift | Dock: S', this.canvas.width / 2, this.canvas.height - 40);
-    },
-
-    _drawMissionClear(ctx) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.fillStyle = '#00FF00';
-        ctx.font = '30px "Courier New", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('MISSION COMPLETE', this.canvas.width / 2, this.canvas.height / 2 - 20);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '16px "Courier New", monospace';
-        ctx.fillText('Press [W] or [Click] to continue', this.canvas.width / 2, this.canvas.height / 2 + 20);
-
-        // Allow next mission
-        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
-            this.gameState = 'playing';
-            this._nextMission();
-        }
-    },
-
-    _drawMiniMap(ctx) {
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const mm = this.map.miniMapCanvas;
-
-        if (!mm) return;
-
-        // Center of the screen
-        const mmX = (w - mm.width) / 2;
-        const mmY = (h - mm.height) / 2;
-
-        ctx.save();
-        ctx.globalAlpha = 0.85;
-
-        // Draw the cached static map
-        ctx.drawImage(mm, mmX, mmY);
-
-        // Draw border
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(mmX, mmY, mm.width, mm.height);
-
-        ctx.globalAlpha = 1.0;
-
-        // Helper to draw a dot
-        const drawDot = (worldX, worldY, color, size = 2) => {
-            const px = mmX + (worldX / TILE_SIZE) * this.map.miniMapScale;
-            const py = mmY + (worldY / TILE_SIZE) * this.map.miniMapScale;
-            ctx.fillStyle = color;
-            ctx.fillRect(px - size / 2, py - size / 2, size, size);
-        };
-
-        // Carrier (Blue square)
-        if (this.carrier && this.carrier.alive) {
-            drawDot(this.carrier.x + this.carrier.width / 2, this.carrier.y + this.carrier.height / 2, '#0088FF', 5);
-        }
-
-        // Enemies (Red squares)
-        for (const enemy of this.enemies) {
-            if (enemy.alive) drawDot(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, '#FF3333', 3);
-        }
-
-        // Player (White square)
-        if (this.player && this.player.alive && !this.player.docked) {
-            drawDot(this.player.x + this.player.width / 2, this.player.y + this.player.height / 2, '#FFFFFF', 4);
-        }
-
-        ctx.restore();
-    },
-
-    _drawGameOver(ctx) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.fillStyle = '#FF3333';
-        ctx.font = 'bold 36px "Courier New", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2 - 20);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Courier New", monospace';
-        ctx.fillText(`FINAL SCORE: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2 + 20);
-
-        ctx.fillStyle = '#888888';
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Press R to Restart', this.canvas.width / 2, this.canvas.height / 2 + 60);
-        ctx.textAlign = 'left';
-
-        // Restart on R
-        if (this.input.isKeyPressed('KeyR')) {
-            this._restart();
-        }
-    },
-
-    _restart() {
-        this.score = 0;
-        this.missionsCompleted = 0;
-        this.projectiles = [];
-        this.particles = [];
-        this.landmines = [];
-        this.enemies = [];
-        this.enemyBullets = [];
-        this.base = null;
-        this.flag = null;
-        this.gameState = 'playing';
-
-        // Regenerate map
-        this.map = new Map(this, this.missionsCompleted);
-        this.hud = new HUD(this);
-
-        const spawnPos = this._findSpawnPosition(5, 5, 12, 10);
-        this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
-        this.player = new Player(
-            this,
-            this.carrier.x + this.carrier.width / 2 - 10,
-            this.carrier.y - 24
-        );
-        this.player.docked = true;
-        this.camera.follow(this.player);
-        this.camera.snapToTarget();
-
-        // Recreate landmines
-        this._spawnLandmines();
-
-        // Recreate enemies
-        this._spawnEnemies();
-    },
-
-    _nextMission() {
-        this.projectiles = [];
-        this.particles = [];
-        this.landmines = [];
-        this.enemies = [];
-        this.enemyBullets = [];
-        this.base = null;
-        this.flag = null;
-        this.gameState = 'playing';
-
-        // Regenerate map
-        this.map = new Map(this, this.missionsCompleted);
-        this.hud = new HUD(this);
-
-        const spawnPos = this._findSpawnPosition(5, 5, 12, 10);
-        this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
-        this.player = new Player(
-            this,
-            this.carrier.x + this.carrier.width / 2 - 10,
-            this.carrier.y - 24
-        );
-        this.player.docked = true;
-        this.camera.follow(this.player);
-        this.camera.snapToTarget();
-
-        // Recreate landmines
-        this._spawnLandmines();
-
-        // Recreate enemies
-        this._spawnEnemies();
     },
 
     // ==========================================
@@ -752,15 +441,6 @@ const Game = {
     // ==========================================
 
     /** Spawn explosion particles at position */
-    _checkLaserHit(bullet, target) {
-        // Broad phase box check
-        if (bullet.x > target.x && bullet.x < target.x + target.width &&
-            bullet.y > target.y && bullet.y < target.y + target.height) {
-            return true;
-        }
-        return false;
-    },
-
     spawnExplosion(x, y, size) {
         const newParticles = createExplosion(x, y, size);
         this.particles.push(...newParticles);
@@ -777,7 +457,6 @@ const Game = {
                     const dx = ex - x;
                     const dy = ey - y;
                     if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) {
-                        // Detonate on next frame/tick to avoid deep call stacks
                         mine.detonate();
                     }
                 }
@@ -791,101 +470,23 @@ const Game = {
         this.particles.push(...newParticles);
     },
 
+    /** Spawn heavy damage sparks and sound */
+    spawnHeavyDamage(x, y) {
+        this.spawnSparks(x, y);
+        audioManager.playHeavyDamage();
+    },
+
     /** Add to score */
     addScore(points) {
         this.score += points;
     },
 
-    /** Create Landmine entities from the map's spawn data */
-    _spawnLandmines() {
-        this.landmines = [];
-        for (const pos of this.map.landmineSpawns) {
-            this.landmines.push(new Landmine(this, pos.x, pos.y));
-        }
-    },
-
-    /** Create EnemyTank and EnemyAttacker entities from the map's spawn data */
-    _spawnEnemies() {
-        this.enemies = [];
-        this.enemyBullets = [];
-
-        // Helper function to find a non-overlapping spawn offset
-        const resolveOverlap = (baseX, baseY) => {
-            let x = baseX;
-            let y = baseY;
-            // Try to find a clear spot by nudging left or right up to 3 times
-            for (let attempt = 0; attempt < 10; attempt++) {
-                let isOverlapping = false;
-                for (const e of this.enemies) {
-                    // Check if centers are too close (e.g. < 24px)
-                    const dx = (e.x + e.width / 2) - (x + 12); // assume ~24px width
-                    const dy = (e.y + e.height / 2) - (y + 8);
-                    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) {
-                        isOverlapping = true;
-                        break;
-                    }
-                }
-                if (!isOverlapping) return { x, y }; // Found a good spot
-                // Nudge left or right randomly
-                x += (Math.random() < 0.5 ? -1 : 1) * 16;
-            }
-            return { x, y }; // Fallback to whatever we have if it's too crowded
-        };
-
-        // Spawn hover tanks
-        for (const pos of this.map.enemyTankSpawns) {
-            const adjustedPos = resolveOverlap(pos.x, pos.y);
-            this.enemies.push(new EnemyTank(this, adjustedPos.x, adjustedPos.y));
-        }
-
-        // Filter available attacker types based on missionsCompleted
-        // Mission 1 (0): None (handled by Map.js)
-        // Mission 2 (1): Standard only
-        // Mission 3+ (2+): Standard + Heavy
-        // Mission 4+ (3+): Standard + Heavy + Rival
-        const availableTypes = {};
-        let totalWeight = 0;
-
-        for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
-            if (key === 'heavy' && this.missionsCompleted < 2) continue;
-            if (key === 'rival' && this.missionsCompleted < 3) continue;
-
-            availableTypes[key] = type;
-            totalWeight += type.spawnWeight;
-        }
-
-        // Attackers (Humanoids)
-        for (const pos of this.map.enemyAttackerSpawns) {
-            let rnd = Math.random() * totalWeight;
-            let selectedTypeKey = 'standard';
-
-            for (const [key, typeDef] of Object.entries(availableTypes)) {
-                if (rnd < typeDef.spawnWeight) {
-                    selectedTypeKey = key;
-                    break;
-                }
-                rnd -= typeDef.spawnWeight;
-            }
-            const adjustedPos = resolveOverlap(pos.x, pos.y);
-            this.enemies.push(new EnemyAttacker(this, adjustedPos.x, adjustedPos.y, availableTypes[selectedTypeKey]));
-        }
-
-        // Spawn aerial drones
-        for (const pos of this.map.enemyDroneSpawns) {
-            // Drones hover, so overlapping is less of an issue, but staggering helps
-            this.enemies.push(new EnemyDrone(this, pos.x, pos.y));
-        }
-
-        // Spawn stationary turrets
-        for (const pos of this.map.enemyTurretSpawns) {
-            this.enemies.push(new EnemyTurret(this, pos.x, pos.y, pos.isCeiling));
-        }
-
-        // Spawn Main Base at the very end
-        if (this.map.enemyBaseSpawn) {
-            this.base = new EnemyBase(this, this.map.enemyBaseSpawn.x, this.map.enemyBaseSpawn.y);
-            this.enemies.push(this.base);
-        }
+    /** Transition to game over state (idempotent) */
+    _triggerGameOver() {
+        if (this.gameState === 'gameover') return;
+        this.gameState = 'gameover';
+        audioManager.stopBGM();
+        audioManager.playGameOver();
     },
 
     // ==========================================

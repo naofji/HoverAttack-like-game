@@ -11,6 +11,7 @@ import {
     ENEMY_DRONE_GRENADE_CHANCE,
     ENEMY_BULLET_SPEED
 } from '../utils/Constants.js';
+import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 
@@ -234,34 +235,21 @@ export class EnemyDrone {
     }
 
     _collidesWithMap() {
-        const map = this.game.map;
         const points = [
             { x: this.x + 2, y: this.y + 2 },
             { x: this.x + this.width - 2, y: this.y + 2 },
             { x: this.x + 2, y: this.y + this.height - 2 },
             { x: this.x + this.width - 2, y: this.y + this.height - 2 },
         ];
-        return points.some(p => map.isSolidAtPixel(p.x, p.y));
+        return collidesWithMap(this, this.game.map, points);
     }
 
     _hasLineOfSight(target) {
-        const map = this.game.map;
-        const x1 = this.x + this.width / 2;
-        const y1 = this.y + this.height / 2;
-        const x2 = target.x + target.width / 2;
-        const y2 = target.y + target.height / 2;
-
-        const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const steps = Math.ceil(dist / (TILE_SIZE / 2));
-
-        for (let i = 1; i < steps; i++) {
-            const tx = x1 + (x2 - x1) * (i / steps);
-            const ty = y1 + (y2 - y1) * (i / steps);
-            if (map.isSolidAtPixel(tx, ty)) {
-                return false;
-            }
-        }
-        return true;
+        return hasLineOfSight(
+            this.x + this.width / 2, this.y + this.height / 2,
+            target.x + target.width / 2, target.y + target.height / 2,
+            this.game.map
+        );
     }
 
     takeDamage(amount) {

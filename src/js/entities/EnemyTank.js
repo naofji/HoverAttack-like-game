@@ -10,6 +10,7 @@ import {
     ENEMY_TANK_MAX_FALLING_SPEED,
     EXPLOSION_PARTICLE_COUNT
 } from '../utils/Constants.js';
+import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 
 export class EnemyTank {
@@ -138,7 +139,10 @@ export class EnemyTank {
 
         // Vertical Entity Collision
         if (this.vy > 0) {
-            this._checkVerticalEntities();
+            const entities = [...this.game.enemies];
+            const player = this.game.player;
+            if (player && player.alive && !player.docked) entities.push(player);
+            checkVerticalEntityCollision(this, entities);
         }
     }
 
@@ -147,53 +151,13 @@ export class EnemyTank {
         const player = this.game.player;
         if (player && player.alive && !player.docked) entities.push(player);
 
-        for (const entity of entities) {
-            if (entity === this || !entity.alive) continue;
-
-            if (this.x < entity.x + entity.width &&
-                this.x + this.width > entity.x &&
-                this.y < entity.y + entity.height &&
-                this.y + this.height > entity.y) {
-
-                if (this.vx > 0) {
-                    this.x = entity.x - this.width;
-                    this.vx = 0;
-                } else if (this.vx < 0) {
-                    this.x = entity.x + entity.width;
-                    this.vx = 0;
-                }
-
-                this.patrolDir *= -1;
-            }
-        }
-    }
-
-    _checkVerticalEntities() {
-        const entities = [...this.game.enemies];
-        const player = this.game.player;
-        if (player && player.alive && !player.docked) entities.push(player);
-
-        for (const entity of entities) {
-            if (entity === this || !entity.alive) continue;
-
-            const myBottom = this.y + this.height;
-            const myPrevBottom = myBottom - this.vy;
-            const eTop = entity.y;
-
-            if (this.x + this.width > entity.x && this.x < entity.x + entity.width) {
-                if (myPrevBottom <= eTop + 4 && myBottom >= eTop) {
-                    this.y = eTop - this.height;
-                    this.vy = 0;
-                    this.x += entity.vx || 0;
-                    break;
-                }
-            }
-        }
+        checkHorizontalEntityCollision(this, entities, () => {
+            this.patrolDir *= -1;
+        });
     }
 
     _collidesWithMap() {
-        const map = this.game.map;
-        // Check 4 corners + 2 bottom-center points
+        // EnemyTank uses 5 check points (4 corners + bottom center)
         const points = [
             { x: this.x + 1, y: this.y + 1 },
             { x: this.x + this.width - 1, y: this.y + 1 },
@@ -201,7 +165,7 @@ export class EnemyTank {
             { x: this.x + this.width - 1, y: this.y + this.height - 1 },
             { x: this.x + this.width / 2, y: this.y + this.height - 1 },
         ];
-        return points.some(p => map.isSolidAtPixel(p.x, p.y));
+        return collidesWithMap(this, this.game.map, points);
     }
 
     // ------------------------------------------

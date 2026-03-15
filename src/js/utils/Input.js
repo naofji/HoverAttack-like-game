@@ -39,8 +39,18 @@ export class Input {
 
         this.canvas.addEventListener('mousemove', (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            this.mouse.x = e.clientX - rect.left;
-            this.mouse.y = e.clientY - rect.top;
+            const newX = e.clientX - rect.left;
+            const newY = e.clientY - rect.top;
+            
+            if (this.mouse.x !== newX || this.mouse.y !== newY) {
+                this.mouse.x = newX;
+                this.mouse.y = newY;
+                
+                if (this.crosshairLocked) {
+                    this.crosshairLocked = false;
+                    console.log('Crosshair Unlocked (Mouse Moved)');
+                }
+            }
         });
 
         this.canvas.addEventListener('mousedown', (e) => {

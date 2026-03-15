@@ -170,6 +170,7 @@ export class EnemyBase {
 
         // Massive explosion
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 70);
+        audioManager.playBaseDestroyed();
     }
 
     draw(ctx) {

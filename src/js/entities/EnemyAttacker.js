@@ -9,6 +9,7 @@ import {
     HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
     MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT
 } from '../utils/Constants.js';
+import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
 import { Grenade } from './Grenade.js';
 
@@ -197,25 +198,39 @@ export class EnemyAttacker {
             }
         }
         else if (mType === 'chase_and_jump') {
-            if (Math.abs(dx) > 4) {
+            const preferredDist = 140; // Maintain this horizontal distance
+            const distTolerance = 30;  // Range: 110 - 170
+            const absDx = Math.abs(dx);
+
+            if (absDx > preferredDist + distTolerance) {
+                // Too far: approach aggressively
                 this.patrolDir = dx > 0 ? 1 : -1;
+                this.vx = this.patrolDir * this.maxSpeed;
+            } else if (absDx < preferredDist - distTolerance) {
+                // Too close: retreat to safety
+                this.patrolDir = dx > 0 ? -1 : 1;
+                this.vx = this.patrolDir * this.maxSpeed;
+            } else {
+                // Within optimal skirmish range: pace and circle
+                if (Math.random() < 0.02) { // 2% chance to switch pacing direction
+                    this.patrolDir *= -1;
+                }
+                this.vx = this.patrolDir * this.maxSpeed * 0.8; // Pace slightly slower
             }
-            this.vx = this.patrolDir * this.maxSpeed;
 
             if (this.onGround) {
                 if (this.jumpCooldown <= 0) {
-                    // Jump frequently or if player is above
-                    if (dy < -16 || Math.random() < 0.05) {
+                    // Jump if target is high, or occasionally to stay unpredictable
+                    if (dy < -16 || Math.random() < 0.03) {
                         this._jump();
                     }
                 }
             } else {
-                // Airborne: hover if player is above or just to stay airborne longer
-                if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() < 0.1))) {
+                // Airborne: hover if player is above or to stay in the air while skirmishing
+                if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() * 1.5 < 0.1))) {
                     this.hovering = true;
                     this.vy -= 0.6; // Hover upward thrust
                     this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                    // Cap rising speed
                     if (this.vy < -4.0) this.vy = -4.0;
                 }
             }
@@ -368,27 +383,11 @@ export class EnemyAttacker {
         const player = this.game.player;
         if (player && player.alive && !player.docked) entities.push(player);
 
-        for (const entity of entities) {
-            if (entity === this || !entity.alive) continue;
-
-            if (this.x < entity.x + entity.width &&
-                this.x + this.width > entity.x &&
-                this.y < entity.y + entity.height &&
-                this.y + this.height > entity.y) {
-
-                if (this.vx > 0) {
-                    this.x = entity.x - this.width;
-                    this.vx = 0;
-                } else if (this.vx < 0) {
-                    this.x = entity.x + entity.width;
-                    this.vx = 0;
-                }
-
-                if (this.aiState === 'patrol') {
-                    this.patrolDir *= -1;
-                }
+        checkHorizontalEntityCollision(this, entities, () => {
+            if (this.aiState === 'patrol') {
+                this.patrolDir *= -1;
             }
-        }
+        });
     }
 
     _checkVerticalEntities() {
@@ -396,38 +395,13 @@ export class EnemyAttacker {
         const player = this.game.player;
         if (player && player.alive && !player.docked) entities.push(player);
 
-        for (const entity of entities) {
-            if (entity === this || !entity.alive) continue;
-
-            const myBottom = this.y + this.height;
-            const myPrevBottom = myBottom - this.vy;
-            const eTop = entity.y;
-
-            if (this.x + this.width > entity.x && this.x < entity.x + entity.width) {
-                if (myPrevBottom <= eTop + 4 && myBottom >= eTop) {
-                    this.y = eTop - this.height;
-                    this.onGround = true;
-                    this.vy = 0;
-                    this.x += entity.vx || 0;
-                    break;
-                }
-            }
+        if (checkVerticalEntityCollision(this, entities)) {
+            this.onGround = true;
         }
     }
 
     _collidesWithMap() {
-        const map = this.game.map;
-        const points = [
-            { x: this.x + 2, y: this.y + 2 },
-            { x: this.x + this.width - 2, y: this.y + 2 },
-            { x: this.x + 2, y: this.y + this.height - 1 },
-            { x: this.x + this.width - 2, y: this.y + this.height - 1 },
-            { x: this.x + this.width / 2, y: this.y + 2 },
-            { x: this.x + this.width / 2, y: this.y + this.height - 1 },
-            { x: this.x + 2, y: this.y + this.height / 2 },
-            { x: this.x + this.width - 2, y: this.y + this.height / 2 },
-        ];
-        return points.some(p => map.isSolidAtPixel(p.x, p.y));
+        return collidesWithMap(this, this.game.map);
     }
 
     // ------------------------------------------
