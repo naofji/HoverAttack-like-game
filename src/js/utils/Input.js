@@ -20,13 +20,23 @@ export class Input {
         // Lock-on state
         this.crosshairLocked = false;
         this.lockedWorldX = 0;
-        this.lockedWorldY = 0;
+        // Typing support for Ranking entry
+        this.typedChars = [];
 
         this._setupListeners();
     }
 
     _setupListeners() {
         window.addEventListener('keydown', (e) => {
+            if (!this.keys[e.code]) {
+                // Record single keystrokes (no repeat) for text entry
+                if (e.key.length === 1 && /[a-zA-Z0-9 :\-_.]/.test(e.key)) {
+                    this.typedChars.push(e.key);
+                } else if (e.key === 'Backspace' || e.key === 'Enter') {
+                    this.typedChars.push(e.key);
+                }
+            }
+
             this.keys[e.code] = true;
             if (PREVENT_DEFAULT_KEYS.has(e.code)) {
                 e.preventDefault();
@@ -89,6 +99,11 @@ export class Input {
         return this.mouse.right && !this.prevMouse.right;
     }
 
+    /** Get typed characters/actions of this frame */
+    getTypedChars() {
+        return this.typedChars;
+    }
+
     /** Get mouse position in world coordinates */
     getMouseWorld(camera) {
         return {
@@ -109,5 +124,6 @@ export class Input {
     endFrame() {
         this.prevKeys = { ...this.keys };
         this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
+        this.typedChars = []; // Clear key queue
     }
 }

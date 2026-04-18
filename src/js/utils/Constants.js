@@ -64,6 +64,16 @@ export const GRENADE_DAMAGE = 80;
 export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
 export const GRENADE_EXPLOSION_COUNT = 150;
 
+// --- Player Machine Gun (Fallback for missiles) ---
+export const PLAYER_MG_SPEED = 3; // Same as ENEMY_BULLET_SPEED
+export const PLAYER_MG_RADIUS = 1.5;
+export const PLAYER_MG_DAMAGE = 3;
+export const PLAYER_MG_LIFETIME = 240; // Exactly half of missile range (240 * 3 = 720px)
+export const PLAYER_MG_BURST_SIZE = 16;
+export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
+export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
+export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 degrees)
+
 // --- Carrier ---
 export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
@@ -75,8 +85,8 @@ export const CARRIER_INITIAL_LIVES = 3;
 export const CAMERA_LERP = 0.08;
 
 // --- HUD ---
-export const HUD_TOP_HEIGHT = 30;
-export const HUD_BOTTOM_HEIGHT = 24;
+export const HUD_TOP_HEIGHT = 60; // Expanded to fit 2 rows
+export const HUD_BOTTOM_HEIGHT = 0;
 export const HUD_FONT = 'bold 16px "Courier New", monospace';
 export const HUD_COLOR = '#00FF00';
 export const HUD_BG_COLOR = 'rgba(0, 0, 0, 0.85)';

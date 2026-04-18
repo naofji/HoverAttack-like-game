@@ -25,6 +25,7 @@ export class EnemyDrone {
         this.vx = 0;
         this.vy = 0;
         this.hp = ENEMY_DRONE_HP;
+        this.maxHp = this.hp;
         this.alive = true;
 
         this.fireTimer = Math.floor(Math.random() * ENEMY_DRONE_FIRE_INTERVAL);

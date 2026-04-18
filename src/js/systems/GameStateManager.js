@@ -22,7 +22,12 @@ export class GameStateManager {
         if (resetScore) {
             game.score = 0;
             game.missionsCompleted = 0;
+            game.totalTime = 0;
         }
+        
+        game.missionTimer = 0;
+        game.pendingTimeBonus = 0;
+        game.slotRunning = false;
 
         game.projectiles = [];
         game.particles = [];

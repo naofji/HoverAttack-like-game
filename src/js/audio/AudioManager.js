@@ -482,6 +482,90 @@ export class AudioManager {
         if (this.bgm) {
             this.bgm.stop();
         }
+        this.stopRankingBGM();
+    }
+
+    playRankingBGM() {
+        this.init();
+        this._resume();
+        this.stopRankingBGM();
+
+        const now = this.ctx.currentTime;
+        const tempo = 0.2; // 150 BPM
+        this.rankingOscillators = [];
+        this.rankingGainNodes = [];
+
+        // Simple C Major loop (C E G C) very bright and pop
+        const notes = [
+            523.25, 659.25, 783.99, 1046.50,
+            523.25, 659.25, 1046.50, 783.99
+        ];
+        const bassNotes = [130.81, 130.81, 174.61, 174.61, 196.00, 196.00, 196.00, 196.00];
+
+        // Loop the pattern a few times and schedule them out
+        // For simplicity, we just schedule 120 beats (approx 24 seconds) of loop.
+        // It's a ranking screen, so 24s is usually enough. Or we can extend it.
+        const numLoops = 20;
+
+        for (let loop = 0; loop < numLoops; loop++) {
+            for (let i = 0; i < 8; i++) {
+                let t = now + (loop * 8 + i) * tempo;
+                
+                // Melody
+                let osc = this.ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.value = notes[i];
+                let gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + tempo - 0.02);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + tempo);
+
+                this.rankingOscillators.push(osc);
+                this.rankingGainNodes.push(gain);
+
+                // Bass
+                let bOsc = this.ctx.createOscillator();
+                bOsc.type = 'triangle';
+                bOsc.frequency.value = bassNotes[i];
+                let bGain = this.ctx.createGain();
+                bGain.gain.setValueAtTime(0, t);
+                bGain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+                bGain.gain.linearRampToValueAtTime(0, t + tempo);
+
+                bOsc.connect(bGain);
+                bGain.connect(this.ctx.destination);
+                bOsc.start(t);
+                bOsc.stop(t + tempo);
+
+                this.rankingOscillators.push(bOsc);
+                this.rankingGainNodes.push(bGain);
+            }
+        }
+    }
+
+    stopRankingBGM() {
+        if (this.rankingGainNodes) {
+            this.rankingGainNodes.forEach(g => {
+                g.gain.cancelScheduledValues(this.ctx.currentTime);
+                g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            });
+            this.rankingGainNodes = null;
+        }
+        if (this.rankingOscillators) {
+            setTimeout(() => {
+                if (this.rankingOscillators) {
+                    this.rankingOscillators.forEach(o => {
+                        try { o.stop(); o.disconnect(); } catch(e) {}
+                    });
+                    this.rankingOscillators = null;
+                }
+            }, 150);
+        }
     }
 
     playGameOver() {

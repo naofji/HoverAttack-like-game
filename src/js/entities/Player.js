@@ -13,7 +13,8 @@ import {
     HOVER_COOLDOWN_AFTER_BURST,
     PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES,
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
-    COLOR_HOVER_EXHAUST
+    COLOR_HOVER_EXHAUST,
+    PLAYER_MG_BURST_SIZE
 } from '../utils/Constants.js';
 import { collidesWithMap, getDefaultCheckPoints } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -33,6 +34,7 @@ export class Player {
 
         // Resources
         this.hp = PLAYER_MAX_HP;
+        this.maxHp = this.hp;
         this.lives = PLAYER_INITIAL_LIVES;
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
@@ -52,6 +54,11 @@ export class Player {
         this.invincibleTimer = 0; // frames of invincibility after respawn
         this.hoverCooldown = 0;   // frames before hover can activate after jump
         this.missileCooldown = 0; // frames before next missile can be fired
+
+        // Machine Gun state
+        this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+        this.mgFireTimer = 0;
+        this.mgReloadTimer = 0;
     }
 
     update() {
@@ -60,6 +67,10 @@ export class Player {
         // --- Timers that should run even while docked ---
         if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
+
+        // Machine Gun timers
+        if (this.mgFireTimer > 0) this.mgFireTimer--;
+        if (this.mgReloadTimer > 0) this.mgReloadTimer--;
 
         if (this.docked) return; // Handled by carrier
 
@@ -399,6 +410,11 @@ export class Player {
         this.walkFrame = 2; // Default standing
         this.walkTimer = 0;
         
+        // Reset Machine Gun state
+        this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+        this.mgFireTimer = 0;
+        this.mgReloadTimer = 0;
+        
         // Ensure sounds are stopped
         audioManager.stopHover();
     }
@@ -409,6 +425,11 @@ export class Player {
         this.grenades = GRENADE_INITIAL_COUNT;
         this.hoverFuel = HOVER_MAX_FUEL;
         this.hp = PLAYER_MAX_HP;
+
+        // Reset Machine Gun state
+        this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+        this.mgFireTimer = 0;
+        this.mgReloadTimer = 0;
     }
 
     draw(ctx) {

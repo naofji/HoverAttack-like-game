@@ -3,6 +3,7 @@
 // ============================================
 
 import { Missile } from '../entities/Missile.js';
+import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
 
 export class CollisionManager {
@@ -71,6 +72,17 @@ export class CollisionManager {
                         game.spawnExplosion(proj.x, proj.y, 12);
                         proj.alive = false;
                         proj.exploded = true;
+                        break;
+                    }
+                }
+            } else if (proj instanceof PlayerBullet) {
+                // Player machine gun bullets vs enemies
+                for (const enemy of game.enemies) {
+                    if (!enemy.alive) continue;
+                    if (pointInRect(proj.x, proj.y, enemy)) {
+                        enemy.takeDamage(3); // Machine gun damage
+                        game.spawnExplosion(proj.x, proj.y, 4); // Smaller hit spark
+                        proj.alive = false;
                         break;
                     }
                 }

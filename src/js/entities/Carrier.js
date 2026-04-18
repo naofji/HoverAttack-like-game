@@ -25,6 +25,7 @@ export class Carrier {
         this.alive = true;
 
         this.hp = CARRIER_MAX_HP;
+        this.maxHp = this.hp;
         this.lives = CARRIER_INITIAL_LIVES;
 
         // Platform area for docking (relative to carrier x)

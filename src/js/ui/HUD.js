@@ -12,7 +12,6 @@ import {
 export class HUD {
     constructor(game) {
         this.game = game;
-        this.startTime = Date.now();
     }
 
     draw(ctx) {
@@ -21,62 +20,49 @@ export class HUD {
         const w = this.game.canvas.width;
 
         ctx.save();
-
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
-        // ====== TOP BAR ======
+        // ====== Background ======
         ctx.fillStyle = HUD_BG_COLOR;
         ctx.fillRect(0, 0, w, HUD_TOP_HEIGHT);
-
         ctx.font = HUD_FONT;
 
-        // Title
+        // --- ROW 1 ---
+        const row1Y = HUD_TOP_HEIGHT * 0.3;
+
         ctx.fillStyle = '#00CCFF';
-        ctx.fillText('HOVER ATTACK', 12, HUD_TOP_HEIGHT / 4);
+        ctx.fillText('HOVER ATTACK', 12, row1Y);
 
-        // Score
+        const elapsed = this.game.totalTime;
+        const minutes  = Math.floor(elapsed / 60000);
+        const seconds  = Math.floor((elapsed % 60000) / 1000);
+        const centis   = Math.floor((elapsed % 1000) / 10);
+        const timeStr  = `TIME ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
         ctx.fillStyle = HUD_COLOR;
-        const scoreStr = 'SCORE ' + String(this.game.score).padStart(7, '0');
-        ctx.fillText(scoreStr, w - 140, HUD_TOP_HEIGHT / 2);
+        ctx.fillText(timeStr, 250, row1Y);
 
-        // Resource row
-        ctx.font = HUD_FONT;
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('GRENADE', 12, HUD_TOP_HEIGHT * 0.75);
+        ctx.fillText('MISSION', 510, row1Y);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 85, HUD_TOP_HEIGHT * 0.75);
+        ctx.fillText(String(this.game.missionsCompleted + 1 || 1), 585, row1Y);
+
+        ctx.fillStyle = HUD_COLOR;
+        ctx.fillText('SCORE ' + String(this.game.score).padStart(7, '0'), w - 160, row1Y);
+
+        // --- ROW 2 ---
+        const row2Y = HUD_TOP_HEIGHT * 0.7;
 
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('MISSILE', 130, HUD_TOP_HEIGHT * 0.75);
+        ctx.fillText('GRENADE', 12, row2Y);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.missiles : 0).padStart(3, ' '), 205, HUD_TOP_HEIGHT * 0.75);
+        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 85, row2Y);
 
-        // Hover gauge
-        ctx.fillStyle = '#FFCC00';
-        ctx.fillText('HOVER', 280, HUD_TOP_HEIGHT * 0.75);
-        const fuelRatio = player ? player.hoverFuel / HOVER_MAX_FUEL : 0;
-        const barW = 200;
-        const barH = 10;
-        const barX = 330;
-        const barY = HUD_TOP_HEIGHT * 0.75 - barH / 2;
-        // Background
-        ctx.fillStyle = '#333333';
-        ctx.fillRect(barX, barY, barW, barH);
-        // Fuel bar
-        if (fuelRatio > 0.8) {
-            ctx.fillStyle = '#00FFFF';
-        } else if (fuelRatio > 0.5) {
-            ctx.fillStyle = '#00FF00';
-        } else if (fuelRatio > 0.3) {
-            ctx.fillStyle = '#FFAA00';
-        } else {
-            ctx.fillStyle = '#FF0000';
-        }
-        ctx.fillRect(barX, barY, barW * fuelRatio, barH);
-        // Border
-        ctx.strokeStyle = '#888888';
-        ctx.strokeRect(barX, barY, barW, barH);
+        this._drawWeaponStatus(ctx, player, row2Y);
+        this._drawHoverGauge(ctx, player, row2Y);
+        this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 510, 595, 615, row2Y);
+        this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  700, 775, 795, row2Y, 60);
+        this._drawCarrierArrow(ctx, player, carrier, w);
 
         // Separator line
         ctx.strokeStyle = '#444444';
@@ -85,122 +71,158 @@ export class HUD {
         ctx.lineTo(w, HUD_TOP_HEIGHT);
         ctx.stroke();
 
-        // ====== BOTTOM BAR ======
-        const bottomY = this.game.canvas.height - HUD_BOTTOM_HEIGHT;
-        ctx.fillStyle = HUD_BG_COLOR;
-        ctx.fillRect(0, bottomY, w, HUD_BOTTOM_HEIGHT);
+        ctx.restore();
+    }
 
-        // Separator line
-        ctx.strokeStyle = '#444444';
-        ctx.beginPath();
-        ctx.moveTo(0, bottomY);
-        ctx.lineTo(w, bottomY);
-        ctx.stroke();
-
-        ctx.font = HUD_FONT;
-
-        // TIME
-        const elapsed = Date.now() - this.startTime;
-        const minutes = Math.floor(elapsed / 60000);
-        const seconds = Math.floor((elapsed % 60000) / 1000);
-        const centis = Math.floor((elapsed % 1000) / 10);
-        const timeStr = `TIME ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centis).padStart(2, '0')}`;
-        ctx.fillStyle = HUD_COLOR;
-        ctx.fillText(timeStr, 12, bottomY + HUD_BOTTOM_HEIGHT / 2);
-
-        // ATTACKER
+    // ------------------------------------------
+    // Weapon status (MISSILE / M-GUN)
+    // ------------------------------------------
+    _drawWeaponStatus(ctx, player, y) {
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('ATTACKER', 160, bottomY + HUD_BOTTOM_HEIGHT / 2);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.lives : 0), 240, bottomY + HUD_BOTTOM_HEIGHT / 2);
-
-        // CARRIER
-        ctx.fillStyle = '#FFCC00';
-        ctx.fillText('CARRIER', 360, bottomY + HUD_BOTTOM_HEIGHT / 2);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(carrier ? carrier.lives : 0), 430, bottomY + HUD_BOTTOM_HEIGHT / 2);
-
-        // MISSION
-        ctx.fillStyle = '#FFCC00';
-        ctx.fillText('MISSION', 560, bottomY + HUD_BOTTOM_HEIGHT / 2);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(this.game.missionsCompleted + 1 || 1), 640, bottomY + HUD_BOTTOM_HEIGHT / 2);
-
-        // HP bar for player (small bar near bottom-left)
-        if (player && player.alive) {
-            const hpRatio = player.hp / PLAYER_MAX_HP;
-            const hpW = 50;
-            const hpH = 8;
-            const hpX = 256;
-            const hpY = bottomY + HUD_BOTTOM_HEIGHT / 2 - hpH / 2;
-            ctx.fillStyle = '#333';
-            ctx.fillRect(hpX, hpY, hpW, hpH);
-            ctx.fillStyle = hpRatio > 0.5 ? '#00DD00' : hpRatio > 0.2 ? '#DDAA00' : '#DD0000';
-            ctx.fillRect(hpX, hpY, hpW * hpRatio, hpH);
-            ctx.strokeStyle = '#666';
-            ctx.strokeRect(hpX, hpY, hpW, hpH);
-        }
-
-        // HP bar for carrier
-        if (carrier && carrier.alive) {
-            const hpRatio = carrier.hp / CARRIER_MAX_HP;
-            const hpW = 50;
-            const hpH = 8;
-            const hpX = 446;
-            const hpY = bottomY + HUD_BOTTOM_HEIGHT / 2 - hpH / 2;
-            ctx.fillStyle = '#333';
-            ctx.fillRect(hpX, hpY, hpW, hpH);
-            ctx.fillStyle = hpRatio > 0.5 ? '#00DD00' : hpRatio > 0.2 ? '#DDAA00' : '#DD0000';
-            ctx.fillRect(hpX, hpY, hpW * hpRatio, hpH);
-            ctx.strokeStyle = '#666';
-            ctx.strokeRect(hpX, hpY, hpW, hpH);
-
-            // --- Carrier Direction Arrow ---
-            const cam = this.game.camera;
-            // Check if carrier center is outside the camera view
-            const cx = carrier.x + carrier.width / 2;
-            const cy = carrier.y + carrier.height / 2;
-            const isOffScreen =
-                cx < cam.x ||
-                cx > cam.x + w ||
-                cy < cam.y ||
-                cy > cam.y + this.game.canvas.height;
-
-            if (isOffScreen && (!player || !player.docked)) {
-                // Determine screen center relative to world
-                const screenCenterX = cam.x + w / 2;
-                const screenCenterY = cam.y + this.game.canvas.height / 2;
-
-                // Angle from screen center to carrier
-                const angle = Math.atan2(cy - screenCenterY, cx - screenCenterX);
-
-                // Place arrow near the edge of the screen, accounting for HUD
-                const radiusX = (w / 2) - 30;
-                const radiusY = (this.game.canvas.height / 2) - Math.max(HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT) - 30;
-
-                // Calculate display position in screen coordinates
-                const arrowX = w / 2 + Math.cos(angle) * radiusX;
-                const arrowY = this.game.canvas.height / 2 + Math.sin(angle) * radiusY;
-
-                // Draw yellow triangle pointing in `angle` direction
-                ctx.translate(arrowX, arrowY);
-                ctx.rotate(angle);
-
-                ctx.fillStyle = '#FFFF00'; // Yellow
-                ctx.beginPath();
-                ctx.moveTo(10, 0);     // Tip
-                ctx.lineTo(-8, 8);     // Bottom right
-                ctx.lineTo(-4, 0);     // Inner indent
-                ctx.lineTo(-8, -8);    // Bottom left
-                ctx.closePath();
-                ctx.fill();
-
-                // Reset transform
-                ctx.rotate(-angle);
-                ctx.translate(-arrowX, -arrowY);
+        if (player && player.missiles > 0) {
+            ctx.fillText('MISSILE', 140, y);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(String(player.missiles).padStart(3, ' '), 215, y);
+        } else {
+            ctx.fillText('M-GUN', 140, y);
+            ctx.fillStyle = '#FFFFFF';
+            if (player && player.mgReloadTimer > 0) {
+                ctx.fillText('RELOAD', 215, y);
+            } else {
+                ctx.fillText(`RDY ${player ? player.mgBurstLeft : 0}`, 215, y);
             }
         }
+    }
 
+    // ------------------------------------------
+    // Hover fuel triangle gauge
+    // ------------------------------------------
+    _drawHoverGauge(ctx, player, y) {
+        ctx.fillStyle = '#FFCC00';
+        ctx.fillText('HOVER', 280, y);
+
+        const fuelRatio = player ? player.hoverFuel / HOVER_MAX_FUEL : 0;
+        const barW = 120;
+        const barH = 12;
+        const barX = 340;
+        const barY = y + 6; // Anchor to bottom of row
+
+        // Color by fuel level
+        let fuelColor = '#FF0000';
+        if      (fuelRatio > 0.8) fuelColor = '#00FFFF';
+        else if (fuelRatio > 0.5) fuelColor = '#00FF00';
+        else if (fuelRatio > 0.3) fuelColor = '#FFAA00';
+
+        // Empty background triangle
+        ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
+        ctx.beginPath();
+        ctx.moveTo(barX,        barY);
+        ctx.lineTo(barX + barW, barY - barH);
+        ctx.lineTo(barX + barW, barY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Filled portion
+        const filledW = barW * fuelRatio;
+        const filledH = barH * fuelRatio;
+
+        const glowing = fuelRatio >= 0.8;
+        if (glowing) {
+            ctx.shadowBlur  = 8;
+            ctx.shadowColor = '#FFFFFF';
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth   = 1.5;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.fillStyle = fuelColor;
+        ctx.beginPath();
+        ctx.moveTo(barX,           barY);
+        ctx.lineTo(barX + filledW, barY - filledH);
+        ctx.lineTo(barX + filledW, barY);
+        ctx.closePath();
+        ctx.fill();
+        if (glowing) ctx.stroke();
+
+        // Reset shadow/stroke
+        ctx.shadowBlur = 0;
+        ctx.lineWidth  = 1;
+
+        // Static border
+        ctx.strokeStyle = '#888888';
+        ctx.beginPath();
+        ctx.moveTo(barX,        barY);
+        ctx.lineTo(barX + barW, barY - barH);
+        ctx.lineTo(barX + barW, barY);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Faint bounding box
+        ctx.strokeStyle = 'rgba(136, 136, 136, 0.3)';
+        ctx.strokeRect(barX, barY - barH, barW, barH);
+    }
+
+    // ------------------------------------------
+    // Unit label + lives count + HP bar
+    // ------------------------------------------
+    _drawUnitHpBar(ctx, unit, maxHp, label, labelX, livesX, barX, y, barW = 40) {
+        const hpH = 8;
+        const barY = y - hpH / 2;
+
+        ctx.fillStyle = '#FFCC00';
+        ctx.fillText(label, labelX, y);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(String(unit ? unit.lives : 0), livesX, y);
+
+        if (unit && unit.alive) {
+            const hpRatio = unit.hp / maxHp;
+            ctx.fillStyle = '#DD0000'; // Damage
+            ctx.fillRect(barX, barY, barW, hpH);
+            ctx.fillStyle = '#00DD00'; // Remaining life
+            ctx.fillRect(barX, barY, barW * hpRatio, hpH);
+            ctx.strokeStyle = '#666';
+            ctx.strokeRect(barX, barY, barW, hpH);
+        }
+    }
+
+    // ------------------------------------------
+    // Off-screen carrier direction indicator
+    // ------------------------------------------
+    _drawCarrierArrow(ctx, player, carrier, w) {
+        if (!carrier || !carrier.alive) return;
+        if (player && player.docked) return;
+
+        const cam = this.game.camera;
+        const cx  = carrier.x + carrier.width  / 2;
+        const cy  = carrier.y + carrier.height / 2;
+        const isOffScreen =
+            cx < cam.x ||
+            cx > cam.x + w ||
+            cy < cam.y ||
+            cy > cam.y + this.game.canvas.height;
+
+        if (!isOffScreen) return;
+
+        const screenCenterX = cam.x + w / 2;
+        const screenCenterY = cam.y + this.game.canvas.height / 2;
+        const angle   = Math.atan2(cy - screenCenterY, cx - screenCenterX);
+        const radiusX = (w / 2) - 30;
+        const radiusY = (this.game.canvas.height / 2) - HUD_TOP_HEIGHT - 10;
+        const arrowX  = w / 2 + Math.cos(angle) * radiusX;
+        const arrowY  = this.game.canvas.height / 2 + Math.sin(angle) * radiusY;
+
+        ctx.save();
+        ctx.translate(arrowX, arrowY);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#FFFF00';
+        ctx.beginPath();
+        ctx.moveTo( 10,  0);   // Tip
+        ctx.lineTo( -8,  8);   // Bottom left
+        ctx.lineTo( -4,  0);   // Inner indent
+        ctx.lineTo( -8, -8);   // Top left
+        ctx.closePath();
+        ctx.fill();
         ctx.restore();
     }
 }

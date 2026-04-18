@@ -28,6 +28,7 @@ export class EnemyAttacker {
         // Config-driven stats
         this.config = config;
         this.hp = config.hp;
+        this.maxHp = this.hp;
         this.maxSpeed = config.speed;
         this.jumpForce = config.jumpForce;
         this.score = config.score;

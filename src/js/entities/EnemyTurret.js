@@ -19,6 +19,7 @@ export class EnemyTurret {
         this.width = ENEMY_TURRET_WIDTH;
         this.height = ENEMY_TURRET_HEIGHT;
         this.hp = ENEMY_TURRET_HP;
+        this.maxHp = this.hp;
         this.alive = true;
         this.isCeilingMounted = isCeilingMounted;
 

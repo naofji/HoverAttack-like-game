@@ -39,7 +39,7 @@ export class ScreenRenderer {
 
         // Blinking text
         if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.fillText('Press [W] or [Click] to Start', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('Press Any Key to Start', canvas.width / 2, canvas.height / 2 + 60);
         }
 
         // Render instructions
@@ -58,11 +58,24 @@ export class ScreenRenderer {
         ctx.fillStyle = '#00FF00';
         ctx.font = '30px "Courier New", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('MISSION COMPLETE', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('MISSION COMPLETE', canvas.width / 2, canvas.height / 2 - 40);
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '16px "Courier New", monospace';
-        ctx.fillText('Press [W] or [Click] to continue', canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillStyle = '#FFFF00';
+        ctx.font = '24px "Courier New", monospace';
+        // Format time mm:ss.xx
+        const mm = Math.floor(this.game.missionTimer / 60000).toString().padStart(2, '0');
+        const ss = Math.floor((this.game.missionTimer % 60000) / 1000).toString().padStart(2, '0');
+        const xx = Math.floor((this.game.missionTimer % 1000) / 10).toString().padStart(2, '0');
+        ctx.fillText(`CLEAR TIME: ${mm}:${ss}.${xx}`, canvas.width / 2, canvas.height / 2);
+
+        if (this.game.targetTimeBonus > 0 || this.game.slotRunning) {
+            ctx.fillStyle = '#FF8800';
+            ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 30);
+        } else {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '16px "Courier New", monospace';
+            ctx.fillText('Press Any Key to continue', canvas.width / 2, canvas.height / 2 + 60);
+        }
     }
 
     drawGameOver(ctx) {
@@ -82,7 +95,143 @@ export class ScreenRenderer {
 
         ctx.fillStyle = '#888888';
         ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Press R to Restart', canvas.width / 2, canvas.height / 2 + 60);
+        ctx.fillText('Please wait...', canvas.width / 2, canvas.height / 2 + 60);
+        ctx.textAlign = 'left';
+    }
+
+    drawGameClear(ctx) {
+        const canvas = this.game.canvas;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#00FFFF'; // Cyan for clear
+        ctx.font = 'bold 36px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONGRATULATIONS!', canvas.width / 2, canvas.height / 2 - 60);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '18px "Courier New", monospace';
+        ctx.fillText(`ALL MISSIONS CLEARED!`, canvas.width / 2, canvas.height / 2 - 20);
+
+        ctx.fillStyle = '#FFFF00';
+        ctx.font = '24px "Courier New", monospace';
+        const mm = Math.floor(this.game.totalTime / 60000).toString().padStart(2, '0');
+        const ss = Math.floor((this.game.totalTime % 60000) / 1000).toString().padStart(2, '0');
+        const xx = Math.floor((this.game.totalTime % 1000) / 10).toString().padStart(2, '0');
+        ctx.fillText(`TOTAL TIME: ${mm}:${ss}.${xx}`, canvas.width / 2, canvas.height / 2 + 20);
+
+        if (this.game.targetTimeBonus > 0 || this.game.slotRunning) {
+            ctx.fillStyle = '#FF8800';
+            ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 50);
+        } else {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '18px "Courier New", monospace';
+            ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 60);
+
+            ctx.fillStyle = '#888888';
+            ctx.font = '14px "Courier New", monospace';
+            ctx.fillText('Please wait...', canvas.width / 2, canvas.height / 2 + 90);
+        }
+        ctx.textAlign = 'left';
+    }
+
+    drawRankingEntry(ctx, currentName, score) {
+        const canvas = this.game.canvas;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#FFFF00'; // Yellow
+        ctx.font = 'bold 24px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('!!! YOU GOT A HIGH SCORE !!!', canvas.width / 2, canvas.height / 4);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '18px "Courier New", monospace';
+        ctx.fillText(`YOUR SCORE: ${score}`, canvas.width / 2, canvas.height / 4 + 40);
+
+        ctx.fillText('ENTER YOUR NAME:', canvas.width / 2, canvas.height / 2 - 20);
+
+        // Name input box
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(canvas.width / 2 - 100, canvas.height / 2, 200, 40);
+        ctx.strokeStyle = '#00FF00';
+        ctx.strokeRect(canvas.width / 2 - 100, canvas.height / 2, 200, 40);
+
+        ctx.fillStyle = '#00FF00';
+        ctx.font = 'bold 24px "Courier New", monospace';
+        ctx.textAlign = 'left';
+        
+        // Blink cursor
+        let displayStr = currentName;
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            displayStr += '_';
+        }
+        ctx.fillText(displayStr, canvas.width / 2 - 90, canvas.height / 2 + 28);
+        ctx.textAlign = 'left'; // Already left, but kept for consistency
+
+        ctx.fillStyle = '#AAAAAA';
+        ctx.font = '14px "Courier New", monospace';
+        ctx.fillText('Press [ENTER] to save', canvas.width / 2, canvas.height / 2 + 70);
+
+        ctx.textAlign = 'left';
+    }
+
+    drawRankingDisplay(ctx, scores, highlightIndex = -1) {
+        const canvas = this.game.canvas;
+
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#00FF00';
+        ctx.font = 'bold 28px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOP 20 RANKING', canvas.width / 2, 40);
+
+        ctx.font = '16px "Courier New", monospace';
+        ctx.fillStyle = '#AAAAAA';
+        // Headers for single column
+        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 75);
+
+        ctx.font = 'bold 16px "Courier New", monospace';
+        const startY = 100;
+        const lineH = 22; // Fit 20 lines in a single column
+
+        scores.forEach((entry, index) => {
+            if (index === highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
+                ctx.fillStyle = '#FF00FF'; // Blink magenta/pink for new entry
+            } else {
+                if (index === 0) ctx.fillStyle = '#FFFF00'; // 1st Gold
+                else if (index === 1) ctx.fillStyle = '#CCCCCC'; // 2nd Silver
+                else if (index === 2) ctx.fillStyle = '#CD7F32'; // 3rd Bronze
+                else ctx.fillStyle = '#FFFFFF';
+            }
+
+            // Fixed width formatting
+            const rank = String(index + 1).padStart(2, ' ');
+            const scoreStr = String(entry.score).padStart(7, ' ');
+            const nameStr = (entry.name).padEnd(10, ' ');
+            const missionStr = String(entry.mission).padStart(2, ' ');
+            let timeStr = "";
+            if (entry.clearTime) {
+                timeStr = ` (${entry.clearTime})`;
+            }
+
+            // Single column layout
+            const textLeft = canvas.width / 2 - 200;
+            ctx.textAlign = 'left';
+            
+            ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}`, textLeft, startY + index * lineH);
+        });
+
+        // Blinking text
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FFFFFF';
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.fillText('Press Any Key to Start', canvas.width / 2, canvas.height - 25);
+        }
+
         ctx.textAlign = 'left';
     }
 

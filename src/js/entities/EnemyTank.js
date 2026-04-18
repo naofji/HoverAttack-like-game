@@ -25,6 +25,7 @@ export class EnemyTank {
         this.alive = true;
 
         this.hp = ENEMY_TANK_HP;
+        this.maxHp = this.hp;
         this.score = ENEMY_TANK_SCORE;
         this.facingRight = Math.random() < 0.5;
 

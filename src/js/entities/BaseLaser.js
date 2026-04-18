@@ -11,7 +11,7 @@ export class BaseLaser {
         this.dx = Math.cos(angle) * BASE_LASER_SPEED;
         this.dy = Math.sin(angle) * BASE_LASER_SPEED;
         this.angle = angle;
-        this.width = 60;  // Increased from 16
+        this.width = 100;  // Increased from 16
         this.height = 6;  // Increased from 4
         this.alive = true;
         this.life = 120; // Maximum life in frames

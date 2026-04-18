@@ -2,7 +2,7 @@
 // Crosshair - Mouse aiming reticle
 // ============================================
 
-import { COLOR_CROSSHAIR } from '../utils/Constants.js';
+import { COLOR_CROSSHAIR, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT } from '../utils/Constants.js';
 
 export class Crosshair {
     constructor(game) {
@@ -22,6 +22,13 @@ export class Crosshair {
             my = input.mouse.y;
         }
 
+        // Apply clamping so crosshair doesn't visually overlap the HUD
+        const minY = HUD_TOP_HEIGHT;
+        const maxY = this.game.canvas.height - HUD_BOTTOM_HEIGHT;
+        
+        if (my < minY) my = minY;
+        if (my > maxY) my = maxY;
+
         const size = 12;
         const gap = 3;
 
@@ -29,17 +36,42 @@ export class Crosshair {
         ctx.strokeStyle = input.crosshairLocked ? '#FFFF00' : COLOR_CROSSHAIR;
         ctx.lineWidth = input.crosshairLocked ? 2.5 : 1.5;
 
-        // Horizontal lines
         ctx.beginPath();
-        ctx.moveTo(mx - size, my);
-        ctx.lineTo(mx - gap, my);
-        ctx.moveTo(mx + gap, my);
-        ctx.lineTo(mx + size, my);
-        // Vertical lines
-        ctx.moveTo(mx, my - size);
-        ctx.lineTo(mx, my - gap);
-        ctx.moveTo(mx, my + gap);
-        ctx.lineTo(mx, my + size);
+        if (input.crosshairLocked) {
+            const r = 14; // corner radius
+            const l = 6; // length of the L segment
+
+            // Top-Left
+            ctx.moveTo(mx - r, my - r + l);
+            ctx.lineTo(mx - r, my - r);
+            ctx.lineTo(mx - r + l, my - r);
+            
+            // Top-Right
+            ctx.moveTo(mx + r - l, my - r);
+            ctx.lineTo(mx + r, my - r);
+            ctx.lineTo(mx + r, my - r + l);
+            
+            // Bottom-Right
+            ctx.moveTo(mx + r, my + r - l);
+            ctx.lineTo(mx + r, my + r);
+            ctx.lineTo(mx + r - l, my + r);
+            
+            // Bottom-Left
+            ctx.moveTo(mx - r + l, my + r);
+            ctx.lineTo(mx - r, my + r);
+            ctx.lineTo(mx - r, my + r - l);
+        } else {
+            // Horizontal lines
+            ctx.moveTo(mx - size, my);
+            ctx.lineTo(mx - gap, my);
+            ctx.moveTo(mx + gap, my);
+            ctx.lineTo(mx + size, my);
+            // Vertical lines
+            ctx.moveTo(mx, my - size);
+            ctx.lineTo(mx, my - gap);
+            ctx.moveTo(mx, my + gap);
+            ctx.lineTo(mx, my + size);
+        }
         ctx.stroke();
 
         // Center dot
