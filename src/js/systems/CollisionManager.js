@@ -80,7 +80,10 @@ export class CollisionManager {
                 for (const enemy of game.enemies) {
                     if (!enemy.alive) continue;
                     if (pointInRect(proj.x, proj.y, enemy)) {
-                        enemy.takeDamage(3); // Machine gun damage
+                        // Boss (EnemyBase) is immune to machine gun bullets
+                        if (!enemy.isBase) {
+                            enemy.takeDamage(3); // Machine gun damage
+                        }
                         game.spawnExplosion(proj.x, proj.y, 4); // Smaller hit spark
                         proj.alive = false;
                         break;

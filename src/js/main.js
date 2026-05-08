@@ -270,6 +270,11 @@ const Game = {
             this.showMiniMap = !this.showMiniMap;
         }
 
+        // --- Weapon Switch ---
+        if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
+            this.player.switchWeapon();
+        }
+
         // --- Docking / Undocking ---
         this._handleDocking();
 
@@ -448,35 +453,43 @@ const Game = {
         const py = player.y + player.height / 2;
         const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
 
-        // Left click or Space: Missile
-        const fireMissile = this.input.mouse.left || this.input.isKeyDown('Space');
-        if (fireMissile && player.missiles > 0 && player.missileCooldown <= 0) {
-            const activeMissiles = this.projectiles.filter(p => p instanceof Missile && p.isPlayerOwned).length;
-            if (activeMissiles < MISSILE_MAX_ON_SCREEN) {
-                const muzzleX = px + Math.cos(angle) * 12;
-                const muzzleY = py + Math.sin(angle) * 12;
-                this.projectiles.push(new Missile(this, muzzleX, muzzleY, angle, true));
-                player.missiles--;
-                player.missileCooldown = 15;
-                audioManager.playMissile();
-            }
-        } else if (fireMissile && player.missiles === 0 && player.mgReloadTimer <= 0 && player.mgFireTimer <= 0) {
-            // Machine Gun logic
-            const muzzleX = px + Math.cos(angle) * 12;
-            const muzzleY = py + Math.sin(angle) * 12;
-            
-            // Add random spread
-            const spread = (Math.random() - 0.5) * PLAYER_MG_SPREAD;
-            const finalAngle = angle + spread;
-            
-            this.projectiles.push(new PlayerBullet(this, muzzleX, muzzleY, finalAngle));
-            
-            player.mgFireTimer = PLAYER_MG_BURST_DELAY;
-            player.mgBurstLeft--;
-            
-            if (player.mgBurstLeft <= 0) {
-                player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
-                player.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+        // Left click or Space: Fire current weapon
+        const fireRequested = this.input.mouse.left || this.input.isKeyDown('Space');
+        
+        if (fireRequested) {
+            if (player.currentWeapon === 'missile') {
+                // Missile logic
+                if (player.missiles > 0 && player.missileCooldown <= 0) {
+                    const activeMissiles = this.projectiles.filter(p => p instanceof Missile && p.isPlayerOwned).length;
+                    if (activeMissiles < MISSILE_MAX_ON_SCREEN) {
+                        const muzzleX = px + Math.cos(angle) * 12;
+                        const muzzleY = py + Math.sin(angle) * 12;
+                        this.projectiles.push(new Missile(this, muzzleX, muzzleY, angle, true));
+                        player.missiles--;
+                        player.missileCooldown = 15;
+                        audioManager.playMissile();
+                    }
+                }
+            } else if (player.currentWeapon === 'mg') {
+                // Machine Gun logic
+                if (player.mgReloadTimer <= 0 && player.mgFireTimer <= 0) {
+                    const muzzleX = px + Math.cos(angle) * 12;
+                    const muzzleY = py + Math.sin(angle) * 12;
+                    
+                    // Add random spread
+                    const spread = (Math.random() - 0.5) * PLAYER_MG_SPREAD;
+                    const finalAngle = angle + spread;
+                    
+                    this.projectiles.push(new PlayerBullet(this, muzzleX, muzzleY, finalAngle));
+                    
+                    player.mgFireTimer = PLAYER_MG_BURST_DELAY;
+                    player.mgBurstLeft--;
+                    
+                    if (player.mgBurstLeft <= 0) {
+                        player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
+                        player.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+                    }
+                }
             }
         }
 

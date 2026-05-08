@@ -46,7 +46,7 @@ export class ScreenRenderer {
         ctx.fillStyle = '#AAAAAA';
         ctx.font = '14px "Courier New", monospace';
         ctx.fillText('Move: A/D | Launch/Burst: W | Hover: W (Hold) | Shoot: L-Click | Grenade: R-Click', canvas.width / 2, canvas.height - 60);
-        ctx.fillText('Map: M | Lock-on: Shift | Dock: S', canvas.width / 2, canvas.height - 40);
+        ctx.fillText('Map: M | Lock-on: Shift | Weapon Switch: F | Dock: S', canvas.width / 2, canvas.height - 40);
     }
 
     drawMissionClear(ctx) {

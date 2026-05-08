@@ -234,8 +234,8 @@ export class Carrier {
         ctx.fillRect(x + 28, drawY + 10, 8, 4);
 
         // Hull border
-        ctx.strokeStyle = '#0a1a3a';
-        ctx.strokeRect(x + 4, drawY + 4, 56, 26);
+        // ctx.strokeStyle = '#0a1a3a';
+        // ctx.strokeRect(x + 4, drawY + 4, 56, 26);
     }
 
     _drawEngines(ctx, x, drawY) {

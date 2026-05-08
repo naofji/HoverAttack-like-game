@@ -14,7 +14,7 @@ import {
     PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES,
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
-    PLAYER_MG_BURST_SIZE
+    PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME
 } from '../utils/Constants.js';
 import { collidesWithMap, getDefaultCheckPoints } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -59,11 +59,14 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+
+        // Current weapon ('missile' or 'mg')
+        this.currentWeapon = 'missile';
     }
 
     update() {
         if (!this.alive) return;
-        
+
         // --- Timers that should run even while docked ---
         if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
@@ -400,7 +403,7 @@ export class Player {
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
-        
+
         // Reset states to prevent bugs across lives
         this.hovering = false;
         this.crouching = false;
@@ -409,14 +412,30 @@ export class Player {
         this.missileCooldown = 0;
         this.walkFrame = 2; // Default standing
         this.walkTimer = 0;
-        
+
         // Reset Machine Gun state
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
-        
+
         // Ensure sounds are stopped
         audioManager.stopHover();
+
+        // Reset weapon
+        this.currentWeapon = 'missile';
+    }
+
+    /** Toggles between Missile and Machine Gun */
+    switchWeapon() {
+        if (this.currentWeapon === 'missile') {
+            this.currentWeapon = 'mg';
+            // Start reload process when switching to MG (not instant)
+            this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
+            this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
+        } else {
+            this.currentWeapon = 'missile';
+        }
+        audioManager.playSwitch();
     }
 
     /** Resupply all resources (when docking) */
@@ -447,7 +466,11 @@ export class Player {
 
         this._drawBody(ctx, x, y, isCrouched, crouchOffset);
         if (!isCrouched) {
-            this._drawBazooka(ctx, x, y, crouchOffset);
+            if (this.currentWeapon === 'missile') {
+                this._drawBazooka(ctx, x, y, crouchOffset);
+            } else {
+                this._drawMachineGun(ctx, x, y, crouchOffset);
+            }
         }
         this._drawHoverExhaust(ctx);
     }
@@ -624,6 +647,41 @@ export class Player {
         // Detail stripe
         ctx.fillStyle = '#808080';
         ctx.fillRect(4, -1, 5, 2);
+
+        ctx.restore();
+    }
+
+    _drawMachineGun(ctx, x, y, crouchOffset) {
+        const targetWorld = this.game.input.getTargetWorld(this.game.camera);
+        const cx = x + this.width / 2;
+        const cy = y + 6 + crouchOffset;
+
+        let rawAngle = Math.atan2(targetWorld.y - cy, targetWorld.x - cx);
+        if (!this.facingRight) {
+            rawAngle = Math.PI - rawAngle;
+        }
+
+        ctx.save();
+        if (this.facingRight) {
+            ctx.translate(cx + 2, cy);
+        } else {
+            ctx.translate(cx - 2, cy);
+            ctx.scale(-1, 1);
+        }
+        ctx.rotate(rawAngle);
+
+        // Receiver / Body
+        ctx.fillStyle = '#777777';
+        ctx.fillRect(-2, -2, 7, 5);
+        // Barrel (shorter and thinner than bazooka)
+        ctx.fillStyle = '#666666';
+        ctx.fillRect(5, -1, 6, 2);
+        // Magazine (vertical box)
+        ctx.fillStyle = '#555555';
+        ctx.fillRect(0, 2, 3, 4);
+        // Stock / Grip
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(-4, -1, 3, 3);
 
         ctx.restore();
     }

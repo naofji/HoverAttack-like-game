@@ -56,12 +56,12 @@ export class HUD {
         ctx.fillStyle = '#FFCC00';
         ctx.fillText('GRENADE', 12, row2Y);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 85, row2Y);
+        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 90, row2Y);
 
         this._drawWeaponStatus(ctx, player, row2Y);
         this._drawHoverGauge(ctx, player, row2Y);
-        this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 510, 595, 615, row2Y);
-        this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  700, 775, 795, row2Y, 60);
+        this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
+        this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
         this._drawCarrierArrow(ctx, player, carrier, w);
 
         // Separator line
@@ -78,19 +78,26 @@ export class HUD {
     // Weapon status (MISSILE / M-GUN)
     // ------------------------------------------
     _drawWeaponStatus(ctx, player, y) {
-        ctx.fillStyle = '#FFCC00';
-        if (player && player.missiles > 0) {
-            ctx.fillText('MISSILE', 140, y);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillText(String(player.missiles).padStart(3, ' '), 215, y);
+        if (!player) return;
+
+        const isMissile = player.currentWeapon === 'missile';
+        const isMG = player.currentWeapon === 'mg';
+
+        // --- Missile Status ---
+        ctx.fillStyle = isMissile ? '#FFCC00' : '#444444';
+        ctx.fillText('MISSILE', 145, y);
+        ctx.fillStyle = isMissile ? '#FFFFFF' : '#666666';
+        ctx.fillText(String(player.missiles).padStart(3, ' '), 220, y);
+
+        // --- Machine Gun Status ---
+        ctx.fillStyle = isMG ? '#FFCC00' : '#444444';
+        ctx.fillText('M-GUN', 270, y);
+        ctx.fillStyle = isMG ? '#FFFFFF' : '#666666';
+        
+        if (player.mgReloadTimer > 0) {
+            ctx.fillText('RELOAD', 330, y);
         } else {
-            ctx.fillText('M-GUN', 140, y);
-            ctx.fillStyle = '#FFFFFF';
-            if (player && player.mgReloadTimer > 0) {
-                ctx.fillText('RELOAD', 215, y);
-            } else {
-                ctx.fillText(`RDY ${player ? player.mgBurstLeft : 0}`, 215, y);
-            }
+            ctx.fillText(`RDY ${player.mgBurstLeft}`, 330, y);
         }
     }
 
@@ -99,12 +106,12 @@ export class HUD {
     // ------------------------------------------
     _drawHoverGauge(ctx, player, y) {
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('HOVER', 280, y);
+        ctx.fillText('HOVER', 420, y);
 
         const fuelRatio = player ? player.hoverFuel / HOVER_MAX_FUEL : 0;
-        const barW = 120;
+        const barW = 80;
         const barH = 12;
-        const barX = 340;
+        const barX = 485;
         const barY = y + 6; // Anchor to bottom of row
 
         // Color by fuel level
