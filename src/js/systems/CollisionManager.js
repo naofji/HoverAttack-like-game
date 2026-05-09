@@ -39,6 +39,8 @@ export class CollisionManager {
                         if (bullet.constructor.name === 'EnemyCruiseMissile') {
                             damage = 30; // Medium damage
                             game.spawnExplosion(bullet.x, bullet.y, 40); // Large explosion
+                        } else if (bullet.constructor.name === 'EnemyHomingMissile') {
+                            game.spawnExplosion(bullet.x, bullet.y, 12); // Small explosion
                         }
 
                         game.player.takeDamage(damage);
@@ -54,6 +56,8 @@ export class CollisionManager {
                         if (bullet.constructor.name === 'EnemyCruiseMissile') {
                             damage = 30; // Medium damage
                             game.spawnExplosion(bullet.x, bullet.y, 40); // Large explosion
+                        } else if (bullet.constructor.name === 'EnemyHomingMissile') {
+                            game.spawnExplosion(bullet.x, bullet.y, 12); // Small explosion
                         }
 
                         game.carrier.takeDamage(damage);
@@ -91,7 +95,7 @@ export class CollisionManager {
                             bullet.exploded = true;
                             proj.alive = false;
                             if (proj instanceof Missile) proj.exploded = true;
-                            game.spawnExplosion(bullet.x, bullet.y, 8);
+                            game.spawnExplosion(bullet.x, bullet.y, 12); // Slightly larger than before
                             game.addScore(20); // Bonus for interception
                             break; // Proj destroyed, move to next proj
                         }

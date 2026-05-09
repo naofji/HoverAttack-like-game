@@ -10,6 +10,8 @@ export class Camera {
         this.x = 0;
         this.y = 0;
         this.target = null;
+        this.shakeIntensity = 0;
+        this.shakeTimer = 0;
     }
 
     /** Set the entity to follow */
@@ -28,6 +30,12 @@ export class Camera {
         this._clamp();
     }
 
+    /** Trigger a screen shake effect */
+    shake(intensity, duration) {
+        this.shakeIntensity = intensity;
+        this.shakeTimer = duration;
+    }
+
     update() {
         if (!this.target) return;
 
@@ -40,6 +48,14 @@ export class Camera {
         this.y += (targetY - this.y) * CAMERA_LERP;
 
         this._clamp();
+
+        // Apply shake offset
+        if (this.shakeTimer > 0) {
+            this.x += (Math.random() - 0.5) * this.shakeIntensity;
+            this.y += (Math.random() - 0.5) * this.shakeIntensity;
+            this.shakeTimer--;
+            this.shakeIntensity *= 0.95; // Gradually decay intensity
+        }
     }
 
     _clamp() {

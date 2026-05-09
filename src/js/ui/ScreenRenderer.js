@@ -46,7 +46,7 @@ export class ScreenRenderer {
         ctx.fillStyle = '#AAAAAA';
         ctx.font = '14px "Courier New", monospace';
         ctx.fillText('Move: A/D | Launch/Burst: W | Hover: W (Hold) | Shoot: L-Click | Grenade: R-Click', canvas.width / 2, canvas.height - 60);
-        ctx.fillText('Map: M | Lock-on: Shift | Weapon Switch: F | Dock: S', canvas.width / 2, canvas.height - 40);
+        ctx.fillText('Map: R | Lock-on: Shift | Weapon Switch: F | Dock: S', canvas.width / 2, canvas.height - 40);
     }
 
     drawMissionClear(ctx) {
@@ -246,9 +246,10 @@ export class ScreenRenderer {
         // Center of the screen
         const mmX = (w - mm.width) / 2;
         const mmY = (h - mm.height) / 2;
+        const alpha = game.miniMapAlpha || 0;
 
         ctx.save();
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = 0.85 * alpha;
 
         // Draw the cached static map
         ctx.drawImage(mm, mmX, mmY);

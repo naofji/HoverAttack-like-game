@@ -73,6 +73,7 @@ const Game = {
     missionsCompleted: 0,
     gameState: 'title', // 'title', 'playing', 'gameover', 'mission_clear', 'game_clear', 'ranking_entry', 'ranking_display'
     showMiniMap: false,
+    miniMapAlpha: 0,
     stateTimer: 0,
     playerNameInput: "",
     
@@ -269,8 +270,21 @@ const Game = {
         this.missionTimer += deltaTime;
 
         // --- MiniMap Toggle ---
-        if (this.input.isKeyPressed('KeyM')) {
+        if (this.input.isKeyPressed('KeyR')) {
             this.showMiniMap = !this.showMiniMap;
+        }
+
+        // Auto-close map on movement
+        if (this.showMiniMap && (this.input.isKeyDown('KeyA') || this.input.isKeyDown('KeyD') || this.input.isKeyDown('KeyW'))) {
+            this.showMiniMap = false;
+        }
+
+        // Update MiniMap Alpha (Fade)
+        const mapFadeSpeed = 0.08;
+        if (this.showMiniMap) {
+            this.miniMapAlpha = Math.min(1.0, this.miniMapAlpha + mapFadeSpeed);
+        } else {
+            this.miniMapAlpha = Math.max(0, this.miniMapAlpha - mapFadeSpeed);
         }
 
         // --- Weapon Switch ---
@@ -381,9 +395,11 @@ const Game = {
                     this.flag = null;
                     this.missionsCompleted++;
                     
-                    // Calculate Time Bonus: max 10000, drops by 50 every second, min 0
+                    // Calculate Time Bonus based on map area (proportional to total tiles)
+                    const totalTiles = this.map.cols * this.map.rows;
+                    const baseBonus = Math.floor(totalTiles / 100) * 100;
                     const seconds = Math.floor(this.missionTimer / 1000);
-                    this.targetTimeBonus = Math.max(0, 10000 - (seconds * 50));
+                    this.targetTimeBonus = Math.max(0, baseBonus - (seconds * 50));
                     this.currentTimeBonus = 0;
                     this.slotRunning = true;
 
@@ -615,8 +631,8 @@ const Game = {
             this.screenRenderer.drawMissionClear(ctx);
         } else if (this.gameState === 'ranking_entry') {
             this.screenRenderer.drawRankingEntry(ctx, this.playerNameInput, this.score);
-        } else if (this.showMiniMap) {
-            this.screenRenderer.drawMiniMap(ctx);
+        } else if (this.showMiniMap || this.miniMapAlpha > 0) {
+            this.screenRenderer.drawMiniMap(ctx, this.miniMapAlpha);
         }
     },
 

@@ -522,9 +522,11 @@ export class AudioManager {
     playTitleBGM() {
         this.init();
         this._resume();
+        this.stopRankingBGM(); // Ensure ranking BGM is stopped
+
         if (this.useMP3BGM && this.bgm) {
             // If already playing title BGM, don't restart it
-            if (this.bgm.playing && this.bgm.url === 'src/assets/audio/title.mp3') {
+            if (this.bgm.playing && this.bgm.url && this.bgm.url.endsWith('title.mp3')) {
                 return;
             }
             this.bgm.setURL('src/assets/audio/title.mp3');

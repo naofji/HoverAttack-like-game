@@ -51,6 +51,10 @@ export class EnemyBase {
         // Cruise Missile State
         this._resetCruiseMissileTimer();
         this.cruiseWarning = false;
+
+        // Destruction Sequence State
+        this.dying = false;
+        this.dyingTimer = 0;
     }
 
     _resetCruiseMissileTimer() {
@@ -60,6 +64,28 @@ export class EnemyBase {
 
     update() {
         if (!this.alive) return;
+
+        if (this.dying) {
+            this.dyingTimer--;
+            
+            // Random explosions across the structure
+            if (this.dyingTimer % 6 === 0) {
+                const rx = this.x + Math.random() * this.width;
+                const ry = this.y + Math.random() * this.height;
+                const size = 20 + Math.random() * 30;
+                this.game.spawnExplosion(rx, ry, size);
+                audioManager.playExplosion(size > 35);
+                
+                if (this.game.camera) {
+                    this.game.camera.shake(8, 3);
+                }
+            }
+
+            if (this.dyingTimer <= 0) {
+                this._finishDestruction();
+            }
+            return;
+        }
 
         // Animate the core
         this.coreAnimTimer += 1;
@@ -434,12 +460,17 @@ export class EnemyBase {
     }
 
     _die() {
-        this.alive = false;
+        if (this.dying) return;
+        this.dying = true;
+        this.dyingTimer = 90; // 1.5 seconds of explosions
         this.game.score += this.scoreValue;
-
-        // Massive explosion
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 70);
         audioManager.playBaseDestroyed();
+    }
+
+    _finishDestruction() {
+        this.alive = false;
+        // Final massive explosion
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 80);
     }
 
     draw(ctx) {
