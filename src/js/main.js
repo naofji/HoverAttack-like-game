@@ -468,7 +468,19 @@ const Game = {
                         player.missiles--;
                         player.missileCooldown = 15;
                         audioManager.playMissile();
+
+                        // Auto-switch to Machine Gun if out of missiles
+                        if (player.missiles <= 0) {
+                            player.currentWeapon = 'mg';
+                            player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
+                            audioManager.playSwitch();
+                        }
                     }
+                } else if (player.missiles <= 0) {
+                    // Force switch if trying to fire with 0 missiles
+                    player.currentWeapon = 'mg';
+                    player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
+                    audioManager.playSwitch();
                 }
             } else if (player.currentWeapon === 'mg') {
                 // Machine Gun logic

@@ -287,11 +287,25 @@ export class EnemyBase {
         if (!isFinite(safeCoreY)) safeCoreY = 24;
 
         try {
-            // Emerald green glowing gradient
+            // Determine core colors based on mission index
+            const colors = [
+                { main: '#FF0000', glow: 'rgba(255, 0, 0, 0)' },   // 1: Red
+                { main: '#FF8800', glow: 'rgba(255, 136, 0, 0)' }, // 2: Orange
+                { main: '#FFFF00', glow: 'rgba(255, 255, 0, 0)' }, // 3: Yellow
+                { main: '#00FF00', glow: 'rgba(0, 255, 0, 0)' },   // 4: Green
+                { main: '#00AAFF', glow: 'rgba(0, 170, 255, 0)' }, // 5: Blue (Cyan-ish)
+                { main: '#4B0082', glow: 'rgba(75, 0, 130, 0)' },  // 6: Indigo
+                { main: '#EE82EE', glow: 'rgba(238, 130, 238, 0)' } // 7: Violet
+            ];
+            const colorIdx = (this.game.missionsCompleted || 0) % colors.length;
+            const coreColor = colors[colorIdx].main;
+            const coreGlow = colors[colorIdx].glow;
+
+            // Glowing gradient
             const gradient = ctx.createRadialGradient(safeCoreX, safeCoreY, 0, safeCoreX, safeCoreY, coreRadius * 2);
             gradient.addColorStop(0, '#FFFFFF'); // Bright center
-            gradient.addColorStop(0.3 + pulse * 0.2, '#00FFAA'); // Emerald Green
-            gradient.addColorStop(1, 'rgba(0, 255, 170, 0)'); // Fade out
+            gradient.addColorStop(0.3 + pulse * 0.2, coreColor);
+            gradient.addColorStop(1, coreGlow); // Fade out
 
             ctx.fillStyle = gradient;
             ctx.beginPath();
@@ -315,14 +329,14 @@ export class EnemyBase {
             }
 
             // Solid inner core
-            ctx.fillStyle = '#E0FFFF'; // Light cyan/white glow
+            ctx.fillStyle = '#FFFFFF'; // Bright glow
             ctx.beginPath();
             ctx.arc(safeCoreX, safeCoreY, coreRadius * 0.5, 0, Math.PI * 2);
             ctx.fill();
 
             // Draw Charge Particles
             if (this.attackState === 'charging') {
-                ctx.fillStyle = '#00FFAA';
+                ctx.fillStyle = coreColor;
                 for (const p of this.chargeParticles) {
                     const size = 1 + (p.life / 30) * 2;
                     ctx.fillRect(safeCoreX + p.x - size / 2, safeCoreY + p.y - size / 2, size, size);

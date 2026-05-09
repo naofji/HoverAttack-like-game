@@ -17,12 +17,6 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT
 } from '../utils/Constants.js';
 
-// --- Block rendering styles (lookup table) ---
-const BLOCK_STYLES = {
-    [BLOCK_NORMAL]: { fill: COLOR_NORMAL_BLOCK, border: COLOR_NORMAL_BLOCK_BORDER },
-    [BLOCK_HARD]: { fill: COLOR_HARD_BLOCK, border: COLOR_HARD_BLOCK_BORDER },
-    [BLOCK_INDESTRUCTIBLE]: { fill: COLOR_INDESTRUCTIBLE_BLOCK, border: COLOR_INDESTRUCTIBLE_BLOCK_BORDER },
-};
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
@@ -35,6 +29,24 @@ export class Map {
     constructor(game, missionLevel = 0) {
         this.game = game;
         this.missionLevel = missionLevel;
+
+        // Define stage-specific palettes for normal blocks
+        const palettes = [
+            { fill: '#8B4513', border: '#5c2e0b' }, // 1: Brown (Original)
+            { fill: '#A0522D', border: '#70381d' }, // 2: Sienna (Orange-ish)
+            { fill: '#B8860B', border: '#825e07' }, // 3: DarkGoldenrod (Yellowish)
+            { fill: '#2E8B57', border: '#1e5c39' }, // 4: SeaGreen (Greenish)
+            { fill: '#4682B4', border: '#2e5677' }, // 5: SteelBlue (Blueish)
+            { fill: '#4B3621', border: '#2b1e12' }, // 6: Cafe Noir (Indigo-ish dark)
+            { fill: '#483D8B', border: '#2e2759' }  // 7: DarkSlateBlue (Purple-ish)
+        ];
+        const palIdx = (this.missionLevel || 0) % palettes.length;
+        
+        this.blockStyles = {
+            [BLOCK_NORMAL]: palettes[palIdx],
+            [BLOCK_HARD]: { fill: COLOR_HARD_BLOCK, border: COLOR_HARD_BLOCK_BORDER },
+            [BLOCK_INDESTRUCTIBLE]: { fill: COLOR_INDESTRUCTIBLE_BLOCK, border: COLOR_INDESTRUCTIBLE_BLOCK_BORDER },
+        };
 
         // Scale map size based on mission level (levels 0 to 4 correspond to Mission 1 to 5)
         // Cap the scaling factor at level 4 (Mission 5)
@@ -815,7 +827,7 @@ export class Map {
                 const block = this.grid[r][c];
                 if (block === BLOCK_EMPTY) continue;
 
-                ctx.fillStyle = BLOCK_STYLES[block].fill;
+                ctx.fillStyle = this.blockStyles[block].fill;
                 ctx.fillRect(c * this.miniMapScale, r * this.miniMapScale, this.miniMapScale, this.miniMapScale);
             }
         }
@@ -865,7 +877,7 @@ export class Map {
 
                 const x = c * TILE_SIZE;
                 const y = r * TILE_SIZE;
-                const style = BLOCK_STYLES[block];
+                const style = this.blockStyles[block];
 
                 ctx.fillStyle = style.fill;
                 ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);

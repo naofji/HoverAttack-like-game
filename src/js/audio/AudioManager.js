@@ -516,7 +516,6 @@ export class AudioManager {
         if (this.bgm) {
             this.bgm.stop();
         }
-        this.stopRankingBGM();
     }
 
     playRankingBGM() {

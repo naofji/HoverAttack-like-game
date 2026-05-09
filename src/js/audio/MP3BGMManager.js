@@ -10,6 +10,7 @@ export class MP3BGMManager {
         this.source = null;
         this.gainNode = null;
         this.url = 'src/assets/audio/bgm.mp3'; // Default path
+        this._stopTimerId = null; // Track pending stop timeout
     }
 
     _init() {
@@ -31,7 +32,13 @@ export class MP3BGMManager {
 
     start() {
         this._init();
-        
+
+        // Cancel any pending stop timer so it doesn't kill the new track
+        if (this._stopTimerId !== null) {
+            clearTimeout(this._stopTimerId);
+            this._stopTimerId = null;
+        }
+
         // If already playing, stop current playback to allow restart/change
         this.audioElement.pause();
         this.audioElement.currentTime = 0;
@@ -52,12 +59,20 @@ export class MP3BGMManager {
 
     stop() {
         if (!this.playing) return;
-        
+
+        // Cancel any previously scheduled stop to avoid race conditions
+        if (this._stopTimerId !== null) {
+            clearTimeout(this._stopTimerId);
+            this._stopTimerId = null;
+        }
+
         // Fade out then pause
+        this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
         this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
-        setTimeout(() => {
+        this._stopTimerId = setTimeout(() => {
             this.audioElement.pause();
             this.playing = false;
+            this._stopTimerId = null;
         }, 1000);
     }
 }
