@@ -97,7 +97,8 @@ export class SpawnManager {
 
         for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
             if (key === 'heavy' && game.missionsCompleted < 2) continue;
-            if (key === 'rival' && game.missionsCompleted < 3) continue;
+            if (key === 'rival' && game.missionsCompleted < 4) continue;
+            if (key === 'artillery' && game.missionsCompleted < 5) continue; // Mission 6+
 
             availableTypes[key] = type;
             totalWeight += type.spawnWeight;

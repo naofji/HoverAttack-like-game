@@ -33,7 +33,14 @@ export class CollisionManager {
                 // Check collision with player
                 if (game.player && game.player.alive && !game.player.docked && game.player.invincibleTimer <= 0) {
                     if (pointInRect(bullet.x, bullet.y, game.player)) {
-                        const damage = bullet.isBaseLaser ? 50 : 10;
+                        let damage = 10;
+                        if (bullet.isBaseLaser) damage = 50;
+                        
+                        if (bullet.constructor.name === 'EnemyCruiseMissile') {
+                            damage = 30; // Medium damage
+                            game.spawnExplosion(bullet.x, bullet.y, 40); // Large explosion
+                        }
+
                         game.player.takeDamage(damage);
                         if (!bullet.isBaseLaser) bullet.alive = false;
                     }
@@ -41,7 +48,14 @@ export class CollisionManager {
                 // Check collision with carrier
                 if (game.carrier && game.carrier.alive) {
                     if (pointInRect(bullet.x, bullet.y, game.carrier)) {
-                        const damage = bullet.isBaseLaser ? 50 : 10;
+                        let damage = 10;
+                        if (bullet.isBaseLaser) damage = 50;
+
+                        if (bullet.constructor.name === 'EnemyCruiseMissile') {
+                            damage = 30; // Medium damage
+                            game.spawnExplosion(bullet.x, bullet.y, 40); // Large explosion
+                        }
+
                         game.carrier.takeDamage(damage);
                         if (!bullet.isBaseLaser) bullet.alive = false;
                     }
@@ -62,6 +76,49 @@ export class CollisionManager {
 
         for (const proj of game.projectiles) {
             if (!proj.alive || proj.exploded) continue;
+
+            // --- Intercept Homing & Cruise Missiles ---
+            const isPlayerProj = (proj instanceof Missile && proj.isPlayerOwned) || (proj instanceof PlayerBullet);
+            if (isPlayerProj) {
+                for (const bullet of game.enemyBullets) {
+                    if (!bullet.alive) continue;
+
+                    if (bullet.constructor.name === 'EnemyHomingMissile') {
+                        const dx = proj.x - bullet.x;
+                        const dy = proj.y - bullet.y;
+                        if (dx * dx + dy * dy < 144) { // ~12px radius collision
+                            bullet.alive = false;
+                            bullet.exploded = true;
+                            proj.alive = false;
+                            if (proj instanceof Missile) proj.exploded = true;
+                            game.spawnExplosion(bullet.x, bullet.y, 8);
+                            game.addScore(20); // Bonus for interception
+                            break; // Proj destroyed, move to next proj
+                        }
+                    } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
+                        const dx = proj.x - bullet.x;
+                        const dy = proj.y - bullet.y;
+                        if (dx * dx + dy * dy < 400) { // ~20px radius collision (bigger target)
+                            const damage = proj instanceof Missile ? 15 : 3; // MG damage is 3
+                            bullet.hp -= damage;
+                            
+                            proj.alive = false;
+                            if (proj instanceof Missile) proj.exploded = true;
+                            
+                            if (bullet.hp <= 0) {
+                                bullet.alive = false;
+                                bullet.exploded = true;
+                                game.spawnExplosion(bullet.x, bullet.y, 40); // Large explosion when shot down
+                                game.addScore(100); // Bonus for destroying cruise missile
+                            } else {
+                                game.spawnExplosion(proj.x, proj.y, 5); // Hit spark
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!proj.alive) continue; // Skip further checks if intercepted
 
             if (proj instanceof Missile && proj.isPlayerOwned) {
                 // Player missiles vs enemies

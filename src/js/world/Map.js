@@ -72,7 +72,7 @@ export class Map {
         this.targetTankCount = Math.max(4, Math.floor(maxTanks * areaRatio));
         this.targetLandmineCount = Math.max(12, Math.floor(maxLandmines * areaRatio));
 
-        // Attackers start from Mission 2 (missionLevel 1)
+        // Attackers enabled from Mission 2 (missionLevel 1)
         this.targetAttackerCount = (this.missionLevel >= 1) ? Math.max(5, Math.floor(maxAttackers * areaRatio)) : 0;
 
         // Drones start from Mission 4 (missionLevel 3)
@@ -589,8 +589,10 @@ export class Map {
     }
 
     _carveMainBaseRoom() {
-        // Deepest part of the map
-        const centerR = Math.floor(this.rows / 2);
+        // Random position along the right edge: between middle (rows/2) and bottom (near rows-15)
+        const minR = Math.floor(this.rows / 2);
+        const maxR = this.rows - 15;
+        const centerR = minR + Math.floor(Math.random() * (maxR - minR));
         const centerC = this.cols - 12;
 
         // Ensure there is a tunnel connecting to it

@@ -65,10 +65,10 @@ export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
 export const GRENADE_EXPLOSION_COUNT = 150;
 
 // --- Player Machine Gun (Fallback for missiles) ---
-export const PLAYER_MG_SPEED = 3; // Same as ENEMY_BULLET_SPEED
+export const PLAYER_MG_SPEED = 4; // Same as ENEMY_BULLET_SPEED
 export const PLAYER_MG_RADIUS = 1.5;
 export const PLAYER_MG_DAMAGE = 3;
-export const PLAYER_MG_LIFETIME = 240; // Exactly half of missile range (240 * 3 = 720px)
+export const PLAYER_MG_LIFETIME = 192; // 80% of original 240 (192 * 3 = 576px)
 export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
@@ -121,6 +121,19 @@ export const ENEMY_BULLET_RADIUS = 2;
 export const ENEMY_BULLET_DAMAGE_PLAYER = 15;
 export const ENEMY_BULLET_DAMAGE_CARRIER = 10;
 export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
+
+export const ENEMY_HOMING_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
+export const ENEMY_HOMING_MISSILE_TURN_RATE = 0.02; // Radians per frame
+export const ENEMY_HOMING_MISSILE_LIFETIME = 300; // Lives longer to find target
+
+export const CRUISE_MISSILE_MAX_SPEED = 1.5; // Half of homing missile speed
+export const CRUISE_MISSILE_TURN_RATE = 0.03; // Slower turn rate
+export const CRUISE_MISSILE_LIFETIME = 1800; // Very long lifetime (30 seconds)
+export const CRUISE_MISSILE_HP = 9; // 3 machine gun hits
+export const CRUISE_MISSILE_WARNING_TIME = 180; // 3 seconds warning
+export const CRUISE_MISSILE_SCORE = 100;
+export const CRUISE_MISSILE_MIN_DELAY = 2700; // 45 seconds at 60fps
+export const CRUISE_MISSILE_MAX_DELAY = 3600; // 60 seconds at 60fps
 
 // --- Enemy Attacker (Humanoid) ---
 export const ENEMY_ATTACKER_TOTAL_COUNT = 40;
@@ -179,6 +192,24 @@ export const ENEMY_ATTACKER_TYPES = {
         visorColor: '#FFCC00',
         backpackColor: '#882222',
         exhaustColor: '#FF6644',
+    },
+    artillery: {
+        name: 'artillery',
+        hp: 50,
+        speed: 0.4,
+        jumpForce: -4.5,
+        fireInterval: 300,    // 5 seconds between bursts
+        sightRange: CANVAS_WIDTH * 0.8, // Very long sight
+        score: 800,
+        spawnWeight: 100,     // Increased for testing
+        usesGrenades: false,
+        aimAccuracy: 1.0,
+        movementType: 'stop_and_shoot',
+        bodyColor: '#DDAA00', // Yellow-Orange
+        headColor: '#BB8800',
+        visorColor: '#FF0000', // Red eye
+        backpackColor: '#996600',
+        exhaustColor: '#FFEE44',
     },
 };
 

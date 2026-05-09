@@ -15,12 +15,12 @@ export class MP3BGMManager {
 
     _init() {
         if (this.source) return;
-        
+
         // Connect the audio element to the Web Audio context
         this.source = this.ctx.createMediaElementSource(this.audioElement);
         this.gainNode = this.ctx.createGain();
         this.gainNode.gain.value = 0; // Start muted for fade-in
-        
+
         this.source.connect(this.gainNode);
         this.gainNode.connect(this.ctx.destination);
     }
@@ -67,12 +67,13 @@ export class MP3BGMManager {
         }
 
         // Fade out then pause
+        // Fade out then pause
         this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
-        this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
+        this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // ~0.5s fade
         this._stopTimerId = setTimeout(() => {
             this.audioElement.pause();
             this.playing = false;
             this._stopTimerId = null;
-        }, 1000);
+        }, 500);
     }
 }

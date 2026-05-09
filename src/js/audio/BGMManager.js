@@ -204,7 +204,7 @@ export class BGMManager {
     stop() {
         if (!this.playing) return;
         this.playing = false;
-        if (this.masterGain) this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
+        if (this.masterGain) this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // ~0.5s fade
         if (this.scheduleTimer) clearTimeout(this.scheduleTimer);
     }
 

@@ -132,6 +132,9 @@ const Game = {
         console.log('Hover Attack v1.0 Ready!');
         window.Game = this;
 
+        // Play Title BGM
+        audioManager.playTitleBGM();
+
         // Start game loop
         requestAnimationFrame(this.loop.bind(this));
     },
@@ -172,7 +175,7 @@ const Game = {
             if (this.stateTimer > 10000) {
                 this.gameState = 'title';
                 this.stateTimer = 0;
-                audioManager.stopBGM(); 
+                audioManager.playTitleBGM(); 
             } else {
                 const typed = this.input.getTypedChars();
                 if (typed.length > 0 || this.input.isLeftClickPressed() || this.input.isRightClickPressed()) {
@@ -221,7 +224,7 @@ const Game = {
                 } else {
                     this.gameState = 'title';
                     this.stateTimer = 0;
-                    audioManager.stopBGM();
+                    audioManager.playTitleBGM();
                 }
             }
             return;
@@ -240,7 +243,7 @@ const Game = {
                 } else {
                     this.gameState = 'title';
                     this.stateTimer = 0;
-                    audioManager.stopBGM();
+                    audioManager.playTitleBGM();
                 }
             }
             return;

@@ -71,6 +71,33 @@ export class HUD {
         ctx.lineTo(w, HUD_TOP_HEIGHT);
         ctx.stroke();
 
+        // --- Cruise Missile Warning ---
+        if (this.game.base && this.game.base.cruiseWarning) {
+            const timerSec = Math.ceil(this.game.base.cruiseMissileTimer / 60);
+            if (Math.floor(Date.now() / 200) % 2 === 0) { // Blink quickly
+                const centerX = w / 2;
+                const centerY = this.game.canvas.height * 0.75;
+                
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Draw semi-transparent background box for readability
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(centerX - 300, centerY - 25, 600, 50);
+                
+                // Border for the box
+                ctx.strokeStyle = '#FF0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(centerX - 300, centerY - 25, 600, 50);
+
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 24px "Courier New", monospace';
+                ctx.fillText(`⚠️ WARNING: CRUISE MISSILE LAUNCH IN T-${timerSec}... ⚠️`, centerX, centerY);
+                ctx.restore();
+            }
+        }
+
         ctx.restore();
     }
 

@@ -83,6 +83,52 @@ export class TrailParticle {
 }
 
 // --------------------------------------------
+// Flash Particle - Quick bright circle for explosions
+// --------------------------------------------
+export class FlashParticle {
+    constructor(x, y, maxSize, lifetime = 15) {
+        this.x = x;
+        this.y = y;
+        this.maxSize = maxSize;
+        this.maxLifetime = lifetime;
+        this.lifetime = lifetime;
+        this.alive = true;
+    }
+
+    update() {
+        if (!this.alive) return;
+        this.lifetime--;
+        if (this.lifetime <= 0) {
+            this.alive = false;
+        }
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+
+        const progress = 1.0 - (this.lifetime / this.maxLifetime);
+        const alpha = Math.max(0, 1.0 - progress);
+        const size = this.maxSize * (0.2 + 0.8 * Math.sin(progress * Math.PI));
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = alpha * 0.8;
+        
+        // Outer glow
+        const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, size);
+        grad.addColorStop(0, '#FFFFFF');
+        grad.addColorStop(0.4, '#FFFF88');
+        grad.addColorStop(1, 'rgba(255, 100, 0, 0)');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// --------------------------------------------
 // Factory: Explosion Particles
 // --------------------------------------------
 const EXPLOSION_COLORS = ['#FFFF00', '#FFAA00', '#FF6600', '#FFFFFF', '#FF4400'];
@@ -90,14 +136,22 @@ const EXPLOSION_COLORS = ['#FFFF00', '#FFAA00', '#FF6600', '#FFFFFF', '#FF4400']
 export function createExplosion(x, y, count) {
     const particles = [];
 
+    // Add a central flash
+    const flashSize = 10 + count / 4;
+    particles.push(new FlashParticle(x, y, flashSize));
+
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 0.5 + Math.random() * 3;
+        const speed = 0.5 + Math.random() * (count > 50 ? 5 : 3);
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
-        const color = EXPLOSION_COLORS[Math.floor(Math.random() * EXPLOSION_COLORS.length)];
+        
+        // Variety of colors
+        let color = EXPLOSION_COLORS[Math.floor(Math.random() * EXPLOSION_COLORS.length)];
+        if (Math.random() < 0.2) color = '#888888'; // Add some debris/smoke particles
+
         const size = 1 + Math.random() * 4;
-        const lifetime = 10 + Math.floor(Math.random() * 25);
+        const lifetime = 15 + Math.floor(Math.random() * 25);
 
         particles.push(new Particle(x, y, vx, vy, color, size, lifetime));
     }

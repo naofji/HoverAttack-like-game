@@ -449,6 +449,9 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+
+        // Auto-switch to missiles when docking/resupplying
+        this.currentWeapon = 'missile';
     }
 
     draw(ctx) {

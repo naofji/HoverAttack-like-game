@@ -12,6 +12,7 @@ import {
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
 import { Grenade } from './Grenade.js';
+import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -44,6 +45,10 @@ export class EnemyAttacker {
         this.walkFrame = 2;
         this.walkTimer = 0;
         this.hovering = false;
+        this.crouching = false;
+        this.crouchTimer = 0;
+        this.burstCount = 0;
+        this.burstTimer = 0;
 
         // Hover fuel support (used if movementType allows hovering)
         this.hoverFuel = HOVER_MAX_FUEL;
@@ -64,7 +69,10 @@ export class EnemyAttacker {
         }
 
         // --- Movement ---
-        if (this.aiState === 'chase') {
+        if (this.crouching || this.burstCount > 0) {
+            // Cannot move while crouching or bursting
+            this.vx = 0;
+        } else if (this.aiState === 'chase') {
             this._chaseTarget(target);
         } else {
             this._patrol();
@@ -244,17 +252,98 @@ export class EnemyAttacker {
         this.jumpCooldown = 60; // ~1 second cooldown
     }
 
+    _findPathToTarget(target) {
+        if (!target) return null;
+        const map = this.game.map;
+        const start = map.pixelToTile(this.x + this.width / 2, this.y + this.height / 2);
+        const end = map.pixelToTile(target.x + target.width / 2, target.y + target.height / 2);
+
+        if (start.r === end.r && start.c === end.c) return null;
+
+        const queue = [[start]];
+        const visited = new Set([`${start.r},${start.c}`]);
+
+        let iterations = 0;
+        const maxIterations = 300;
+
+        while (queue.length > 0 && iterations < maxIterations) {
+            iterations++;
+            const path = queue.shift();
+            const curr = path[path.length - 1];
+
+            if (curr.r === end.r && curr.c === end.c) {
+                return path;
+            }
+
+            // Neighbor directions
+            const dirs = [
+                {r:-1, c:0}, {r:1, c:0}, {r:0, c:-1}, {r:0, c:1},
+                {r:-1, c:-1}, {r:-1, c:1}, {r:1, c:-1}, {r:1, c:1}
+            ];
+
+            for (const d of dirs) {
+                const nr = curr.r + d.r;
+                const nc = curr.c + d.c;
+                const key = `${nr},${nc}`;
+
+                if (nr >= 0 && nr < map.rows && nc >= 0 && nc < map.cols &&
+                    !map.isSolid(nr, nc) && !visited.has(key)) {
+                    visited.add(key);
+                    queue.push([...path, {r:nr, c:nc}]);
+                }
+            }
+        }
+        return null;
+    }
+
     _handleShooting() {
+        const target = this._getClosestTarget();
+
+        // Handle crouching and bursting sequence for artillery
+        if (this.crouching) {
+            this.crouchTimer--;
+            if (this.crouchTimer <= 0) {
+                this.crouching = false;
+                this.burstCount = 4;
+                this.burstTimer = 0;
+            }
+            return;
+        }
+
+        if (this.burstCount > 0) {
+            this.burstTimer--;
+            if (this.burstTimer <= 0) {
+                this._fire(target);
+                this.burstCount--;
+                this.burstTimer = 15; // 15 frames between burst shots
+                if (this.burstCount <= 0) {
+                    this.fireTimer = this.config.fireInterval;
+                }
+            }
+            return;
+        }
+
         this.fireTimer--;
         if (this.fireTimer > 0) return;
-        if (this.aiState !== 'chase') {
+        if (this.aiState !== 'chase' || !target) {
             this.fireTimer = this.config.fireInterval;
             return;
         }
 
-        const target = this._getClosestTarget();
-        if (!target) return;
+        // Ready to fire. If artillery, start crouch sequence
+        if (this.config.name === 'artillery') {
+            this.crouching = true;
+            this.crouchTimer = 30; // crouch for half a second before bursting
+            return;
+        }
 
+        // Normal firing
+        this._fire(target);
+        this.fireTimer = this.config.fireInterval;
+    }
+
+    _fire(target) {
+        if (!target) return;
         const targetX = target.x + target.width / 2;
         const targetY = target.y + target.height / 2;
         const dx = targetX - (this.x + this.width / 2);
@@ -264,25 +353,33 @@ export class EnemyAttacker {
         const accuracy = this.config.aimAccuracy !== undefined ? this.config.aimAccuracy : 1.0;
 
         if (Math.random() > accuracy) {
-            // add random spread up to +/- ~30 degrees (0.5 radians)
             angle += (Math.random() - 0.5) * 1.0;
         }
 
+        const crouchOffset = (this.crouching || this.burstCount > 0) ? 6 : 0;
         const muzzleX = this.x + this.width / 2 + Math.cos(angle) * 10;
-        const muzzleY = this.y + this.height / 2 + Math.sin(angle) * 6;
+        const muzzleY = this.y + this.height / 2 + Math.sin(angle) * 6 + crouchOffset;
 
-        // Rival type: sometimes fire grenade
-        if (this.config.usesGrenades && Math.random() < this.config.grenadeChance) {
+        if (this.config.name === 'artillery') {
+            // Pathfinding-based initial firing direction
+            const path = this._findPathToTarget(target);
+            if (path && path.length > 1) {
+                // Aim for the first step in the path through the cave
+                const nextTile = path[Math.min(path.length - 1, 3)]; // Look ahead slightly
+                const dxp = (nextTile.c + 0.5) * TILE_SIZE - muzzleX;
+                const dyp = (nextTile.r + 0.5) * TILE_SIZE - muzzleY;
+                angle = Math.atan2(dyp, dxp);
+            }
+            const missile = new EnemyHomingMissile(this.game, muzzleX, muzzleY, angle);
+            this.game.enemyBullets.push(missile);
+        } else if (this.config.usesGrenades && Math.random() < this.config.grenadeChance) {
             const grenade = new Grenade(this.game, muzzleX, muzzleY, angle);
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
         } else {
-            // Fire enemy missile (with trail, red color)
             const missile = new Missile(this.game, muzzleX, muzzleY, angle, false);
             this.game.projectiles.push(missile);
         }
-
-        this.fireTimer = this.config.fireInterval;
     }
 
     // ------------------------------------------
@@ -436,6 +533,7 @@ export class EnemyAttacker {
         const x = Math.round(this.x);
         const y = Math.round(this.y);
         const cfg = this.config;
+        const type = cfg.name;
 
         ctx.save();
 
@@ -446,53 +544,148 @@ export class EnemyAttacker {
             ctx.translate(x, y);
         }
 
-        // --- Body ---
-        ctx.fillStyle = cfg.bodyColor;
-        ctx.fillRect(5, 4, 10, 12);
+        const isCrouching = this.crouching || this.burstCount > 0;
+        const crouchOffset = isCrouching ? 4 : 0;
+        ctx.translate(0, crouchOffset);
 
-        // --- Head ---
-        ctx.fillStyle = cfg.headColor;
-        ctx.fillRect(6, 0, 8, 5);
-        // Visor
-        ctx.fillStyle = cfg.visorColor;
-        ctx.fillRect(10, 1, 3, 3);
+        // --- Design by Type ---
+        if (type === 'heavy') {
+            // BULKY / ARMORED DESIGN
+            // Shoulder Pad (Back)
+            ctx.fillStyle = cfg.backpackColor;
+            ctx.fillRect(3, 2, 6, 4);
+            // Bulky Body
+            ctx.fillStyle = cfg.bodyColor;
+            ctx.fillRect(4, 4, 12, 13);
+            // Thick Legs
+            this._drawLegs(ctx, crouchOffset);
+            // Bigger Head
+            ctx.fillStyle = cfg.headColor;
+            ctx.fillRect(6, -1, 9, 6);
+            // Visor (Slit)
+            ctx.fillStyle = cfg.visorColor;
+            ctx.fillRect(10, 1, 4, 2);
+            // Heavy Gun
+            ctx.fillStyle = '#666666';
+            ctx.fillRect(14, 8, 6, 4);
+            ctx.fillStyle = '#999999';
+            ctx.fillRect(18, 8, 3, 4);
+        } 
+        else if (type === 'rival') {
+            // SLEEK / SPEED DESIGN
+            // Sleek Body
+            ctx.fillStyle = cfg.bodyColor;
+            ctx.fillRect(6, 4, 8, 12);
+            // Sleek Head with horns
+            ctx.fillStyle = cfg.headColor;
+            ctx.fillRect(7, 0, 6, 5);
+            ctx.fillRect(7, -2, 2, 3); // Left horn
+            ctx.fillRect(11, -2, 2, 3); // Right horn
+            // Visor (Glowing Eye)
+            ctx.fillStyle = cfg.visorColor;
+            ctx.fillRect(10, 1, 3, 3);
+            // Dual Barrels
+            ctx.fillStyle = '#777777';
+            ctx.fillRect(13, 6, 6, 2);
+            ctx.fillRect(13, 9, 6, 2);
+            this._drawLegs(ctx, crouchOffset);
+        }
+        else if (type === 'artillery') {
+            // SNIPER / RADAR DESIGN
+            // Radar / Antenna on back
+            ctx.strokeStyle = cfg.exhaustColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(3, 4); ctx.lineTo(3, -2);
+            ctx.lineTo(6, -4); ctx.stroke();
+            // Body
+            ctx.fillStyle = cfg.bodyColor;
+            ctx.fillRect(5, 5, 11, 11);
+            // Head
+            ctx.fillStyle = cfg.headColor;
+            ctx.fillRect(7, 1, 7, 5);
+            // Visor
+            ctx.fillStyle = cfg.visorColor;
+            ctx.fillRect(11, 2, 3, 2);
+            // LONG SNIPER BARREL
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(14, 8, 12, 2);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(24, 7, 2, 4);
+            this._drawLegs(ctx, crouchOffset);
+        }
+        else {
+            // STANDARD HUMANOID DESIGN
+            // Body
+            ctx.fillStyle = cfg.bodyColor;
+            ctx.fillRect(5, 4, 10, 12);
+            // Head
+            ctx.fillStyle = cfg.headColor;
+            ctx.fillRect(6, 0, 8, 5);
+            // Visor
+            ctx.fillStyle = cfg.visorColor;
+            ctx.fillRect(10, 1, 3, 3);
+            // Backpack
+            ctx.fillStyle = cfg.backpackColor;
+            ctx.fillRect(2, 5, 4, 8);
+            ctx.fillStyle = cfg.exhaustColor;
+            ctx.fillRect(2, 12, 4, 2);
+            // Legs
+            this._drawLegs(ctx, crouchOffset);
+            // Gun
+            ctx.fillStyle = '#777777';
+            ctx.fillRect(13, 7, 5, 2);
+            ctx.fillStyle = '#999999';
+            ctx.fillRect(17, 7, 2, 2);
+        }
 
-        // --- Backpack ---
-        ctx.fillStyle = cfg.backpackColor;
-        ctx.fillRect(2, 5, 4, 8);
-        ctx.fillStyle = cfg.exhaustColor;
-        ctx.fillRect(2, 12, 4, 2);
-
-        // --- Legs ---
-        this._drawLegs(ctx);
-
-        // --- Hover Exhaust ---
+        // --- Hover Exhaust (Common) ---
         if (this.hovering) {
             for (let i = 0; i < 3; i++) {
                 const px = 2 + Math.random() * 4;
-                const py = 14 + Math.random() * 6;
+                const py = 14 + Math.random() * 6 - crouchOffset;
                 const size = 1 + Math.random() * 3;
-                ctx.fillStyle = '#00FFFF'; // constant cyan color for hover
+                ctx.fillStyle = '#00FFFF';
                 ctx.globalAlpha = 0.3 + Math.random() * 0.4;
                 ctx.fillRect(px, py, size, size);
             }
             ctx.globalAlpha = 1.0;
         }
 
-        // --- Gun barrel (simple) ---
-        ctx.fillStyle = '#777777';
-        ctx.fillRect(13, 7, 5, 2);
-        ctx.fillStyle = '#999999';
-        ctx.fillRect(17, 7, 2, 2);
-
         ctx.restore();
     }
 
-    _drawLegs(ctx) {
+    _drawLegs(ctx, crouchOffset = 0) {
+        const type = this.config.name;
+
+        if (type === 'artillery') {
+            // Quad leg design for artillery
+            const legColor1 = this.config.bodyColor;
+            const legColor2 = this.config.headColor;
+            
+            ctx.fillStyle = legColor1;
+            if (crouchOffset > 0) {
+                // Low profile quad legs
+                ctx.fillRect(2, 15, 4, 4);
+                ctx.fillRect(12, 15, 4, 4);
+                ctx.fillStyle = legColor2;
+                ctx.fillRect(0, 18, 4, 2);
+                ctx.fillRect(14, 18, 4, 2);
+            } else {
+                // Standing quad legs
+                ctx.fillRect(4, 16, 3, 6);
+                ctx.fillRect(11, 16, 3, 6);
+                ctx.fillStyle = legColor2;
+                ctx.fillRect(2, 20, 4, 3);
+                ctx.fillRect(12, 20, 4, 3);
+            }
+            return;
+        }
+
         if (!this.onGround) {
             // Hover/airborne legs - slightly spread
-            this._drawLeg(ctx, 6, 16, -1);  // near leg
-            this._drawLeg(ctx, 9, 16, 1);   // far leg
+            this._drawLeg(ctx, 6, 16 - crouchOffset, -1);  // near leg
+            this._drawLeg(ctx, 9, 16 - crouchOffset, 1);   // far leg
         } else {
             // Walk legs based on walkFrame
             const WALK_POSES = [
@@ -502,8 +695,16 @@ export class EnemyAttacker {
                 { near: 1, far: -1 },   // frame 3
             ];
             const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
-            this._drawLeg(ctx, 6, 16, pose.near);
-            this._drawLeg(ctx, 9, 16, pose.far);
+            
+            if (crouchOffset > 0) {
+                // Crouching pose (knees bent, feet spread)
+                const spread = type === 'heavy' ? 4 : 2;
+                this._drawLeg(ctx, 6 - spread, 16 - crouchOffset, -2);
+                this._drawLeg(ctx, 9 + spread, 16 - crouchOffset, 2);
+            } else {
+                this._drawLeg(ctx, 6, 16, pose.near);
+                this._drawLeg(ctx, 9, 16, pose.far);
+            }
         }
     }
 

@@ -501,12 +501,13 @@ export class AudioManager {
     startBGM(missionIndex = 0) {
         this.init();
         this._resume();
+
         if (this.bgm) {
             if (this.useMP3BGM) {
-                // Determine which MP3 to play based on missionIndex
-                // Use two-digit padding: bgm01.mp3, bgm02.mp3, etc.
                 const missionNum = (missionIndex + 1).toString().padStart(2, '0');
-                this.bgm.setURL(`src/assets/audio/bgm${missionNum}.mp3`);
+                const url = `src/assets/audio/bgm${missionNum}.mp3`;
+                console.log(`AudioManager: Starting BGM for Mission ${missionIndex + 1} -> ${url}`);
+                this.bgm.setURL(url);
             }
             this.bgm.start();
         }
@@ -515,6 +516,19 @@ export class AudioManager {
     stopBGM() {
         if (this.bgm) {
             this.bgm.stop();
+        }
+    }
+
+    playTitleBGM() {
+        this.init();
+        this._resume();
+        if (this.useMP3BGM && this.bgm) {
+            // If already playing title BGM, don't restart it
+            if (this.bgm.playing && this.bgm.url === 'src/assets/audio/title.mp3') {
+                return;
+            }
+            this.bgm.setURL('src/assets/audio/title.mp3');
+            this.bgm.start();
         }
     }
 
@@ -595,7 +609,7 @@ export class AudioManager {
         if (this.rankingGainNodes) {
             this.rankingGainNodes.forEach(g => {
                 g.gain.cancelScheduledValues(this.ctx.currentTime);
-                g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+                g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
             });
             this.rankingGainNodes = null;
         }
@@ -607,7 +621,7 @@ export class AudioManager {
                     });
                     this.rankingOscillators = null;
                 }
-            }, 150);
+            }, 600);
         }
     }
 
