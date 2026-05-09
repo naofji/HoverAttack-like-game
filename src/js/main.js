@@ -252,7 +252,7 @@ const Game = {
             if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
                 this.gameState = 'playing';
                 this.stateManager.nextMission();
-                audioManager.startBGM();
+                audioManager.startBGM(this.missionsCompleted);
             }
             return;
         }

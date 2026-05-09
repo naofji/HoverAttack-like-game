@@ -1,4 +1,5 @@
 import { BGMManager } from './BGMManager.js';
+import { MP3BGMManager } from './MP3BGMManager.js';
 
 export class AudioManager {
     constructor() {
@@ -10,13 +11,19 @@ export class AudioManager {
         this.noiseBuffer = null;
         this.hoverRPM = 0; // Tracks internal engine rev-up (0.0 to 1.0)
         this.bgm = null;
+        this.useMP3BGM = true; // Set to true to use an external MP3 file
     }
 
     init() {
         if (this.ctx) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this._createNoiseBuffer();
-        this.bgm = new BGMManager(this.ctx);
+
+        if (this.useMP3BGM) {
+            this.bgm = new MP3BGMManager(this.ctx);
+        } else {
+            this.bgm = new BGMManager(this.ctx);
+        }
     }
 
     _createNoiseBuffer() {
@@ -402,10 +409,10 @@ export class AudioManager {
         this._resume();
 
         const now = this.ctx.currentTime;
-        
+
         // A triumphant, grand victory fanfare (like a retro classic RPG or action game clear)
         // Melody: G4 -> C5 -> G5 -> C6 -> E6 -> G6 (held with vibrato/arpeggio)
-        
+
         // Base Tempo: 120BPM (1 beat = 0.5s)
         const tempo = 0.15; // Fast, energetic pace for the intro
 
@@ -421,7 +428,7 @@ export class AudioManager {
             { f: 1046.50, t: tempo * 7.5, d: tempo * 0.5 },// C6
             { f: 1567.98, t: tempo * 8, d: tempo * 4 }    // G6 (Final triumphant hold)
         ];
-        
+
         // Harmony / Brass backing (Sawtooth for thickness)
         const harmony = [
             { f: 196.00, t: 0.0, d: tempo },       // G3
@@ -447,18 +454,18 @@ export class AudioManager {
         melody.forEach(n => allNotes.push({ ...n, type: 'square', vol: 0.08 }));
         harmony.forEach(n => allNotes.push({ ...n, type: 'sawtooth', vol: 0.05 }));
         bass.forEach(n => allNotes.push({ ...n, type: 'triangle', vol: 0.12 }));
-        
+
         // Sparkle arpeggio over the final held note (G6 chord)
         const finalTime = tempo * 8;
         const arpeggioNotes = [1046.50, 1318.51, 1567.98, 2093.00]; // C6, E6, G6, C7
-        for(let i=0; i<16; i++) {
-             allNotes.push({
-                 f: arpeggioNotes[i % 4],
-                 t: finalTime + (i * 0.05),
-                 d: 0.1,
-                 type: 'sine',
-                 vol: 0.03
-             });
+        for (let i = 0; i < 16; i++) {
+            allNotes.push({
+                f: arpeggioNotes[i % 4],
+                t: finalTime + (i * 0.05),
+                d: 0.1,
+                type: 'sine',
+                vol: 0.03
+            });
         }
 
         allNotes.forEach(note => {
@@ -471,15 +478,15 @@ export class AudioManager {
             // Snappy envelope for the notes
             gain.gain.setValueAtTime(0, now + note.t);
             gain.gain.linearRampToValueAtTime(note.vol, now + note.t + 0.02); // Quick attack
-            
+
             if (note.t >= finalTime && note.d >= tempo * 4) {
-                 // Final held note has a long fade out
-                 gain.gain.setValueAtTime(note.vol, now + note.t + 1.0); // Hold full volume for 1 sec
-                 gain.gain.exponentialRampToValueAtTime(0.001, now + note.t + note.d); // Fade out over remaining 3 secs
+                // Final held note has a long fade out
+                gain.gain.setValueAtTime(note.vol, now + note.t + 1.0); // Hold full volume for 1 sec
+                gain.gain.exponentialRampToValueAtTime(0.001, now + note.t + note.d); // Fade out over remaining 3 secs
             } else {
-                 // Normal notes
-                 gain.gain.setValueAtTime(note.vol, now + note.t + note.d - 0.05); // Hold
-                 gain.gain.linearRampToValueAtTime(0.001, now + note.t + note.d); // Quick Release
+                // Normal notes
+                gain.gain.setValueAtTime(note.vol, now + note.t + note.d - 0.05); // Hold
+                gain.gain.linearRampToValueAtTime(0.001, now + note.t + note.d); // Quick Release
             }
 
             osc.connect(gain);
@@ -491,10 +498,16 @@ export class AudioManager {
     }
 
     // --- BGM Control ---
-    startBGM() {
+    startBGM(missionIndex = 0) {
         this.init();
         this._resume();
         if (this.bgm) {
+            if (this.useMP3BGM) {
+                // Determine which MP3 to play based on missionIndex
+                // Use two-digit padding: bgm01.mp3, bgm02.mp3, etc.
+                const missionNum = (missionIndex + 1).toString().padStart(2, '0');
+                this.bgm.setURL(`src/assets/audio/bgm${missionNum}.mp3`);
+            }
             this.bgm.start();
         }
     }
@@ -510,6 +523,12 @@ export class AudioManager {
         this.init();
         this._resume();
         this.stopRankingBGM();
+
+        if (this.useMP3BGM && this.bgm) {
+            this.bgm.setURL('src/assets/audio/name.mp3');
+            this.bgm.start();
+            return;
+        }
 
         const now = this.ctx.currentTime;
         const tempo = 0.2; // 150 BPM
@@ -531,7 +550,7 @@ export class AudioManager {
         for (let loop = 0; loop < numLoops; loop++) {
             for (let i = 0; i < 8; i++) {
                 let t = now + (loop * 8 + i) * tempo;
-                
+
                 // Melody
                 let osc = this.ctx.createOscillator();
                 osc.type = 'square';
@@ -540,7 +559,7 @@ export class AudioManager {
                 gain.gain.setValueAtTime(0, t);
                 gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.001, t + tempo - 0.02);
-                
+
                 osc.connect(gain);
                 gain.connect(this.ctx.destination);
                 osc.start(t);
@@ -570,6 +589,10 @@ export class AudioManager {
     }
 
     stopRankingBGM() {
+        if (this.useMP3BGM && this.bgm) {
+            this.bgm.stop();
+        }
+
         if (this.rankingGainNodes) {
             this.rankingGainNodes.forEach(g => {
                 g.gain.cancelScheduledValues(this.ctx.currentTime);
@@ -581,7 +604,7 @@ export class AudioManager {
             setTimeout(() => {
                 if (this.rankingOscillators) {
                     this.rankingOscillators.forEach(o => {
-                        try { o.stop(); o.disconnect(); } catch(e) {}
+                        try { o.stop(); o.disconnect(); } catch (e) { }
                     });
                     this.rankingOscillators = null;
                 }
@@ -597,7 +620,7 @@ export class AudioManager {
 
         // Sad minor chord descending progression: Cm -> G/B -> Ab -> G
         // We'll play a heavy arpeggiated bass line and a crying lead
-        
+
         const noteLength = 0.6; // Slow and heavy
         const volume = 0.4; // Fixed volume
 
@@ -610,7 +633,7 @@ export class AudioManager {
             [130.81, 155.56, 196.00], // Cm (C3)
             [123.47, 146.83, 196.00], // G/B (B2)
             [103.83, 130.81, 155.56], // Ab (Ab2)
-            [98.00,  123.47, 146.83]  // G (G2)
+            [98.00, 123.47, 146.83]  // G (G2)
         ];
 
         // Lead melody (crying effect with pitch bend down)
@@ -635,7 +658,7 @@ export class AudioManager {
                 const osc = this.ctx.createOscillator();
                 osc.type = 'triangle'; // Smooth, sad tone
                 osc.frequency.value = freq;
-                
+
                 const gain = this.ctx.createGain();
                 gain.gain.setValueAtTime(0, time);
                 gain.gain.linearRampToValueAtTime(0.3, time + 0.1);
@@ -656,7 +679,7 @@ export class AudioManager {
             const time = now + i * noteLength;
             const osc = this.ctx.createOscillator();
             osc.type = 'sawtooth'; // Slightly buzzy for emotion
-            
+
             // Pitch bend / crying effect
             osc.frequency.setValueAtTime(freq, time);
             if (i === leadNotes.length - 1) {
@@ -670,7 +693,7 @@ export class AudioManager {
             const gain = this.ctx.createGain();
             gain.gain.setValueAtTime(0, time);
             gain.gain.linearRampToValueAtTime(0.25, time + 0.1); // Attack
-            
+
             const dur = (i === leadNotes.length - 1) ? noteLength * 3 : noteLength;
             gain.gain.exponentialRampToValueAtTime(0.01, time + dur - 0.05); // Decay
 
