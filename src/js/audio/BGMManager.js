@@ -1,118 +1,117 @@
 // ============================================
-// BGMManager v3 - Catchy Riff & Jazzy Groove
+// BGMManager - Procedural Jazz/Funk BGM
 // ============================================
-// Generates a looping BGM using Web Audio API with:
-//   - Solid jazzy/funky drum patterns (v1 inspired)
-//   - Consistent walking jazz bassline
+// Generates a looping BGM with Web Audio API:
+//   - Jazz drum patterns (kick / snare / hi-hat)
+//   - Walking jazz bassline
 //   - Warm ethereal chord pads
-//   - Catchy, syncopated lead riffs (No portamento)
-//   - Classic delay and Lush reverb
+//   - Catchy, syncopated lead riffs
+//   - Delay and reverb effects
+
+// ---- Music Data ----
+
+// Jazz chord progression: ii-V-I-vi style (two keys)
+const PROGRESSIONS = [
+    // Dm7 - G7 - Cmaj7 - Am7
+    [
+        [293.66, 349.23, 440.00, 523.25],
+        [392.00, 493.88, 587.33, 349.23],
+        [261.63, 329.63, 392.00, 493.88],
+        [220.00, 261.63, 329.63, 392.00],
+    ],
+    // Fm7 - Bb7 - Ebmaj7 - Cm7
+    [
+        [174.61, 207.65, 261.63, 311.13],
+        [233.08, 293.66, 349.23, 207.65],
+        [155.56, 196.00, 233.08, 293.66],
+        [130.81, 155.56, 196.00, 233.08],
+    ],
+];
+
+const BASS_PATTERNS = [
+    [
+        [146.83, 164.81, 174.61, 164.81],
+        [196.00, 220.00, 246.94, 220.00],
+        [130.81, 146.83, 164.81, 146.83],
+        [110.00, 130.81, 146.83, 130.81],
+    ],
+    [
+        [87.31,  98.00,  110.00, 98.00 ],
+        [116.54, 130.81, 146.83, 130.81],
+        [77.78,  87.31,  98.00,  87.31 ],
+        [65.41,  77.78,  87.31,  77.78 ],
+    ],
+];
+
+// Lead scales (per progression)
+const LEAD_SCALES = [
+    [523.25, 587.33, 622.25, 698.46, 783.99, 932.33, 1046.50, 1174.66, 1244.51],
+    [622.25, 698.46, 783.99, 932.33, 1046.50, 1244.51, 1396.91, 1567.98],
+];
+
+// Catchy syncopated riffs: rhythm = 1 means "play note"
+const RIFFS = [
+    {
+        rhythm:  [1,0,0,1, 1,0,1,0, 0,0,1,0, 1,1,0,0],
+        offsets: [0,0,0,4, 3,3,5,5, 0,0,2,2, 4,0,0,0],
+    },
+    {
+        rhythm:  [1,0,1,1, 0,1,0,0, 1,0,1,0, 0,0,0,1],
+        offsets: [0,0,2,3, 0,4,0,0, 5,0,4,0, 0,0,0,2],
+    },
+];
+
+// Drum patterns (two variants for variety)
+const KICK_PATTERNS  = [
+    [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],
+    [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,0,0],
+];
+const SNARE_PATTERNS = [
+    [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    [0,0,0,0, 1,0,1,0, 0,0,0,0, 1,0,0,1],
+];
+const HIHAT_PATTERNS = [
+    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    [1,1,1,1, 1,0,1,0, 1,1,1,1, 1,0,1,0],
+];
 
 export class BGMManager {
     constructor(audioCtx) {
-        this.ctx = audioCtx;
+        this.ctx     = audioCtx;
         this.playing = false;
-        this.masterGain = null;
-        this.scheduleTimer = null;
 
         // Tempo
-        this.bpm = 150;
-        this.stepDuration = 60 / this.bpm / 4; // 16th note duration
-        this.barDuration = this.stepDuration * 16;
+        this.bpm          = 150;
+        this.stepDuration = 60 / this.bpm / 4; // 16th-note
+        this.barDuration  = this.stepDuration * 16;
 
-        // Pattern scheduling
-        this.nextBarTime = 0;
-        this.currentBar = 0;
-        this.scheduleAheadTime = 0.2; // seconds to look ahead
+        // Scheduling
+        this.scheduleTimer    = null;
+        this.nextBarTime      = 0;
+        this.currentBar       = 0;
+        this.scheduleAheadTime = 0.2;
 
-        // Noise buffer for drums
-        this.noiseBuffer = null;
-
-        // Effects
-        this.convolver = null;
-        this.reverbGain = null;
-        this.delayNode = null;
-        this.delayFeedback = null;
-        this.delayGain = null;
-
-        // Sub-buses
-        this.drumBus = null;
-        this.bassBus = null;
-        this.padBus = null;
-        this.leadBus = null;
-
-        // Jazz chord progression (ii-V-I-vi style)
-        this.progressions = [
-            // Dm7 - G7 - Cmaj7 - Am7
-            [
-                [293.66, 349.23, 440.00, 523.25],  // Dm7
-                [392.00, 493.88, 587.33, 349.23],  // G7
-                [261.63, 329.63, 392.00, 493.88],  // Cmaj7
-                [220.00, 261.63, 329.63, 392.00],  // Am7
-            ],
-            // Fm7 - Bb7 - Ebmaj7 - Cm7
-            [
-                [174.61, 207.65, 261.63, 311.13],  // Fm7
-                [233.08, 293.66, 349.23, 207.65],  // Bb7
-                [155.56, 196.00, 233.08, 293.66],  // Ebmaj7
-                [130.81, 155.56, 196.00, 233.08],  // Cm7
-            ],
-        ];
+        // State
         this.currentProgression = 0;
+        this.currentRiff        = 0;
 
-        // Bass walking patterns
-        this.bassPatterns = [
-            [
-                [146.83, 164.81, 174.61, 164.81],  // D walk
-                [196.00, 220.00, 246.94, 220.00],  // G walk
-                [130.81, 146.83, 164.81, 146.83],  // C walk
-                [110.00, 130.81, 146.83, 130.81],  // A walk
-            ],
-            [
-                [87.31, 98.00, 110.00, 98.00],     // F walk
-                [116.54, 130.81, 146.83, 130.81],  // Bb walk
-                [77.78, 87.31, 98.00, 87.31],      // Eb walk
-                [65.41, 77.78, 87.31, 77.78],      // C walk
-            ],
-        ];
-
-        // Lead scales
-        this.leadScales = [
-            [523.25, 587.33, 622.25, 698.46, 783.99, 932.33, 1046.50, 1174.66, 1244.51], // C minor/blues
-            [622.25, 698.46, 783.99, 932.33, 1046.50, 1244.51, 1396.91, 1567.98]        // Eb major
-        ];
-
-        // NEW: Specific catchy riffs (rhythm pulses + scale step offsets)
-        // rhythm: 1 = start note, 0 = rest/continue
-        // offsets: indices into the active scale relative to a "base" note
-        this.riffs = [
-            {
-                rhythm:  [1,0,0,1, 1,0,1,0, 0,0,1,0, 1,1,0,0], // 16 steps
-                offsets: [0,0,0,4, 3,3,5,5, 0,0,2,2, 4,0,0,0]  
-            },
-            {
-                rhythm:  [1,0,1,1, 0,1,0,0, 1,0,1,0, 0,0,0,1],
-                offsets: [0,0,2,3, 0,4,0,0, 5,0,4,0, 0,0,0,2]
-            }
-        ];
-        this.currentRiff = 0;
-
-        // Drum patterns
-        this.kickPatterns = [
-            [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],
-            [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,0,0],
-        ];
-        this.snarePatterns = [
-            [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
-            [0,0,0,0, 1,0,1,0, 0,0,0,0, 1,0,0,1],
-        ];
-        this.hihatPatterns = [
-            [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-            [1,1,1,1, 1,0,1,0, 1,1,1,1, 1,0,1,0],
-        ];
+        // Audio graph nodes (created lazily in _init)
+        this.masterGain   = null;
+        this.noiseBuffer  = null;
+        this.convolver    = null;
+        this.reverbGain   = null;
+        this.delayNode    = null;
+        this.delayFeedback = null;
+        this.delayGain    = null;
+        this.drumBus      = null;
+        this.bassBus      = null;
+        this.padBus       = null;
+        this.leadBus      = null;
     }
 
-    // ---- INITIALIZATION ----
+    // ==========================================
+    // INITIALIZATION (lazy)
+    // ==========================================
 
     _init() {
         if (this.masterGain) return;
@@ -122,18 +121,16 @@ export class BGMManager {
     }
 
     _createNoiseBuffer() {
-        const sr = this.ctx.sampleRate;
+        const sr  = this.ctx.sampleRate;
         const buf = this.ctx.createBuffer(1, sr * 2, sr);
         const data = buf.getChannelData(0);
-        for (let i = 0; i < data.length; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
         this.noiseBuffer = buf;
     }
 
     _createEffects() {
-        const sr = this.ctx.sampleRate;
-        const length = sr * 1.5;
+        const sr      = this.ctx.sampleRate;
+        const length  = sr * 1.5;
         const impulse = this.ctx.createBuffer(2, length, sr);
         for (let ch = 0; ch < 2; ch++) {
             const data = impulse.getChannelData(ch);
@@ -141,17 +138,17 @@ export class BGMManager {
                 data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
             }
         }
-        this.convolver = this.ctx.createConvolver();
+        this.convolver        = this.ctx.createConvolver();
         this.convolver.buffer = impulse;
-        this.reverbGain = this.ctx.createGain();
+        this.reverbGain       = this.ctx.createGain();
         this.reverbGain.gain.value = 0.25;
 
-        this.delayNode = this.ctx.createDelay(1.0);
+        this.delayNode             = this.ctx.createDelay(1.0);
         this.delayNode.delayTime.value = this.stepDuration * 3;
-        this.delayFeedback = this.ctx.createGain();
+        this.delayFeedback         = this.ctx.createGain();
         this.delayFeedback.gain.value = 0.35;
-        this.delayGain = this.ctx.createGain();
-        this.delayGain.gain.value = 0.2;
+        this.delayGain             = this.ctx.createGain();
+        this.delayGain.gain.value  = 0.2;
 
         this.delayNode.connect(this.delayFeedback);
         this.delayFeedback.connect(this.delayNode);
@@ -162,36 +159,40 @@ export class BGMManager {
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.value = 0;
 
-        this.drumBus = this.ctx.createGain();
-        this.drumBus.gain.value = 0.7;
-        this.bassBus = this.ctx.createGain();
-        this.bassBus.gain.value = 0.55;
-        this.padBus = this.ctx.createGain();
-        this.padBus.gain.value = 0.2;
-        this.leadBus = this.ctx.createGain();
-        this.leadBus.gain.value = 0.25; // Boost lead for riffs
+        this.drumBus = this._makeBus(0.70);
+        this.bassBus = this._makeBus(0.55);
+        this.padBus  = this._makeBus(0.20);
+        this.leadBus = this._makeBus(0.25);
 
-        this.drumBus.connect(this.masterGain);
-        this.bassBus.connect(this.masterGain);
-        this.padBus.connect(this.masterGain);
-        this.leadBus.connect(this.masterGain);
-
+        // Reverb send
         this.padBus.connect(this.convolver);
         this.leadBus.connect(this.convolver);
-        this.leadBus.connect(this.delayNode);
         this.convolver.connect(this.reverbGain);
         this.reverbGain.connect(this.masterGain);
+
+        // Delay send (lead only)
+        this.leadBus.connect(this.delayNode);
         this.delayGain.connect(this.masterGain);
 
         this.masterGain.connect(this.ctx.destination);
     }
 
-    // ---- PLAYBACK CONTROL ----
+    /** Create a gain node, connect to masterGain, and return it. */
+    _makeBus(gainValue) {
+        const bus = this.ctx.createGain();
+        bus.gain.value = gainValue;
+        bus.connect(this.masterGain);
+        return bus;
+    }
+
+    // ==========================================
+    // PLAYBACK CONTROL
+    // ==========================================
 
     start() {
         if (this.playing) return;
         this._init();
-        this.playing = true;
+        this.playing    = true;
         this.currentBar = 0;
         this.nextBarTime = this.ctx.currentTime + 0.1;
 
@@ -204,11 +205,13 @@ export class BGMManager {
     stop() {
         if (!this.playing) return;
         this.playing = false;
-        if (this.masterGain) this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // ~0.5s fade
+        if (this.masterGain) this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // ~0.5s
         if (this.scheduleTimer) clearTimeout(this.scheduleTimer);
     }
 
-    // ---- SCHEDULING ----
+    // ==========================================
+    // SCHEDULING
+    // ==========================================
 
     _scheduleLoop() {
         if (!this.playing) return;
@@ -217,47 +220,42 @@ export class BGMManager {
             this.nextBarTime += this.barDuration;
             this.currentBar++;
 
+            // Rotate progression and riff every 4 bars
             if (this.currentBar % 4 === 0) {
-                this.currentProgression = (this.currentProgression + 1) % this.progressions.length;
-                this.currentRiff = (this.currentRiff + 1) % this.riffs.length;
+                this.currentProgression = (this.currentProgression + 1) % PROGRESSIONS.length;
+                this.currentRiff        = (this.currentRiff + 1) % RIFFS.length;
             }
         }
         this.scheduleTimer = setTimeout(() => this._scheduleLoop(), 50);
     }
 
     _scheduleBar(barTime, barIndex) {
-        const chordIndex = barIndex % 4;
-        const prog = this.progressions[this.currentProgression];
-        const bassPat = this.bassPatterns[this.currentProgression];
-        const chord = prog[chordIndex];
-        const bassNotes = bassPat[chordIndex];
-        const drumVariant = barIndex % this.kickPatterns.length;
+        const chordIndex  = barIndex % 4;
+        const chord       = PROGRESSIONS[this.currentProgression][chordIndex];
+        const bassNotes   = BASS_PATTERNS[this.currentProgression][chordIndex];
+        const drumVariant = barIndex % KICK_PATTERNS.length;
 
         this._scheduleDrums(barTime, drumVariant);
         this._scheduleBass(barTime, bassNotes);
         this._schedulePad(barTime, chord);
-
-        // Lead riff (structured instead of random)
         this._scheduleLeadRiff(barTime, barIndex);
     }
 
-    // ---- DRUMS (Solid v1 vibes) ----
+    // ==========================================
+    // DRUMS
+    // ==========================================
 
     _scheduleDrums(barTime, variant) {
-        const kickPat = this.kickPatterns[variant];
-        const snarePat = this.snarePatterns[variant];
-        const hihatPat = this.hihatPatterns[variant];
-
         for (let step = 0; step < 16; step++) {
             const t = barTime + step * this.stepDuration;
-            if (kickPat[step]) this._playKick(t);
-            if (snarePat[step]) this._playSnare(t);
-            if (hihatPat[step]) this._playHihat(t, step % 4 === 3);
+            if (KICK_PATTERNS[variant][step])  this._playKick(t);
+            if (SNARE_PATTERNS[variant][step]) this._playSnare(t);
+            if (HIHAT_PATTERNS[variant][step]) this._playHihat(t, step % 4 === 3);
         }
     }
 
     _playKick(time) {
-        const osc = this.ctx.createOscillator();
+        const osc  = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(150, time);
@@ -271,10 +269,11 @@ export class BGMManager {
     }
 
     _playSnare(time) {
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
+        // Noise layer
+        const noise   = this.ctx.createBufferSource();
+        noise.buffer  = this.noiseBuffer;
         const nFilter = this.ctx.createBiquadFilter();
-        nFilter.type = 'highpass';
+        nFilter.type  = 'highpass';
         nFilter.frequency.value = 1800;
         const nGain = this.ctx.createGain();
         nGain.gain.setValueAtTime(0.4, time);
@@ -283,8 +282,9 @@ export class BGMManager {
         nFilter.connect(nGain);
         nGain.connect(this.drumBus);
 
-        const osc = this.ctx.createOscillator();
-        osc.type = 'triangle';
+        // Tone layer
+        const osc   = this.ctx.createOscillator();
+        osc.type    = 'triangle';
         osc.frequency.value = 220;
         const oGain = this.ctx.createGain();
         oGain.gain.setValueAtTime(0.25, time);
@@ -292,20 +292,18 @@ export class BGMManager {
         osc.connect(oGain);
         oGain.connect(this.drumBus);
 
-        noise.start(time);
-        noise.stop(time + 0.1);
-        osc.start(time);
-        osc.stop(time + 0.08);
+        noise.start(time); noise.stop(time + 0.10);
+        osc.start(time);   osc.stop(time + 0.08);
     }
 
     _playHihat(time, open = false) {
-        const noise = this.ctx.createBufferSource();
+        const noise  = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
         const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
+        filter.type  = 'bandpass';
         filter.frequency.value = 8000;
+        const dur  = open ? 0.1 : 0.04;
         const gain = this.ctx.createGain();
-        const dur = open ? 0.1 : 0.04;
         gain.gain.setValueAtTime(0.2, time);
         gain.gain.exponentialRampToValueAtTime(0.01, time + dur);
         noise.connect(filter);
@@ -315,19 +313,20 @@ export class BGMManager {
         noise.stop(time + dur);
     }
 
-    // ---- BASS (Smooth walking) ----
+    // ==========================================
+    // BASS
+    // ==========================================
 
     _scheduleBass(barTime, bassNotes) {
         const beatDur = this.stepDuration * 4;
         for (let beat = 0; beat < 4; beat++) {
-            const t = barTime + beat * beatDur;
-            this._playBassNote(t, bassNotes[beat], beatDur * 0.9);
+            this._playBassNote(barTime + beat * beatDur, bassNotes[beat], beatDur * 0.9);
         }
     }
 
     _playBassNote(time, freq, dur) {
-        const osc = this.ctx.createOscillator();
-        osc.type = 'triangle';
+        const osc  = this.ctx.createOscillator();
+        osc.type   = 'triangle';
         osc.frequency.value = freq;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, time);
@@ -340,54 +339,55 @@ export class BGMManager {
         osc.stop(time + dur);
     }
 
-    // ---- PAD (Ethereal chords) ----
+    // ==========================================
+    // PAD
+    // ==========================================
 
     _schedulePad(barTime, chord) {
         const dur = this.barDuration;
         chord.forEach((freq, i) => {
             const osc = this.ctx.createOscillator();
-            osc.type = 'sine';
+            osc.type  = 'sine';
             osc.frequency.value = freq;
-            osc.detune.value = (i - 1.5) * 10;
-            const noteGain = this.ctx.createGain();
-            noteGain.gain.setValueAtTime(0, barTime);
-            noteGain.gain.linearRampToValueAtTime(0.2, barTime + 0.5);
-            noteGain.gain.setValueAtTime(0.2, barTime + dur - 0.5);
-            noteGain.gain.linearRampToValueAtTime(0.001, barTime + dur);
-            osc.connect(noteGain);
-            noteGain.connect(this.padBus);
+            osc.detune.value    = (i - 1.5) * 10;
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0, barTime);
+            gain.gain.linearRampToValueAtTime(0.2, barTime + 0.5);
+            gain.gain.setValueAtTime(0.2, barTime + dur - 0.5);
+            gain.gain.linearRampToValueAtTime(0.001, barTime + dur);
+            osc.connect(gain);
+            gain.connect(this.padBus);
             osc.start(barTime);
             osc.stop(barTime + dur);
         });
     }
 
-    // ---- LEAD SYNTH (Catchy Riffs) ----
+    // ==========================================
+    // LEAD SYNTH
+    // ==========================================
 
+    /** Play the catchy riff every other bar to avoid overcrowding. */
     _scheduleLeadRiff(barTime, barIndex) {
-        // Only play lead on certain bars to avoid being too busy
         if (barIndex % 2 !== 0) return;
 
-        const riff = this.riffs[this.currentRiff];
-        const scale = this.leadScales[this.currentProgression % this.leadScales.length];
-        
+        const riff  = RIFFS[this.currentRiff];
+        const scale = LEAD_SCALES[this.currentProgression % LEAD_SCALES.length];
+
         for (let step = 0; step < 16; step++) {
-            if (riff.rhythm[step]) {
-                const t = barTime + step * this.stepDuration;
-                const noteIndex = riff.offsets[step];
-                const freq = scale[noteIndex % scale.length];
-                this._playLeadNote(t, freq, this.stepDuration * 2);
-            }
+            if (!riff.rhythm[step]) continue;
+            const t    = barTime + step * this.stepDuration;
+            const freq = scale[riff.offsets[step] % scale.length];
+            this._playLeadNote(t, freq, this.stepDuration * 2);
         }
     }
 
     _playLeadNote(time, freq, dur) {
-        const osc = this.ctx.createOscillator();
-        osc.type = 'square';
+        const osc    = this.ctx.createOscillator();
+        osc.type     = 'square';
         osc.frequency.setValueAtTime(freq, time);
 
-        // Filter for a sharper synth sound
         const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
+        filter.type  = 'lowpass';
         filter.frequency.setValueAtTime(4000, time);
         filter.frequency.exponentialRampToValueAtTime(1000, time + dur);
 

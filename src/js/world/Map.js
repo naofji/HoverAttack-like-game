@@ -41,7 +41,7 @@ export class Map {
             { fill: '#483D8B', border: '#2e2759' }  // 7: DarkSlateBlue (Purple-ish)
         ];
         const palIdx = (this.missionLevel || 0) % palettes.length;
-        
+
         this.blockStyles = {
             [BLOCK_NORMAL]: palettes[palIdx],
             [BLOCK_HARD]: { fill: COLOR_HARD_BLOCK, border: COLOR_HARD_BLOCK_BORDER },
@@ -632,10 +632,10 @@ export class Map {
         }
 
         // Add some hard blocks for cover
-        this.grid[floorR - 1][centerC - 7] = BLOCK_HARD;
-        this.blockHP[floorR - 1][centerC - 7] = HARD_BLOCK_HP;
-        this.grid[floorR - 2][centerC - 7] = BLOCK_HARD;
-        this.blockHP[floorR - 2][centerC - 7] = HARD_BLOCK_HP;
+        this.grid[floorR - 1][centerC - 7] = BLOCK_INDESTRUCTIBLE;
+        this.blockHP[floorR - 1][centerC - 7] = 999;
+        this.grid[floorR - 2][centerC - 7] = BLOCK_INDESTRUCTIBLE;
+        this.blockHP[floorR - 2][centerC - 7] = 999;
 
         // Save spawn location for the Main Base (base rests on the indestructible floor)
         this.enemyBaseSpawn = {

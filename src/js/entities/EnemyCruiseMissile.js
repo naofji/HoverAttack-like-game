@@ -5,13 +5,17 @@
 import {
     CRUISE_MISSILE_MAX_SPEED,
     CRUISE_MISSILE_TURN_RATE,
+    CRUISE_MISSILE_ENGAGE_DISTANCE,
     CRUISE_MISSILE_LIFETIME,
     CRUISE_MISSILE_HP,
     EXPLOSION_PARTICLE_COUNT,
     PARTICLE_LIFETIME,
-    TILE_SIZE
+    TILE_SIZE,
+    GRENADE_BLAST_RADIUS,
+    GRENADE_EXPLOSION_COUNT
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class EnemyCruiseMissile {
     constructor(game, x, y, initialAngle, path = null) {
@@ -45,115 +49,96 @@ export class EnemyCruiseMissile {
         // Delay before homing seeker can turn on (minimum arming time)
         this.homingDelay = 60; // frames (1 second before it can engage tracking)
         this.homingActive = false;
-        this.engageDistance = 100; // pixels (Switches to terminal homing when close)
+        this.engageDistance = CRUISE_MISSILE_ENGAGE_DISTANCE; // pixels (Switches to terminal homing when close)
     }
 
     update() {
         if (!this.alive || this.exploded) return;
 
-        // Acceleration logic
-        if (this.speed < this.maxSpeed) {
-            this.speed += this.acceleration;
-        } else {
-            this.speed = this.maxSpeed;
-        }
-
+        this._updateAcceleration();
         this.frameCounter++;
-
-        // --- Mode Control ---
-        const target = this._getTarget();
-        if (target) {
-            const dx = (target.x + target.width / 2) - this.x;
-            const dy = (target.y + target.height / 2) - this.y;
-            const distSq = dx * dx + dy * dy;
-
-            // Switch to Terminal Homing if close enough
-            if (!this.homingActive && this.frameCounter > this.homingDelay) {
-                if (distSq < this.engageDistance * this.engageDistance) {
-                    this.homingActive = true;
-                    this.path = null; // Drop A* path when homing starts
-                }
-            }
-
-            if (this.homingActive) {
-                // Terminal Homing (Direct tracking)
-                let targetAngle = Math.atan2(dy, dx);
-                let diff = targetAngle - this.angle;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                this.angle += Math.max(-CRUISE_MISSILE_TURN_RATE, Math.min(CRUISE_MISSILE_TURN_RATE, diff));
-            } else if (this.path) {
-                // Cruise Phase: Follow A* Path
-                this._followPath();
-            }
-        }
-
-        // Obstacle Avoidance (Drifting)
-        // Now integrated: always runs to provide smooth nudges away from walls
+        this._updateGuidance();
         this._avoidObstacles();
 
-        // Update Position
         this.x += Math.cos(this.angle + this.driftAngle) * this.speed;
         this.y += Math.sin(this.angle + this.driftAngle) * this.speed;
-
-        // Decay drift
         this.driftAngle *= 0.85;
 
-        // Trail Particle (Intense Smoke + Fire when homing)
-        if (this.frameCounter % 2 === 0) {
-            // Cruise missile emits larger, thicker smoke
-            for (let i = 0; i < 3; i++) {
-                const tp = new TrailParticle(
-                    this.x + (Math.random() - 0.5) * 8,
-                    this.y + (Math.random() - 0.5) * 8,
-                    PARTICLE_LIFETIME * 2.0
-                );
+        this._updateTrail();
 
-                if (this.homingActive && Math.random() < 0.4) {
-                    // Emit orange/red fire sparks when seeker is active
-                    tp.color = `rgba(255, 60, 0, 0.9)`;
-                    tp.vx = (Math.random() - 0.5) * 4.0;
-                    tp.vy = (Math.random() - 0.5) * 4.0;
-                } else {
-                    tp.color = `rgba(180, 180, 180, 0.8)`;
-                    tp.vx = (Math.random() - 0.5) * 2.0;
-                    tp.vy = (Math.random() - 0.5) * 2.0;
-                }
-                this.game.particles.push(tp);
+        this.lifetime--;
+        if (this.lifetime <= 0) { this.alive = false; return; }
+
+        if (this.armingTimer > 0) { this.armingTimer--; return; }
+
+        this._checkMapCollision();
+    }
+
+    /** Gradually accelerate from rest to cruise speed. */
+    _updateAcceleration() {
+        this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
+    }
+
+    /** Manage path-following vs. terminal-homing guidance. */
+    _updateGuidance() {
+        const target = this._getTarget();
+        if (!target) return;
+
+        const dx = (target.x + target.width / 2) - this.x;
+        const dy = (target.y + target.height / 2) - this.y;
+
+        if (!this.homingActive && this.frameCounter > this.homingDelay) {
+            if (dx * dx + dy * dy < this.engageDistance * this.engageDistance) {
+                this.homingActive = true;
+                this.path = null;
             }
         }
 
-        this.lifetime--;
-        if (this.lifetime <= 0) {
-            this.alive = false;
-            return;
+        if (this.homingActive) {
+            const diff = this._normalizeAngle(Math.atan2(dy, dx) - this.angle);
+            this.angle += Math.max(-CRUISE_MISSILE_TURN_RATE,
+                Math.min(CRUISE_MISSILE_TURN_RATE, diff));
+        } else if (this.path) {
+            this._followPath();
         }
+    }
 
-        // Decrement arming timer
-        if (this.armingTimer > 0) {
-            this.armingTimer--;
-            return; // Skip collision detection until armed
+    /** Spawn heavy smoke/fire trail particles. */
+    _updateTrail() {
+        if (this.frameCounter % 2 !== 0) return;
+        for (let i = 0; i < 3; i++) {
+            const tp = new TrailParticle(
+                this.x + (Math.random() - 0.5) * 8,
+                this.y + (Math.random() - 0.5) * 8,
+                PARTICLE_LIFETIME * 2.0
+            );
+            if (this.homingActive && Math.random() < 0.4) {
+                tp.color = 'rgba(255, 60, 0, 0.9)';
+                tp.vx = (Math.random() - 0.5) * 4.0;
+                tp.vy = (Math.random() - 0.5) * 4.0;
+            } else {
+                tp.color = 'rgba(180, 180, 180, 0.8)';
+                tp.vx = (Math.random() - 0.5) * 2.0;
+                tp.vy = (Math.random() - 0.5) * 2.0;
+            }
+            this.game.particles.push(tp);
         }
+    }
 
-        // --- Map collision (Rotated Block unit overlap check) ---
+    /** OBB map collision check using rotated AABB of the missile hull. */
+    _checkMapCollision() {
         const map = this.game.map;
-        const TS = TILE_SIZE; // 16px
-
-        // Calculate the bounding box of the ROTATED missile
+        const TS = TILE_SIZE;
         const cos = Math.cos(this.angle + this.driftAngle);
         const sin = Math.sin(this.angle + this.driftAngle);
 
-        // Visual corners relative to center (width goes -10 to 14, height -8 to 8)
         const corners = [
-            { x: -10, y: -8 },
-            { x: 14, y: -8 },
-            { x: 14, y: 8 },
-            { x: -10, y: 8 }
+            { x: -10, y: -3 }, { x: 8, y: -3 },
+            { x: 10, y: 3 }, { x: -8, y: 3 }
         ];
 
         let minX = Infinity, maxX = -Infinity;
         let minY = Infinity, maxY = -Infinity;
-
         for (const pt of corners) {
             const rx = pt.x * cos - pt.y * sin;
             const ry = pt.x * sin + pt.y * cos;
@@ -163,39 +148,23 @@ export class EnemyCruiseMissile {
             if (ry > maxY) maxY = ry;
         }
 
-        // Calculate the range of blocks (tiles) the rotated AABB overlaps
-        // Adding a small 2px leeway to prevent scraping on perfectly parallel walls
         const startC = Math.floor((this.x + minX + 2) / TS);
         const endC = Math.floor((this.x + maxX - 2) / TS);
         const startR = Math.floor((this.y + minY + 2) / TS);
         const endR = Math.floor((this.y + maxY - 2) / TS);
 
-        let hitR = -1;
-        let hitC = -1;
-
-        // Check all overlapping blocks
-        for (let r = startR; r <= endR; r++) {
+        let hitR = -1, hitC = -1;
+        outer: for (let r = startR; r <= endR; r++) {
             for (let c = startC; c <= endC; c++) {
-                if (map.isSolid(r, c)) {
-                    hitR = r;
-                    hitC = c;
-                    break;
-                }
+                if (map.isSolid(r, c)) { hitR = r; hitC = c; break outer; }
             }
-            if (hitR !== -1) break;
         }
 
         if (hitR !== -1) {
-            // Damage the block and explode
-            console.warn(`[CruiseMissile] HIT BLOCK at tile(r=${hitR}, c=${hitC}) | missile pos=(${Math.round(this.x)}, ${Math.round(this.y)}) | angle=${this.angle.toFixed(2)} | drift=${this.driftAngle.toFixed(3)}`);
-            map.damageBlock(hitR, hitC, 3);
-            this.game.spawnExplosion(this.x, this.y, EXPLOSION_PARTICLE_COUNT * 2);
-            this.exploded = true;
-            this.alive = false;
+            this._explode();
             return;
         }
 
-        // --- Out of bounds ---
         if (this.x < 0 || this.x > map.width || this.y < 0 || this.y > map.height) {
             this.alive = false;
         }
@@ -207,29 +176,25 @@ export class EnemyCruiseMissile {
             return;
         }
 
-        const targetPt = this.path[this.currentPathIndex];
-        const tx = targetPt.x;
-        const ty = targetPt.y;
+        const pt = this.path[this.currentPathIndex];
+        const dx = pt.x - this.x;
+        const dy = pt.y - this.y;
 
-        const dx = tx - this.x;
-        const dy = ty - this.y;
-        const distSq = dx * dx + dy * dy;
-
-        // If reached waypoint, move to next
-        // Threshold: waypoint radius = TILE_SIZE (16px). distSq < 16*16 = 256
-        if (distSq < TILE_SIZE * TILE_SIZE) {
+        if (dx * dx + dy * dy < TILE_SIZE * TILE_SIZE) {
             this.currentPathIndex++;
             return;
         }
 
-        // Steer towards waypoint
-        let targetAngle = Math.atan2(dy, dx);
-        let diff = targetAngle - this.angle;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
+        const diff = this._normalizeAngle(Math.atan2(dy, dx) - this.angle);
+        const rate = CRUISE_MISSILE_TURN_RATE * 2;
+        this.angle += Math.max(-rate, Math.min(rate, diff));
+    }
 
-        // Turn faster during path following to stay on course
-        this.angle += Math.max(-CRUISE_MISSILE_TURN_RATE * 2, Math.min(CRUISE_MISSILE_TURN_RATE * 2, diff));
+    /** Wrap an angle to the range (-π, π]. */
+    _normalizeAngle(a) {
+        while (a < -Math.PI) a += Math.PI * 2;
+        while (a > Math.PI) a -= Math.PI * 2;
+        return a;
     }
 
     _getTarget() {
@@ -282,6 +247,23 @@ export class EnemyCruiseMissile {
         }
     }
 
+    _explode() {
+        if (this.exploded) return;
+        this.exploded = true;
+        this.alive = false;
+
+        const map = this.game.map;
+        const tile = map.pixelToTile(this.x, this.y);
+
+        // AOE Map destruction (large blast like a grenade)
+        map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
+
+        // Visual and Audio feedback
+        this.game.spawnExplosion(this.x, this.y, GRENADE_EXPLOSION_COUNT);
+        audioManager.playExplosion(true);
+        if (this.game.camera) this.game.camera.shake(8, 15);
+    }
+
     draw(ctx) {
         if (!this.alive || this.exploded) return;
 
@@ -312,11 +294,11 @@ export class EnemyCruiseMissile {
         // Draw Cruise Missile Body (Dark Gray/Red)
         // Much larger: 16x8
         ctx.fillStyle = '#444444';
-        ctx.fillRect(-8, -4, 16, 8);
+        ctx.fillRect(-8, -3, 16, 6);
 
         // Draw Wings (Red)
         ctx.fillStyle = '#FF2222';
-        ctx.fillRect(-4, -8, 6, 16); // Top & bottom wings
+        ctx.fillRect(-4, -6, 6, 12); // Top & bottom wings
 
         // Draw Engine Exhaust (Orange)
         ctx.fillStyle = '#FF8800';
@@ -325,9 +307,9 @@ export class EnemyCruiseMissile {
         // Draw Tip (Yellow)
         ctx.fillStyle = '#FFFF00';
         ctx.beginPath();
-        ctx.moveTo(8, -4);
+        ctx.moveTo(8, -3);
         ctx.lineTo(14, 0);
-        ctx.lineTo(8, 4);
+        ctx.lineTo(8, 3);
         ctx.fill();
 
         // Draw HP indicator if damaged

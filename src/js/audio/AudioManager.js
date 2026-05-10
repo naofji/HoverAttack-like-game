@@ -24,6 +24,21 @@ export class AudioManager {
         } else {
             this.bgm = new BGMManager(this.ctx);
         }
+
+        // Resume context and retry BGM on first user interaction (browser policy)
+        const resume = () => {
+            if (!this.ctx) return;
+            this._resume();
+            if (this.ctx.state === 'running') {
+                if (this.bgm && !this.bgm.playing && this.bgm.url && this.bgm.url.endsWith('title.mp3')) {
+                    this.bgm.start();
+                }
+                document.removeEventListener('click', resume);
+                document.removeEventListener('keydown', resume);
+            }
+        };
+        document.addEventListener('click', resume);
+        document.addEventListener('keydown', resume);
     }
 
     _createNoiseBuffer() {
@@ -41,10 +56,31 @@ export class AudioManager {
         }
     }
 
-    // --- Hover (Engine) Sounds ---
-    playHover(pitch = 1.0) {
+    /** Convenience: ensure context is initialized and running. */
+    _prepare() {
         this.init();
         this._resume();
+    }
+
+    /**
+     * Build a wave-shaper distortion curve.
+     * @param {number} amount - Distortion intensity (higher = more distorted).
+     */
+    _makeDistortionCurve(amount) {
+        const k         = typeof amount === 'number' ? amount : 50;
+        const n_samples = 44100;
+        const curve     = new Float32Array(n_samples);
+        const deg       = Math.PI / 180;
+        for (let i = 0; i < n_samples; i++) {
+            const x = i * 2 / n_samples - 1;
+            curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
+    }
+
+    // --- Hover (Engine) Sounds ---
+    playHover(pitch = 1.0) {
+        this._prepare();
 
         if (!this.hoverOsc) {
             this.hoverOsc = this.ctx.createOscillator();
@@ -57,19 +93,7 @@ export class AudioManager {
 
             // Distortion for the oscillator (engine growl)
             const distortion = this.ctx.createWaveShaper();
-            const makeDistortionCurve = (amount) => {
-                const k = typeof amount === 'number' ? amount : 50,
-                    n_samples = 44100,
-                    curve = new Float32Array(n_samples),
-                    deg = Math.PI / 180;
-                let x;
-                for (let i = 0; i < n_samples; ++i) {
-                    x = i * 2 / n_samples - 1;
-                    curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
-                }
-                return curve;
-            };
-            distortion.curve = makeDistortionCurve(400);
+            distortion.curve = this._makeDistortionCurve(400);
             distortion.oversample = '4x';
 
             // Filter for the oscillator (muffled tone)
@@ -151,8 +175,7 @@ export class AudioManager {
 
     // --- Explosions & Bursts ---
     playBurst() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -175,8 +198,7 @@ export class AudioManager {
     }
 
     playExplosion(large = false) {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -200,8 +222,7 @@ export class AudioManager {
 
     // --- Weapons ---
     playMissile() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -221,8 +242,7 @@ export class AudioManager {
     }
 
     playEnemyFire() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -242,8 +262,7 @@ export class AudioManager {
     }
 
     playSwitch() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -264,8 +283,7 @@ export class AudioManager {
 
     // --- Laser ---
     playLaserCharge() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -286,8 +304,7 @@ export class AudioManager {
     }
 
     playLaserFire() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const osc = this.ctx.createOscillator();
         const sub = this.ctx.createOscillator();
@@ -319,8 +336,7 @@ export class AudioManager {
     }
 
     playHeavyDamage() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const now = this.ctx.currentTime;
 
@@ -353,17 +369,7 @@ export class AudioManager {
 
         // Add some distortion/crunch
         const distortion = this.ctx.createWaveShaper();
-        const makeDistortionCurve = (amount) => {
-            const k = typeof amount === 'number' ? amount : 50,
-                n_samples = 44100,
-                curve = new Float32Array(n_samples);
-            for (let i = 0; i < n_samples; ++i) {
-                const x = i * 2 / n_samples - 1;
-                curve[i] = (3 + k) * x * 20 * (Math.PI / 180) / (Math.PI + k * Math.abs(x));
-            }
-            return curve;
-        };
-        distortion.curve = makeDistortionCurve(100);
+        distortion.curve = this._makeDistortionCurve(100);
 
         osc.connect(distortion);
         distortion.connect(oscGain);
@@ -376,8 +382,7 @@ export class AudioManager {
     }
 
     playBaseDestroyed() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const now = this.ctx.currentTime;
         const notes = [
@@ -405,8 +410,7 @@ export class AudioManager {
     }
 
     playSuccess() {
-        this.init();
-        this._resume();
+        this._prepare();
 
         const now = this.ctx.currentTime;
 
@@ -522,21 +526,24 @@ export class AudioManager {
     playTitleBGM() {
         this.init();
         this._resume();
-        this.stopRankingBGM(); // Ensure ranking BGM is stopped
 
         if (this.useMP3BGM && this.bgm) {
             // If already playing title BGM, don't restart it
             if (this.bgm.playing && this.bgm.url && this.bgm.url.endsWith('title.mp3')) {
                 return;
             }
+        }
+
+        this.stopRankingBGM(); // Ensure ranking BGM is stopped
+
+        if (this.useMP3BGM && this.bgm) {
             this.bgm.setURL('src/assets/audio/title.mp3');
             this.bgm.start();
         }
     }
 
     playRankingBGM() {
-        this.init();
-        this._resume();
+        this._prepare();
         this.stopRankingBGM();
 
         if (this.useMP3BGM && this.bgm) {
@@ -628,8 +635,7 @@ export class AudioManager {
     }
 
     playGameOver() {
-        this.init();
-        this._resume();
+        this._prepare();
         if (!this.ctx || this.ctx.state === 'suspended') return;
         const now = this.ctx.currentTime;
 
@@ -718,6 +724,53 @@ export class AudioManager {
             osc.start(time);
             osc.stop(time + dur);
         });
+    }
+
+    playAlarm() {
+        this._prepare();
+        if (!this.ctx || this.ctx.state === 'suspended') return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'square';
+        // Siren effect: oscillate frequency
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.15);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.05, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.3);
+    }
+
+    playProximityAlarm() {
+        this._prepare();
+        if (!this.ctx || this.ctx.state === 'suspended') return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        // "Bween!" sound using a low-frequency sawtooth wave
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(80, now);
+        osc.frequency.linearRampToValueAtTime(120, now + 0.3);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.5);
     }
 }
 

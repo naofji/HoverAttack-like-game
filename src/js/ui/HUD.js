@@ -98,7 +98,75 @@ export class HUD {
             }
         }
 
+        // --- Carrier Alerts ---
+        this._drawCarrierDamageAlert(ctx, w);
+        this._drawProximityAlert(ctx, w);
+
         ctx.restore();
+    }
+
+    _drawProximityAlert(ctx, w) {
+        // Yellow alert if enemies/bullets are near carrier
+        if (!this.game.proximityAlertActive) return;
+
+        // Don't show yellow if red damage alert is active (red has priority)
+        if (this.game.carrier && this.game.carrier.damageTimer > 0) return;
+
+        const carrier = this.game.carrier;
+        const cam = this.game.camera;
+        const screenX = carrier.x - cam.x;
+        const screenW = w;
+        const screenH = this.game.canvas.height;
+
+        // Pulsing yellow — same timing style as damage alert
+        const alpha = Math.sin(Date.now() / 120) * 0.35 + 0.45;
+        ctx.fillStyle = `rgba(255, 220, 0, ${alpha})`;
+
+        const thickness = 10;
+
+        if (screenX + carrier.width < 0) {
+            // Carrier is to the left of the screen
+            ctx.fillRect(0, HUD_TOP_HEIGHT, thickness, screenH);
+        } else if (screenX > screenW) {
+            // Carrier is to the right of the screen
+            ctx.fillRect(screenW - thickness, HUD_TOP_HEIGHT, thickness, screenH);
+        } else {
+            // Carrier is visible on screen: full border
+            ctx.fillRect(0, HUD_TOP_HEIGHT, screenW, thickness); // Top
+            ctx.fillRect(0, screenH - thickness, screenW, thickness); // Bottom
+            ctx.fillRect(0, HUD_TOP_HEIGHT, thickness, screenH); // Left
+            ctx.fillRect(screenW - thickness, HUD_TOP_HEIGHT, thickness, screenH); // Right
+        }
+    }
+
+    _drawCarrierDamageAlert(ctx, w) {
+        const carrier = this.game.carrier;
+        if (!carrier || carrier.damageTimer <= 0) return;
+
+        const cam = this.game.camera;
+        const screenX = carrier.x - cam.x;
+        const screenW = w;
+        const screenH = this.game.canvas.height;
+
+        // Pulse intensity
+        const alpha = (Math.sin(Date.now() / 100) * 0.4 + 0.5) * (carrier.damageTimer / 60);
+        ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+
+        const thickness = 10;
+
+        if (screenX + carrier.width < 0) {
+            // Carrier is to the left of the screen
+            ctx.fillRect(0, HUD_TOP_HEIGHT, thickness, screenH);
+        } else if (screenX > screenW) {
+            // Carrier is to the right of the screen
+            ctx.fillRect(screenW - thickness, HUD_TOP_HEIGHT, thickness, screenH);
+        } else {
+            // Carrier is visible on screen: Pulse full border
+            ctx.fillRect(0, HUD_TOP_HEIGHT, screenW, thickness); // Top
+            ctx.fillRect(0, screenH - thickness, screenW, thickness); // Bottom
+            ctx.fillRect(0, HUD_TOP_HEIGHT, thickness, screenH); // Left
+            ctx.fillRect(screenW - thickness, HUD_TOP_HEIGHT, thickness, screenH); // Right
+        }
     }
 
     // ------------------------------------------

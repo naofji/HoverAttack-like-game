@@ -44,45 +44,46 @@ export class EnemyTurret {
     update() {
         if (!this.alive) return;
 
-        // Visuals
         if (this.recoil > 0) this.recoil *= 0.8;
 
         const target = this._findTarget();
+        this._updateAiming(target);
+        this._updateStateMachine(target);
+    }
 
-        // Aiming
+    /** Rotate barrel to track (or return to rest when no target). */
+    _updateAiming(target) {
         if (target) {
-            const cx = this.x + this.width / 2;
+            const cx = this.x + this.width  / 2;
             const cy = this.y + this.height / 2;
-            const tx = target.x + target.width / 2;
-            const ty = target.y + target.height / 2;
-            this.targetAngle = Math.atan2(ty - cy, tx - cx);
-
-            // Limit traverse angle if needed, or let it turn freely
-            this.currentAngle = this.targetAngle; // Instant aim for now
+            this.targetAngle  = Math.atan2(
+                target.y + target.height / 2 - cy,
+                target.x + target.width  / 2 - cx
+            );
+            this.currentAngle = this.targetAngle; // Instant aim
         } else {
-            // Return to rest position slowly
-            const restAngle = this.isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
-            this.currentAngle += (restAngle - this.currentAngle) * 0.05;
+            const rest = this.isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
+            this.currentAngle += (rest - this.currentAngle) * 0.05;
         }
+    }
 
-        // State Machine
+    /** Advance the idle → bursting → cooldown state machine. */
+    _updateStateMachine(target) {
         if (this.state === 'idle') {
             if (this.cooldownTimer > 0) {
                 this.cooldownTimer--;
             } else if (target) {
-                this.state = 'bursting';
+                this.state     = 'bursting';
                 this.burstCount = this.maxBurstCount;
-                this.burstTimer = 0; // Fire immediately
+                this.burstTimer = 0;
             }
         } else if (this.state === 'bursting') {
             if (this.burstTimer <= 0) {
-                // Shoot one bullet of the burst
                 this._executeAttack();
                 this.burstCount--;
                 this.burstTimer = ENEMY_TURRET_BURST_DELAY;
-
                 if (this.burstCount <= 0) {
-                    this.state = 'cooldown';
+                    this.state         = 'cooldown';
                     this.cooldownTimer = ENEMY_TURRET_COOLDOWN;
                 }
             } else {
@@ -90,9 +91,7 @@ export class EnemyTurret {
             }
         } else if (this.state === 'cooldown') {
             this.cooldownTimer--;
-            if (this.cooldownTimer <= 0) {
-                this.state = 'idle';
-            }
+            if (this.cooldownTimer <= 0) this.state = 'idle';
         }
     }
 

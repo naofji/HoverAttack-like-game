@@ -6,6 +6,8 @@ import {
     ENEMY_HOMING_MISSILE_MAX_SPEED,
     ENEMY_HOMING_MISSILE_TURN_RATE,
     ENEMY_HOMING_MISSILE_LIFETIME,
+    ENEMY_HOMING_MISSILE_DELAY,
+    ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE,
     TILE_SIZE,
     EXPLOSION_PARTICLE_COUNT,
     PARTICLE_LIFETIME
@@ -19,11 +21,13 @@ export class EnemyHomingMissile {
         this.y = y;
         this.angle = initialAngle;
         this.speed = 0; // Starts from zero as requested
-        this.maxSpeed = ENEMY_HOMING_MISSILE_MAX_SPEED;
+        this.maxSpeed     = ENEMY_HOMING_MISSILE_MAX_SPEED;
+        this.turnRate     = ENEMY_HOMING_MISSILE_TURN_RATE;
+        this.lifetime     = ENEMY_HOMING_MISSILE_LIFETIME;
+        this.homingDelay  = ENEMY_HOMING_MISSILE_DELAY;
         this.acceleration = 0.08; // Gradual startup
         this.alive = true;
         this.exploded = false;
-        this.lifetime = ENEMY_HOMING_MISSILE_LIFETIME;
         this.frameCounter = 0;
         this.isPlayerOwned = false; // Never player owned
 
@@ -31,107 +35,96 @@ export class EnemyHomingMissile {
         this.driftAngle = 0;
         
         // Delay before homing seeker can turn on (minimum arming time)
-        this.homingDelay = 40; // frames
         this.homingActive = false;
-        this.engageDistance = 350; // pixels
+        this.engageDistance = ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE;
     }
 
     update() {
         if (!this.alive || this.exploded) return;
 
-        // Acceleration logic: start from zero and reach cruise speed
-        if (this.speed < this.maxSpeed) {
-            this.speed += this.acceleration;
-        } else {
-            this.speed = this.maxSpeed;
-        }
-
+        this._updateAcceleration();
         this.frameCounter++;
-
-        // Homing Logic (Engages when within proximity AND after initial launch phase)
-        const target = this._getTarget();
-        if (target) {
-            const tx = target.x + target.width / 2;
-            const ty = target.y + target.height / 2;
-            
-            // Check delay and distance
-            if (!this.homingActive && this.frameCounter > this.homingDelay) {
-                const dx = tx - this.x;
-                const dy = ty - this.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq < this.engageDistance * this.engageDistance) {
-                    this.homingActive = true; // Seeker engaged!
-                }
-            }
-
-            if (this.homingActive) {
-                let targetAngle = Math.atan2(ty - this.y, tx - this.x);
-
-                // Normalize angles for smooth turning
-                let diff = targetAngle - this.angle;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-
-                // Apply turning with turn rate limit
-                this.angle += Math.max(-ENEMY_HOMING_MISSILE_TURN_RATE, Math.min(ENEMY_HOMING_MISSILE_TURN_RATE, diff));
-            }
-        }
-
-        // Obstacle Avoidance (Drifting)
+        this._updateHoming();
         this._avoidObstacles();
 
-        // Update Position
         this.x += Math.cos(this.angle + this.driftAngle) * this.speed;
         this.y += Math.sin(this.angle + this.driftAngle) * this.speed;
-        
-        // Decay drift
-        this.driftAngle *= 0.85; // Slightly slower decay for longer drifts
+        this.driftAngle *= 0.85;
 
-        // Trail Particle (Intense Smoke + Fire when homing)
-        if (this.frameCounter % 2 === 0) {
-            for (let i = 0; i < 2; i++) {
-                const tp = new TrailParticle(
-                    this.x + (Math.random() - 0.5) * 4, 
-                    this.y + (Math.random() - 0.5) * 4, 
-                    PARTICLE_LIFETIME * 1.5
-                );
-                
-                if (this.homingActive && Math.random() < 0.3) {
-                    // Emit orange/red fire sparks when seeker is active
-                    tp.color = `rgba(255, 100, 0, 0.9)`;
-                    tp.vx = (Math.random() - 0.5) * 3.0;
-                    tp.vy = (Math.random() - 0.5) * 3.0;
-                } else {
-                    tp.color = `rgba(220, 220, 220, 0.7)`;
-                    tp.vx = (Math.random() - 0.5) * 1.5;
-                    tp.vy = (Math.random() - 0.5) * 1.5;
-                }
-                this.game.particles.push(tp);
-            }
-        }
+        this._updateTrail();
 
         this.lifetime--;
-        if (this.lifetime <= 0) {
-            this.alive = false;
-            return;
-        }
+        if (this.lifetime <= 0) { this.alive = false; return; }
 
-        // --- Map collision ---
-        const map = this.game.map;
+        const map  = this.game.map;
         const tile = map.pixelToTile(this.x, this.y);
-
         if (map.isSolid(tile.r, tile.c)) {
-            // Damage the block and explode
             map.damageBlock(tile.r, tile.c, 1);
             this.game.spawnExplosion(this.x, this.y, EXPLOSION_PARTICLE_COUNT);
             this.exploded = true;
-            this.alive = false;
+            this.alive    = false;
             return;
         }
-
-        // --- Out of bounds ---
         if (this.x < 0 || this.x > map.width || this.y < 0 || this.y > map.height) {
             this.alive = false;
+        }
+    }
+
+    /** Gradually accelerate from rest to cruise speed. */
+    _updateAcceleration() {
+        this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
+    }
+
+    /** Engage seeker when arming conditions are met, then steer toward target. */
+    _updateHoming() {
+        const target = this._getTarget();
+        if (!target) return;
+
+        const tx = target.x + target.width  / 2;
+        const ty = target.y + target.height / 2;
+
+        if (!this.homingActive && this.frameCounter > this.homingDelay) {
+            const dx = tx - this.x;
+            const dy = ty - this.y;
+            if (dx * dx + dy * dy < this.engageDistance * this.engageDistance) {
+                this.homingActive = true;
+            }
+        }
+
+        if (this.homingActive) {
+            const targetAngle = Math.atan2(ty - this.y, tx - this.x);
+            const diff = this._normalizeAngle(targetAngle - this.angle);
+            this.angle += Math.max(-ENEMY_HOMING_MISSILE_TURN_RATE,
+                           Math.min( ENEMY_HOMING_MISSILE_TURN_RATE, diff));
+        }
+    }
+
+    /** Wrap an angle to the range (-π, π]. */
+    _normalizeAngle(a) {
+        while (a < -Math.PI) a += Math.PI * 2;
+        while (a >  Math.PI) a -= Math.PI * 2;
+        return a;
+    }
+
+    /** Spawn smoke/fire trail particles. */
+    _updateTrail() {
+        if (this.frameCounter % 2 !== 0) return;
+        for (let i = 0; i < 2; i++) {
+            const tp = new TrailParticle(
+                this.x + (Math.random() - 0.5) * 4,
+                this.y + (Math.random() - 0.5) * 4,
+                PARTICLE_LIFETIME * 1.5
+            );
+            if (this.homingActive && Math.random() < 0.3) {
+                tp.color = 'rgba(255, 100, 0, 0.9)';
+                tp.vx = (Math.random() - 0.5) * 3.0;
+                tp.vy = (Math.random() - 0.5) * 3.0;
+            } else {
+                tp.color = 'rgba(220, 220, 220, 0.7)';
+                tp.vx = (Math.random() - 0.5) * 1.5;
+                tp.vy = (Math.random() - 0.5) * 1.5;
+            }
+            this.game.particles.push(tp);
         }
     }
 

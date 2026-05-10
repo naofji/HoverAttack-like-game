@@ -140,21 +140,22 @@ export class EnemyTank {
 
         // Vertical Entity Collision
         if (this.vy > 0) {
-            const entities = [...this.game.enemies];
-            const player = this.game.player;
-            if (player && player.alive && !player.docked) entities.push(player);
-            checkVerticalEntityCollision(this, entities);
+            checkVerticalEntityCollision(this, this._buildEntityList());
         }
     }
 
     _checkHorizontalEntities() {
-        const entities = [...this.game.enemies];
-        const player = this.game.player;
-        if (player && player.alive && !player.docked) entities.push(player);
-
-        checkHorizontalEntityCollision(this, entities, () => {
+        checkHorizontalEntityCollision(this, this._buildEntityList(), () => {
             this.patrolDir *= -1;
         });
+    }
+
+    /** Build collideable entity list (enemies + active player). */
+    _buildEntityList() {
+        const list   = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) list.push(player);
+        return list;
     }
 
     _collidesWithMap() {
@@ -177,54 +178,48 @@ export class EnemyTank {
         this.fireTimer--;
         if (this.fireTimer > 0) return;
 
-        const player = this.game.player;
-        const carrier = this.game.carrier;
-        let target = null;
-        let minDist = ENEMY_TANK_SIGHT_RANGE;
-
-        // Check if player is a valid target
-        if (player && player.alive && !player.docked) {
-            const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
-            // Only target if in the front 180-degree arc
-            if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
-                const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist <= minDist) {
-                    minDist = dist;
-                    target = player;
-                }
-            }
-        }
-
-        // Check if carrier is a valid target (carrier is wide, so use center distance)
-        if (carrier && carrier.alive) {
-            const dx = (carrier.x + carrier.width / 2) - (this.x + this.width / 2);
-            // Only target if in the front 180-degree arc
-            if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
-                const dy = (carrier.y + carrier.height / 2) - (this.y + this.height / 2);
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                // If player is docked, we prioritize carrier anyway since player is invalid
-                if (dist <= minDist) {
-                    minDist = dist;
-                    target = carrier;
-                }
-            }
-        }
-
+        const target = this._findTarget();
         if (target) {
-            // Fire at target
-            const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+            const dx = (target.x + target.width  / 2) - (this.x + this.width  / 2);
             const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
-            const angle = Math.atan2(dy, dx);
-            const bulletX = this.x + this.width / 2 + Math.cos(angle) * 8;
+            const angle   = Math.atan2(dy, dx);
+            const bulletX = this.x + this.width  / 2 + Math.cos(angle) * 8;
             const bulletY = this.y + this.height / 2 + Math.sin(angle) * 4;
             this.game.enemyBullets.push(new EnemyBullet(this.game, bulletX, bulletY, angle));
-
-            // Face the player
             this.facingRight = dx > 0;
         }
 
         this.fireTimer = ENEMY_TANK_FIRE_INTERVAL;
+    }
+
+    /**
+     * Find the closest valid target within the forward arc.
+     * Player is preferred over carrier; both must be within sight range.
+     */
+    _findTarget() {
+        const halfW  = this.width  / 2;
+        const halfH  = this.height / 2;
+        const selfCX = this.x + halfW;
+        const selfCY = this.y + halfH;
+
+        let best    = null;
+        let minDist = ENEMY_TANK_SIGHT_RANGE;
+
+        const check = (entity) => {
+            if (!entity || !entity.alive) return;
+            const dx = (entity.x + entity.width  / 2) - selfCX;
+            const dy = (entity.y + entity.height / 2) - selfCY;
+            // Only target entities in the forward 180° arc
+            if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= minDist) { minDist = dist; best = entity; }
+            }
+        };
+
+        const player = this.game.player;
+        if (player && !player.docked) check(player);
+        check(this.game.carrier);
+        return best;
     }
 
     // ------------------------------------------
@@ -264,7 +259,6 @@ export class EnemyTank {
         if (!this.facingRight) {
             ctx.translate(x + this.width, y);
             ctx.scale(-1, 1);
-            ctx.translate(0, 0);
         } else {
             ctx.translate(x, y);
         }

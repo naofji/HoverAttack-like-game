@@ -52,84 +52,82 @@ export class EnemyAttacker {
 
         // Hover fuel support (used if movementType allows hovering)
         this.hoverFuel = HOVER_MAX_FUEL;
+        this.frameCounter = Math.floor(Math.random() * 100);
     }
 
     update() {
         if (!this.alive) return;
 
-        this.hovering = false; // Reset hover state each frame
-        const target = this._getClosestTarget();
+        this.frameCounter++;
+        this.hovering = false;
+        const target     = this._getClosestTarget();
         const targetDist = target ? this._distToTarget(target) : Infinity;
 
-        // --- AI Decision ---
-        if (target && targetDist <= this.config.sightRange) {
-            this.aiState = 'chase';
-        } else {
-            this.aiState = 'patrol';
-        }
+        // --- AI state decision ---
+        this.aiState = (target && targetDist <= this.config.sightRange) ? 'chase' : 'patrol';
 
         // --- Movement ---
-        if (this.crouching || this.burstCount > 0) {
-            // Cannot move while crouching or bursting
-            this.vx = 0;
-        } else if (this.aiState === 'chase') {
-            this._chaseTarget(target);
-        } else {
-            this._patrol();
-        }
+        this._updateMovement(target);
 
         // --- Hover Fuel Recovery ---
         if (this.onGround) {
             this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + HOVER_FUEL_RECOVERY);
         }
 
-        // --- Gravity ---
+        // --- Physics ---
         this.vy += GRAVITY;
         if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
 
-        // --- Air friction (when not on ground) ---
-        if (!this.onGround) {
-            // Only apply if not actively walking
-            if (this.aiState !== 'chase') {
-                this.vx *= AIR_FRICTION;
-                if (Math.abs(this.vx) < 0.1) this.vx = 0;
-            }
+        if (!this.onGround && this.aiState !== 'chase') {
+            this.vx *= AIR_FRICTION;
+            if (Math.abs(this.vx) < 0.1) this.vx = 0;
         }
 
-        // --- Jump cooldown ---
         if (this.jumpCooldown > 0) this.jumpCooldown--;
 
-        // --- Movement & Collision ---
         this._moveAndCollide();
+        this._updateFacing(target);
+        this._updateWalkAnimation();
+        this._handleShooting();
+    }
 
-        // --- Facing direction ---
-        if (this.vx > 0.1) this.facingRight = true;
+    /** Apply movement velocity for the current frame. */
+    _updateMovement(target) {
+        if (this.crouching || this.burstCount > 0) {
+            this.vx = 0;
+        } else if (this.aiState === 'chase') {
+            this._chaseTarget(target);
+        } else {
+            this._patrol();
+        }
+    }
+
+    /** Update facing direction based on velocity and AI target. */
+    _updateFacing(target) {
+        if (this.vx > 0.1)       this.facingRight = true;
         else if (this.vx < -0.1) this.facingRight = false;
 
-        // --- Face target when chasing ---
+        // Face the target when chasing (overrides velocity-based facing)
         if (this.aiState === 'chase' && target) {
             this.facingRight = (target.x + target.width / 2) > (this.x + this.width / 2);
         }
+    }
 
-        // --- Walk animation ---
+    /** Advance the walk animation frame. */
+    _updateWalkAnimation() {
         if (this.onGround && Math.abs(this.vx) > 0.3) {
             this.walkTimer++;
             if (this.walkTimer >= 5) {
                 this.walkTimer = 0;
-                const isMovingForward = (this.facingRight && this.vx > 0) || (!this.facingRight && this.vx < 0);
-                if (isMovingForward) {
-                    this.walkFrame = (this.walkFrame + 1) % 4;
-                } else {
-                    this.walkFrame = (this.walkFrame - 1 + 4) % 4;
-                }
+                const forward = (this.facingRight && this.vx > 0) || (!this.facingRight && this.vx < 0);
+                this.walkFrame = forward
+                    ? (this.walkFrame + 1) % 4
+                    : (this.walkFrame - 1 + 4) % 4;
             }
         } else {
             this.walkFrame = 2;
             this.walkTimer = 0;
         }
-
-        // --- Shooting ---
-        this._handleShooting();
     }
 
     // ------------------------------------------
@@ -239,6 +237,82 @@ export class EnemyAttacker {
                 if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() * 1.5 < 0.1))) {
                     this.hovering = true;
                     this.vy -= 0.6; // Hover upward thrust
+                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
+                    if (this.vy < -4.0) this.vy = -4.0;
+                }
+            }
+        }
+        else if (mType === 'skirmish') {
+            const preferredDist = 200; // Farther preferred distance for artillery
+            const distTolerance = 40;
+            const absDx = Math.abs(dx);
+
+            if (absDx > preferredDist + distTolerance) {
+                // Too far: approach cautiously
+                this.patrolDir = dx > 0 ? 1 : -1;
+                this.vx = this.patrolDir * this.maxSpeed;
+            } else if (absDx < preferredDist - distTolerance) {
+                // Too close: retreat quickly
+                this.patrolDir = dx > 0 ? -1 : 1;
+                this.vx = this.patrolDir * this.maxSpeed * 1.2;
+            } else {
+                // Within optimal range: pace and "circle"
+                if (Math.random() < 0.01) { // Occasionally switch pacing
+                    this.patrolDir *= -1;
+                }
+                this.vx = this.patrolDir * this.maxSpeed * 0.7;
+
+                // "Circling" effect: occasionally jump or hover even if target isn't high
+                if (this.onGround && Math.random() < 0.01) {
+                    this._jump();
+                }
+            }
+
+            // Vertical movement support
+            if (this.onGround) {
+                if (this.jumpCooldown <= 0 && dy < -32) {
+                    this._jump();
+                }
+            } else {
+                // Use hover to stay at a certain height or prolong jumps
+                if (this.hoverFuel > 0 && (dy < -16 || (this.vy > 0 && Math.random() < 0.05))) {
+                    this.hovering = true;
+                    this.vy -= 0.5;
+                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
+                    if (this.vy < -3.0) this.vy = -3.0;
+                }
+            }
+        }
+        else if (mType === 'zigzag_chase') {
+            const absDx = Math.abs(dx);
+            const preferredDist = 80; // Try to get closer than artillery
+
+            // Primary direction bias
+            let moveDir = dx > 0 ? 1 : -1;
+
+            // Zigzag oscillation (switch direction bias using sine wave)
+            const zigzagPhase = Math.sin(this.frameCounter * 0.15);
+
+            if (absDx > preferredDist + 20) {
+                // Approaching: combine bias with oscillation
+                this.vx = (moveDir * 0.7 + zigzagPhase * 0.5) * this.maxSpeed;
+            } else if (absDx < preferredDist - 20) {
+                // Too close: retreat with zigzag
+                this.vx = (-moveDir * 0.8 + zigzagPhase * 0.4) * this.maxSpeed;
+            } else {
+                // In range: focus more on zigzagging to dodge
+                this.vx = zigzagPhase * this.maxSpeed;
+            }
+
+            // High frequency jumping/hovering for rivals
+            if (this.onGround) {
+                if (this.jumpCooldown <= 0 && (dy < -16 || Math.random() < 0.02)) {
+                    this._jump();
+                }
+            } else {
+                if (this.hoverFuel > 0 && (dy < -8 || Math.random() < 0.1)) {
+                    this.hovering = true;
+                    this.vy -= 0.6;
                     this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                     if (this.vy < -4.0) this.vy = -4.0;
                 }
@@ -477,25 +551,23 @@ export class EnemyAttacker {
     }
 
     _checkHorizontalEntities() {
-        const entities = [...this.game.enemies];
-        const player = this.game.player;
-        if (player && player.alive && !player.docked) entities.push(player);
-
-        checkHorizontalEntityCollision(this, entities, () => {
-            if (this.aiState === 'patrol') {
-                this.patrolDir *= -1;
-            }
+        checkHorizontalEntityCollision(this, this._buildEntityList(), () => {
+            if (this.aiState === 'patrol') this.patrolDir *= -1;
         });
     }
 
     _checkVerticalEntities() {
-        const entities = [...this.game.enemies];
-        const player = this.game.player;
-        if (player && player.alive && !player.docked) entities.push(player);
-
-        if (checkVerticalEntityCollision(this, entities)) {
+        if (checkVerticalEntityCollision(this, this._buildEntityList())) {
             this.onGround = true;
         }
+    }
+
+    /** Build a list of collideable entities (enemies + active player). */
+    _buildEntityList() {
+        const list   = [...this.game.enemies];
+        const player = this.game.player;
+        if (player && player.alive && !player.docked) list.push(player);
+        return list;
     }
 
     _collidesWithMap() {

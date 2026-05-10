@@ -1,78 +1,87 @@
 /**
- * MP3BGMManager - Handles loading and playing an external MP3 file as BGM.
+ * MP3BGMManager
+ * Plays an external MP3 file as BGM via the Web Audio API.
+ * Supports fade-in on start and fade-out on stop.
  */
 export class MP3BGMManager {
     constructor(audioCtx) {
-        this.ctx = audioCtx;
-        this.playing = false;
+        this.ctx          = audioCtx;
+        this.playing      = false;
+        this.url          = 'src/assets/audio/bgm.mp3';
         this.audioElement = new Audio();
         this.audioElement.loop = true;
-        this.source = null;
-        this.gainNode = null;
-        this.url = 'src/assets/audio/bgm.mp3'; // Default path
-        this._stopTimerId = null; // Track pending stop timeout
+        this.source       = null;
+        this.gainNode     = null;
+        this._stopTimerId = null; // Pending fade-out timeout
     }
 
+    // ------------------------------------------
+    // Private
+    // ------------------------------------------
+
+    /** Connect audio element → gain → destination (idempotent). */
     _init() {
         if (this.source) return;
-
-        // Connect the audio element to the Web Audio context
-        this.source = this.ctx.createMediaElementSource(this.audioElement);
+        this.source   = this.ctx.createMediaElementSource(this.audioElement);
         this.gainNode = this.ctx.createGain();
-        this.gainNode.gain.value = 0; // Start muted for fade-in
-
+        this.gainNode.gain.value = 0; // Start muted; fade in on play
         this.source.connect(this.gainNode);
         this.gainNode.connect(this.ctx.destination);
     }
 
+    // ------------------------------------------
+    // Public API
+    // ------------------------------------------
+
+    /** Set the MP3 URL to load on the next start(). */
     setURL(url) {
         this.url = url;
         this.audioElement.src = url;
     }
 
+    /** Start (or restart) playback with a 2-second fade-in. */
     start() {
         this._init();
 
-        // Cancel any pending stop timer so it doesn't kill the new track
+        // Cancel any pending fade-out so it doesn't kill the new track
         if (this._stopTimerId !== null) {
             clearTimeout(this._stopTimerId);
             this._stopTimerId = null;
         }
 
-        // If already playing, stop current playback to allow restart/change
         this.audioElement.pause();
         this.audioElement.currentTime = 0;
+        this.audioElement.src  = this.url;
+        this.audioElement.loop = true;
 
-        this.audioElement.src = this.url;
         this.audioElement.play().then(() => {
             this.playing = true;
-            // Fade in
             this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
             this.gainNode.gain.setValueAtTime(0, this.ctx.currentTime);
             this.gainNode.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 2);
         }).catch(err => {
-            console.error("Failed to play MP3 BGM:", err);
-            console.log("Make sure the file exists at:", this.url);
+            console.error('Failed to play MP3 BGM:', err);
+            console.log('Make sure the file exists at:', this.url);
             this.playing = false;
         });
     }
 
+    /** Fade out over ~0.5 s then pause. */
     stop() {
         if (!this.playing) return;
 
-        // Cancel any previously scheduled stop to avoid race conditions
+        // Cancel any previously scheduled stop to avoid races
         if (this._stopTimerId !== null) {
             clearTimeout(this._stopTimerId);
             this._stopTimerId = null;
         }
 
-        // Fade out then pause
-        // Fade out then pause
         this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
-        this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // ~0.5s fade
+        this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); // τ=0.1 → ~0.5s
+
         this._stopTimerId = setTimeout(() => {
             this.audioElement.pause();
-            this.playing = false;
+            this.playing      = false;
             this._stopTimerId = null;
         }, 500);
     }

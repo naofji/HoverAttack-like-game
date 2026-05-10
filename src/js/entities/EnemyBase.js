@@ -10,9 +10,18 @@ import {
     BASE_LASER_COOLDOWN,
     CRUISE_MISSILE_WARNING_TIME,
     CRUISE_MISSILE_MIN_DELAY,
-    CRUISE_MISSILE_MAX_DELAY
+    CRUISE_MISSILE_MAX_DELAY,
+    ENEMY_BASE_TURRET_COOLDOWN,
+    ENEMY_BASE_TURRET_BURST_COUNT,
+    ENEMY_BASE_TURRET_BURST_DELAY,
+    ENEMY_BASE_MISSILE_COOLDOWN,
+    ENEMY_BASE_HOMING_COOLDOWN,
+    CRUISE_MISSILE_ACTIVATION_RANGE
 } from '../utils/Constants.js';
 import { BaseLaser } from './BaseLaser.js';
+import { EnemyBullet } from './EnemyBullet.js';
+import { Missile } from './Missile.js';
+import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { EnemyCruiseMissile } from './EnemyCruiseMissile.js';
 import { audioManager } from '../audio/AudioManager.js';
 
@@ -48,6 +57,15 @@ export class EnemyBase {
         this.cooldownTimer = 0;
         this.chargeParticles = [];
 
+        // Additional Weapons State
+        this.turretState = 'idle'; // 'idle', 'bursting', 'cooldown'
+        this.turretCooldownTimer = Math.floor(Math.random() * ENEMY_BASE_TURRET_COOLDOWN);
+        this.turretBurstCount = 0;
+        this.turretBurstTimer = 0;
+
+        this.missileTimer = ENEMY_BASE_MISSILE_COOLDOWN;
+        this.homingTimer  = ENEMY_BASE_HOMING_COOLDOWN;
+
         // Cruise Missile State
         this._resetCruiseMissileTimer();
         this.cruiseWarning = false;
@@ -66,43 +84,40 @@ export class EnemyBase {
         if (!this.alive) return;
 
         if (this.dying) {
-            this.dyingTimer--;
-            
-            // Random explosions across the structure
-            if (this.dyingTimer % 6 === 0) {
-                const rx = this.x + Math.random() * this.width;
-                const ry = this.y + Math.random() * this.height;
-                const size = 20 + Math.random() * 30;
-                this.game.spawnExplosion(rx, ry, size);
-                audioManager.playExplosion(size > 35);
-                
-                if (this.game.camera) {
-                    this.game.camera.shake(8, 3);
-                }
-            }
-
-            if (this.dyingTimer <= 0) {
-                this._finishDestruction();
-            }
+            this._updateDyingSequence();
             return;
         }
 
-        // Animate the core
         this.coreAnimTimer += 1;
-
-        // Update Laser State
         this._updateLaser();
-
-        // Update Cruise Missile State
+        this._updateBaseTurret();
+        this._updateBaseMissile();
+        this._updateBaseHoming();
         this._updateCruiseMissile();
 
-        // Keep bounds updated
+        // Keep bounds in sync with position
         this.bounds.x = this.x;
         this.bounds.y = this.y;
     }
 
+    /** Tick the cinematic destruction sequence. */
+    _updateDyingSequence() {
+        this.dyingTimer--;
+
+        if (this.dyingTimer % 6 === 0) {
+            const rx   = this.x + Math.random() * this.width;
+            const ry   = this.y + Math.random() * this.height;
+            const size = 20 + Math.random() * 30;
+            this.game.spawnExplosion(rx, ry, size);
+            audioManager.playExplosion(size > 35);
+            if (this.game.camera) this.game.camera.shake(8, 3);
+        }
+
+        if (this.dyingTimer <= 0) this._finishDestruction();
+    }
+
     _updateLaser() {
-        const target = this._findTarget();
+        const target = this._findTarget(BASE_LASER_RANGE);
 
         if (this.attackState === 'idle') {
             if (target) {
@@ -147,14 +162,115 @@ export class EnemyBase {
         }
     }
 
-    _findTarget() {
+    _updateBaseTurret() {
+        // Mission 2+ (missionsCompleted 1+)
+        if (this.game.missionsCompleted < 1) return;
+
+        const target = this._findTarget();
+
+        if (this.turretState === 'idle') {
+            if (this.turretCooldownTimer > 0) {
+                this.turretCooldownTimer--;
+            } else if (target) {
+                this.turretState = 'bursting';
+                this.turretBurstCount = ENEMY_BASE_TURRET_BURST_COUNT;
+                this.turretBurstTimer = 0;
+            }
+        } else if (this.turretState === 'bursting') {
+            if (this.turretBurstTimer <= 0) {
+                this._fireTurretBullet(target);
+                this.turretBurstCount--;
+                this.turretBurstTimer = ENEMY_BASE_TURRET_BURST_DELAY;
+                if (this.turretBurstCount <= 0) {
+                    this.turretState = 'cooldown';
+                    this.turretCooldownTimer = ENEMY_BASE_TURRET_COOLDOWN;
+                }
+            } else {
+                this.turretBurstTimer--;
+            }
+        } else if (this.turretState === 'cooldown') {
+            this.turretCooldownTimer--;
+            if (this.turretCooldownTimer <= 0) this.turretState = 'idle';
+        }
+    }
+
+    _fireTurretBullet(target) {
+        if (!target) return;
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+        const angle = Math.atan2(target.y + target.height / 2 - centerY, target.x + target.width / 2 - centerX);
+        const inaccuracy = (Math.random() - 0.5) * 0.15;
+
+        const bullet = new EnemyBullet(this.game, centerX, centerY, angle + inaccuracy);
+        this.game.enemyBullets.push(bullet);
+        audioManager.playEnemyFire();
+    }
+
+    _updateBaseMissile() {
+        // Mission 4+ (missionsCompleted 3+)
+        if (this.game.missionsCompleted < 3) return;
+
+        this.missileTimer--;
+        if (this.missileTimer <= 0) {
+            const target = this._findTarget();
+            if (target) {
+                this._fireBaseMissile(target);
+                this.missileTimer = ENEMY_BASE_MISSILE_COOLDOWN;
+            } else {
+                this.missileTimer = 30; // Check again soon
+            }
+        }
+    }
+
+    _fireBaseMissile(target) {
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+        const angle = Math.atan2(target.y + target.height / 2 - centerY, target.x + target.width / 2 - centerX);
+
+        const missile = new Missile(this.game, centerX, centerY, angle, false); // isPlayerOwned = false
+        this.game.enemyBullets.push(missile);
+        audioManager.playEnemyFire();
+    }
+
+    _updateBaseHoming() {
+        // Mission 6+ (missionsCompleted 5+)
+        if (this.game.missionsCompleted < 5) return;
+
+        this.homingTimer--;
+        if (this.homingTimer <= 0) {
+            const target = this._findTarget();
+            if (target) {
+                this._fireBaseHomingVolley(target);
+                this.homingTimer = ENEMY_BASE_HOMING_COOLDOWN;
+            } else {
+                this.homingTimer = 30; // Check again soon
+            }
+        }
+    }
+
+    _fireBaseHomingVolley(target) {
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+        const baseAngle = Math.atan2(target.y + target.height / 2 - centerY, target.x + target.width / 2 - centerX);
+
+        // Fire 4 homing missiles in a spread
+        const spread = 0.6;
+        for (let i = 0; i < 4; i++) {
+            const offset = (i - 1.5) * spread;
+            const missile = new EnemyHomingMissile(this.game, centerX, centerY, baseAngle + offset);
+            this.game.enemyBullets.push(missile);
+        }
+        audioManager.playEnemyFire();
+    }
+
+    _findTarget(maxRange = Infinity) {
         // Find closest between player and carrier
         const candidates = [];
         if (this.game.player && this.game.player.alive && !this.game.player.docked) candidates.push(this.game.player);
         if (this.game.carrier && this.game.carrier.alive) candidates.push(this.game.carrier);
 
         let bestTarget = null;
-        let minDist = BASE_LASER_RANGE;
+        let minDist = maxRange;
 
         const centerX = this.x + this.width / 2;
         const centerY = this.y + this.height / 2;
@@ -185,6 +301,20 @@ export class EnemyBase {
     _updateCruiseMissile() {
         // Enabled from Mission 7 (missionsCompleted 6)
         if (this.game.missionsCompleted >= 6) {
+            const target = this._findCruiseTarget();
+            if (!target) return;
+
+            // Only check activation range BEFORE the warning starts.
+            // Once the warning is active, the missile is committed to launching.
+            if (!this.cruiseWarning) {
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq > CRUISE_MISSILE_ACTIVATION_RANGE * CRUISE_MISSILE_ACTIVATION_RANGE) {
+                    return;
+                }
+            }
+
             this.cruiseMissileTimer--;
             
             if (this.cruiseMissileTimer <= CRUISE_MISSILE_WARNING_TIME) {
@@ -261,6 +391,15 @@ export class EnemyBase {
             return 1.414 * Math.min(dr, dc) + Math.abs(dr - dc);
         };
 
+        // --- Search area cropping (Optimization) ---
+        // Limit search to a rectangle encompassing both points plus a margin.
+        // This prevents the algorithm from exploring the entire map if blocked.
+        const margin = 20;
+        const minR = Math.max(0, Math.min(start.r, end.r) - margin);
+        const maxR = Math.min(map.rows - 1, Math.max(start.r, end.r) + margin);
+        const minC = Math.max(0, Math.min(start.c, end.c) - margin);
+        const maxC = Math.min(map.cols - 1, Math.max(start.c, end.c) + margin);
+
         // --- A* with parent-pointer (no path-array copying per node) ---
         // Each node stores: r, c, g, h, f, parent
         const gScore = new Map();
@@ -299,7 +438,9 @@ export class EnemyBase {
             for (const d of dirs) {
                 const nr = curr.r + d.r;
                 const nc = curr.c + d.c;
-                if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
+
+                // Cropping check
+                if (nr < minR || nr > maxR || nc < minC || nc > maxC) continue;
                 if (map.isSolid(nr, nc) && !(nr === end.r && nc === end.c)) continue;
 
                 // Diagonal movement: both cardinal neighbors must be open (prevents corner-cutting)
@@ -475,205 +616,214 @@ export class EnemyBase {
 
     draw(ctx) {
         if (!this.alive) return;
-
-        // --- Pre-launch Path Visualization (World Space) ---
-        if (this.cruiseWarning && this.preLaunchPath) {
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255, 0, 0, 1.0)'; // Solid red for warning phase
-            ctx.setLineDash([10, 5]);
-            ctx.lineWidth = 3; // Make it thicker so it's clearly visible
-            ctx.beginPath();
-            ctx.moveTo(this.x + this.width / 2, this.y + this.height / 2);
-            for (const pt of this.preLaunchPath) {
-                ctx.lineTo(pt.x, pt.y);
-            }
-            ctx.stroke();
-            ctx.restore();
-        }
+        this._drawWarningPath(ctx);
 
         const drawX = Math.round(this.x);
         const drawY = Math.round(this.y);
-
         ctx.save();
         ctx.translate(drawX, drawY);
 
-        // 1. Draw base structure (dark gray frame)
-        ctx.fillStyle = '#111111';
-        ctx.fillRect(0, 0, this.width, this.height);
+        this._drawStructure(ctx);
+        this._drawShields(ctx);
+        this._drawCore(ctx);
 
+        ctx.restore();
+    }
+
+    /** Draw the pre-launch cruise-missile warning path. */
+    _drawWarningPath(ctx) {
+        if (!this.cruiseWarning || !this.preLaunchPath) return;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 0, 0, 1.0)';
+        ctx.setLineDash([10, 5]);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.width / 2, this.y + this.height / 2);
+        for (const pt of this.preLaunchPath) ctx.lineTo(pt.x, pt.y);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    /** Draw the base frame and structural pillars. */
+    _drawStructure(ctx) {
         const coreX = this.width / 2;
         const coreY = this.height / 2;
 
-        let safeCoreX = coreX || 16;
-        let safeCoreY = coreY || 24;
-        let safeTimer = this.coreAnimTimer || 0;
+        // Dark frame
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(0, 0, this.width, this.height);
 
-        // --- Structural Pillars (Top and Bottom clamping the core) ---
-        ctx.fillStyle = '#CCCCCC'; // Light gray / white-ish
-        ctx.fillRect(safeCoreX - 20, 0, 40, safeCoreY - 25); // Top pillar
-        ctx.fillRect(safeCoreX - 20, safeCoreY + 25, 40, this.height - (safeCoreY + 25)); // Bottom pillar
+        // Structural pillars
+        ctx.fillStyle = '#CCCCCC';
+        ctx.fillRect(coreX - 20, 0, 40, coreY - 25);
+        ctx.fillRect(coreX - 20, coreY + 25, 40, this.height - (coreY + 25));
 
-        // Pillar details (metallic shading lines)
+        // Pillar shading
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(safeCoreX - 16, 0, 4, safeCoreY - 25);
-        ctx.fillRect(safeCoreX - 16, safeCoreY + 25, 4, this.height - (safeCoreY + 25));
+        ctx.fillRect(coreX - 16, 0, 4, coreY - 25);
+        ctx.fillRect(coreX - 16, coreY + 25, 4, this.height - (coreY + 25));
         ctx.fillStyle = '#888888';
-        ctx.fillRect(safeCoreX + 12, 0, 4, safeCoreY - 25);
-        ctx.fillRect(safeCoreX + 12, safeCoreY + 25, 4, this.height - (safeCoreY + 25));
+        ctx.fillRect(coreX + 12, 0, 4, coreY - 25);
+        ctx.fillRect(coreX + 12, coreY + 25, 4, this.height - (coreY + 25));
 
-        // Horizontal clamps holding the core
+        // Horizontal clamps
         ctx.fillStyle = '#AAAAAA';
-        ctx.fillRect(safeCoreX - 25, safeCoreY - 28, 50, 6);
-        ctx.fillRect(safeCoreX - 25, safeCoreY + 22, 50, 6);
+        ctx.fillRect(coreX - 25, coreY - 28, 50, 6);
+        ctx.fillRect(coreX - 25, coreY + 22, 50, 6);
         ctx.fillStyle = '#DDDDDD';
-        ctx.fillRect(safeCoreX - 23, safeCoreY - 27, 46, 2);
-        ctx.fillRect(safeCoreX - 23, safeCoreY + 23, 46, 2);
+        ctx.fillRect(coreX - 23, coreY - 27, 46, 2);
+        ctx.fillRect(coreX - 23, coreY + 23, 46, 2);
+    }
 
-        // 2. Draw Shields (from outside in, complex metallic structures)
-        ctx.lineWidth = 3;
-
-        // Helper function to draw metallic segmented arcs
-        const drawSegmentedShield = (radius, color, rotationOffset, segments = 8) => {
-            ctx.strokeStyle = color;
-            ctx.beginPath();
-            const step = (Math.PI * 2) / segments;
-            const gap = 0.15; // angular gap between segments
-            for (let i = 0; i < segments; i++) {
-                const angle = i * step + rotationOffset;
-                ctx.arc(safeCoreX, safeCoreY, radius, angle + gap, angle + step - gap);
-            }
-            ctx.stroke();
-
-            // Draw connecting nodes
-            ctx.fillStyle = '#FFFFFF';
-            for (let i = 0; i < segments; i++) {
-                const angle = i * step + rotationOffset;
-                const nx = safeCoreX + Math.cos(angle) * radius;
-                const ny = safeCoreY + Math.sin(angle) * radius;
-                ctx.fillRect(nx - 2, ny - 2, 4, 4);
-            }
-        };
-
-        const rotSpeed1 = safeTimer * 0.02;
-        const rotSpeed2 = -safeTimer * 0.03;
-        const rotSpeed3 = safeTimer * 0.015;
+    /** Draw all active shield rings. */
+    _drawShields(ctx) {
+        const cx    = this.width  / 2;
+        const cy    = this.height / 2;
+        const t     = this.coreAnimTimer;
+        const rot1  =  t * 0.020;
+        const rot2  = -t * 0.030;
+        const rot3  =  t * 0.015;
 
         // Shield 3 (Outer)
         if (this.shields >= 3) {
-            drawSegmentedShield(45, '#DDDDDD', rotSpeed3, 8); // White-gray metallic
+            ctx.lineWidth = 3;
+            this._drawSegmentedShield(ctx, cx, cy, 45, '#DDDDDD', rot3, 8);
             ctx.strokeStyle = '#888888';
-            ctx.lineWidth = 1;
+            ctx.lineWidth   = 1;
             ctx.beginPath();
-            ctx.arc(safeCoreX, safeCoreY, 48, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 48, 0, Math.PI * 2);
             ctx.stroke();
         }
 
         // Shield 2 (Middle)
-        ctx.lineWidth = 4;
         if (this.shields >= 2) {
-            drawSegmentedShield(35, '#AAAAAA', rotSpeed2, 6); // Gray metallic
+            ctx.lineWidth = 4;
+            this._drawSegmentedShield(ctx, cx, cy, 35, '#AAAAAA', rot2, 6);
         }
 
         // Shield 1 (Inner)
-        ctx.lineWidth = 5;
         if (this.shields >= 1) {
-            drawSegmentedShield(25, '#FFFFFF', rotSpeed1, 4); // Bright white metallic
-            // Inner protective hex
+            ctx.lineWidth = 5;
+            this._drawSegmentedShield(ctx, cx, cy, 25, '#FFFFFF', rot1, 4);
+            // Inner hex
             ctx.strokeStyle = 'rgba(200, 255, 255, 0.4)';
-            ctx.lineWidth = 2;
+            ctx.lineWidth   = 2;
             ctx.beginPath();
             for (let i = 0; i <= 6; i++) {
-                const a = i * (Math.PI / 3) + rotSpeed1;
-                const hx = safeCoreX + Math.cos(a) * 20;
-                const hy = safeCoreY + Math.sin(a) * 20;
-                if (i === 0) ctx.moveTo(hx, hy);
-                else ctx.lineTo(hx, hy);
+                const a  = i * (Math.PI / 3) + rot1;
+                const hx = cx + Math.cos(a) * 20;
+                const hy = cy + Math.sin(a) * 20;
+                if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
             }
             ctx.stroke();
         }
+    }
 
-        // 3. Draw Core (Emerald Green and Sparkling)
-        // Pulsating effect using sine wave
-        const pulse = (Math.sin(safeTimer / 8) + 1) / 2; // 0 to 1
-        const coreRadius = Math.max(1, 8 + pulse * 3);
+    /**
+     * Draw metallic segmented arc shield ring.
+     * @param {number} segments - Number of arc segments.
+     */
+    _drawSegmentedShield(ctx, cx, cy, radius, color, rotOffset, segments = 8) {
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        const step = (Math.PI * 2) / segments;
+        const gap  = 0.15;
+        for (let i = 0; i < segments; i++) {
+            const a = i * step + rotOffset;
+            ctx.arc(cx, cy, radius, a + gap, a + step - gap);
+        }
+        ctx.stroke();
 
-        // Fallback for extreme paranoia, createRadialGradient requires finite numbers > 0
-        if (!isFinite(safeCoreX)) safeCoreX = 16;
-        if (!isFinite(safeCoreY)) safeCoreY = 24;
+        // Connector nodes
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < segments; i++) {
+            const a  = i * step + rotOffset;
+            const nx = cx + Math.cos(a) * radius;
+            const ny = cy + Math.sin(a) * radius;
+            ctx.fillRect(nx - 2, ny - 2, 4, 4);
+        }
+    }
+
+    /** Draw the pulsating energy core with bloom, sparkles, and charge particles. */
+    _drawCore(ctx) {
+        let cx = this.width  / 2 || 16;
+        let cy = this.height / 2 || 24;
+        if (!isFinite(cx)) cx = 16;
+        if (!isFinite(cy)) cy = 24;
+
+        const t      = this.coreAnimTimer || 0;
+        const pulse  = (Math.sin(t / 8) + 1) / 2;
+        const radius = Math.max(1, 8 + pulse * 3);
 
         try {
-            // Determine core colors based on mission index (Balanced brightness)
-            const colors = [
-                { main: '#FF2222', glow: 'rgba(255, 34, 34, 0)' },   // 1: Red
-                { main: '#FFAA11', glow: 'rgba(255, 170, 17, 0)' },  // 2: Orange
-                { main: '#FFFF33', glow: 'rgba(255, 255, 51, 0)' },  // 3: Yellow
-                { main: '#33FF33', glow: 'rgba(51, 255, 51, 0)' },   // 4: Green
-                { main: '#22CCFF', glow: 'rgba(34, 204, 255, 0)' },  // 5: Blue (Cyan)
-                { main: '#8344C0', glow: 'rgba(131, 68, 192, 0)' },  // 6: Indigo
-                { main: '#F68DF6', glow: 'rgba(246, 141, 246, 0)' }  // 7: Violet
-            ];
-            const colorIdx = (this.game.missionsCompleted || 0) % colors.length;
-            const coreColor = colors[colorIdx].main;
-            const coreGlow = colors[colorIdx].glow;
+            const { main: coreColor, glow: coreGlow } = this._getCoreColors();
 
-            // Draw a larger faint bloom first
+            // Bloom
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const bloomGradient = ctx.createRadialGradient(safeCoreX, safeCoreY, 0, safeCoreX, safeCoreY, coreRadius * 4);
-            bloomGradient.addColorStop(0, coreColor);
-            bloomGradient.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = bloomGradient;
+            const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 4);
+            bloom.addColorStop(0, coreColor);
+            bloom.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = bloom;
             ctx.beginPath();
-            ctx.arc(safeCoreX, safeCoreY, coreRadius * 4, 0, Math.PI * 2);
+            ctx.arc(cx, cy, radius * 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
 
-            // Glowing gradient (Primary Core)
-            const gradient = ctx.createRadialGradient(safeCoreX, safeCoreY, 0, safeCoreX, safeCoreY, coreRadius * 2);
-            gradient.addColorStop(0, '#FFFFFF'); // Bright white center
-            gradient.addColorStop(0.2, '#FFFFFF'); // Keep white longer
-            gradient.addColorStop(0.5 + pulse * 0.2, coreColor);
-            gradient.addColorStop(1, coreGlow); // Fade out
-
-            ctx.fillStyle = gradient;
+            // Primary glow gradient
+            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2);
+            grad.addColorStop(0,              '#FFFFFF');
+            grad.addColorStop(0.2,            '#FFFFFF');
+            grad.addColorStop(0.5 + pulse * 0.2, coreColor);
+            grad.addColorStop(1,              coreGlow);
+            ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(safeCoreX, safeCoreY, coreRadius * 2, 0, Math.PI * 2);
+            ctx.arc(cx, cy, radius * 2, 0, Math.PI * 2);
             ctx.fill();
 
-            // Sparkles on the core
+            // Sparkles
             ctx.fillStyle = '#FFFFFF';
-            const sparkleCount = 4;
-            for (let i = 0; i < sparkleCount; i++) {
-                // Pseudo-random offset based on timer to make sparks jitter
-                const spAngle = (safeTimer * 0.1 + i * (Math.PI * 2 / sparkleCount));
-                const spDist = (Math.sin(safeTimer * 0.2 + i) + 1) / 2 * coreRadius;
-                const sx = safeCoreX + Math.cos(spAngle) * spDist;
-                const sy = safeCoreY + Math.sin(spAngle) * spDist;
-
-                // Draw tiny cross spark
-                const spSize = Math.random() * 2 + 1;
-                ctx.fillRect(sx - spSize / 2, sy - 0.5, spSize, 1);
-                ctx.fillRect(sx - 0.5, sy - spSize / 2, 1, spSize);
+            for (let i = 0; i < 4; i++) {
+                const sa = t * 0.1 + i * (Math.PI / 2);
+                const sd = ((Math.sin(t * 0.2 + i) + 1) / 2) * radius;
+                const sx = cx + Math.cos(sa) * sd;
+                const sy = cy + Math.sin(sa) * sd;
+                const ss = Math.random() * 2 + 1;
+                ctx.fillRect(sx - ss / 2, sy - 0.5, ss, 1);
+                ctx.fillRect(sx - 0.5, sy - ss / 2, 1, ss);
             }
 
             // Solid inner core
-            ctx.fillStyle = '#FFFFFF'; // Bright glow
+            ctx.fillStyle = '#FFFFFF';
             ctx.beginPath();
-            ctx.arc(safeCoreX, safeCoreY, coreRadius * 0.5, 0, Math.PI * 2);
+            ctx.arc(cx, cy, radius * 0.5, 0, Math.PI * 2);
             ctx.fill();
 
-            // Draw Charge Particles
+            // Charge particles
             if (this.attackState === 'charging') {
                 ctx.fillStyle = coreColor;
                 for (const p of this.chargeParticles) {
-                    const size = 1 + (p.life / 30) * 2;
-                    ctx.fillRect(safeCoreX + p.x - size / 2, safeCoreY + p.y - size / 2, size, size);
+                    const s = 1 + (p.life / 30) * 2;
+                    ctx.fillRect(cx + p.x - s / 2, cy + p.y - s / 2, s, s);
                 }
             }
         } catch (e) {
-            console.error("Gradient error in base:", e);
+            console.error('Gradient error in base:', e);
         }
+    }
 
-        ctx.restore();
+    /** Return the core color pair for the current mission index. */
+    _getCoreColors() {
+        const COLORS = [
+            { main: '#FF2222', glow: 'rgba(255, 34, 34, 0)'   },
+            { main: '#FFAA11', glow: 'rgba(255, 170, 17, 0)'  },
+            { main: '#FFFF33', glow: 'rgba(255, 255, 51, 0)'  },
+            { main: '#33FF33', glow: 'rgba(51, 255, 51, 0)'   },
+            { main: '#22CCFF', glow: 'rgba(34, 204, 255, 0)'  },
+            { main: '#8344C0', glow: 'rgba(131, 68, 192, 0)'  },
+            { main: '#F68DF6', glow: 'rgba(246, 141, 246, 0)' },
+        ];
+        const idx = (this.game.missionsCompleted || 0) % COLORS.length;
+        return COLORS[idx];
     }
 }

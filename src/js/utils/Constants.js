@@ -29,8 +29,8 @@ export const PLAYER_WIDTH = 16;
 export const PLAYER_HEIGHT = 24;
 export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
-export const PLAYER_MAX_FALLING_SPEED = 8.0;  // Terminal velocity for falling
-export const PLAYER_STUN_FALL_SPEED = 7.0;    // Falling speed that triggers landing stun
+export const PLAYER_MAX_FALLING_SPEED = 7.0;  // Terminal velocity for falling
+export const PLAYER_STUN_FALL_SPEED = 6.0;    // Falling speed that triggers landing stun
 export const PLAYER_STUN_DURATION = 20;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
 export const PLAYER_BURST_FORCE = -6.0;
@@ -48,7 +48,7 @@ export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
 
 // --- Weapons ---
-export const MISSILE_SPEED = 8;
+export const MISSILE_SPEED = 7;
 export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
 export const MISSILE_LIFETIME = 180; // frames
@@ -80,6 +80,7 @@ export const CARRIER_HEIGHT = 32;
 export const CARRIER_SPEED = 0.4;
 export const CARRIER_MAX_HP = 200;
 export const CARRIER_INITIAL_LIVES = 3;
+export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert
 
 // --- Camera ---
 export const CAMERA_LERP = 0.08;
@@ -125,15 +126,19 @@ export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
 export const ENEMY_HOMING_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
 export const ENEMY_HOMING_MISSILE_TURN_RATE = 0.02; // Radians per frame
 export const ENEMY_HOMING_MISSILE_LIFETIME = 300; // Lives longer to find target
+export const ENEMY_HOMING_MISSILE_DELAY = 30;     // Frames before tracking starts
+export const ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE = 240; // Pixels before tracking starts
 
-export const CRUISE_MISSILE_MAX_SPEED = 1.5; // Half of homing missile speed
+export const CRUISE_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
 export const CRUISE_MISSILE_TURN_RATE = 0.03; // Slower turn rate
+export const CRUISE_MISSILE_ENGAGE_DISTANCE = 240; // Distance in pixels before active homing starts
 export const CRUISE_MISSILE_LIFETIME = 1800; // Very long lifetime (30 seconds)
 export const CRUISE_MISSILE_HP = 9; // 3 machine gun hits
 export const CRUISE_MISSILE_WARNING_TIME = 180; // 3 seconds warning
 export const CRUISE_MISSILE_SCORE = 100;
-export const CRUISE_MISSILE_MIN_DELAY = 2700; // 45 seconds at 60fps
-export const CRUISE_MISSILE_MAX_DELAY = 3600; // 60 seconds at 60fps
+export const CRUISE_MISSILE_MIN_DELAY = 1200; // 20 seconds at 60fps
+export const CRUISE_MISSILE_MAX_DELAY = 1800; // 30 seconds at 60fps
+export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement range in pixels
 
 // --- Enemy Attacker (Humanoid) ---
 export const ENEMY_ATTACKER_TOTAL_COUNT = 40;
@@ -186,7 +191,7 @@ export const ENEMY_ATTACKER_TYPES = {
         usesGrenades: true,
         grenadeChance: 0.05,  // 5% chance to throw grenade instead of missile
         aimAccuracy: 0.8,
-        movementType: 'chase_and_jump',
+        movementType: 'zigzag_chase',
         bodyColor: '#CC3333',
         headColor: '#AA2222',
         visorColor: '#FFCC00',
@@ -257,6 +262,13 @@ export const BASE_LASER_CHARGE_TIME = 40; // frames
 export const BASE_LASER_COOLDOWN = 90;  // frames
 export const BASE_LASER_SPEED = 12;
 export const BASE_LASER_DAMAGE = 15;
+
+// --- Enemy Base Additional Weapons ---
+export const ENEMY_BASE_TURRET_COOLDOWN = 120;
+export const ENEMY_BASE_TURRET_BURST_COUNT = 5;
+export const ENEMY_BASE_TURRET_BURST_DELAY = 10;
+export const ENEMY_BASE_MISSILE_COOLDOWN = 180;
+export const ENEMY_BASE_HOMING_COOLDOWN = 240;
 
 
 // --- Colors ---

@@ -67,125 +67,128 @@ export class Player {
     update() {
         if (!this.alive) return;
 
-        // --- Timers that should run even while docked ---
-        if (this.invincibleTimer > 0) this.invincibleTimer--;
-        if (this.missileCooldown > 0) this.missileCooldown--;
-
-        // Machine Gun timers
-        if (this.mgFireTimer > 0) this.mgFireTimer--;
-        if (this.mgReloadTimer > 0) this.mgReloadTimer--;
-
-        if (this.docked) return; // Handled by carrier
+        this._updateTimers();
+        if (this.docked) return;
 
         const input = this.game.input;
+        this._updateCrouching(input);
+        this._updateHorizontal(input);
 
-        // --- Crouching & Stun ---
-        if (this.stunTimer > 0) {
-            this.stunTimer--;
-            this.crouching = true; // Force crouch while stunned
-        } else {
-            // Manual crouch with 'S' key when on ground
-            this.crouching = this.onGround && input.isKeyDown('KeyS');
-        }
-
-        // --- Horizontal movement ---
-        if (this.crouching) {
-            // Prevent walking while crouching
-            if (this.onGround) this.vx = 0;
-        } else {
-            // Normal walking
-            if (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) {
-                this.vx = -PLAYER_MAX_SPEED;
-            } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
-                this.vx = PLAYER_MAX_SPEED;
-            } else {
-                // On ground: stop immediately (no drift). In air: slight air friction
-                if (this.onGround) {
-                    this.vx = 0;
-                } else {
-                    this.vx *= AIR_FRICTION;
-                    if (Math.abs(this.vx) < 0.1) this.vx = 0;
-                }
-            }
-        }
-
-        // --- Gravity ---
         this.vy += GRAVITY;
 
-        // --- Burst & Hover (W or Shift key) ---
+        this._updateBurstHover(input);
+        this._updateFuelRecovery(input);
+        this._updateSpeedCaps();
+        this._updateFacing(input);
+        this._moveAndCollide();
+        this._updateWalkAnimation();
+    }
+
+    /** Decrement all per-frame timers (runs even while docked). */
+    _updateTimers() {
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
+        if (this.missileCooldown > 0) this.missileCooldown--;
+        if (this.mgFireTimer > 0) this.mgFireTimer--;
+        if (this.mgReloadTimer > 0) this.mgReloadTimer--;
+    }
+
+    /** Update crouching/stun state. */
+    _updateCrouching(input) {
+        if (this.stunTimer > 0) {
+            this.stunTimer--;
+            this.crouching = true;
+        } else {
+            this.crouching = this.onGround && input.isKeyDown('KeyS');
+        }
+    }
+
+    /** Apply horizontal movement or friction. */
+    _updateHorizontal(input) {
+        if (this.crouching) {
+            if (this.onGround) this.vx = 0;
+            return;
+        }
+        if (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) {
+            this.vx = -PLAYER_MAX_SPEED;
+        } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
+            this.vx = PLAYER_MAX_SPEED;
+        } else if (this.onGround) {
+            this.vx = 0;
+        } else {
+            this.vx *= AIR_FRICTION;
+            if (Math.abs(this.vx) < 0.1) this.vx = 0;
+        }
+    }
+
+    /** Handle burst jump and hovering. */
+    _updateBurstHover(input) {
         this.hovering = false;
         if (this.hoverCooldown > 0) this.hoverCooldown--;
-        const burstHoverHeld = input.isKeyDown('KeyW'); // Shift is now for lock-on
-        // Cannot burst/hover if stunned or manually crouching
-        if (burstHoverHeld && !this.crouching) {
+
+        const wHeld = input.isKeyDown('KeyW');
+        if (wHeld && !this.crouching) {
             if (this.onGround && this.hoverFuel >= BURST_MIN_FUEL) {
-                // On ground + >= 80% fuel: Burst
+                // Burst jump
                 this.vy = PLAYER_BURST_FORCE;
                 this.onGround = false;
                 this.hoverFuel -= BURST_FUEL_CONSUMPTION;
                 this.hoverCooldown = HOVER_COOLDOWN_AFTER_BURST;
                 audioManager.playBurst();
             } else if (this.hoverCooldown <= 0 && this.hoverFuel > 0) {
-                // In air after cooldown: hover (consumes fuel)
+                // Hover (dynamic thrust based on remaining fuel)
                 const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
-                const currentThrust = HOVER_THRUST_MIN + (HOVER_THRUST - HOVER_THRUST_MIN) * fuelRatio;
-                this.vy += currentThrust;
-                this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                if (this.hoverFuel < 0) this.hoverFuel = 0;
+                const thrust = HOVER_THRUST_MIN + (HOVER_THRUST - HOVER_THRUST_MIN) * fuelRatio;
+                this.vy += thrust;
+                this.hoverFuel = Math.max(0, this.hoverFuel - HOVER_FUEL_CONSUMPTION);
                 this.hovering = true;
-                // Play hover sound with pitch based on fuel/thrust
                 audioManager.playHover(fuelRatio);
             }
         }
 
-        if (!this.hovering) {
-            audioManager.stopHover();
-        }
+        if (!this.hovering) audioManager.stopHover();
+    }
 
-        // --- Hover fuel auto-recovery when not hovering ---
-        if (!this.hovering && this.hoverFuel < HOVER_MAX_FUEL) {
-            const carrier = this.game.carrier;
-            const nearCarrier = carrier && carrier.alive &&
-                Math.abs(this.x - carrier.x) < carrier.width * 2 &&
-                Math.abs(this.y - carrier.y) < carrier.height * 2;
-            const sKeyDown = input.isKeyDown('KeyS') && !nearCarrier;
-            const recoveryRate = sKeyDown ? HOVER_FUEL_RECOVERY_BOOST : HOVER_FUEL_RECOVERY;
-            this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + recoveryRate);
-        }
+    /** Auto-recover hover fuel when not hovering. S key gives a boost (secret). */
+    _updateFuelRecovery(input) {
+        if (this.hovering || this.hoverFuel >= HOVER_MAX_FUEL) return;
 
-        // Cap falling speed
+        const carrier = this.game.carrier;
+        const nearCarrier = carrier && carrier.alive &&
+            Math.abs(this.x - carrier.x) < carrier.width * 2 &&
+            Math.abs(this.y - carrier.y) < carrier.height * 2;
+        const recoveryRate = (input.isKeyDown('KeyS') && !nearCarrier)
+            ? HOVER_FUEL_RECOVERY_BOOST
+            : HOVER_FUEL_RECOVERY;
+        this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + recoveryRate);
+    }
+
+    /** Clamp vertical speed within allowed limits. */
+    _updateSpeedCaps() {
         if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
-        // Cap rising speed only when hovering
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
+    }
 
-        // --- Facing direction (based on mouse aim) ---
+    /** Update facing direction based on mouse aim. */
+    _updateFacing(input) {
         const targetWorld = input.getTargetWorld(this.game.camera);
-        const centerX = this.x + this.width / 2;
-        this.facingRight = targetWorld.x >= centerX;
+        this.facingRight = targetWorld.x >= this.x + this.width / 2;
+    }
 
-        // --- Movement & Collision ---
-        this._moveAndCollide();
-
-        // --- Walk animation ---
+    /** Advance the walk animation frame. */
+    _updateWalkAnimation() {
         if (this.onGround && Math.abs(this.vx) > 0.5) {
             this.walkTimer++;
             if (this.walkTimer >= 4) {
                 this.walkTimer = 0;
-                // Determine if moving forwards relative to facing direction
-                const isMovingForward = (this.facingRight && this.vx > 0) || (!this.facingRight && this.vx < 0);
-                if (isMovingForward) {
-                    this.walkFrame = (this.walkFrame + 1) % 4;
-                } else {
-                    this.walkFrame = (this.walkFrame - 1 + 4) % 4;
-                }
+                const forward = (this.facingRight && this.vx > 0) || (!this.facingRight && this.vx < 0);
+                this.walkFrame = forward
+                    ? (this.walkFrame + 1) % 4
+                    : (this.walkFrame - 1 + 4) % 4;
             }
         } else {
             this.walkFrame = 2;
             this.walkTimer = 0;
         }
-
-        // --- Timers ---
-        // (timers running while docked are decremented at the top of this method)
     }
 
     _moveAndCollide() {
@@ -196,14 +199,29 @@ export class Player {
 
         let hitHMap = false;
         if (this._collidesWithMap()) {
-            hitHMap = true;
-            this.x -= this.vx;
-            if (this.vx > 0) {
-                this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
-            } else if (this.vx < 0) {
-                this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
+            // STEP-UP LOGIC: Try stepping up 1 tile if on ground
+            let steppedUp = false;
+            if (this.onGround && Math.abs(this.vx) > 0) {
+                const originalY = this.y;
+                this.y -= TILE_SIZE;
+                if (!this._collidesWithMap()) {
+                    steppedUp = true;
+                    // Successfully stepped up! 
+                } else {
+                    this.y = originalY; // Could not step up
+                }
             }
-            this.vx = 0;
+
+            if (!steppedUp) {
+                hitHMap = true;
+                this.x -= this.vx;
+                if (this.vx > 0) {
+                    this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
+                } else if (this.vx < 0) {
+                    this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
+                }
+                this.vx = 0;
+            }
         }
 
         // Horizontal Carrier Collision
@@ -404,24 +422,17 @@ export class Player {
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
 
-        // Reset states to prevent bugs across lives
+        // Reset all transient states
         this.hovering = false;
         this.crouching = false;
         this.stunTimer = 0;
         this.hoverCooldown = 0;
         this.missileCooldown = 0;
-        this.walkFrame = 2; // Default standing
+        this.walkFrame = 2;
         this.walkTimer = 0;
+        this._resetMGState();
 
-        // Reset Machine Gun state
-        this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
-        this.mgFireTimer = 0;
-        this.mgReloadTimer = 0;
-
-        // Ensure sounds are stopped
         audioManager.stopHover();
-
-        // Reset weapon
         this.currentWeapon = 'missile';
     }
 
@@ -438,20 +449,21 @@ export class Player {
         audioManager.playSwitch();
     }
 
-    /** Resupply all resources (when docking) */
+    /** Resupply all resources (when docking). */
     resupply() {
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
         this.hoverFuel = HOVER_MAX_FUEL;
         this.hp = PLAYER_MAX_HP;
+        this._resetMGState();
+        this.currentWeapon = 'missile';
+    }
 
-        // Reset Machine Gun state
+    /** Reset machine-gun burst/reload counters to factory defaults. */
+    _resetMGState() {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
-
-        // Auto-switch to missiles when docking/resupplying
-        this.currentWeapon = 'missile';
     }
 
     draw(ctx) {
@@ -640,7 +652,7 @@ export class Player {
 
         // Tube
         ctx.fillStyle = '#666666';
-        ctx.fillRect(0, -2, 14, 4);
+        ctx.fillRect(-8, -2, 22, 4);
         // Muzzle
         ctx.fillStyle = '#444444';
         ctx.fillRect(11, -3, 4, 6);
@@ -649,7 +661,7 @@ export class Player {
         ctx.fillRect(-3, -3, 6, 6);
         // Detail stripe
         ctx.fillStyle = '#808080';
-        ctx.fillRect(4, -1, 5, 2);
+        ctx.fillRect(-6, -1, 16, 2);
 
         ctx.restore();
     }

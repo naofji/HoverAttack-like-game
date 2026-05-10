@@ -10,6 +10,7 @@ import {
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class Carrier {
     constructor(game, x, y) {
@@ -31,6 +32,8 @@ export class Carrier {
         // Platform area for docking (relative to carrier x)
         this.platformLeft = 16;
         this.platformRight = 48;
+
+        this.damageTimer = 0;
     }
 
     update() {
@@ -62,6 +65,11 @@ export class Carrier {
         if (player && player.docked) {
             player.x = this.x + this.width / 2 - player.width / 2;
             player.y = this.y - player.height;
+        }
+
+        // Damage alert timer
+        if (this.damageTimer > 0) {
+            this.damageTimer--;
         }
     }
 
@@ -167,6 +175,7 @@ export class Carrier {
     takeDamage(amount) {
         if (!this.alive) return;
         this.hp -= amount;
+        this.damageTimer = 60; // Show alert for 1 second
         this.game.spawnHeavyDamage(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {
             this.die();

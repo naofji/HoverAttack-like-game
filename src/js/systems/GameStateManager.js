@@ -21,7 +21,7 @@ export class GameStateManager {
 
         if (resetScore) {
             game.score = 0;
-            game.missionsCompleted = 0;
+            game.missionsCompleted = 6; // Set to 6 to start from Mission 7 for debug
             game.totalTime = 0;
         }
         
