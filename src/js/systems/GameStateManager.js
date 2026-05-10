@@ -21,10 +21,10 @@ export class GameStateManager {
 
         if (resetScore) {
             game.score = 0;
-            game.missionsCompleted = 6; // Set to 6 to start from Mission 7 for debug
+            game.missionsCompleted = 0; // Set to 6 to start from Mission 7 for debug
             game.totalTime = 0;
         }
-        
+
         game.missionTimer = 0;
         game.pendingTimeBonus = 0;
         game.slotRunning = false;
