@@ -3,19 +3,19 @@
 // ============================================
 
 import {
-    GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_BOUNCE, GRENADE_FRICTION,
+    GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
     GRENADE_BLAST_RADIUS, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE,
     GRENADE_LIFETIME, GRENADE_EXPLOSION_COUNT,
     TILE_SIZE
 } from '../utils/Constants.js';
 
 export class Grenade {
-    constructor(game, x, y, angle) {
+    constructor(game, x, y, angle, speed = GRENADE_SPEED) {
         this.game = game;
         this.x = x;
         this.y = y;
-        this.vx = Math.cos(angle) * GRENADE_SPEED;
-        this.vy = Math.sin(angle) * GRENADE_SPEED;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
         this.alive = true;
         this.lifetime = GRENADE_LIFETIME;
         this.rotation = 0;
@@ -29,6 +29,7 @@ export class Grenade {
 
         // Apply gravity
         this.vy += GRENADE_GRAVITY;
+        if (this.vy > GRENADE_MAX_FALLING_SPEED) this.vy = GRENADE_MAX_FALLING_SPEED;
 
         // Calculate next position
         let nextX = this.x + this.vx;

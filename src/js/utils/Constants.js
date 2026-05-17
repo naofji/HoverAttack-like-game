@@ -42,19 +42,23 @@ export const BURST_FUEL_CONSUMPTION = 30;  // fuel consumed immediately on burst
 export const BURST_MIN_FUEL = 80;          // minimum fuel required to burst (80%)
 export const HOVER_FUEL_RECOVERY = 0.5;     // per frame when not hovering
 export const HOVER_FUEL_RECOVERY_BOOST = 0.75; // per frame when pressing S solo
-export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.5s at 60fps) before hover activates after burst
+export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before hover activates after burst
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
 
 // --- Weapons ---
-export const MISSILE_SPEED = 7;
+export const MISSILE_SPEED = 6;
 export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
 export const MISSILE_LIFETIME = 180; // frames
 
 export const GRENADE_SPEED = 5;
+export const GRENADE_SPEED_MIN = 0;           // 近距離投擲の最小速度
+export const GRENADE_SPEED_MAX = 5;           // 遠距離投擲の最大速度
+export const GRENADE_SPEED_MAX_DIST = 200;    // この距離(world px)でMAX速度に達する
 export const GRENADE_GRAVITY = 0.20;
+export const GRENADE_MAX_FALLING_SPEED = 6;
 export const GRENADE_BOUNCE = 0.2;
 export const GRENADE_FRICTION = 0.9;
 export const GRENADE_INITIAL_COUNT = 12;
@@ -65,10 +69,10 @@ export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
 export const GRENADE_EXPLOSION_COUNT = 150;
 
 // --- Player Machine Gun (Fallback for missiles) ---
-export const PLAYER_MG_SPEED = 4; // Same as ENEMY_BULLET_SPEED
+export const PLAYER_MG_SPEED = 4; // a little bit faster than ENEMY_BULLET_SPEED
 export const PLAYER_MG_RADIUS = 1.5;
 export const PLAYER_MG_DAMAGE = 3;
-export const PLAYER_MG_LIFETIME = 192; // 80% of original 240 (192 * 3 = 576px)
+export const PLAYER_MG_LIFETIME = 180; // 80% of original 240 (192 * 3 = 576px)
 export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
@@ -276,10 +280,16 @@ export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
 export const COLOR_HUD_TEXT = '#00CCFF';
 export const COLOR_LASER = '#00FFAA';
-export const COLOR_HARD_BLOCK = '#2a6496';
-export const COLOR_HARD_BLOCK_BORDER = '#1a3d5c';
-export const COLOR_INDESTRUCTIBLE_BLOCK = '#555555';
-export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#3a3a3a';
+export const COLOR_HARD_BLOCK = '#555555';
+export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
+export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
+export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_CAVE_BG = '#1a0a00';
 export const COLOR_CROSSHAIR = 'rgba(255, 255, 0, 0.8)';
 export const COLOR_HOVER_EXHAUST = 'rgba(0, 255, 255, 0.6)';
+
+// Auto-Aim Unit
+export const AUTO_AIM_DURATION = 3600;         // 60秒 (60fps)
+export const AUTO_AIM_MAX_DURATION = 10800;    // 上限3分 (60fps)
+export const AUTO_AIM_SNAP_RADIUS = 120;      // スナップ判定半径 (world px)
+export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマウス移動量 (screen px/frame)

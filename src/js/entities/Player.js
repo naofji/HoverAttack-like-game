@@ -16,7 +16,7 @@ import {
     COLOR_HOVER_EXHAUST,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME
 } from '../utils/Constants.js';
-import { collidesWithMap, getDefaultCheckPoints } from '../utils/Physics.js';
+import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class Player {
@@ -40,6 +40,9 @@ export class Player {
         this.grenades = GRENADE_INITIAL_COUNT;
         this.hoverFuel = HOVER_MAX_FUEL;
         this.hovering = false;
+        this.repairKits = 0;
+        this.autoAimTimer = 0;
+        this.autoAimMaxTimer = 0;
 
         // Docking
         this.docked = false;
@@ -168,9 +171,9 @@ export class Player {
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
     }
 
-    /** Update facing direction based on mouse aim. */
+    /** Update facing direction based on mouse aim (or auto-aim target). */
     _updateFacing(input) {
-        const targetWorld = input.getTargetWorld(this.game.camera);
+        const targetWorld = this.game.autoAimTarget || input.getTargetWorld(this.game.camera);
         this.facingRight = targetWorld.x >= this.x + this.width / 2;
     }
 
@@ -277,9 +280,7 @@ export class Player {
         this.onGround = false;
 
         // 1. Check Map Collision
-        let hitVMap = false;
         if (this._collidesWithMap()) {
-            hitVMap = true;
             if (this.vy > 0) {
                 // Landing on map
                 if (this.vy > PLAYER_STUN_FALL_SPEED) { // Hard landing threshold
@@ -325,6 +326,21 @@ export class Player {
                         // Move with carrier horizontally if standing on it
                         this.x += carrier.vx;
                     }
+                }
+            }
+        }
+
+        // 2b. Lift carrier from below (player moving upward hits carrier's underside)
+        if (!this.docked && this.vy < 0) {
+            const carrier = this.game.carrier;
+            if (carrier && carrier.alive) {
+                const cBottom = carrier.y + carrier.height;
+                const hOverlap = this.x + this.width > carrier.x && this.x < carrier.x + carrier.width;
+                // 頭がキャリア底面に入り込み、かつ足はまだ底面以下にある（真下からの衝突）
+                if (hOverlap && this.y < cBottom && this.y + this.height >= cBottom) {
+                    this.y = cBottom;           // 頭をキャリア底面にスナップ（プレイヤーはキャリアに追従）
+                    carrier.vy = this.vy * 0.5; // キャリアは重いので半分の速度で持ち上がる
+                    carrier.vx = this.vx;       // 持ち上げ中はプレイヤーの左右移動に追従
                 }
             }
         }
@@ -418,6 +434,9 @@ export class Player {
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
         this.hoverFuel = HOVER_MAX_FUEL;
+        this.repairKits = 0;
+        this.autoAimTimer = 0;
+        this.autoAimMaxTimer = 0;
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
@@ -704,12 +723,14 @@ export class Player {
     _drawHoverExhaust(ctx) {
         if (!this.hovering) return;
 
+        // バックパックのノズル位置（ローカル x:2〜6, y:12〜14 の橙ノズル直下）
+        const backpackX = this.facingRight ? (this.x - 2) : (this.x + this.width - 4);
         for (let i = 0; i < 3; i++) {
-            const px = this.x + 4 + Math.random() * 4;
-            const py = this.y + this.height + Math.random() * 6;
-            const size = 1 + Math.random() * 3;
+            const px = backpackX + Math.random() * 4;
+            const py = this.y + 12 + Math.random() * 5;
+            const size = 1 + Math.random() * 4;
             ctx.fillStyle = COLOR_HOVER_EXHAUST;
-            ctx.globalAlpha = 0.3 + Math.random() * 0.4;
+            ctx.globalAlpha = 0.3 + Math.random() * 0.6;
             ctx.fillRect(px, py, size, size);
         }
         ctx.globalAlpha = 1.0;

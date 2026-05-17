@@ -13,6 +13,8 @@ import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCol
 import { Missile } from './Missile.js';
 import { Grenade } from './Grenade.js';
 import { EnemyHomingMissile } from './EnemyHomingMissile.js';
+import { RepairKit } from './RepairKit.js';
+import { AutoAimUnit } from './AutoAimUnit.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -60,7 +62,7 @@ export class EnemyAttacker {
 
         this.frameCounter++;
         this.hovering = false;
-        const target     = this._getClosestTarget();
+        const target = this._getClosestTarget();
         const targetDist = target ? this._distToTarget(target) : Infinity;
 
         // --- AI state decision ---
@@ -104,7 +106,7 @@ export class EnemyAttacker {
 
     /** Update facing direction based on velocity and AI target. */
     _updateFacing(target) {
-        if (this.vx > 0.1)       this.facingRight = true;
+        if (this.vx > 0.1) this.facingRight = true;
         else if (this.vx < -0.1) this.facingRight = false;
 
         // Face the target when chasing (overrides velocity-based facing)
@@ -351,8 +353,8 @@ export class EnemyAttacker {
 
             // Neighbor directions
             const dirs = [
-                {r:-1, c:0}, {r:1, c:0}, {r:0, c:-1}, {r:0, c:1},
-                {r:-1, c:-1}, {r:-1, c:1}, {r:1, c:-1}, {r:1, c:1}
+                { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
+                { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
             ];
 
             for (const d of dirs) {
@@ -363,7 +365,7 @@ export class EnemyAttacker {
                 if (nr >= 0 && nr < map.rows && nc >= 0 && nc < map.cols &&
                     !map.isSolid(nr, nc) && !visited.has(key)) {
                     visited.add(key);
-                    queue.push([...path, {r:nr, c:nc}]);
+                    queue.push([...path, { r: nr, c: nc }]);
                 }
             }
         }
@@ -564,7 +566,7 @@ export class EnemyAttacker {
 
     /** Build a list of collideable entities (enemies + active player). */
     _buildEntityList() {
-        const list   = [...this.game.enemies];
+        const list = [...this.game.enemies];
         const player = this.game.player;
         if (player && player.alive && !player.docked) list.push(player);
         return list;
@@ -593,6 +595,15 @@ export class EnemyAttacker {
         const cy = this.y + this.height / 2;
         this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
         this.game.addScore(this.score);
+
+        // rival は30%の確率でリペアキットをドロップ
+        if (this.config.name === 'rival' && Math.random() < 0.3) {
+            this.game.repairKits.push(new RepairKit(this.game, cx, this.y));
+        }
+        // artillery は50%の確率でオートエイムユニットをドロップ
+        if (this.config.name === 'artillery' && Math.random() < 0.5) {
+            this.game.autoAimUnits.push(new AutoAimUnit(this.game, cx, this.y));
+        }
     }
 
     // ------------------------------------------
@@ -642,7 +653,7 @@ export class EnemyAttacker {
             ctx.fillRect(14, 8, 6, 4);
             ctx.fillStyle = '#999999';
             ctx.fillRect(18, 8, 3, 4);
-        } 
+        }
         else if (type === 'rival') {
             // SLEEK / SPEED DESIGN
             // Sleek Body
@@ -651,16 +662,22 @@ export class EnemyAttacker {
             // Sleek Head with horns
             ctx.fillStyle = cfg.headColor;
             ctx.fillRect(7, 0, 6, 5);
-            ctx.fillRect(7, -2, 2, 3); // Left horn
-            ctx.fillRect(11, -2, 2, 3); // Right horn
+            ctx.fillRect(10, -3, 2, 2); // Bottom horn
+            ctx.fillRect(11, -2, 2, 3); // Top horn
             // Visor (Glowing Eye)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(10, 1, 5, 2);
             ctx.fillStyle = cfg.visorColor;
-            ctx.fillRect(10, 1, 3, 3);
+            ctx.fillRect(10, 1, 3, 2);
             // Dual Barrels
             ctx.fillStyle = '#777777';
-            ctx.fillRect(13, 6, 6, 2);
-            ctx.fillRect(13, 9, 6, 2);
+            ctx.fillRect(13, 6, 8, 2);
+            ctx.fillRect(16, 7, -6, 3);
             this._drawLegs(ctx, crouchOffset);
+            // Backpack
+            ctx.fillStyle = cfg.backpackColorColor;
+            ctx.fillRect(1, 6, 5, 5);
+            ctx.fillRect(5, 4, -3, 9);
         }
         else if (type === 'artillery') {
             // SNIPER / RADAR DESIGN
@@ -684,7 +701,7 @@ export class EnemyAttacker {
             ctx.fillRect(14, 8, 12, 2);
             ctx.fillStyle = '#888888';
             ctx.fillRect(24, 7, 2, 4);
-            this._drawLegs(ctx, crouchOffset);
+            this._drawArtilleryLegs(ctx, crouchOffset);
         }
         else {
             // STANDARD HUMANOID DESIGN
@@ -727,37 +744,54 @@ export class EnemyAttacker {
         ctx.restore();
     }
 
-    _drawLegs(ctx, crouchOffset = 0) {
-        const type = this.config.name;
+    _drawArtilleryLegs(ctx, crouchOffset = 0) {
+        const legColor1 = this.config.bodyColor;
+        const legColor2 = this.config.headColor;
 
-        if (type === 'artillery') {
-            // Quad leg design for artillery
-            const legColor1 = this.config.bodyColor;
-            const legColor2 = this.config.headColor;
-            
+        if (crouchOffset > 0) {
+            // Low profile quad legs (crouching)
             ctx.fillStyle = legColor1;
-            if (crouchOffset > 0) {
-                // Low profile quad legs
-                ctx.fillRect(2, 15, 4, 4);
-                ctx.fillRect(12, 15, 4, 4);
-                ctx.fillStyle = legColor2;
-                ctx.fillRect(0, 18, 4, 2);
-                ctx.fillRect(14, 18, 4, 2);
-            } else {
-                // Standing quad legs
-                ctx.fillRect(4, 16, 3, 6);
-                ctx.fillRect(11, 16, 3, 6);
-                ctx.fillStyle = legColor2;
-                ctx.fillRect(2, 20, 4, 3);
-                ctx.fillRect(12, 20, 4, 3);
-            }
-            return;
-        }
+            ctx.fillRect(2, 15, 4, 4);
+            ctx.fillRect(12, 15, 4, 4);
+            ctx.fillStyle = legColor2;
+            ctx.fillRect(0, 18, 4, 2);
+            ctx.fillRect(14, 18, 4, 2);
+        } else if (!this.onGround) {
+            // 空中: vxの反対方向に足が流れる
+            const swing = Math.round(Math.max(-3, Math.min(3, -this.vx * 0.8)));
+            ctx.fillStyle = legColor1;
+            ctx.fillRect(4 + swing, 16, 3, 6);
+            ctx.fillRect(11 + swing, 16, 3, 6);
+            ctx.fillStyle = legColor2;
+            ctx.fillRect(2 + swing, 20, 4, 3);
+            ctx.fillRect(12 + swing, 20, 4, 3);
+        } else {
+            const WALK_POSES = [
+                { l: -2, r: 2 },
+                { l: -1, r: 1 },
+                { l: 0, r: 0 },
+                { l: 1, r: -1 },
+            ];
+            const isWalking = Math.abs(this.vx) > 0.3;
+            const pose = isWalking ? (WALK_POSES[this.walkFrame] || WALK_POSES[2]) : WALK_POSES[2];
+            const tl = Math.round(pose.l / 2);
+            const tr = Math.round(pose.r / 2);
 
+            ctx.fillStyle = legColor1;
+            ctx.fillRect(4 + tl, 16, 3, 6);
+            ctx.fillRect(11 + tr, 16, 3, 6);
+            ctx.fillStyle = legColor2;
+            ctx.fillRect(2 + pose.l, 20, 4, 3);
+            ctx.fillRect(12 + pose.r, 20, 4, 3);
+        }
+    }
+
+    _drawLegs(ctx, crouchOffset = 0) {
         if (!this.onGround) {
-            // Hover/airborne legs - slightly spread
-            this._drawLeg(ctx, 6, 16 - crouchOffset, -1);  // near leg
-            this._drawLeg(ctx, 9, 16 - crouchOffset, 1);   // far leg
+            // 空中: vxの反対方向に足が流れる（慣性で後ろに引っ張られる感じ）
+            const swing = Math.round(Math.max(-3, Math.min(3, -this.vx * 0.8)));
+            this._drawLeg(ctx, 6 + swing, 16 - crouchOffset, swing);
+            this._drawLeg(ctx, 9 + swing, 16 - crouchOffset, swing);
         } else {
             // Walk legs based on walkFrame
             const WALK_POSES = [
@@ -767,7 +801,7 @@ export class EnemyAttacker {
                 { near: 1, far: -1 },   // frame 3
             ];
             const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
-            
+
             if (crouchOffset > 0) {
                 // Crouching pose (knees bent, feet spread)
                 const spread = type === 'heavy' ? 4 : 2;

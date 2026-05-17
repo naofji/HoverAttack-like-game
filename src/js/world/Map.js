@@ -5,7 +5,6 @@
 import {
     MIN_MAP_COLS, MIN_MAP_ROWS, MAX_MAP_COLS, MAX_MAP_ROWS,
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
-    COLOR_NORMAL_BLOCK, COLOR_NORMAL_BLOCK_BORDER,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
@@ -20,8 +19,6 @@ import {
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
-const INITIAL_FILL_RATIO = 0.45;
-const SMOOTH_PASSES = 5;
 const HARD_BLOCK_CHANCE = 0.06;
 const HARD_BLOCK_HP = 3;
 
@@ -872,29 +869,266 @@ export class Map {
         const startRow = Math.max(0, Math.floor(cam.y / TILE_SIZE));
         const endRow = Math.min(this.rows, Math.ceil((cam.y + this.game.canvas.height) / TILE_SIZE));
 
+        const S = TILE_SIZE;
         for (let r = startRow; r < endRow; r++) {
             for (let c = startCol; c < endCol; c++) {
                 const block = this.grid[r][c];
                 if (block === BLOCK_EMPTY) continue;
-
-                const x = c * TILE_SIZE;
-                const y = r * TILE_SIZE;
-                const style = this.blockStyles[block];
-
-                ctx.fillStyle = style.fill;
-                ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-                ctx.strokeStyle = style.border;
-                ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
-
-                // Draw crack lines on damaged hard blocks
-                if (block === BLOCK_HARD && this.blockHP[r][c] < HARD_BLOCK_HP) {
-                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                    ctx.beginPath();
-                    ctx.moveTo(x + 8, y + 8);
-                    ctx.lineTo(x + TILE_SIZE - 8, y + TILE_SIZE - 8);
-                    ctx.stroke();
+                if (block === BLOCK_INDESTRUCTIBLE) {
+                    this._drawPolishedBlock(ctx, c * S, r * S, S);
+                } else {
+                    this._drawRockyBlock(ctx, r, c, block);
                 }
             }
         }
+    }
+
+    _drawRockyBlock(ctx, r, c, block) {
+        const S = TILE_SIZE;
+        const x = c * S;
+        const y = r * S;
+
+        const style = this.blockStyles[block];
+
+        // タイル座標から計算する決定論的乱数（毎フレーム同一値）
+        const seed = (r * 7919 + c * 104729) | 0;
+        const rng = (i) => {
+            let h = Math.imul((seed ^ Math.imul(i, 2654435761)) | 0, 0x9e3779b9) >>> 0;
+            h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+            return (h >>> 0) / 0xFFFFFFFF;
+        };
+
+        // 4方向の露出判定（空洞に面しているか）
+        const expTop = r === 0 || this.grid[r - 1][c] === BLOCK_EMPTY;
+        const expBottom = r === this.rows - 1 || this.grid[r + 1][c] === BLOCK_EMPTY;
+        const expLeft = c === 0 || this.grid[r][c - 1] === BLOCK_EMPTY;
+        const expRight = c === this.cols - 1 || this.grid[r][c + 1] === BLOCK_EMPTY;
+
+        // 凸角：両隣が空洞 → 面取りサイズを決定論的に選ぶ
+        const cTL = (expTop && expLeft) ? (4 + Math.floor(rng(90) * 6)) : 0;
+        const cTR = (expTop && expRight) ? (4 + Math.floor(rng(91) * 6)) : 0;
+        const cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
+        const cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
+
+        // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
+        const notchTL = !expTop && !expLeft && r > 0 && c > 0 && this.grid[r - 1][c - 1] === BLOCK_EMPTY;
+        const notchTR = !expTop && !expRight && r > 0 && c < this.cols - 1 && this.grid[r - 1][c + 1] === BLOCK_EMPTY;
+        const notchBL = !expBottom && !expLeft && r < this.rows - 1 && c > 0 && this.grid[r + 1][c - 1] === BLOCK_EMPTY;
+        const notchBR = !expBottom && !expRight && r < this.rows - 1 && c < this.cols - 1 && this.grid[r + 1][c + 1] === BLOCK_EMPTY;
+
+        // 1. 面取り多角形でベース塗り（時計回りで頂点列挙）
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x + cTL, y);           // 上辺：左端（TL面取り分だけ右へ）
+        ctx.lineTo(x + S - cTR, y);           // 上辺：右端
+        if (cTR) ctx.lineTo(x + S, y + cTR); // TR面取り斜線
+        ctx.lineTo(x + S, y + S - cBR);       // 右辺：下端
+        if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
+        ctx.lineTo(x + cBL, y + S);       // 下辺：左端
+        if (cBL) ctx.lineTo(x, y + S - cBL); // BL面取り斜線
+        ctx.lineTo(x, y + cTL);     // 左辺：上端
+        if (cTL) ctx.lineTo(x + cTL, y);     // TL面取り斜線（→ closePath と一致）
+        ctx.closePath();
+
+        ctx.fillStyle = style.fill;
+        ctx.fill();
+
+        // 以降の描画をこの多角形内に制限
+        ctx.clip();
+
+        // 2. ブロックごとの明度バリエーション（5段階）
+        const v = Math.floor(rng(80) * 5);
+        if (v === 0) { ctx.fillStyle = 'rgba(0,0,0,0.09)'; ctx.fillRect(x, y, S, S); }
+        if (v === 1) { ctx.fillStyle = 'rgba(0,0,0,0.04)'; ctx.fillRect(x, y, S, S); }
+        if (v === 3) { ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(x, y, S, S); }
+        if (v === 4) { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x, y, S, S); }
+
+        // 3. 凹角の影ノッチ（隣ブロックとの接合部に小さな暗い三角）
+        const NOTCH = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        if (notchTL) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + NOTCH, y); ctx.lineTo(x, y + NOTCH); ctx.closePath(); ctx.fill(); }
+        if (notchTR) { ctx.beginPath(); ctx.moveTo(x + S, y); ctx.lineTo(x + S - NOTCH, y); ctx.lineTo(x + S, y + NOTCH); ctx.closePath(); ctx.fill(); }
+        if (notchBL) { ctx.beginPath(); ctx.moveTo(x, y + S); ctx.lineTo(x + NOTCH, y + S); ctx.lineTo(x, y + S - NOTCH); ctx.closePath(); ctx.fill(); }
+        if (notchBR) { ctx.beginPath(); ctx.moveTo(x + S, y + S); ctx.lineTo(x + S - NOTCH, y + S); ctx.lineTo(x + S, y + S - NOTCH); ctx.closePath(); ctx.fill(); }
+
+        // 4. 露出面をジャギーポリゴンで描画（clip が面取り部分を自動除外）
+        const STEPS = 4;
+        const JITTER = 6;
+
+        // 上面：光が当たる明るい面
+        if (expTop) {
+            ctx.fillStyle = 'rgba(255,255,255,0.32)';
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            for (let i = 0; i <= STEPS; i++)
+                ctx.lineTo(x + S * i / STEPS, y + 1 + rng(i) * JITTER);
+            ctx.lineTo(x + S, y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.60)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= STEPS; i++) {
+                const px = x + S * i / STEPS, py = y + rng(i + 10) * 2;
+                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
+        // 下面：影になる暗い面
+        if (expBottom) {
+            ctx.fillStyle = 'rgba(0,0,0,0.50)';
+            ctx.beginPath();
+            ctx.moveTo(x, y + S);
+            for (let i = 0; i <= STEPS; i++)
+                ctx.lineTo(x + S * i / STEPS, y + S - 1 - rng(i + 20) * JITTER);
+            ctx.lineTo(x + S, y + S);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 左面：やや明るい面
+        if (expLeft) {
+            ctx.fillStyle = 'rgba(255,255,255,0.20)';
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            for (let i = 0; i <= STEPS; i++)
+                ctx.lineTo(x + 1 + rng(i + 30) * JITTER, y + S * i / STEPS);
+            ctx.lineTo(x, y + S);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 右面：やや暗い面
+        if (expRight) {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath();
+            ctx.moveTo(x + S, y);
+            for (let i = 0; i <= STEPS; i++)
+                ctx.lineTo(x + S - 1 - rng(i + 40) * JITTER, y + S * i / STEPS);
+            ctx.lineTo(x + S, y + S);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 5. 内部テクスチャ（岩の多角形ファセット + ひび線）
+        // --- 暗い面：必ず2枚 ---
+        ctx.fillStyle = `rgba(0,0,0,${0.10 + rng(200) * 0.10})`;
+        ctx.beginPath();
+        ctx.moveTo(x + rng(201) * S, y + rng(202) * S);
+        ctx.lineTo(x + rng(203) * S, y + rng(204) * S);
+        ctx.lineTo(x + rng(205) * S, y + rng(206) * S);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(0,0,0,${0.07 + rng(207) * 0.08})`;
+        ctx.beginPath();
+        ctx.moveTo(x + rng(208) * S, y + rng(209) * S);
+        ctx.lineTo(x + rng(210) * S, y + rng(211) * S);
+        ctx.lineTo(x + rng(212) * S, y + rng(213) * S);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- 明るい面：60%の確率で1枚 ---
+        if (rng(214) > 0.40) {
+            ctx.fillStyle = `rgba(255,255,255,${0.07 + rng(215) * 0.09})`;
+            ctx.beginPath();
+            ctx.moveTo(x + rng(216) * S, y + rng(217) * S);
+            ctx.lineTo(x + rng(218) * S, y + rng(219) * S);
+            ctx.lineTo(x + rng(220) * S, y + rng(221) * S);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // --- ハイライト：35%の確率で追加1枚 ---
+        if (rng(222) > 0.65) {
+            ctx.fillStyle = `rgba(255,255,255,${0.04 + rng(223) * 0.07})`;
+            ctx.beginPath();
+            ctx.moveTo(x + 1 + rng(224) * (S - 2), y + 1 + rng(225) * (S - 2));
+            ctx.lineTo(x + 1 + rng(226) * (S - 2), y + 1 + rng(227) * (S - 2));
+            ctx.lineTo(x + 1 + rng(228) * (S - 2), y + 1 + rng(229) * (S - 2));
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // --- ひび線 ---
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + 2 + rng(50) * (S - 4), y + 2 + rng(51) * (S - 4));
+        ctx.lineTo(x + 2 + rng(52) * (S - 4), y + 2 + rng(53) * (S - 4));
+        ctx.stroke();
+        if (rng(60) > 0.5) {
+            ctx.strokeStyle = 'rgba(0,0,0,0.09)';
+            ctx.beginPath();
+            ctx.moveTo(x + 3 + rng(61) * (S - 6), y + 3 + rng(62) * (S - 6));
+            ctx.lineTo(x + 3 + rng(63) * (S - 6), y + 3 + rng(64) * (S - 6));
+            ctx.stroke();
+        }
+
+        // 6. ハードブロックのダメージクラック（被ダメージ1回につき2本追加）
+        if (block === BLOCK_HARD && this.blockHP[r][c] < HARD_BLOCK_HP) {
+            const damageTaken = HARD_BLOCK_HP - this.blockHP[r][c];
+            const crackCount = Math.min(damageTaken * 2, 4);
+            // 各クラックのスタイル定義（後から入るほど濃く・太く）
+            const crackStyles = [
+                { color: 'rgba(255,255,255,0.38)', width: 1 },
+                { color: 'rgba(255,255,255,0.44)', width: 1 },
+                { color: 'rgba(255,255,255,0.52)', width: 1.5 },
+                { color: 'rgba(255,255,255,0.62)', width: 1.5 },
+            ];
+            for (let ci = 0; ci < crackCount; ci++) {
+                const base = 100 + ci * 4; // rng の他用途と被らないシード帯
+                ctx.strokeStyle = crackStyles[ci].color;
+                ctx.lineWidth = crackStyles[ci].width;
+                ctx.beginPath();
+                ctx.moveTo(x + 1 + rng(base) * (S - 2), y + 1 + rng(base + 1) * (S - 2));
+                ctx.lineTo(x + 1 + rng(base + 2) * (S - 2), y + 1 + rng(base + 3) * (S - 2));
+                ctx.stroke();
+            }
+        }
+
+        ctx.restore();
+    }
+
+    _drawPolishedBlock(ctx, x, y, S) {
+        const style = this.blockStyles[BLOCK_INDESTRUCTIBLE];
+        const B = 3; // ベベル幅
+
+        // ベース塗り
+        ctx.fillStyle = style.fill;
+        ctx.fillRect(x, y, S, S);
+
+        // 上面ハイライト（光が当たる面）
+        ctx.fillStyle = 'rgba(255,255,255,0.38)';
+        ctx.fillRect(x, y, S, B);
+        // 左面ハイライト
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(x, y + B, B, S - B);
+
+        // 下面シャドウ
+        ctx.fillStyle = 'rgba(0,0,0,0.50)';
+        ctx.fillRect(x, y + S - B, S, B);
+        // 右面シャドウ
+        ctx.fillStyle = 'rgba(0,0,0,0.34)';
+        ctx.fillRect(x + S - B, y, B, S - B);
+
+        // 内側の陰刻ライン（機械加工されたタイル感）
+        ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + B + 0.5, y + B + 0.5, S - 2 * B - 1, S - 2 * B - 1);
+
+        // 光沢スポット（左上に小さな鏡面ハイライト）
+        const inner = S - 2 * B;
+        ctx.fillStyle = 'rgba(255,255,255,0.24)';
+        ctx.fillRect(x + B, y + B, Math.ceil(inner * 0.55), Math.ceil(inner * 0.38));
+
+        // エッジラインで個々のタイル境界をくっきり示す
+        ctx.fillStyle = 'rgba(255,255,255,0.62)';
+        ctx.fillRect(x, y, S, 1);           // 上端
+        ctx.fillRect(x, y, 1, S);           // 左端
+        ctx.fillStyle = 'rgba(0,0,0,0.68)';
+        ctx.fillRect(x, y + S - 1, S, 1);   // 下端
+        ctx.fillRect(x + S - 1, y, 1, S);   // 右端
     }
 }

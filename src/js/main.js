@@ -17,7 +17,8 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, PLAYER_MG_SPREAD,
-    CARRIER_PROXIMITY_ALERT_RANGE
+    CARRIER_PROXIMITY_ALERT_RANGE,
+    GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST
 } from './utils/Constants.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
@@ -36,6 +37,8 @@ import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
 import { audioManager } from './audio/AudioManager.js';
+import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
+import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
 
 // ============================================
 // Game Object
@@ -67,11 +70,16 @@ const Game = {
     landmines: [],
     enemies: [],
     enemyBullets: [],
+    repairKits: [],
+    autoAimUnits: [],
+    autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
+    autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
     flag: null,
 
     // Game state
     score: 0,
-    missionsCompleted: 0, // Set to 6 to start from Mission 7 for debug
+    debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
+    missionsCompleted: 0,
     gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'ranking_display'
     showMiniMap: false,
     miniMapAlpha: 0,
@@ -170,7 +178,7 @@ const Game = {
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
-            audioManager.startBGM();
+            audioManager.startBGM(this.missionsCompleted);
         }
     },
 
@@ -183,7 +191,7 @@ const Game = {
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
-            audioManager.startBGM();
+            audioManager.startBGM(this.missionsCompleted);
         }
     },
 
@@ -235,6 +243,12 @@ const Game = {
         this.totalTime += deltaTime;
         this.missionTimer += deltaTime;
 
+        // ロック中: 内部マウス座標をクロスヘアのスクリーン位置に固定
+        if (this.input.crosshairLocked) {
+            this.input.mouse.x = this.input.lockedWorldX - this.camera.x;
+            this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
+        }
+
         this._updateMiniMap();
 
         if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
@@ -249,6 +263,9 @@ const Game = {
         this._updateProjectiles();
         this._updateParticles();
         this._updateLandmines();
+        this._updateRepairKits();
+        this._updateAutoAimUnits();
+        this._updateAutoAim();
         this.map.update();
         this._updateEnemies();
         this._checkMissionClear();
@@ -338,6 +355,78 @@ const Game = {
         }
     },
 
+    _updateRepairKits() {
+        for (let i = this.repairKits.length - 1; i >= 0; i--) {
+            this.repairKits[i].update();
+            if (!this.repairKits[i].alive) this.repairKits.splice(i, 1);
+        }
+    },
+
+    _updateAutoAimUnits() {
+        for (let i = this.autoAimUnits.length - 1; i >= 0; i--) {
+            this.autoAimUnits[i].update();
+            if (!this.autoAimUnits[i].alive) this.autoAimUnits.splice(i, 1);
+        }
+    },
+
+    _updateAutoAim() {
+        const player = this.player;
+        this.autoAimTarget = null;
+
+        // 常にマウス位置を記録しておく（ピックアップ直後に古い位置と比較して即キャンセルされるのを防ぐ）
+        const mx = this.input.mouse.x;
+        const my = this.input.mouse.y;
+        const dx = Math.abs(mx - (this._prevMouseX ?? mx));
+        const dy = Math.abs(my - (this._prevMouseY ?? my));
+        this._prevMouseX = mx;
+        this._prevMouseY = my;
+
+        if (!player || !player.alive || player.docked || player.autoAimTimer <= 0) {
+            this.autoAimLockedEnemy = null;
+            return;
+        }
+
+        player.autoAimTimer--;
+
+        // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）
+        if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD) {
+            this.autoAimLockedEnemy = null;
+            return;
+        }
+
+        // ロック中の敵が生存していればそのまま追跡
+        if (this.autoAimLockedEnemy && this.autoAimLockedEnemy.alive) {
+            const e = this.autoAimLockedEnemy;
+            this.autoAimTarget = {
+                x: e.x + (e.width || 0) / 2,
+                y: e.y + (e.height || 0) / 2
+            };
+            return;
+        }
+
+        // ロック対象なし: マウスのワールド座標に最も近い敵を新規検索
+        const mouseWorld = this.input.getMouseWorld(this.camera);
+        let bestEnemy = null;
+        let bestDist = AUTO_AIM_SNAP_RADIUS;
+        for (const enemy of this.enemies) {
+            if (!enemy.alive) continue;
+            const ex = enemy.x + (enemy.width || 0) / 2;
+            const ey = enemy.y + (enemy.height || 0) / 2;
+            const d = Math.hypot(ex - mouseWorld.x, ey - mouseWorld.y);
+            if (d < bestDist) {
+                bestDist = d;
+                bestEnemy = enemy;
+            }
+        }
+        if (bestEnemy) {
+            this.autoAimLockedEnemy = bestEnemy;
+            this.autoAimTarget = {
+                x: bestEnemy.x + (bestEnemy.width || 0) / 2,
+                y: bestEnemy.y + (bestEnemy.height || 0) / 2
+            };
+        }
+    },
+
     _updateEnemies() {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             this.enemies[i].update();
@@ -393,6 +482,16 @@ const Game = {
             player.resupply();
             player.x = carrier.x + carrier.width / 2 - player.width / 2;
             player.y = carrier.y - player.height;
+
+            // リペアキットを消費してキャリアを修理
+            while (player.repairKits > 0) {
+                if (carrier.hp < carrier.maxHp) {
+                    carrier.hp = Math.min(carrier.maxHp, carrier.hp + REPAIR_KIT_HEAL);
+                } else {
+                    carrier.lives++;
+                }
+                player.repairKits--;
+            }
         }
 
         // Undock — check head clearance before launching
@@ -416,7 +515,7 @@ const Game = {
         if (!player || !player.alive || player.docked) return;
         if (player.crouching || player.stunTimer > 0) return;
 
-        const targetWorld = this.input.getTargetWorld(this.camera);
+        const targetWorld = this.autoAimTarget || this.input.getTargetWorld(this.camera);
         const px = player.x + player.width / 2;
         const py = player.y + player.height / 2;
         const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
@@ -427,9 +526,12 @@ const Game = {
             else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, angle);
         }
 
-        // Secondary fire: Grenade
+        // Secondary fire: Grenade（距離に応じた投擲強度）
         if (this.input.isRightClickPressed() && player.grenades > 0) {
-            this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle));
+            const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
+            const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
+            const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
+            this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
             player.grenades--;
             audioManager.playExplosion(false);
         }
@@ -512,6 +614,8 @@ const Game = {
         for (const proj of this.projectiles) proj.draw(ctx);
         for (const particle of this.particles) particle.draw(ctx);
         for (const mine of this.landmines) mine.draw(ctx);
+        for (const kit of this.repairKits) kit.draw(ctx);
+        for (const unit of this.autoAimUnits) unit.draw(ctx);
 
         // HP bars for player and carrier
         this._drawHpBarIfDamaged(ctx, this.player);

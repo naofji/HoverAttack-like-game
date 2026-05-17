@@ -60,8 +60,10 @@ export class HUD {
 
         this._drawWeaponStatus(ctx, player, row2Y);
         this._drawHoverGauge(ctx, player, row2Y);
+        this._drawAutoAimBar(ctx, player, row2Y);
         this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
         this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
+        this._drawRepairKitIcons(ctx, player, row2Y);
         this._drawCarrierArrow(ctx, player, carrier, w);
 
         // Separator line
@@ -263,6 +265,85 @@ export class HUD {
         // Faint bounding box
         ctx.strokeStyle = 'rgba(136, 136, 136, 0.3)';
         ctx.strokeRect(barX, barY - barH, barW, barH);
+    }
+
+    // ------------------------------------------
+    // Auto-Aim remaining time bar (MISSILE/M-GUN エリアの下に小さく表示)
+    // ------------------------------------------
+    _drawAutoAimBar(ctx, player, y) {
+        if (!player || player.autoAimTimer <= 0) return;
+
+        const ratio = player.autoAimTimer / player.autoAimMaxTimer;
+        const labelX = 145;
+        const barX = 195;
+        const barW = 220;
+        const barH = 5;
+        const rowY = y + 11; // row2Y の直下
+
+        ctx.font = 'bold 10px "Courier New", monospace';
+        ctx.fillStyle = '#FF6600';
+        ctx.fillText('A-AIM', labelX, rowY);
+
+        ctx.fillStyle = 'rgba(80,20,0,0.8)';
+        ctx.fillRect(barX, rowY - barH + 2, barW, barH);
+
+        ctx.fillStyle = '#FF6600';
+        ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
+
+        ctx.strokeStyle = '#663300';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
+
+        // フォントを元に戻す
+        ctx.font = 'bold 16px "Courier New", monospace';
+    }
+
+    // ------------------------------------------
+    // Repair kit icons below CARRIER display
+    // ------------------------------------------
+    _drawRepairKitIcons(ctx, player, y) {
+        if (!player || player.repairKits <= 0) return;
+
+        const count = Math.min(player.repairKits, 10); // 最大10個表示
+        const S = 7;   // アイコンサイズ
+        const gap = 2; // アイコン間隔
+        const startX = 800;
+        const iconY = y + 8;
+        const r = 2;   // 角丸半径
+
+        ctx.save();
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = '#00FF66';
+
+        for (let i = 0; i < count; i++) {
+            const x = startX + i * (S + gap);
+
+            // 角丸緑四角
+            ctx.fillStyle = '#00BB44';
+            ctx.beginPath();
+            ctx.moveTo(x + r, iconY);
+            ctx.lineTo(x + S - r, iconY);
+            ctx.arcTo(x + S, iconY, x + S, iconY + r, r);
+            ctx.lineTo(x + S, iconY + S - r);
+            ctx.arcTo(x + S, iconY + S, x + S - r, iconY + S, r);
+            ctx.lineTo(x + r, iconY + S);
+            ctx.arcTo(x, iconY + S, x, iconY + S - r, r);
+            ctx.lineTo(x, iconY + r);
+            ctx.arcTo(x, iconY, x + r, iconY, r);
+            ctx.closePath();
+            ctx.fill();
+
+            // 白い十字
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            const cx = x + S / 2;
+            const cy = iconY + S / 2;
+            ctx.fillRect(cx - 0.5, iconY + 1, 1, S - 2); // 縦
+            ctx.fillRect(x + 1, cy - 0.5, S - 2, 1);     // 横
+            ctx.shadowBlur = 4;
+        }
+
+        ctx.restore();
     }
 
     // ------------------------------------------

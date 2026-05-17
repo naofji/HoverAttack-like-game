@@ -21,7 +21,7 @@ export class GameStateManager {
 
         if (resetScore) {
             game.score = 0;
-            game.missionsCompleted = 0; // Set to 6 to start from Mission 7 for debug
+            game.missionsCompleted = game.debugStartMission ?? 0;
             game.totalTime = 0;
         }
 
@@ -34,6 +34,10 @@ export class GameStateManager {
         game.landmines = [];
         game.enemies = [];
         game.enemyBullets = [];
+        game.repairKits = [];
+        game.autoAimUnits = [];
+        game.autoAimTarget = null;
+        game.autoAimLockedEnemy = null;
         game.base = null;
         game.flag = null;
         game.gameState = 'playing';
