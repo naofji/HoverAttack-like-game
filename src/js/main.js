@@ -72,9 +72,15 @@ const Game = {
     enemyBullets: [],
     repairKits: [],
     autoAimUnits: [],
+    missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
     flag: null,
+
+    // Options
+    options: {
+        carrierLift: true, // false = 持ち上げ無効 & 横当たり無効（上に乗るのみ可）
+    },
 
     // Game state
     score: 0,
@@ -159,6 +165,7 @@ const Game = {
     _updateGameState(deltaTime) {
         switch (this.gameState) {
             case 'title': return this._updateTitle(deltaTime);
+            case 'how_to_play': return this._updateHowToPlay(deltaTime);
             case 'ranking_display': return this._updateRankingDisplay(deltaTime);
             case 'ranking_entry': return this._updateRankingEntry();
             case 'gameover': return this._updateGameOver(deltaTime);
@@ -170,11 +177,24 @@ const Game = {
 
     _updateTitle(deltaTime) {
         this.stateTimer += deltaTime;
-        if (this.stateTimer > 8000) {
+        if (this.input.isKeyPressed('Tab')) {
+            this.options.carrierLift = !this.options.carrierLift;
+        } else if (this.stateTimer > 8000) {
+            this.gameState = 'how_to_play';
+            this.stateTimer = 0;
+        } else if (this._anyKeyOrClick()) {
+            this.stateManager.restart();
+            this.gameState = 'playing';
+            audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    _updateHowToPlay(deltaTime) {
+        this.stateTimer += deltaTime;
+        if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
             this.gameState = 'ranking_display';
             this.stateTimer = 0;
             this.lastRankIndex = -1;
-            audioManager.playTitleBGM();
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
@@ -265,6 +285,7 @@ const Game = {
         this._updateLandmines();
         this._updateRepairKits();
         this._updateAutoAimUnits();
+        this._updateMissileKits();
         this._updateAutoAim();
         this.map.update();
         this._updateEnemies();
@@ -366,6 +387,13 @@ const Game = {
         for (let i = this.autoAimUnits.length - 1; i >= 0; i--) {
             this.autoAimUnits[i].update();
             if (!this.autoAimUnits[i].alive) this.autoAimUnits.splice(i, 1);
+        }
+    },
+
+    _updateMissileKits() {
+        for (let i = this.missileKits.length - 1; i >= 0; i--) {
+            this.missileKits[i].update();
+            if (!this.missileKits[i].alive) this.missileKits.splice(i, 1);
         }
     },
 
@@ -589,6 +617,10 @@ const Game = {
             this.screenRenderer.drawTitleScreen(ctx);
             return;
         }
+        if (this.gameState === 'how_to_play') {
+            this.screenRenderer.drawHowToPlay(ctx, this.stateTimer < 10000 ? 0 : 1);
+            return;
+        }
         if (this.gameState === 'ranking_display') {
             this.screenRenderer.drawRankingDisplay(ctx, this.highScoreManager.getTop10(), this.lastRankIndex);
             return;
@@ -616,6 +648,7 @@ const Game = {
         for (const mine of this.landmines) mine.draw(ctx);
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);
+        for (const kit of this.missileKits) kit.draw(ctx);
 
         // HP bars for player and carrier
         this._drawHpBarIfDamaged(ctx, this.player);

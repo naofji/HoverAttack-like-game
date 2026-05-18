@@ -15,6 +15,7 @@ import { Grenade } from './Grenade.js';
 import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
+import { MissileKit } from './MissileKit.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -596,6 +597,10 @@ export class EnemyAttacker {
         this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
         this.game.addScore(this.score);
 
+        // heavy は30%の確率でミサイル・サプライ・キットをドロップ
+        if (this.config.name === 'heavy' && Math.random() < 0.3) {
+            this.game.missileKits.push(new MissileKit(this.game, cx, this.y));
+        }
         // rival は30%の確率でリペアキットをドロップ
         if (this.config.name === 'rival' && Math.random() < 0.3) {
             this.game.repairKits.push(new RepairKit(this.game, cx, this.y));

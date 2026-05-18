@@ -227,8 +227,8 @@ export class Player {
             }
         }
 
-        // Horizontal Carrier Collision
-        if (!hitHMap) {
+        // Horizontal Carrier Collision (carrierLift OFF 時は無効)
+        if (!hitHMap && this.game.options.carrierLift) {
             const carrier = this.game.carrier;
             if (carrier && carrier.alive) {
                 // If the player overlaps the carrier horizontally AND vertically
@@ -330,8 +330,8 @@ export class Player {
             }
         }
 
-        // 2b. Lift carrier from below (player moving upward hits carrier's underside)
-        if (!this.docked && this.vy < 0) {
+        // 2b. Lift carrier from below (carrierLift ON 時のみ有効)
+        if (!this.docked && this.vy < 0 && this.game.options.carrierLift) {
             const carrier = this.game.carrier;
             if (carrier && carrier.alive) {
                 const cBottom = carrier.y + carrier.height;

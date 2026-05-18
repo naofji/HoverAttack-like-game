@@ -4,7 +4,7 @@
 
 // Keys that should prevent default browser behavior (scrolling, etc.)
 const PREVENT_DEFAULT_KEYS = new Set([
-    'Space', 'ShiftLeft', 'ShiftRight',
+    'Space', 'ShiftLeft', 'ShiftRight', 'Tab',
     'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyM', 'KeyF',
     'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'
 ]);
@@ -20,6 +20,7 @@ export class Input {
         // Lock-on state
         this.crosshairLocked = false;
         this.lockedWorldX = 0;
+        this.lockedWorldY = 0;
         // Typing support for Ranking entry
         this.typedChars = [];
 
