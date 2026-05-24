@@ -7,7 +7,7 @@ body {
     justify-content: center;
     align-items: center;
     height: 100vh;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: 'Space Mono', 'Courier New', Courier, monospace;
     overflow: hidden;
 }
 

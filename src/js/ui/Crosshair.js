@@ -100,7 +100,7 @@ export class Crosshair {
         // AUTO ラベル（オートエイム有効中のみ）
         if (autoAimActive) {
             ctx.save();
-            ctx.font = 'bold 8px "Courier New", monospace';
+            ctx.font = 'bold 8px "Space Mono", monospace';
             ctx.fillStyle = '#FF3300';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'bottom';

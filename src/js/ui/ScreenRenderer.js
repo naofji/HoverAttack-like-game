@@ -24,7 +24,7 @@ export class ScreenRenderer {
         const canvas = this.game.canvas;
 
         ctx.fillStyle = '#00FF00'; // Retro green
-        ctx.font = 'bold 16px "Courier New", monospace';
+        ctx.font = 'bold 16px "Space Mono", monospace';
         ctx.textAlign = 'left';
 
         // Approx character width for 16px Courier New is ~9.6px
@@ -37,25 +37,26 @@ export class ScreenRenderer {
         }
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px "Courier New", monospace';
+        ctx.font = '20px "Space Mono", monospace';
         ctx.textAlign = 'center';
 
         // Blinking text
         if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.fillText('Press Any Key to Start', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.restore();
         }
 
-        // Render instructions
-        ctx.fillStyle = '#AAAAAA';
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Move: A/D | Launch/Burst: W | Hover: W (Hold) | Shoot: L-Click | Grenade: R-Click', canvas.width / 2, canvas.height - 60);
-        ctx.fillText('Map: R | Lock-on: Shift | Weapon Switch: F | Dock: S', canvas.width / 2, canvas.height - 40);
 
         // Option toggle display
         const liftOn = this.game.options.carrierLift;
-        ctx.font = '13px "Courier New", monospace';
+        ctx.font = '13px "Space Mono", monospace';
         ctx.fillStyle = '#555555';
-        ctx.fillText('[Tab] Carrier Lift:', canvas.width / 2 - 30, canvas.height - 18);
+        ctx.fillText('[TAB] CARRIER LIFT:', canvas.width / 2 - 30, canvas.height - 18);
         ctx.fillStyle = liftOn ? '#00FF88' : '#FF4444';
         ctx.textAlign = 'left';
         ctx.fillText(liftOn ? 'ON' : 'OFF', canvas.width / 2 + 78, canvas.height - 18);
@@ -87,7 +88,7 @@ export class ScreenRenderer {
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 28px "Courier New", monospace';
+        ctx.font = 'bold 28px "Space Mono", monospace';
         ctx.shadowColor = '#00FF00';
         ctx.shadowBlur = 15;
         ctx.fillStyle = '#00FF00';
@@ -100,29 +101,29 @@ export class ScreenRenderer {
             // PANEL 1: OBJECTIVE
             this._drawPanel(ctx, cx - 400, 80, 800, 100, 'MISSION OBJECTIVE', '#FFCC00');
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '14px "Courier New", monospace';
+            ctx.font = '14px "Space Mono", monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('Destroy enemy robots, obliterate the enemy base core, and capture the flag.', cx, 130);
+            ctx.fillText('DESTROY ENEMY ROBOTS, OBLITERATE THE ENEMY BASE CORE, AND CAPTURE THE FLAG.', cx, 130);
             ctx.fillStyle = '#FF5555';
-            ctx.fillText('* GAME OVER if the Carrier loses all its lives.', cx, 155);
+            ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, 155);
 
             // PANEL 2: BASIC RULES
             this._drawPanel(ctx, cx - 400, 195, 800, 170, 'BASIC RULES', '#FFCC00');
             ctx.fillStyle = '#CCCCCC';
-            ctx.font = '13px "Courier New", monospace';
+            ctx.font = '13px "Space Mono", monospace';
             ctx.textAlign = 'left';
 
             // Rule 1 (wrapped)
-            ctx.fillText('1) Control Carrier while docked.', cx - 380, 250);
-            ctx.fillText('   Detach to control Attacker (Carrier becomes defenseless).', cx - 380, 266);
+            ctx.fillText('1) CONTROL CARRIER WHILE DOCKED.', cx - 380, 250);
+            ctx.fillText('   DETACH TO CONTROL ATTACKER (CARRIER BECOMES DEFENSELESS).', cx - 380, 266);
 
             // Rule 2 (wrapped)
-            ctx.fillText('2) Docking Attacker with Carrier resupplies ammo/fuel', cx - 380, 295);
-            ctx.fillText('   and repairs damage.', cx - 380, 311);
+            ctx.fillText('2) DOCKING ATTACKER WITH CARRIER RESUPPLIES AMMO/FUEL', cx - 380, 295);
+            ctx.fillText('   AND REPAIRS DAMAGE.', cx - 380, 311);
 
             // Rule 3 (wrapped)
-            ctx.fillText('3) If Attacker is destroyed, respawn at Carrier.', cx - 380, 340);
-            ctx.fillText('   If Carrier is destroyed, respawn at start.', cx - 380, 356);
+            ctx.fillText('3) IF ATTACKER IS DESTROYED, RESPAWN AT CARRIER.', cx - 380, 340);
+            ctx.fillText('   IF CARRIER IS DESTROYED, RESPAWN AT START.', cx - 380, 356);
 
             // Sub-panel for Illustration on the Right
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.2)';
@@ -152,9 +153,9 @@ export class ScreenRenderer {
             this._drawPanel(ctx, cx - 400, 380, 800, 260, 'ITEMS', '#FFCC00');
 
             const items = [
-                { type: 'missile', color: '#FF4444', name: 'Missile Supply Kit', desc: 'Fully restores your missile ammo upon pickup.' },
-                { type: 'autoaim', color: '#FF8800', name: 'Auto-Aim Unit', desc: 'Enables auto-aim for a limited time. (Dropped by Artillery)' },
-                { type: 'repair', color: '#00FF00', name: 'Carrier Repair Kit', desc: 'Repairs Carrier HP when docked. Grants +1 life if full. (Dropped by Rival)' }
+                { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
+                { type: 'autoaim', color: '#FF8800', name: 'AUTO-AIM UNIT', desc: 'ENABLES AUTO-AIM FOR A LIMITED TIME. (DROPPED BY ARTILLERY)' },
+                { type: 'repair', color: '#00FF00', name: 'CARRIER REPAIR KIT', desc: 'REPAIRS CARRIER HP WHEN DOCKED. GRANTS +1 LIFE IF FULL. (DROPPED BY RIVAL)' }
             ];
 
             if (!this.dummyKits) {
@@ -185,11 +186,11 @@ export class ScreenRenderer {
                 // Text
                 ctx.textAlign = 'left';
                 ctx.fillStyle = item.color;
-                ctx.font = 'bold 15px "Courier New", monospace';
+                ctx.font = 'bold 15px "Space Mono", monospace';
                 ctx.fillText(item.name, cx - 320, y - 8);
 
                 ctx.fillStyle = '#CCCCCC';
-                ctx.font = '13px "Courier New", monospace';
+                ctx.font = '13px "Space Mono", monospace';
                 ctx.fillText(item.desc, cx - 320, y + 15);
             });
 
@@ -198,14 +199,14 @@ export class ScreenRenderer {
             this._drawPanel(ctx, cx - 350, 90, 700, 450, 'CONTROLS', '#FFCC00');
 
             const controls = [
-                { key: 'A / D', action: 'Move left / right' },
-                { key: 'W', action: 'Burst jump (ground) / Undock from carrier' },
-                { key: 'Shift', action: 'Hover in air (Hold) / Lock aim (Tap)' },
-                { key: 'L-Click', action: 'Fire missile or machine gun' },
-                { key: 'R-Click', action: 'Throw grenade (distance = strength)' },
-                { key: 'F', action: 'Switch weapon (Missile ↔ M-Gun)' },
-                { key: 'S', action: 'Dock with carrier' },
-                { key: 'R', action: 'Toggle mini-map overlay' },
+                { key: 'A / D', action: 'MOVE LEFT / RIGHT' },
+                { key: 'W', action: 'BURST JUMP (GROUND) / HOVER (HOLD) / UNDOCK' },
+                { key: 'SHIFT', action: 'LOCK-ON AIM (TAP)' },
+                { key: 'L-CLICK', action: 'FIRE MISSILE OR MACHINE GUN' },
+                { key: 'R-CLICK', action: 'THROW GRENADE (TAP: THROW / HOLD + L-CLICK)' },
+                { key: 'F', action: 'SWITCH WEAPON (MISSILE ↔ M-GUN)' },
+                { key: 'S', action: 'DOCK WITH CARRIER / HOLD FOR FAST FUEL CHARGE' },
+                { key: 'R', action: 'TOGGLE MINI-MAP OVERLAY' },
             ];
 
             ctx.textAlign = 'left';
@@ -213,7 +214,7 @@ export class ScreenRenderer {
                 const y = 150 + i * 45;
                 this._drawKeyCap(ctx, cx - 180, y, c.key);
                 ctx.fillStyle = '#EEEEEE';
-                ctx.font = '16px "Courier New", monospace';
+                ctx.font = '16px "Space Mono", monospace';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(c.action, cx - 140, y);
             });
@@ -234,8 +235,8 @@ export class ScreenRenderer {
             ctx.fillStyle = '#FFFFFF';
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
-            ctx.font = 'bold 16px "Courier New", monospace';
-            ctx.fillText('Press Any Key to Start', cx, H - 70);
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO START', cx, H - 70);
             ctx.restore();
         }
     }
@@ -267,7 +268,7 @@ export class ScreenRenderer {
         }
 
         ctx.fillStyle = titleColor;
-        ctx.font = 'bold 18px "Courier New", monospace';
+        ctx.font = 'bold 18px "Space Mono", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(title, x + w / 2, y + 18);
@@ -276,7 +277,7 @@ export class ScreenRenderer {
 
     _drawKeyCap(ctx, x, y, text) {
         ctx.save();
-        ctx.font = 'bold 14px "Courier New", monospace';
+        ctx.font = 'bold 14px "Space Mono", monospace';
         const textWidth = ctx.measureText(text).width;
         const w = Math.max(textWidth + 20, 40);
         const h = 30;
@@ -327,12 +328,12 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#00FF00';
-        ctx.font = '30px "Courier New", monospace';
+        ctx.font = '30px "Space Mono", monospace';
         ctx.textAlign = 'center';
         ctx.fillText('MISSION COMPLETE', canvas.width / 2, canvas.height / 2 - 40);
 
         ctx.fillStyle = '#FFFF00';
-        ctx.font = '24px "Courier New", monospace';
+        ctx.font = '24px "Space Mono", monospace';
         // Format time mm:ss.xx
         const mm = Math.floor(this.game.missionTimer / 60000).toString().padStart(2, '0');
         const ss = Math.floor((this.game.missionTimer % 60000) / 1000).toString().padStart(2, '0');
@@ -343,9 +344,13 @@ export class ScreenRenderer {
             ctx.fillStyle = '#FF8800';
             ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 30);
         } else {
+            ctx.save();
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '16px "Courier New", monospace';
-            ctx.fillText('Press Any Key to continue', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.shadowColor = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO CONTINUE', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.restore();
         }
     }
 
@@ -356,17 +361,17 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#FF3333';
-        ctx.font = 'bold 36px "Courier New", monospace';
+        ctx.font = 'bold 36px "Space Mono", monospace';
         ctx.textAlign = 'center';
         ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Courier New", monospace';
+        ctx.font = '18px "Space Mono", monospace';
         ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 20);
 
         ctx.fillStyle = '#888888';
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Please wait...', canvas.width / 2, canvas.height / 2 + 60);
+        ctx.font = '14px "Space Mono", monospace';
+        ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 60);
         ctx.textAlign = 'left';
     }
 
@@ -377,16 +382,16 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#00FFFF'; // Cyan for clear
-        ctx.font = 'bold 36px "Courier New", monospace';
+        ctx.font = 'bold 36px "Space Mono", monospace';
         ctx.textAlign = 'center';
         ctx.fillText('CONGRATULATIONS!', canvas.width / 2, canvas.height / 2 - 60);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Courier New", monospace';
+        ctx.font = '18px "Space Mono", monospace';
         ctx.fillText(`ALL MISSIONS CLEARED!`, canvas.width / 2, canvas.height / 2 - 20);
 
         ctx.fillStyle = '#FFFF00';
-        ctx.font = '24px "Courier New", monospace';
+        ctx.font = '24px "Space Mono", monospace';
         const mm = Math.floor(this.game.totalTime / 60000).toString().padStart(2, '0');
         const ss = Math.floor((this.game.totalTime % 60000) / 1000).toString().padStart(2, '0');
         const xx = Math.floor((this.game.totalTime % 1000) / 10).toString().padStart(2, '0');
@@ -397,12 +402,12 @@ export class ScreenRenderer {
             ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 50);
         } else {
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '18px "Courier New", monospace';
+            ctx.font = '18px "Space Mono", monospace';
             ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 60);
 
             ctx.fillStyle = '#888888';
-            ctx.font = '14px "Courier New", monospace';
-            ctx.fillText('Please wait...', canvas.width / 2, canvas.height / 2 + 90);
+            ctx.font = '14px "Space Mono", monospace';
+            ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 90);
         }
         ctx.textAlign = 'left';
     }
@@ -414,12 +419,12 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#FFFF00'; // Yellow
-        ctx.font = 'bold 24px "Courier New", monospace';
+        ctx.font = 'bold 24px "Space Mono", monospace';
         ctx.textAlign = 'center';
         ctx.fillText('!!! YOU GOT A HIGH SCORE !!!', canvas.width / 2, canvas.height / 4);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Courier New", monospace';
+        ctx.font = '18px "Space Mono", monospace';
         ctx.fillText(`YOUR SCORE: ${score}`, canvas.width / 2, canvas.height / 4 + 40);
 
         ctx.fillText('ENTER YOUR NAME:', canvas.width / 2, canvas.height / 2 - 20);
@@ -431,7 +436,7 @@ export class ScreenRenderer {
         ctx.strokeRect(canvas.width / 2 - 100, canvas.height / 2, 200, 40);
 
         ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 24px "Courier New", monospace';
+        ctx.font = 'bold 24px "Space Mono", monospace';
         ctx.textAlign = 'left';
 
         // Blink cursor
@@ -443,8 +448,8 @@ export class ScreenRenderer {
         ctx.textAlign = 'left'; // Already left, but kept for consistency
 
         ctx.fillStyle = '#AAAAAA';
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillText('Press [ENTER] to save', canvas.width / 2, canvas.height / 2 + 70);
+        ctx.font = '14px "Space Mono", monospace';
+        ctx.fillText('PRESS [ENTER] TO SAVE', canvas.width / 2, canvas.height / 2 + 70);
 
         ctx.textAlign = 'left';
     }
@@ -456,18 +461,18 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 28px "Courier New", monospace';
+        ctx.font = 'bold 42px "Space Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('TOP 20 RANKING', canvas.width / 2, 40);
+        ctx.fillText('WALL OF FAME', canvas.width / 2, 50);
 
-        ctx.font = '16px "Courier New", monospace';
+        ctx.font = 'bold 19px "Space Mono", monospace';
         ctx.fillStyle = '#AAAAAA';
         // Headers for single column
-        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 75);
+        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 95);
 
-        ctx.font = 'bold 16px "Courier New", monospace';
-        const startY = 100;
-        const lineH = 22; // Fit 20 lines in a single column
+        ctx.font = 'bold 19px "Space Mono", monospace';
+        const startY = 130;
+        const lineH = 22.5; // Fit 20 lines perfectly with max vertical spread
 
         scores.forEach((entry, index) => {
             if (index === highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
@@ -489,8 +494,8 @@ export class ScreenRenderer {
                 timeStr = ` (${entry.clearTime})`;
             }
 
-            // Single column layout
-            const textLeft = canvas.width / 2 - 200;
+            // Single column layout (Adjusted for wider font size)
+            const textLeft = canvas.width / 2 - 255;
             ctx.textAlign = 'left';
 
             ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}`, textLeft, startY + index * lineH);
@@ -498,9 +503,14 @@ export class ScreenRenderer {
 
         // Blinking text
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#FFFFFF';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.fillText('Press Any Key to Start', canvas.width / 2, canvas.height - 25);
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
+            ctx.restore();
         }
 
         ctx.textAlign = 'left';

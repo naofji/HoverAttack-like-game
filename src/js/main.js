@@ -75,6 +75,8 @@ const Game = {
     missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
+    grenadeTrajectory: null,   // 長押し中のグレネード軌道プレビュー {points, landX, landY}
+    leftClickSuppress: false,  // グレネード投擲時の左クリック誤射防止用フラグ
     flag: null,
 
     // Options
@@ -548,22 +550,85 @@ const Game = {
         const py = player.y + player.height / 2;
         const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
 
-        // Primary fire
-        if (this.input.mouse.left || this.input.isKeyDown('Space')) {
+        // 左クリックが離されたら通常兵器の抑制を解除する
+        if (!this.input.mouse.left) {
+            this.leftClickSuppress = false;
+        }
+
+        // Primary fire（長押し中および左クリック抑制中は通常兵器を抑制）
+        if (!this.leftClickSuppress && !this.grenadeWasHeld && (this.input.mouse.left || this.input.isKeyDown('Space'))) {
             if (player.currentWeapon === 'missile') this._fireMissile(player, px, py, angle);
             else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, angle);
         }
 
         // Secondary fire: Grenade（距離に応じた投擲強度）
-        if (this.input.isRightClickPressed() && player.grenades > 0) {
+        // ★ 短押し/長押しの区別は「押した瞬間」には不可能なため、判定はリリース時に行う
+        // 長押し閾値: 10フレーム（約0.17秒）
+        const GRENADE_HOLD_THRESHOLD = 10;
+
+        if (this.input.isRightClickHeld() && player.grenades > 0) {
             const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
             const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
             const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
-            this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
-            player.grenades--;
-            audioManager.playExplosion(false);
+
+            if (this.input.rightHoldFrames >= GRENADE_HOLD_THRESHOLD) {
+                // 長押し確定: 軌道プレビューを表示（毎フレーム更新）
+                this._grenadeHeldAngle = angle;
+                this._grenadeHeldSpeed = grenadeSpeed;
+                this._grenadeHeldPx = px + Math.cos(angle) * 10;
+                this._grenadeHeldPy = py + Math.sin(angle) * 10;
+                this.grenadeWasHeld = true;
+                this.grenadeTrajectory = this._calcGrenadeTrajectory(
+                    this._grenadeHeldPx, this._grenadeHeldPy,
+                    angle, grenadeSpeed
+                );
+
+                // 長押し中に左クリックで投擲
+                if (this.input.isLeftClickPressed()) {
+                    this.projectiles.push(new Grenade(
+                        this,
+                        this._grenadeHeldPx, this._grenadeHeldPy,
+                        this._grenadeHeldAngle, this._grenadeHeldSpeed
+                    ));
+                    player.grenades--;
+                    audioManager.playExplosion(false);
+                    this.grenadeTrajectory = null;
+                    this.grenadeWasHeld = false;
+                    this._grenadeHeldAngle = null;
+                    this._grenadeHeldSpeed = null;
+                    this._grenadeHeldPx = null;
+                    this._grenadeHeldPy = null;
+
+                    // 通常兵器の誤射を避けるため、左クリックを離すまで通常射撃を抑制するフラグを立てる
+                    this.leftClickSuppress = true;
+                }
+            }
+            // 閾値未満の間は何もしない（まだ短押しか長押しか判断できない）
+
+        } else {
+            // 右クリックを離した瞬間
+            if (this.input.isRightClickReleased() && player.grenades > 0) {
+                if (!this.grenadeWasHeld) {
+                    // 短押し確定（閾値未満でリリース）: 投擲
+                    const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
+                    const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
+                    const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
+                    this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
+                    player.grenades--;
+                    audioManager.playExplosion(false);
+                }
+                // 長押しのリリースはキャンセル（左クリックせずに離した場合）
+            }
+            // 状態をクリア
+            this.grenadeTrajectory = null;
+            this.grenadeWasHeld = false;
+            this._grenadeHeldAngle = null;
+            this._grenadeHeldSpeed = null;
+            this._grenadeHeldPx = null;
+            this._grenadeHeldPy = null;
         }
     },
+
 
     _fireMissile(player, px, py, angle) {
         if (player.missiles <= 0) {
@@ -649,6 +714,11 @@ const Game = {
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);
         for (const kit of this.missileKits) kit.draw(ctx);
+
+        // グレネード軌道プレビュー描画（長押し中）
+        if (this.grenadeTrajectory) {
+            this._drawGrenadeTrajectory(ctx, this.grenadeTrajectory);
+        }
 
         // HP bars for player and carrier
         this._drawHpBarIfDamaged(ctx, this.player);
@@ -810,6 +880,108 @@ const Game = {
 
         ctx.restore();
     },
+
+    /**
+     * グレネードの物理軌道を事前シミュレーションして計算する
+     * @returns {{ points: {x,y}[], landX: number, landY: number }}
+     */
+    _calcGrenadeTrajectory(startX, startY, angle, speed) {
+        const TRAJ_GRAVITY           = 0.20;
+        const TRAJ_MAX_FALLING_SPEED = 6;
+        const TRAJ_BOUNCE            = 0.2;
+        const TRAJ_FRICTION          = 0.9;
+        const TRAJ_LIFETIME          = 90;
+
+        const map = this.map;
+        const points = [];
+        let x = startX, y = startY;
+        let vx = Math.cos(angle) * speed;
+        let vy = Math.sin(angle) * speed;
+        let landX = x, landY = y;
+
+        for (let i = 0; i < TRAJ_LIFETIME; i++) {
+            vy += TRAJ_GRAVITY;
+            if (vy > TRAJ_MAX_FALLING_SPEED) vy = TRAJ_MAX_FALLING_SPEED;
+
+            let nextX = x + vx;
+            let nextY = y + vy;
+
+            if (map.isSolidAtPixel(nextX, y)) {
+                vx *= -TRAJ_BOUNCE;
+                nextX = x + vx;
+            }
+            x = nextX;
+
+            if (map.isSolidAtPixel(x, nextY)) {
+                if (Math.abs(vy) > 0.5) {
+                    vy *= -TRAJ_BOUNCE;
+                } else {
+                    vy = 0;
+                    vx *= TRAJ_FRICTION;
+                }
+                nextY = y + vy;
+            }
+            y = nextY;
+
+            // 3フレームおきに軌跡の点を記録
+            if (i % 3 === 0) {
+                points.push({ x, y });
+            }
+
+            landX = x;
+            landY = y;
+
+            // マップ外に出たら終了
+            if (x < 0 || x > map.width || y < 0 || y > map.height) break;
+        }
+
+        return { points, landX, landY };
+    },
+
+    /**
+     * グレネード軌道プレビューを赤い点線と×マークで描画する
+     */
+    _drawGrenadeTrajectory(ctx, trajectory) {
+        const { points, landX, landY } = trajectory;
+        if (points.length < 2) return;
+
+        ctx.save();
+
+        // 細い赤い点線で軌道を描画
+        ctx.strokeStyle = 'rgba(255, 60, 60, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 5]);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        // 爆発位置に×マークを描画
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255, 40, 40, 1.0)';
+        ctx.lineWidth = 1.5;
+        const s = 5;
+        ctx.beginPath();
+        ctx.moveTo(landX - s, landY - s);
+        ctx.lineTo(landX + s, landY + s);
+        ctx.moveTo(landX + s, landY - s);
+        ctx.lineTo(landX - s, landY + s);
+        ctx.stroke();
+
+        // 薄い円でわかりやすくする
+        ctx.strokeStyle = 'rgba(255, 80, 80, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(landX, landY, 8, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+    },
+
+
 
     // ==========================================
     // GAME LOOP

@@ -94,7 +94,7 @@ export class HUD {
                 ctx.strokeRect(centerX - 300, centerY - 25, 600, 50);
 
                 ctx.fillStyle = '#FF0000';
-                ctx.font = 'bold 24px "Courier New", monospace';
+                ctx.font = 'bold 24px "Space Mono", monospace';
                 ctx.fillText(`⚠️ WARNING: CRUISE MISSILE LAUNCH IN T-${timerSec}... ⚠️`, centerX, centerY);
                 ctx.restore();
             }
@@ -280,7 +280,7 @@ export class HUD {
         const barH = 5;
         const rowY = y + 11; // row2Y の直下
 
-        ctx.font = 'bold 10px "Courier New", monospace';
+        ctx.font = 'bold 10px "Space Mono", monospace';
         ctx.fillStyle = '#FF6600';
         ctx.fillText('A-AIM', labelX, rowY);
 
@@ -295,7 +295,7 @@ export class HUD {
         ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
 
         // フォントを元に戻す
-        ctx.font = 'bold 16px "Courier New", monospace';
+        ctx.font = 'bold 16px "Space Mono", monospace';
     }
 
     // ------------------------------------------

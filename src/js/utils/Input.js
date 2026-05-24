@@ -16,6 +16,7 @@ export class Input {
         this.prevKeys = {};
         this.mouse = { x: 0, y: 0, left: false, right: false };
         this.prevMouse = { left: false, right: false };
+        this.rightHoldFrames = 0; // 右クリック長押しフレームカウント
 
         // Lock-on state
         this.crosshairLocked = false;
@@ -95,9 +96,19 @@ export class Input {
         return this.mouse.left && !this.prevMouse.left;
     }
 
-    /** Right mouse just clicked this frame */
+    /** Right mouse just clicked this frame (押し始めの1フレームのみ) */
     isRightClickPressed() {
         return this.mouse.right && !this.prevMouse.right;
+    }
+
+    /** Right mouse is being held this frame (押し始め以外でも継続中) */
+    isRightClickHeld() {
+        return this.mouse.right;
+    }
+
+    /** Right mouse was just released this frame */
+    isRightClickReleased() {
+        return !this.mouse.right && this.prevMouse.right;
     }
 
     /** Get typed characters/actions of this frame */
@@ -126,5 +137,12 @@ export class Input {
         this.prevKeys = { ...this.keys };
         this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
         this.typedChars = []; // Clear key queue
+
+        // 右クリック長押しカウント
+        if (this.mouse.right) {
+            this.rightHoldFrames++;
+        } else {
+            this.rightHoldFrames = 0;
+        }
     }
 }

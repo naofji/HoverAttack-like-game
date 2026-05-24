@@ -166,7 +166,7 @@ export class EnemyBase {
         // Mission 2+ (missionsCompleted 1+)
         if (this.game.missionsCompleted < 1) return;
 
-        const target = this._findTarget();
+        const target = this._findTarget(BASE_LASER_RANGE);
 
         if (this.turretState === 'idle') {
             if (this.turretCooldownTimer > 0) {
@@ -212,7 +212,7 @@ export class EnemyBase {
 
         this.missileTimer--;
         if (this.missileTimer <= 0) {
-            const target = this._findTarget();
+            const target = this._findTarget(BASE_LASER_RANGE);
             if (target) {
                 this._fireBaseMissile(target);
                 this.missileTimer = ENEMY_BASE_MISSILE_COOLDOWN;
@@ -238,7 +238,7 @@ export class EnemyBase {
 
         this.homingTimer--;
         if (this.homingTimer <= 0) {
-            const target = this._findTarget();
+            const target = this._findTarget(BASE_LASER_RANGE);
             if (target) {
                 this._fireBaseHomingVolley(target);
                 this.homingTimer = ENEMY_BASE_HOMING_COOLDOWN;

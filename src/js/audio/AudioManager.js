@@ -12,6 +12,8 @@ export class AudioManager {
         this.hoverRPM = 0; // Tracks internal engine rev-up (0.0 to 1.0)
         this.bgm = null;
         this.useMP3BGM = true; // Set to true to use an external MP3 file
+        this.alarmBuffer = null;
+        this._alarmLoading = false;
     }
 
     init() {
@@ -24,6 +26,8 @@ export class AudioManager {
         } else {
             this.bgm = new BGMManager(this.ctx);
         }
+
+        this._loadAlarmSound();
 
         // Resume context and retry BGM on first user interaction (browser policy)
         const resume = () => {
@@ -726,28 +730,60 @@ export class AudioManager {
         });
     }
 
+    async _loadAlarmSound() {
+        if (this._alarmLoading || this.alarmBuffer) return;
+        this._alarmLoading = true;
+        try {
+            const response = await fetch('src/assets/audio/alert.mp3');
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            this.alarmBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            console.log('AudioManager: Successfully loaded and decoded alert.mp3');
+        } catch (e) {
+            console.error('AudioManager: Failed to load alert.mp3, falling back to synthesizer alarm:', e);
+            this._alarmLoading = false;
+        }
+    }
+
     playAlarm() {
         this._prepare();
         if (!this.ctx || this.ctx.state === 'suspended') return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
 
-        osc.type = 'square';
-        // Siren effect: oscillate frequency
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.linearRampToValueAtTime(1200, now + 0.15);
-        osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+        // MP3がロード完了している場合はそちらを再生する
+        if (this.alarmBuffer) {
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.alarmBuffer;
 
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.05, now + 0.05);
-        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime); // 適度な音量に調整
 
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+            source.start(0);
+        } else {
+            // ロードされていない場合は旧シンセサイザー音を再生し、裏でロードを再度キック
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
 
-        osc.start(now);
-        osc.stop(now + 0.3);
+            osc.type = 'square';
+            // Siren effect: oscillate frequency
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.15);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.05, now + 0.05);
+            gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.3);
+
+            this._loadAlarmSound();
+        }
     }
 
     playProximityAlarm() {

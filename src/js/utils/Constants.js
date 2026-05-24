@@ -92,7 +92,7 @@ export const CAMERA_LERP = 0.08;
 // --- HUD ---
 export const HUD_TOP_HEIGHT = 60; // Expanded to fit 2 rows
 export const HUD_BOTTOM_HEIGHT = 0;
-export const HUD_FONT = 'bold 16px "Courier New", monospace';
+export const HUD_FONT = 'bold 16px "Space Mono", monospace';
 export const HUD_COLOR = '#00FF00';
 export const HUD_BG_COLOR = 'rgba(0, 0, 0, 0.85)';
 
@@ -261,7 +261,7 @@ export const FLAG_SCORE = 5000;
 export const FLAG_COLOR = '#FF0000';
 
 // --- Enemy Base Laser ---
-export const BASE_LASER_RANGE = CANVAS_WIDTH * 0.5;
+export const BASE_LASER_RANGE = CANVAS_WIDTH * 0.55;
 export const BASE_LASER_CHARGE_TIME = 40; // frames
 export const BASE_LASER_COOLDOWN = 90;  // frames
 export const BASE_LASER_SPEED = 12;
