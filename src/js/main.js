@@ -90,7 +90,7 @@ const Game = {
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
-    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'ranking_display'
+    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'ranking_display' | 'wall_of_fame_display'
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
@@ -132,7 +132,7 @@ const Game = {
         this.spawnManager = new SpawnManager(this);
         this.stateManager = new GameStateManager(this);
         this.screenRenderer = new ScreenRenderer(this);
-        this.highScoreManager = new HighScoreManager();
+        this.highScoreManager = new HighScoreManager(this.week.weekId);
 
         const spawnPos = this.spawnManager.findSpawnPosition(5, 5, 12, 10);
         this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
@@ -177,6 +177,7 @@ const Game = {
             case 'title': return this._updateTitle(deltaTime);
             case 'how_to_play': return this._updateHowToPlay(deltaTime);
             case 'ranking_display': return this._updateRankingDisplay(deltaTime);
+            case 'wall_of_fame_display': return this._updateWallOfFameDisplay(deltaTime);
             case 'ranking_entry': return this._updateRankingEntry();
             case 'gameover': return this._updateGameOver(deltaTime);
             case 'game_clear': return this._updateGameClear(deltaTime);
@@ -213,6 +214,18 @@ const Game = {
     },
 
     _updateRankingDisplay(deltaTime) {
+        this.stateTimer += deltaTime;
+        if (this.stateTimer > 10000) {
+            this.gameState = 'wall_of_fame_display';
+            this.stateTimer = 0;
+        } else if (this._anyKeyOrClick()) {
+            this.stateManager.restart();
+            this.gameState = 'playing';
+            audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    _updateWallOfFameDisplay(deltaTime) {
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
             this.gameState = 'title';
@@ -695,7 +708,11 @@ const Game = {
             return;
         }
         if (this.gameState === 'ranking_display') {
-            this.screenRenderer.drawRankingDisplay(ctx, this.highScoreManager.getTop10(), this.lastRankIndex);
+            this.screenRenderer.drawRankingDisplay(ctx, this.highScoreManager.getTop10(), this.lastRankIndex, this.week.weekId);
+            return;
+        }
+        if (this.gameState === 'wall_of_fame_display') {
+            this.screenRenderer.drawWallOfFame(ctx, this.highScoreManager.getWallOfFame());
             return;
         }
 
