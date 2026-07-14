@@ -6,6 +6,8 @@ import { Map } from '../world/Map.js';
 import { Player } from '../entities/Player.js';
 import { Carrier } from '../entities/Carrier.js';
 import { HUD } from '../ui/HUD.js';
+import { SeededRNG } from '../utils/SeededRNG.js';
+import { stageSeed } from '../utils/WeekSeed.js';
 
 export class GameStateManager {
     constructor(game) {
@@ -42,7 +44,8 @@ export class GameStateManager {
         game.flag = null;
         game.gameState = 'playing';
 
-        // Regenerate map
+        // Regenerate map (seeded per week + mission for reproducibility)
+        game.rng = new SeededRNG(stageSeed(game.weekSeed, game.missionsCompleted));
         game.map = new Map(game, game.missionsCompleted);
         game.hud = new HUD(game);
 

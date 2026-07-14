@@ -1,81 +1,102 @@
 // ============================================
-// HighScore Manager
+// HighScore Manager - weekly ranking + wall of fame (local)
 // ============================================
 
-const STORAGE_KEY = 'hoverattack_highscores';
+const WEEKLY_KEY = 'hoverattack_weekly_ranking';
+const FAME_KEY = 'hoverattack_wall_of_fame';
+const MAX_WEEKLY = 20;
+const FAME_TOP = 3;
+const MIN_SCORE = 10000; // Scores must exceed this to be recordable.
 
 export class HighScoreManager {
-    constructor() {
-        this.scores = [];
-        this.loadScores();
+    constructor(weekId) {
+        this.weekId = weekId;
+        this.scores = [];        // this week's ranking (up to MAX_WEEKLY)
+        this.wallOfFame = [];     // [{ weekId, entries: [top3] }], oldest first in storage
+        this._load();
     }
 
-    loadScores() {
+    _load() {
+        // Load wall of fame (persistent archive).
         try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            if (data) {
-                this.scores = JSON.parse(data);
-            } else {
-                this.scores = this._getDefaultScores();
-                this.saveScores();
+            const fameData = localStorage.getItem(FAME_KEY);
+            this.wallOfFame = fameData ? JSON.parse(fameData) : [];
+        } catch (e) {
+            console.error('Failed to load wall of fame:', e);
+            this.wallOfFame = [];
+        }
+
+        // Load this week's ranking; roll over if the stored week differs.
+        let stored = null;
+        try {
+            const data = localStorage.getItem(WEEKLY_KEY);
+            stored = data ? JSON.parse(data) : null;
+        } catch (e) {
+            console.error('Failed to load weekly ranking:', e);
+            stored = null;
+        }
+
+        if (stored && stored.weekId === this.weekId) {
+            this.scores = Array.isArray(stored.scores) ? stored.scores : [];
+        } else {
+            // New week: archive the previous week's top 3, then reset.
+            if (stored && Array.isArray(stored.scores) && stored.scores.length > 0) {
+                this.wallOfFame.push({
+                    weekId: stored.weekId,
+                    entries: stored.scores.slice(0, FAME_TOP),
+                });
+                this._saveFame();
             }
-        } catch (e) {
-            console.error('Failed to load high scores:', e);
-            this.scores = this._getDefaultScores();
+            this.scores = [];
+            this._saveWeekly();
         }
     }
 
-    saveScores() {
+    _saveWeekly() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.scores));
+            localStorage.setItem(WEEKLY_KEY, JSON.stringify({ weekId: this.weekId, scores: this.scores }));
         } catch (e) {
-            console.error('Failed to save high scores:', e);
+            console.error('Failed to save weekly ranking:', e);
         }
     }
 
-    _getDefaultScores() {
-        // Initial dummy scores (Top 20)
-        return [
-            { name: 'HOVER', score: 20000, mission: 7, clearTime: '05:00.00' },
-            { name: 'ATTACK', score: 18000, mission: 6, clearTime: null },
-            { name: 'ROBOT', score: 16000, mission: 5, clearTime: null },
-            { name: 'CAVE', score: 15000, mission: 4, clearTime: null },
-            { name: 'LASER', score: 14000, mission: 4, clearTime: null },
-            { name: 'BASE', score: 13000, mission: 3, clearTime: null },
-            { name: 'DRONE', score: 12000, mission: 3, clearTime: null },
-            { name: 'TANK', score: 11000, mission: 3, clearTime: null },
-            { name: 'PLAYER', score: 10000, mission: 2, clearTime: null },
-            { name: 'NOVICE', score: 9000, mission: 2, clearTime: null },
-            { name: 'GUEST2', score: 8000, mission: 2, clearTime: null },
-            { name: 'GUEST3', score: 7000, mission: 2, clearTime: null },
-            { name: 'GUEST4', score: 6000, mission: 1, clearTime: null },
-            { name: 'GUEST5', score: 5000, mission: 1, clearTime: null },
-            { name: 'GUEST6', score: 4000, mission: 1, clearTime: null },
-            { name: 'GUEST7', score: 3000, mission: 1, clearTime: null },
-            { name: 'GUEST8', score: 2000, mission: 1, clearTime: null },
-            { name: 'GUEST9', score: 1000, mission: 1, clearTime: null },
-            { name: 'GUEST10', score: 500, mission: 1, clearTime: null },
-            { name: 'GUEST11', score: 100, mission: 1, clearTime: null }
-        ];
+    _saveFame() {
+        try {
+            localStorage.setItem(FAME_KEY, JSON.stringify(this.wallOfFame));
+        } catch (e) {
+            console.error('Failed to save wall of fame:', e);
+        }
     }
 
     isHighScore(score) {
-        if (this.scores.length < 20) return true;
+        if (score <= MIN_SCORE) return false;
+        if (this.scores.length < MAX_WEEKLY) return true;
         return score > this.scores[this.scores.length - 1].score;
     }
 
     addScore(name, score, mission, clearTime = null) {
-        const entry = { name: (name || 'AAA').toUpperCase().substring(0, 10), score: score, mission: mission, clearTime: clearTime };
+        const entry = {
+            name: (name || 'AAA').toUpperCase().substring(0, 10),
+            score: score,
+            mission: mission,
+            clearTime: clearTime,
+        };
         this.scores.push(entry);
         this.scores.sort((a, b) => b.score - a.score);
-        if (this.scores.length > 20) {
-            this.scores = this.scores.slice(0, 20);
+        if (this.scores.length > MAX_WEEKLY) {
+            this.scores = this.scores.slice(0, MAX_WEEKLY);
         }
-        this.saveScores();
+        this._saveWeekly();
         return this.scores.indexOf(entry);
     }
 
+    /** This week's ranking (up to MAX_WEEKLY entries). */
     getTop10() {
         return this.scores;
+    }
+
+    /** Wall of fame, newest week first. */
+    getWallOfFame() {
+        return this.wallOfFame.slice().reverse();
     }
 }

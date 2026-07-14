@@ -454,7 +454,7 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    drawRankingDisplay(ctx, scores, highlightIndex = -1) {
+    drawRankingDisplay(ctx, scores, highlightIndex = -1, weekId = '') {
         const canvas = this.game.canvas;
 
         ctx.fillStyle = '#000000';
@@ -463,7 +463,11 @@ export class ScreenRenderer {
         ctx.fillStyle = '#00FF00';
         ctx.font = 'bold 42px "Space Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('WALL OF FAME', canvas.width / 2, 50);
+        ctx.fillText('THIS WEEK', canvas.width / 2, 40);
+
+        ctx.fillStyle = '#00FF00';
+        ctx.font = 'bold 18px "Space Mono", monospace';
+        ctx.fillText(weekId, canvas.width / 2, 68);
 
         ctx.font = 'bold 19px "Space Mono", monospace';
         ctx.fillStyle = '#AAAAAA';
@@ -513,6 +517,59 @@ export class ScreenRenderer {
             ctx.restore();
         }
 
+        ctx.textAlign = 'left';
+    }
+
+    drawWallOfFame(ctx, fame) {
+        const canvas = this.game.canvas;
+
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 42px "Space Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('WALL OF FAME', canvas.width / 2, 50);
+
+        ctx.font = 'bold 18px "Space Mono", monospace';
+
+        if (!fame || fame.length === 0) {
+            ctx.fillStyle = '#AAAAAA';
+            ctx.fillText('NO CHAMPIONS YET', canvas.width / 2, canvas.height / 2);
+        } else {
+            const medals = ['#FFFF00', '#CCCCCC', '#CD7F32'];
+            let y = 110;
+            const textLeft = canvas.width / 2 - 255;
+            for (const wk of fame) {
+                if (y > canvas.height - 60) break;
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#00FF88';
+                ctx.font = 'bold 18px "Space Mono", monospace';
+                ctx.fillText(wk.weekId, textLeft, y);
+                y += 24;
+                ctx.font = 'bold 17px "Space Mono", monospace';
+                wk.entries.forEach((e, i) => {
+                    ctx.fillStyle = medals[i] || '#FFFFFF';
+                    const rank = String(i + 1);
+                    const scoreStr = String(e.score).padStart(7, ' ');
+                    const nameStr = (e.name).padEnd(10, ' ');
+                    ctx.fillText(`  ${rank}.  ${scoreStr}   ${nameStr}`, textLeft, y);
+                    y += 22;
+                });
+                y += 8;
+            }
+        }
+
+        ctx.textAlign = 'center';
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
+            ctx.restore();
+        }
         ctx.textAlign = 'left';
     }
 

@@ -125,8 +125,8 @@ export class Map {
         // Random large enemy area
         const enemyW = 28;
         const enemyH = 20;
-        const enemyC = BORDER_THICKNESS + Math.floor(this.cols * 0.3 + Math.random() * (this.cols * 0.4 - enemyW));
-        const enemyR = BORDER_THICKNESS + Math.floor(this.rows * 0.3 + Math.random() * (this.rows * 0.4 - enemyH));
+        const enemyC = BORDER_THICKNESS + Math.floor(this.cols * 0.3 + this.game.rng.next() * (this.cols * 0.4 - enemyW));
+        const enemyR = BORDER_THICKNESS + Math.floor(this.rows * 0.3 + this.game.rng.next() * (this.rows * 0.4 - enemyH));
         this._carveRoom(enemyC, enemyR, enemyW, enemyH);
         this.rooms.push({ centerR: enemyR + Math.floor(enemyH / 2), centerC: enemyC + Math.floor(enemyW / 2) });
 
@@ -137,13 +137,13 @@ export class Map {
 
         for (let i = 0; i < numRooms; i++) {
             // Room sizes also scale slightly
-            const w = 15 + Math.floor(Math.random() * 20);
-            const h = 15 + Math.floor(Math.random() * 20);
-            const c = BORDER_THICKNESS + Math.floor(Math.random() * (this.cols - BORDER_THICKNESS * 2 - w));
-            const r = BORDER_THICKNESS + Math.floor(Math.random() * (this.rows - BORDER_THICKNESS * 2 - h));
+            const w = 15 + Math.floor(this.game.rng.next() * 20);
+            const h = 15 + Math.floor(this.game.rng.next() * 20);
+            const c = BORDER_THICKNESS + Math.floor(this.game.rng.next() * (this.cols - BORDER_THICKNESS * 2 - w));
+            const r = BORDER_THICKNESS + Math.floor(this.game.rng.next() * (this.rows - BORDER_THICKNESS * 2 - h));
 
             // 50% chance for elliptic room vs rectangular
-            if (Math.random() < 0.5) {
+            if (this.game.rng.next() < 0.5) {
                 this._carveEllipse(r + Math.floor(h / 2), c + Math.floor(w / 2), Math.floor(h / 2), Math.floor(w / 2));
             } else {
                 this._carveRoom(c, r, w, h);
@@ -156,8 +156,8 @@ export class Map {
 
         // Step 6: Add some random loops/cross-connections
         for (let i = 0; i < 5; i++) {
-            const r1 = this.rooms[Math.floor(Math.random() * this.rooms.length)];
-            const r2 = this.rooms[Math.floor(Math.random() * this.rooms.length)];
+            const r1 = this.rooms[Math.floor(this.game.rng.next() * this.rooms.length)];
+            const r2 = this.rooms[Math.floor(this.game.rng.next() * this.rooms.length)];
             this._carveTunnelPath(r1.centerR, r1.centerC, r2.centerR, r2.centerC, 2);
         }
 
@@ -198,8 +198,8 @@ export class Map {
                 // Check if current tile is empty, and there's plenty of space above/below it (7x7 area)
                 if (this._isAreaEmpty(r - 3, c, 7, 7)) {
                     // With a low probability, generate a floating platform here
-                    if (Math.random() < 0.06) { // Sparse platforms
-                        const platWidth = 4 + Math.floor(Math.random() * 6); // width 4 to 9
+                    if (this.game.rng.next() < 0.06) { // Sparse platforms
+                        const platWidth = 4 + Math.floor(this.game.rng.next() * 6); // width 4 to 9
                         const platHeight = 1; // thickness 1 (thinner)
 
                         for (let pr = r; pr < r + platHeight; pr++) {
@@ -292,7 +292,7 @@ export class Map {
 
             // Carve a tunnel between bestFrom and bestTo
             // Varying tunnel width between 6 and 11 for massive connecting halls
-            const tunnelWidth = 6 + Math.floor(Math.random() * 6);
+            const tunnelWidth = 6 + Math.floor(this.game.rng.next() * 6);
             this._carveTunnelPath(bestFrom.centerR, bestFrom.centerC, bestTo.centerR, bestTo.centerC, tunnelWidth);
 
             connected.push(bestTo);
@@ -305,7 +305,7 @@ export class Map {
         const midR = r2;
 
         // Vertical then Horizontal (or vice versa)
-        if (Math.random() < 0.5) {
+        if (this.game.rng.next() < 0.5) {
             this._carveTunnelLine(r1, c1, r2, c1, width); // Vertical
             this._carveTunnelLine(r2, c1, r2, c2, width); // Horizontal
         } else {
@@ -409,7 +409,7 @@ export class Map {
 
         while (r < targetR || c < targetC) {
             this._carveTunnel(r, c, 3);
-            const rand = Math.random();
+            const rand = this.game.rng.next();
             if (c < targetC && (rand < 0.5 || r >= targetR)) {
                 c += 1;
             } else if (r < targetR) {
@@ -436,7 +436,7 @@ export class Map {
     _placeHardBlocks() {
         for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
             for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                if (this.grid[r][c] === BLOCK_NORMAL && Math.random() < HARD_BLOCK_CHANCE) {
+                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < HARD_BLOCK_CHANCE) {
                     this.grid[r][c] = BLOCK_HARD;
                     this.blockHP[r][c] = HARD_BLOCK_HP;
                 }
@@ -468,7 +468,7 @@ export class Map {
         const spawns = [];
         const count = Math.min(this.targetLandmineCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.game.rng.next() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         for (let i = 0; i < count; i++) {
@@ -506,7 +506,7 @@ export class Map {
         const spawns = [];
         const count = Math.min(this.targetTankCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.game.rng.next() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         for (let i = 0; i < count; i++) {
@@ -540,7 +540,7 @@ export class Map {
         const spawns = [];
         const count = Math.min(this.targetAttackerCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.game.rng.next() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         for (let i = 0; i < count; i++) {
@@ -572,7 +572,7 @@ export class Map {
         const spawns = [];
         const count = Math.min(this.targetDroneCount, candidates.length);
         for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.game.rng.next() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         for (let i = 0; i < count; i++) {
@@ -589,7 +589,7 @@ export class Map {
         // Random position along the right edge: between middle (rows/2) and bottom (near rows-15)
         const minR = Math.floor(this.rows / 2);
         const maxR = this.rows - 15;
-        const centerR = minR + Math.floor(Math.random() * (maxR - minR));
+        const centerR = minR + Math.floor(this.game.rng.next() * (maxR - minR));
         const centerC = this.cols - 12;
 
         // Ensure there is a tunnel connecting to it
@@ -744,7 +744,7 @@ export class Map {
 
         // Shuffle candidates
         for (let i = allCandidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.game.rng.next() * (i + 1));
             [allCandidates[i], allCandidates[j]] = [allCandidates[j], allCandidates[i]];
         }
 

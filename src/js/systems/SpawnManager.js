@@ -80,7 +80,7 @@ export class SpawnManager {
                     }
                 }
                 if (!isOverlapping) return { x, y };
-                x += (Math.random() < 0.5 ? -1 : 1) * 16;
+                x += (this.game.rng.next() < 0.5 ? -1 : 1) * 16;
             }
             return { x, y };
         };
@@ -106,7 +106,7 @@ export class SpawnManager {
 
         // Attackers (Humanoids)
         for (const pos of game.map.enemyAttackerSpawns) {
-            let rnd = Math.random() * totalWeight;
+            let rnd = this.game.rng.next() * totalWeight;
             let selectedTypeKey = 'standard';
 
             for (const [key, typeDef] of Object.entries(availableTypes)) {
