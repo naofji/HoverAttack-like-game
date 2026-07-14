@@ -293,3 +293,7 @@ export const AUTO_AIM_DURATION = 3600;         // 60秒 (60fps)
 export const AUTO_AIM_MAX_DURATION = 10800;    // 上限3分 (60fps)
 export const AUTO_AIM_SNAP_RADIUS = 120;      // スナップ判定半径 (world px)
 export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマウス移動量 (screen px/frame)
+
+// --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
+// Leave empty to run fully offline (local ranking only). See docs gas-setup.md.
+export const LEADERBOARD_URL = '';
