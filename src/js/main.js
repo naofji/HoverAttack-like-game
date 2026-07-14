@@ -20,6 +20,8 @@ import {
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST
 } from './utils/Constants.js';
+import { SeededRNG } from './utils/SeededRNG.js';
+import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
 import { Player } from './entities/Player.js';
@@ -115,6 +117,12 @@ const Game = {
         console.log('Hover Attack v1.0 Initializing...');
 
         this.input = new Input(this.canvas);
+
+        // Weekly deterministic seed: same ISO week => same stages for everyone.
+        this.week = getCurrentWeek();
+        this.weekSeed = this.week.seed;
+        this.rng = new SeededRNG(stageSeed(this.weekSeed, this.missionsCompleted));
+
         this.map = new Map(this, this.missionsCompleted);
         this.camera = new Camera(this);
         this.hud = new HUD(this);
