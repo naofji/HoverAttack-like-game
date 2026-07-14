@@ -38,9 +38,11 @@ import { CollisionManager } from './systems/CollisionManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
+import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
 import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
+import { LEADERBOARD_URL } from './utils/Constants.js';
 
 // ============================================
 // Game Object
@@ -133,6 +135,9 @@ const Game = {
         this.stateManager = new GameStateManager(this);
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
+        this.onlineLeaderboard = new OnlineLeaderboard(LEADERBOARD_URL);
+        this.onlineData = null;                       // { weekId, ranking, fame } when loaded
+        this.onlineStatus = LEADERBOARD_URL ? 'loading' : 'offline';
 
         const spawnPos = this.spawnManager.findSpawnPosition(5, 5, 12, 10);
         this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);
@@ -206,6 +211,7 @@ const Game = {
             this.gameState = 'ranking_display';
             this.stateTimer = 0;
             this.lastRankIndex = -1;
+            this._refreshOnline(); // fire-and-forget; render falls back to local until ready
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
@@ -238,6 +244,30 @@ const Game = {
         }
     },
 
+    async _refreshOnline() {
+        if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) {
+            this.onlineStatus = 'offline';
+            return;
+        }
+        this.onlineStatus = 'loading';
+        const res = await this.onlineLeaderboard.fetchData();
+        if (res.ok) {
+            this.onlineData = res;
+            this.onlineStatus = 'ok';
+        } else {
+            this.onlineStatus = 'offline';
+        }
+    },
+
+    async _submitOnline(name, score, mission, clearTime) {
+        if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) return;
+        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime });
+        if (res.ok) {
+            this.lastRankIndex = res.rank;
+            await this._refreshOnline();
+        }
+    },
+
     _updateRankingEntry() {
         const chars = this.input.getTypedChars();
         for (const c of chars) {
@@ -250,6 +280,7 @@ const Game = {
                 this.lastRankIndex = this.highScoreManager.addScore(
                     this.playerNameInput, this.score, displayMission, formattedTime
                 );
+                this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime);
                 this.gameState = 'ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
@@ -708,11 +739,16 @@ const Game = {
             return;
         }
         if (this.gameState === 'ranking_display') {
-            this.screenRenderer.drawRankingDisplay(ctx, this.highScoreManager.getTop10(), this.lastRankIndex, this.week.weekId);
+            const online = this.onlineStatus === 'ok' && this.onlineData;
+            const scores = online ? this.onlineData.ranking : this.highScoreManager.getTop10();
+            const weekId = online ? this.onlineData.weekId : this.week.weekId;
+            this.screenRenderer.drawRankingDisplay(ctx, scores, this.lastRankIndex, weekId, this.onlineStatus);
             return;
         }
         if (this.gameState === 'wall_of_fame_display') {
-            this.screenRenderer.drawWallOfFame(ctx, this.highScoreManager.getWallOfFame());
+            const online = this.onlineStatus === 'ok' && this.onlineData;
+            const fame = online ? this.onlineData.fame : this.highScoreManager.getWallOfFame();
+            this.screenRenderer.drawWallOfFame(ctx, fame, this.onlineStatus);
             return;
         }
 
