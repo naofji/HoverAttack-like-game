@@ -6,6 +6,7 @@ const WEEKLY_KEY = 'hoverattack_weekly_ranking';
 const FAME_KEY = 'hoverattack_wall_of_fame';
 const MAX_WEEKLY = 20;
 const FAME_TOP = 3;
+const MIN_SCORE = 1000; // Scores must exceed this to be recordable.
 
 export class HighScoreManager {
     constructor(weekId) {
@@ -68,6 +69,7 @@ export class HighScoreManager {
     }
 
     isHighScore(score) {
+        if (score <= MIN_SCORE) return false;
         if (this.scores.length < MAX_WEEKLY) return true;
         return score > this.scores[this.scores.length - 1].score;
     }
