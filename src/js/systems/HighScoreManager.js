@@ -6,7 +6,7 @@ const WEEKLY_KEY = 'hoverattack_weekly_ranking';
 const FAME_KEY = 'hoverattack_wall_of_fame';
 const MAX_WEEKLY = 20;
 const FAME_TOP = 3;
-const MIN_SCORE = 1000; // Scores must exceed this to be recordable.
+const MIN_SCORE = 10000; // Scores must exceed this to be recordable.
 
 export class HighScoreManager {
     constructor(weekId) {

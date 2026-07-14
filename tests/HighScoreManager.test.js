@@ -22,12 +22,12 @@ test('weekly ranking starts empty (no dummy scores)', async () => {
   assert.deepEqual(m.getWallOfFame(), []);
 });
 
-test('isHighScore requires score above 1000, even when ranking is empty', async () => {
+test('isHighScore requires score above 10000, even when ranking is empty', async () => {
   const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
   const m = new HighScoreManager('2026-W10');
   assert.equal(m.isHighScore(0), false);
-  assert.equal(m.isHighScore(1000), false); // boundary: not strictly greater
-  assert.equal(m.isHighScore(1001), true);
+  assert.equal(m.isHighScore(10000), false); // boundary: not strictly greater
+  assert.equal(m.isHighScore(10001), true);
 });
 
 test('addScore keeps top 20 sorted descending', async () => {
