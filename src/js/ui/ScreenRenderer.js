@@ -454,11 +454,23 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    drawRankingDisplay(ctx, scores, highlightIndex = -1, weekId = '') {
+    _drawStatusBadge(ctx, status) {
+        if (!status || status === 'ok') return;
+        const canvas = this.game.canvas;
+        ctx.save();
+        ctx.textAlign = 'right';
+        ctx.font = 'bold 14px "Space Mono", monospace';
+        ctx.fillStyle = status === 'loading' ? '#FFD700' : '#FF6666';
+        ctx.fillText(status === 'loading' ? 'LOADING…' : 'OFFLINE', canvas.width - 12, 20);
+        ctx.restore();
+    }
+
+    drawRankingDisplay(ctx, scores, highlightIndex = -1, weekId = '', status = 'ok') {
         const canvas = this.game.canvas;
 
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        this._drawStatusBadge(ctx, status);
 
         ctx.fillStyle = '#00FF00';
         ctx.font = 'bold 42px "Space Mono", monospace';
@@ -520,11 +532,12 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    drawWallOfFame(ctx, fame) {
+    drawWallOfFame(ctx, fame, status = 'ok') {
         const canvas = this.game.canvas;
 
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        this._drawStatusBadge(ctx, status);
 
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 42px "Space Mono", monospace';
