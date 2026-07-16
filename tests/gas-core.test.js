@@ -41,35 +41,46 @@ test('sanitizeName strips control chars, uppercases, caps length, defaults', () 
 });
 
 test('validateEntry accepts a valid entry and rejects bad ones', () => {
-  const ok = ctx.validateEntry({ name: 'zz', score: 12345, mission: 4, clearTime: null });
+  const ok = ctx.validateEntry({ name: 'zz', score: 12345, mission: 4, clearTime: null, country: 'jp' });
   assert.equal(ok.ok, true);
-  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null });
+  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null, country: 'JP' });
   assert.equal(ctx.validateEntry({ name: 'x', score: 10000 }).ok, false); // not > MIN_SCORE
   assert.equal(ctx.validateEntry({ name: 'x', score: -5 }).ok, false);
   assert.equal(ctx.validateEntry({ name: 'x', score: 1.5 }).ok, false); // non-integer
   assert.equal(ctx.validateEntry(null).ok, false);
 });
 
-test('topNForWeek filters by weekId, sorts desc, slices n', () => {
+test('sanitizeCountry keeps 2 letters uppercased, else empty', () => {
+  assert.equal(ctx.sanitizeCountry('jp'), 'JP');
+  assert.equal(ctx.sanitizeCountry('US'), 'US');
+  assert.equal(ctx.sanitizeCountry('j'), '');
+  assert.equal(ctx.sanitizeCountry('jpn'), '');
+  assert.equal(ctx.sanitizeCountry('1!'), '');
+  assert.equal(ctx.sanitizeCountry(null), '');
+});
+
+test('topNForWeek filters by weekId, sorts desc, slices n, carries country', () => {
   const rows = [
-    ['t', '2026-W29', 'A', 100, 1, ''],
-    ['t', '2026-W29', 'B', 300, 2, ''],
-    ['t', '2026-W28', 'C', 999, 3, ''], // other week
-    ['t', '2026-W29', 'D', 200, 1, ''],
+    ['t', '2026-W29', 'A', 100, 1, '', 'JP'],
+    ['t', '2026-W29', 'B', 300, 2, '', 'US'],
+    ['t', '2026-W28', 'C', 999, 3, '', 'GB'], // other week
+    ['t', '2026-W29', 'D', 200, 1, '', ''],
   ];
   const top = ctx.topNForWeek(rows, '2026-W29', 2);
   assert.deepEqual(top.map((e) => e.name), ['B', 'D']);
   assert.equal(top[0].score, 300);
+  assert.equal(top[0].country, 'US');
 });
 
-test('groupFame groups by week, newest first, entries sorted desc', () => {
+test('groupFame groups by week, newest first, entries sorted desc, carries country', () => {
   const fameRows = [
-    ['2026-W27', 1, 'A', 500, 3, ''],
-    ['2026-W27', 2, 'B', 400, 2, ''],
-    ['2026-W28', 1, 'C', 900, 4, ''],
+    ['2026-W27', 1, 'A', 500, 3, '', 'JP'],
+    ['2026-W27', 2, 'B', 400, 2, '', 'US'],
+    ['2026-W28', 1, 'C', 900, 4, '', 'GB'],
   ];
   const fame = ctx.groupFame(fameRows);
   assert.equal(fame[0].weekId, '2026-W28'); // newest first
   assert.equal(fame[1].weekId, '2026-W27');
   assert.deepEqual(fame[1].entries.map((e) => e.name), ['A', 'B']);
+  assert.equal(fame[1].entries[0].country, 'JP');
 });
