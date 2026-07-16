@@ -37,6 +37,11 @@ function sanitizeName(raw) {
   return s.length ? s : 'AAA';
 }
 
+function sanitizeCountry(raw) {
+  var s = (raw == null ? '' : String(raw)).toUpperCase().replace(/[^A-Z]/g, '');
+  return s.length === 2 ? s : '';
+}
+
 function validateEntry(entry) {
   if (!entry || typeof entry !== 'object') return { ok: false, reason: 'bad-body' };
   var score = Number(entry.score);
@@ -44,14 +49,14 @@ function validateEntry(entry) {
   if (score <= MIN_SCORE || score > SCORE_CAP) return { ok: false, reason: 'score-range' };
   var mission = Math.min(7, Math.max(1, Math.floor(Number(entry.mission) || 1)));
   var clearTime = (typeof entry.clearTime === 'string' && entry.clearTime) ? entry.clearTime : null;
-  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime } };
+  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime, country: sanitizeCountry(entry.country) } };
 }
 
 function topNForWeek(rows, weekId, n) {
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) === weekId) {
-      out.push({ name: rows[i][2], score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null });
+      out.push({ name: rows[i][2], score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '' });
     }
   }
   out.sort(function (a, b) { return b.score - a.score; });
@@ -64,7 +69,7 @@ function groupFame(fameRows) {
   for (var i = 0; i < fameRows.length; i++) {
     var wk = String(fameRows[i][0]);
     if (!byWeek[wk]) { byWeek[wk] = []; order.push(wk); }
-    byWeek[wk].push({ name: fameRows[i][2], score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null });
+    byWeek[wk].push({ name: fameRows[i][2], score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '' });
   }
   var out = [];
   for (var j = order.length - 1; j >= 0; j--) {
@@ -84,7 +89,7 @@ function getSheet_(name) {
 function readRows_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  return sheet.getRange(2, 1, lastRow - 1, 7).getValues();
 }
 
 function jsonOut_(obj) {
@@ -119,7 +124,7 @@ function doPost(e) {
       }
     }
     var weekId = isoWeekId(now);
-    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || ''];
+    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || ''];
     sheet.appendRow(row);
     rows.push(row);
     var top = topNForWeek(rows, weekId, MAX_RANKING);
@@ -145,7 +150,7 @@ function weeklySnapshot() {
     }
     var top = topNForWeek(readRows_(getSheet_(SCORES_SHEET)), prev, FAME_TOP);
     for (var r = 0; r < top.length; r++) {
-      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '']);
+      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '']);
     }
   } finally {
     lock.releaseLock();

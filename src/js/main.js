@@ -43,6 +43,7 @@ import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
 import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
+import { getCountryCode } from './utils/geo.js';
 
 // ============================================
 // Game Object
@@ -259,9 +260,9 @@ const Game = {
         }
     },
 
-    async _submitOnline(name, score, mission, clearTime) {
+    async _submitOnline(name, score, mission, clearTime, country) {
         if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) return;
-        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime });
+        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country });
         if (res.ok) {
             this.lastRankIndex = res.rank;
             await this._refreshOnline();
@@ -277,10 +278,11 @@ const Game = {
                 if (this.playerNameInput.trim().length === 0) this.playerNameInput = 'AAA';
                 const displayMission = Math.min(7, this.missionsCompleted + 1);
                 const formattedTime = this.missionsCompleted >= 7 ? this._formatTime(this.totalTime) : null;
+                const country = getCountryCode();
                 this.lastRankIndex = this.highScoreManager.addScore(
-                    this.playerNameInput, this.score, displayMission, formattedTime
+                    this.playerNameInput, this.score, displayMission, formattedTime, country
                 );
-                this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime);
+                this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
                 this.gameState = 'ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
