@@ -74,12 +74,13 @@ export class HighScoreManager {
         return score > this.scores[this.scores.length - 1].score;
     }
 
-    addScore(name, score, mission, clearTime = null) {
+    addScore(name, score, mission, clearTime = null, country = '') {
         const entry = {
             name: (name || 'AAA').toUpperCase().substring(0, 10),
             score: score,
             mission: mission,
             clearTime: clearTime,
+            country: country || '',
         };
         this.scores.push(entry);
         this.scores.sort((a, b) => b.score - a.score);

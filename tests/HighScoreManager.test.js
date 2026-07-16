@@ -68,3 +68,13 @@ test('same week reload preserves this week ranking without re-archiving', async 
   assert.equal(m2.getTop10().length, 1);
   assert.deepEqual(m2.getWallOfFame(), []);
 });
+
+test('addScore stores country and defaults to empty string', async () => {
+  const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
+  const m = new HighScoreManager('2026-W10');
+  m.addScore('AAA', 20000, 4, null, 'JP');
+  m.addScore('BBB', 15000, 3, null); // no country
+  const top = m.getTop10();
+  assert.equal(top[0].country, 'JP');
+  assert.equal(top[1].country, '');
+});
