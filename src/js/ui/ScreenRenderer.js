@@ -456,17 +456,6 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    _drawStatusBadge(ctx, status) {
-        if (!status || status === 'ok') return;
-        const canvas = this.game.canvas;
-        ctx.save();
-        ctx.textAlign = 'right';
-        ctx.font = 'bold 14px "Space Mono", monospace';
-        ctx.fillStyle = status === 'loading' ? '#FFD700' : '#FF6666';
-        ctx.fillText(status === 'loading' ? 'LOADING…' : 'OFFLINE', canvas.width - 12, 20);
-        ctx.restore();
-    }
-
     _drawRankingList(ctx, o) {
         const canvas = this.game.canvas;
 
@@ -545,74 +534,6 @@ export class ScreenRenderer {
             bg: '#080b0f', titleColor: '#D8DEE6', subtitleColor: '#95a0ab',
             rowBright: '#FFFFFF', rowDim: '#5f6b78',
         });
-    }
-
-    drawRankingDisplay(ctx, scores, highlightIndex = -1, weekId = '', status = 'ok') {
-        const canvas = this.game.canvas;
-
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        this._drawStatusBadge(ctx, status);
-
-        ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 42px "Space Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('THIS WEEK', canvas.width / 2, 40);
-
-        ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 18px "Space Mono", monospace';
-        ctx.fillText(weekId, canvas.width / 2, 68);
-
-        ctx.font = 'bold 19px "Space Mono", monospace';
-        ctx.fillStyle = '#AAAAAA';
-        // Headers for single column
-        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 95);
-
-        ctx.font = 'bold 19px "Space Mono", monospace';
-        const startY = 130;
-        const lineH = 22.5; // Fit 20 lines perfectly with max vertical spread
-
-        scores.forEach((entry, index) => {
-            if (index === highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
-                ctx.fillStyle = '#FF00FF'; // Blink magenta/pink for new entry
-            } else {
-                if (index === 0) ctx.fillStyle = '#FFFF00'; // 1st Gold
-                else if (index === 1) ctx.fillStyle = '#CCCCCC'; // 2nd Silver
-                else if (index === 2) ctx.fillStyle = '#CD7F32'; // 3rd Bronze
-                else ctx.fillStyle = '#FFFFFF';
-            }
-
-            // Fixed width formatting
-            const rank = String(index + 1).padStart(2, ' ');
-            const scoreStr = String(entry.score).padStart(7, ' ');
-            const nameStr = (entry.name).padEnd(10, ' ');
-            const missionStr = String(entry.mission).padStart(2, ' ');
-            let timeStr = "";
-            if (entry.clearTime) {
-                timeStr = ` (${entry.clearTime})`;
-            }
-
-            // Single column layout (Adjusted for wider font size)
-            const textLeft = canvas.width / 2 - 255;
-            ctx.textAlign = 'left';
-
-            const flag = flagEmoji(entry.country);
-            ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}${flag ? '  ' + flag : ''}`, textLeft, startY + index * lineH);
-        });
-
-        // Blinking text
-        ctx.textAlign = 'center';
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
-            ctx.restore();
-        }
-
-        ctx.textAlign = 'left';
     }
 
     drawWallOfFame(ctx, fame) {
