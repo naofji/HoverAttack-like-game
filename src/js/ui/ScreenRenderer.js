@@ -6,6 +6,7 @@ import { TILE_SIZE } from '../utils/Constants.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
+import { flagEmoji } from '../utils/geo.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -514,7 +515,8 @@ export class ScreenRenderer {
             const textLeft = canvas.width / 2 - 255;
             ctx.textAlign = 'left';
 
-            ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}`, textLeft, startY + index * lineH);
+            const flag = flagEmoji(entry.country);
+            ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}${flag ? '  ' + flag : ''}`, textLeft, startY + index * lineH);
         });
 
         // Blinking text
@@ -566,7 +568,8 @@ export class ScreenRenderer {
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
                     const nameStr = (e.name).padEnd(10, ' ');
-                    ctx.fillText(`  ${rank}.  ${scoreStr}   ${nameStr}`, textLeft, y);
+                    const flag = flagEmoji(e.country);
+                    ctx.fillText(`  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y);
                     y += 22;
                 });
                 y += 8;
