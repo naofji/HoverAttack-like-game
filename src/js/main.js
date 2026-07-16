@@ -302,6 +302,7 @@ const Game = {
                 this.localRankIndex = this.highScoreManager.addScore(
                     this.playerNameInput, this.score, displayMission, formattedTime, country
                 );
+                this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
                 this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
                 this.gameState = 'local_ranking_display';
                 this.stateTimer = 0;
