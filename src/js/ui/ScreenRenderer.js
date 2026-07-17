@@ -456,6 +456,29 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
+    /** Vertical metallic gradient (highlight → base → specular band → base → shadow). */
+    _metallicGradient(ctx, base, top, bottom) {
+        const g = ctx.createLinearGradient(0, top, 0, bottom);
+        g.addColorStop(0.00, lerpColor(base, '#ffffff', 0.55));
+        g.addColorStop(0.42, base);
+        g.addColorStop(0.50, lerpColor(base, '#ffffff', 0.92));
+        g.addColorStop(0.58, base);
+        g.addColorStop(1.00, lerpColor(base, '#000000', 0.45));
+        return g;
+    }
+
+    /** Draw glossy metallic text: thin dark edge under a metallic vertical gradient fill. */
+    _metallicText(ctx, text, x, y, base, fontPx) {
+        const top = y - fontPx * 0.82;
+        const bottom = y + fontPx * 0.22;
+        ctx.strokeStyle = lerpColor(base, '#000000', 0.65);
+        ctx.lineWidth = Math.max(1, fontPx / 20);
+        ctx.lineJoin = 'round';
+        ctx.strokeText(text, x, y);
+        ctx.fillStyle = this._metallicGradient(ctx, base, top, bottom);
+        ctx.fillText(text, x, y);
+    }
+
     _drawRankingList(ctx, o) {
         const canvas = this.game.canvas;
 
@@ -463,9 +486,8 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        ctx.fillStyle = o.titleColor;
         ctx.font = 'bold 34px "Space Mono", monospace';
-        ctx.fillText(o.title, canvas.width / 2, 40);
+        this._metallicText(ctx, o.title, canvas.width / 2, 40, o.titleColor, 34);
 
         ctx.fillStyle = o.subtitleColor;
         ctx.font = 'bold 16px "Space Mono", monospace';
@@ -487,19 +509,21 @@ export class ScreenRenderer {
             const lineH = 22.5;
             const textLeft = canvas.width / 2 - 255;
             scores.forEach((entry, index) => {
-                if (index === o.highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
-                    ctx.fillStyle = '#FF00FF';
-                } else {
-                    ctx.fillStyle = lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1));
-                }
                 const rank = String(index + 1).padStart(2, ' ');
                 const scoreStr = String(entry.score).padStart(7, ' ');
                 const nameStr = (entry.name).padEnd(10, ' ');
                 const missionStr = String(entry.mission).padStart(2, ' ');
                 const timeStr = entry.clearTime ? ` (${entry.clearTime})` : '';
                 const flag = flagEmoji(entry.country);
+                const rowText = `${rank}.  ${scoreStr}     ${nameStr}${flag ? ' ' + flag : ''}      ${missionStr}${timeStr}`;
+                const rowY = startY + index * lineH;
                 ctx.textAlign = 'left';
-                ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}${flag ? ' ' + flag : ''}      ${missionStr}${timeStr}`, textLeft, startY + index * lineH);
+                if (index === o.highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
+                    ctx.fillStyle = '#FF00FF';
+                    ctx.fillText(rowText, textLeft, rowY);
+                } else {
+                    this._metallicText(ctx, rowText, textLeft, rowY, lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1)), 19);
+                }
             });
         }
 
@@ -542,10 +566,9 @@ export class ScreenRenderer {
         ctx.fillStyle = '#17102b';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 40px "Space Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('✦ WALL OF FAME ✦', canvas.width / 2, 44);
+        this._metallicText(ctx, '✦ WALL OF FAME ✦', canvas.width / 2, 44, '#FFD700', 40);
 
         ctx.fillStyle = '#c9a94a';
         ctx.font = 'bold 16px "Space Mono", monospace';
@@ -567,12 +590,11 @@ export class ScreenRenderer {
                 y += 24;
                 ctx.font = 'bold 17px "Space Mono", monospace';
                 wk.entries.forEach((e, i) => {
-                    ctx.fillStyle = lerpColor('#FFE680', '#9c7a26', Math.min(i / 2, 1));
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
                     const nameStr = (e.name).padEnd(10, ' ');
                     const flag = flagEmoji(e.country);
-                    ctx.fillText(`  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y);
+                    this._metallicText(ctx, `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y, lerpColor('#FFE680', '#9c7a26', Math.min(i / 2, 1)), 17);
                     y += 22;
                 });
                 y += 8;
