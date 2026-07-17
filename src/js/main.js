@@ -93,7 +93,7 @@ const Game = {
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
-    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'ranking_display' | 'wall_of_fame_display'
+    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'wall_of_fame_display'
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
@@ -106,7 +106,8 @@ const Game = {
     currentTimeBonus: 0,
     targetTimeBonus: 0,
     slotRunning: false,
-    lastRankIndex: -1,
+    localRankIndex: -1,
+    globalRankIndex: -1,
 
     // ==========================================
     // INITIALIZATION
@@ -182,7 +183,8 @@ const Game = {
         switch (this.gameState) {
             case 'title': return this._updateTitle(deltaTime);
             case 'how_to_play': return this._updateHowToPlay(deltaTime);
-            case 'ranking_display': return this._updateRankingDisplay(deltaTime);
+            case 'local_ranking_display': return this._updateLocalRanking(deltaTime);
+            case 'global_ranking_display': return this._updateGlobalRanking(deltaTime);
             case 'wall_of_fame_display': return this._updateWallOfFameDisplay(deltaTime);
             case 'ranking_entry': return this._updateRankingEntry();
             case 'gameover': return this._updateGameOver(deltaTime);
@@ -199,6 +201,7 @@ const Game = {
         } else if (this.stateTimer > 8000) {
             this.gameState = 'how_to_play';
             this.stateTimer = 0;
+            this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
@@ -209,10 +212,10 @@ const Game = {
     _updateHowToPlay(deltaTime) {
         this.stateTimer += deltaTime;
         if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
-            this.gameState = 'ranking_display';
+            this.gameState = 'local_ranking_display';
             this.stateTimer = 0;
-            this.lastRankIndex = -1;
-            this._refreshOnline(); // fire-and-forget; render falls back to local until ready
+            this.localRankIndex = -1;
+            this.globalRankIndex = -1;
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
@@ -220,7 +223,24 @@ const Game = {
         }
     },
 
-    _updateRankingDisplay(deltaTime) {
+    _updateLocalRanking(deltaTime) {
+        this.stateTimer += deltaTime;
+        if (this.stateTimer > 10000) {
+            if (this.onlineStatus === 'ok' && this.onlineData) {
+                this.gameState = 'global_ranking_display';
+            } else {
+                this.gameState = 'title';
+                audioManager.playTitleBGM();
+            }
+            this.stateTimer = 0;
+        } else if (this._anyKeyOrClick()) {
+            this.stateManager.restart();
+            this.gameState = 'playing';
+            audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    _updateGlobalRanking(deltaTime) {
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
             this.gameState = 'wall_of_fame_display';
@@ -264,7 +284,7 @@ const Game = {
         if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) return;
         const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country });
         if (res.ok) {
-            this.lastRankIndex = res.rank;
+            this.globalRankIndex = res.rank;
             await this._refreshOnline();
         }
     },
@@ -279,11 +299,12 @@ const Game = {
                 const displayMission = Math.min(7, this.missionsCompleted + 1);
                 const formattedTime = this.missionsCompleted >= 7 ? this._formatTime(this.totalTime) : null;
                 const country = getCountryCode();
-                this.lastRankIndex = this.highScoreManager.addScore(
+                this.localRankIndex = this.highScoreManager.addScore(
                     this.playerNameInput, this.score, displayMission, formattedTime, country
                 );
+                this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
                 this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
-                this.gameState = 'ranking_display';
+                this.gameState = 'local_ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
             } else if (this.playerNameInput.length < 10) {
@@ -740,17 +761,18 @@ const Game = {
             this.screenRenderer.drawHowToPlay(ctx, this.stateTimer < 10000 ? 0 : 1);
             return;
         }
-        if (this.gameState === 'ranking_display') {
-            const online = this.onlineStatus === 'ok' && this.onlineData;
-            const scores = online ? this.onlineData.ranking : this.highScoreManager.getTop10();
-            const weekId = online ? this.onlineData.weekId : this.week.weekId;
-            this.screenRenderer.drawRankingDisplay(ctx, scores, this.lastRankIndex, weekId, this.onlineStatus);
+        if (this.gameState === 'local_ranking_display') {
+            this.screenRenderer.drawLocalRanking(ctx, this.highScoreManager.getTop10(), this.localRankIndex, this.week.weekId);
+            return;
+        }
+        if (this.gameState === 'global_ranking_display') {
+            const data = this.onlineData || { ranking: [], weekId: this.week.weekId };
+            this.screenRenderer.drawGlobalRanking(ctx, data.ranking, this.globalRankIndex, data.weekId);
             return;
         }
         if (this.gameState === 'wall_of_fame_display') {
-            const online = this.onlineStatus === 'ok' && this.onlineData;
-            const fame = online ? this.onlineData.fame : this.highScoreManager.getWallOfFame();
-            this.screenRenderer.drawWallOfFame(ctx, fame, this.onlineStatus);
+            const fame = (this.onlineData && this.onlineData.fame) || [];
+            this.screenRenderer.drawWallOfFame(ctx, fame);
             return;
         }
 

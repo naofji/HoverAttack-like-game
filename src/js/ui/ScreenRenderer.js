@@ -7,6 +7,7 @@ import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
+import { lerpColor } from '../utils/color.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -455,71 +456,53 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    _drawStatusBadge(ctx, status) {
-        if (!status || status === 'ok') return;
-        const canvas = this.game.canvas;
-        ctx.save();
-        ctx.textAlign = 'right';
-        ctx.font = 'bold 14px "Space Mono", monospace';
-        ctx.fillStyle = status === 'loading' ? '#FFD700' : '#FF6666';
-        ctx.fillText(status === 'loading' ? 'LOADING…' : 'OFFLINE', canvas.width - 12, 20);
-        ctx.restore();
-    }
-
-    drawRankingDisplay(ctx, scores, highlightIndex = -1, weekId = '', status = 'ok') {
+    _drawRankingList(ctx, o) {
         const canvas = this.game.canvas;
 
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = o.bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        this._drawStatusBadge(ctx, status);
 
-        ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 42px "Space Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('THIS WEEK', canvas.width / 2, 40);
+        ctx.fillStyle = o.titleColor;
+        ctx.font = 'bold 34px "Space Mono", monospace';
+        ctx.fillText(o.title, canvas.width / 2, 40);
 
-        ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 18px "Space Mono", monospace';
-        ctx.fillText(weekId, canvas.width / 2, 68);
+        ctx.fillStyle = o.subtitleColor;
+        ctx.font = 'bold 16px "Space Mono", monospace';
+        ctx.fillText(o.subtitle, canvas.width / 2, 66);
 
         ctx.font = 'bold 19px "Space Mono", monospace';
-        ctx.fillStyle = '#AAAAAA';
-        // Headers for single column
+        ctx.fillStyle = o.subtitleColor;
         ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 95);
 
-        ctx.font = 'bold 19px "Space Mono", monospace';
-        const startY = 130;
-        const lineH = 22.5; // Fit 20 lines perfectly with max vertical spread
-
-        scores.forEach((entry, index) => {
-            if (index === highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
-                ctx.fillStyle = '#FF00FF'; // Blink magenta/pink for new entry
-            } else {
-                if (index === 0) ctx.fillStyle = '#FFFF00'; // 1st Gold
-                else if (index === 1) ctx.fillStyle = '#CCCCCC'; // 2nd Silver
-                else if (index === 2) ctx.fillStyle = '#CD7F32'; // 3rd Bronze
-                else ctx.fillStyle = '#FFFFFF';
-            }
-
-            // Fixed width formatting
-            const rank = String(index + 1).padStart(2, ' ');
-            const scoreStr = String(entry.score).padStart(7, ' ');
-            const nameStr = (entry.name).padEnd(10, ' ');
-            const missionStr = String(entry.mission).padStart(2, ' ');
-            let timeStr = "";
-            if (entry.clearTime) {
-                timeStr = ` (${entry.clearTime})`;
-            }
-
-            // Single column layout (Adjusted for wider font size)
+        const scores = o.scores || [];
+        if (scores.length === 0) {
+            ctx.textAlign = 'center';
+            ctx.fillStyle = o.subtitleColor;
+            ctx.font = 'bold 18px "Space Mono", monospace';
+            ctx.fillText('NO RECORDS YET', canvas.width / 2, canvas.height / 2);
+        } else {
+            ctx.font = 'bold 19px "Space Mono", monospace';
+            const startY = 130;
+            const lineH = 22.5;
             const textLeft = canvas.width / 2 - 255;
-            ctx.textAlign = 'left';
+            scores.forEach((entry, index) => {
+                if (index === o.highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
+                    ctx.fillStyle = '#FF00FF';
+                } else {
+                    ctx.fillStyle = lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1));
+                }
+                const rank = String(index + 1).padStart(2, ' ');
+                const scoreStr = String(entry.score).padStart(7, ' ');
+                const nameStr = (entry.name).padEnd(10, ' ');
+                const missionStr = String(entry.mission).padStart(2, ' ');
+                const timeStr = entry.clearTime ? ` (${entry.clearTime})` : '';
+                const flag = flagEmoji(entry.country);
+                ctx.textAlign = 'left';
+                ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}${flag ? '  ' + flag : ''}`, textLeft, startY + index * lineH);
+            });
+        }
 
-            const flag = flagEmoji(entry.country);
-            ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}${flag ? '  ' + flag : ''}`, textLeft, startY + index * lineH);
-        });
-
-        // Blinking text
         ctx.textAlign = 'center';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
             ctx.save();
@@ -530,41 +513,61 @@ export class ScreenRenderer {
             ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
-
         ctx.textAlign = 'left';
     }
 
-    drawWallOfFame(ctx, fame, status = 'ok') {
+    drawLocalRanking(ctx, scores, highlightIndex = -1, weekId = '') {
+        this._drawRankingList(ctx, {
+            scores, highlightIndex,
+            title: '▌ LOCAL RANKING — THIS DEVICE',
+            subtitle: `${weekId} · YOUR MACHINE`,
+            bg: '#120b04', titleColor: '#CD7F32', subtitleColor: '#9c6b34',
+            rowBright: '#F0AE6A', rowDim: '#7a5228',
+        });
+    }
+
+    drawGlobalRanking(ctx, scores, highlightIndex = -1, weekId = '') {
+        this._drawRankingList(ctx, {
+            scores, highlightIndex,
+            title: '◍ GLOBAL RANKING — THIS WEEK 🌐',
+            subtitle: `${weekId} · WORLDWIDE`,
+            bg: '#080b0f', titleColor: '#D8DEE6', subtitleColor: '#95a0ab',
+            rowBright: '#FFFFFF', rowDim: '#5f6b78',
+        });
+    }
+
+    drawWallOfFame(ctx, fame) {
         const canvas = this.game.canvas;
 
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = '#17102b';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        this._drawStatusBadge(ctx, status);
 
         ctx.fillStyle = '#FFD700';
-        ctx.font = 'bold 42px "Space Mono", monospace';
+        ctx.font = 'bold 40px "Space Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('WALL OF FAME', canvas.width / 2, 50);
+        ctx.fillText('✦ WALL OF FAME ✦', canvas.width / 2, 44);
 
-        ctx.font = 'bold 18px "Space Mono", monospace';
+        ctx.fillStyle = '#c9a94a';
+        ctx.font = 'bold 16px "Space Mono", monospace';
+        ctx.fillText('WEEKLY CHAMPIONS', canvas.width / 2, 70);
 
         if (!fame || fame.length === 0) {
-            ctx.fillStyle = '#AAAAAA';
+            ctx.fillStyle = '#c9a94a';
+            ctx.font = 'bold 18px "Space Mono", monospace';
             ctx.fillText('NO CHAMPIONS YET', canvas.width / 2, canvas.height / 2);
         } else {
-            const medals = ['#FFFF00', '#CCCCCC', '#CD7F32'];
-            let y = 110;
+            let y = 108;
             const textLeft = canvas.width / 2 - 255;
             for (const wk of fame) {
                 if (y > canvas.height - 60) break;
                 ctx.textAlign = 'left';
-                ctx.fillStyle = '#00FF88';
+                ctx.fillStyle = '#e0c060';
                 ctx.font = 'bold 18px "Space Mono", monospace';
                 ctx.fillText(wk.weekId, textLeft, y);
                 y += 24;
                 ctx.font = 'bold 17px "Space Mono", monospace';
                 wk.entries.forEach((e, i) => {
-                    ctx.fillStyle = medals[i] || '#FFFFFF';
+                    ctx.fillStyle = lerpColor('#FFE680', '#9c7a26', Math.min(i / 2, 1));
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
                     const nameStr = (e.name).padEnd(10, ' ');
