@@ -456,23 +456,25 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
-    /** Vertical metallic gradient (highlight → base → specular band → base → shadow). */
+    /** Chrome-style vertical gradient: bright top → dark "horizon" band → bright bottom reflection. */
     _metallicGradient(ctx, base, top, bottom) {
         const g = ctx.createLinearGradient(0, top, 0, bottom);
-        g.addColorStop(0.00, lerpColor(base, '#ffffff', 0.55));
-        g.addColorStop(0.42, base);
-        g.addColorStop(0.50, lerpColor(base, '#ffffff', 0.92));
-        g.addColorStop(0.58, base);
-        g.addColorStop(1.00, lerpColor(base, '#000000', 0.45));
+        g.addColorStop(0.00, lerpColor(base, '#ffffff', 0.90)); // bright top edge
+        g.addColorStop(0.30, lerpColor(base, '#ffffff', 0.45));
+        g.addColorStop(0.49, lerpColor(base, '#ffffff', 0.05)); // just above horizon
+        g.addColorStop(0.51, lerpColor(base, '#000000', 0.60)); // dark horizon line
+        g.addColorStop(0.56, lerpColor(base, '#000000', 0.42));
+        g.addColorStop(0.80, lerpColor(base, '#000000', 0.08));
+        g.addColorStop(1.00, lerpColor(base, '#ffffff', 0.35)); // ground reflection glow
         return g;
     }
 
-    /** Draw glossy metallic text: thin dark edge under a metallic vertical gradient fill. */
+    /** Draw glossy chrome text: thin dark edge under a chrome vertical gradient fill. */
     _metallicText(ctx, text, x, y, base, fontPx) {
-        const top = y - fontPx * 0.82;
-        const bottom = y + fontPx * 0.22;
-        ctx.strokeStyle = lerpColor(base, '#000000', 0.65);
-        ctx.lineWidth = Math.max(1, fontPx / 20);
+        const top = y - fontPx * 0.78;
+        const bottom = y + fontPx * 0.10;
+        ctx.strokeStyle = lerpColor(base, '#000000', 0.7);
+        ctx.lineWidth = Math.max(1, fontPx / 24);
         ctx.lineJoin = 'round';
         ctx.strokeText(text, x, y);
         ctx.fillStyle = this._metallicGradient(ctx, base, top, bottom);
