@@ -64,7 +64,7 @@ export class EnemyBase {
         this.turretBurstTimer = 0;
 
         this.missileTimer = ENEMY_BASE_MISSILE_COOLDOWN;
-        this.homingTimer  = ENEMY_BASE_HOMING_COOLDOWN;
+        this.homingTimer = ENEMY_BASE_HOMING_COOLDOWN;
 
         // Cruise Missile State
         this._resetCruiseMissileTimer();
@@ -105,8 +105,8 @@ export class EnemyBase {
         this.dyingTimer--;
 
         if (this.dyingTimer % 6 === 0) {
-            const rx   = this.x + Math.random() * this.width;
-            const ry   = this.y + Math.random() * this.height;
+            const rx = this.x + Math.random() * this.width;
+            const ry = this.y + Math.random() * this.height;
             const size = 20 + Math.random() * 30;
             this.game.spawnExplosion(rx, ry, size);
             audioManager.playExplosion(size > 35);
@@ -316,7 +316,7 @@ export class EnemyBase {
             }
 
             this.cruiseMissileTimer--;
-            
+
             if (this.cruiseMissileTimer <= CRUISE_MISSILE_WARNING_TIME) {
                 // When warning starts
                 if (!this.cruiseWarning) {
@@ -347,9 +347,9 @@ export class EnemyBase {
     _fireCruiseMissile() {
         const centerX = this.x + this.width / 2;
         const centerY = this.y + this.height / 2;
-        
+
         // Always launch diagonally up-left to simulate a natural silo ejection
-        let angle = -Math.PI * 0.6; 
+        let angle = -Math.PI * 0.6;
         let path = this.preLaunchPath;
 
         // Try to find an A* path to the target for the initial launch direction if not already found
@@ -363,7 +363,7 @@ export class EnemyBase {
         console.log("BOSS BASE: FIRING CRUISE MISSILE!");
         const missile = new EnemyCruiseMissile(this.game, centerX, centerY, angle, path);
         this.game.enemyBullets.push(missile);
-        
+
         audioManager.playEnemyFire();
     }
 
@@ -431,8 +431,8 @@ export class EnemyBase {
             }
 
             const dirs = [
-                {r:-1, c:0, cost:1}, {r:1, c:0, cost:1}, {r:0, c:-1, cost:1}, {r:0, c:1, cost:1},
-                {r:-1, c:-1, cost:1.414}, {r:-1, c:1, cost:1.414}, {r:1, c:-1, cost:1.414}, {r:1, c:1, cost:1.414}
+                { r: -1, c: 0, cost: 1 }, { r: 1, c: 0, cost: 1 }, { r: 0, c: -1, cost: 1 }, { r: 0, c: 1, cost: 1 },
+                { r: -1, c: -1, cost: 1.414 }, { r: -1, c: 1, cost: 1.414 }, { r: 1, c: -1, cost: 1.414 }, { r: 1, c: 1, cost: 1.414 }
             ];
 
             for (const d of dirs) {
@@ -552,7 +552,7 @@ export class EnemyBase {
 
         // Perpendicular unit vector (90deg rotated) — this is the missile's "width" axis
         const perpX = -uy;
-        const perpY =  ux;
+        const perpY = ux;
 
         // Clearance: one full TILE_SIZE (16px) — ensures missile body never clips corners
         const CLEARANCE = 16;
@@ -677,19 +677,19 @@ export class EnemyBase {
 
     /** Draw all active shield rings. */
     _drawShields(ctx) {
-        const cx    = this.width  / 2;
-        const cy    = this.height / 2;
-        const t     = this.coreAnimTimer;
-        const rot1  =  t * 0.020;
-        const rot2  = -t * 0.030;
-        const rot3  =  t * 0.015;
+        const cx = this.width / 2;
+        const cy = this.height / 2;
+        const t = this.coreAnimTimer;
+        const rot1 = t * 0.020;
+        const rot2 = -t * 0.030;
+        const rot3 = t * 0.015;
 
         // Shield 3 (Outer)
         if (this.shields >= 3) {
             ctx.lineWidth = 3;
             this._drawSegmentedShield(ctx, cx, cy, 45, '#DDDDDD', rot3, 8);
             ctx.strokeStyle = '#888888';
-            ctx.lineWidth   = 1;
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.arc(cx, cy, 48, 0, Math.PI * 2);
             ctx.stroke();
@@ -707,10 +707,10 @@ export class EnemyBase {
             this._drawSegmentedShield(ctx, cx, cy, 25, '#FFFFFF', rot1, 4);
             // Inner hex
             ctx.strokeStyle = 'rgba(200, 255, 255, 0.4)';
-            ctx.lineWidth   = 2;
+            ctx.lineWidth = 2;
             ctx.beginPath();
             for (let i = 0; i <= 6; i++) {
-                const a  = i * (Math.PI / 3) + rot1;
+                const a = i * (Math.PI / 3) + rot1;
                 const hx = cx + Math.cos(a) * 20;
                 const hy = cy + Math.sin(a) * 20;
                 if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
@@ -727,7 +727,7 @@ export class EnemyBase {
         ctx.strokeStyle = color;
         ctx.beginPath();
         const step = (Math.PI * 2) / segments;
-        const gap  = 0.15;
+        const gap = 0.15;
         for (let i = 0; i < segments; i++) {
             const a = i * step + rotOffset;
             ctx.arc(cx, cy, radius, a + gap, a + step - gap);
@@ -737,7 +737,7 @@ export class EnemyBase {
         // Connector nodes
         ctx.fillStyle = '#FFFFFF';
         for (let i = 0; i < segments; i++) {
-            const a  = i * step + rotOffset;
+            const a = i * step + rotOffset;
             const nx = cx + Math.cos(a) * radius;
             const ny = cy + Math.sin(a) * radius;
             ctx.fillRect(nx - 2, ny - 2, 4, 4);
@@ -746,13 +746,13 @@ export class EnemyBase {
 
     /** Draw the pulsating energy core with bloom, sparkles, and charge particles. */
     _drawCore(ctx) {
-        let cx = this.width  / 2 || 16;
+        let cx = this.width / 2 || 16;
         let cy = this.height / 2 || 24;
         if (!isFinite(cx)) cx = 16;
         if (!isFinite(cy)) cy = 24;
 
-        const t      = this.coreAnimTimer || 0;
-        const pulse  = (Math.sin(t / 8) + 1) / 2;
+        const t = this.coreAnimTimer || 0;
+        const pulse = (Math.sin(t / 8) + 1) / 2;
         const radius = Math.max(1, 8 + pulse * 3);
 
         try {
@@ -772,10 +772,10 @@ export class EnemyBase {
 
             // Primary glow gradient
             const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2);
-            grad.addColorStop(0,              '#FFFFFF');
-            grad.addColorStop(0.2,            '#FFFFFF');
+            grad.addColorStop(0, '#FFFFFF');
+            grad.addColorStop(0.2, '#FFFFFF');
             grad.addColorStop(0.5 + pulse * 0.2, coreColor);
-            grad.addColorStop(1,              coreGlow);
+            grad.addColorStop(1, coreGlow);
             ctx.fillStyle = grad;
             ctx.beginPath();
             ctx.arc(cx, cy, radius * 2, 0, Math.PI * 2);
@@ -815,12 +815,12 @@ export class EnemyBase {
     /** Return the core color pair for the current mission index. */
     _getCoreColors() {
         const COLORS = [
-            { main: '#FF2222', glow: 'rgba(255, 34, 34, 0)'   },
-            { main: '#FFAA11', glow: 'rgba(255, 170, 17, 0)'  },
-            { main: '#FFFF33', glow: 'rgba(255, 255, 51, 0)'  },
-            { main: '#33FF33', glow: 'rgba(51, 255, 51, 0)'   },
-            { main: '#22CCFF', glow: 'rgba(34, 204, 255, 0)'  },
-            { main: '#8344C0', glow: 'rgba(131, 68, 192, 0)'  },
+            { main: '#FF2222', glow: 'rgba(255, 34, 34, 0)' },
+            { main: '#FFAA11', glow: 'rgba(255, 170, 17, 0)' },
+            { main: '#FFFF33', glow: 'rgba(255, 255, 51, 0)' },
+            { main: '#33FF33', glow: 'rgba(51, 255, 51, 0)' },
+            { main: '#22CCFF', glow: 'rgba(34, 204, 255, 0)' },
+            { main: '#8344C0', glow: 'rgba(131, 68, 192, 0)' },
             { main: '#F68DF6', glow: 'rgba(246, 141, 246, 0)' },
         ];
         const idx = (this.game.missionsCompleted || 0) % COLORS.length;
