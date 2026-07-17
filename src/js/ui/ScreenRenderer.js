@@ -499,7 +499,7 @@ export class ScreenRenderer {
                 const timeStr = entry.clearTime ? ` (${entry.clearTime})` : '';
                 const flag = flagEmoji(entry.country);
                 ctx.textAlign = 'left';
-                ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}      ${missionStr}${timeStr}${flag ? '  ' + flag : ''}`, textLeft, startY + index * lineH);
+                ctx.fillText(`${rank}.  ${scoreStr}     ${nameStr}${flag ? ' ' + flag : ''}      ${missionStr}${timeStr}`, textLeft, startY + index * lineH);
             });
         }
 
