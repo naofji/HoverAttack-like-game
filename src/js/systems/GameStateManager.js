@@ -60,6 +60,9 @@ export class GameStateManager {
         game.camera.follow(game.player);
         game.camera.snapToTarget();
 
+        game.simAccumulator = 0;
+        game.simAlpha = 1;
+
         // Recreate landmines and enemies
         game.spawnManager.spawnLandmines();
         game.spawnManager.spawnEnemies();
