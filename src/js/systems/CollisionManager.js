@@ -197,9 +197,11 @@ export class CollisionManager {
         const player = game.player;
         const carrier = game.carrier;
 
+        const damageMultiplier = proj.isRival ? 2 : 1;
+
         if (player && player.alive && !player.docked && player.invincibleTimer <= 0
             && pointInRect(proj.x, proj.y, player)) {
-            player.takeDamage(DAMAGE_ENEMY_MISSILE);
+            player.takeDamage(DAMAGE_ENEMY_MISSILE * damageMultiplier);
             game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
             proj.alive = false;
             proj.exploded = true;
@@ -207,7 +209,7 @@ export class CollisionManager {
         }
 
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
-            carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER);
+            carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
             game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
             proj.alive = false;
             proj.exploded = true;

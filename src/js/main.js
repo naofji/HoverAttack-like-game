@@ -783,7 +783,7 @@ const Game = {
         // 長押し閾値: 10フレーム（約0.17秒）
         const GRENADE_HOLD_THRESHOLD = 10;
 
-        if (this.input.isRightClickHeld() && player.grenades > 0) {
+        if (this.input.isRightClickHeld() && Math.floor(player.grenades) > 0) {
             const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
             const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
             const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
@@ -807,7 +807,7 @@ const Game = {
                         this._grenadeHeldPx, this._grenadeHeldPy,
                         this._grenadeHeldAngle, this._grenadeHeldSpeed
                     ));
-                    player.grenades--;
+                    player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
                     audioManager.playExplosion(false);
                     this.grenadeTrajectory = null;
                     this.grenadeWasHeld = false;
@@ -824,14 +824,14 @@ const Game = {
 
         } else {
             // 右クリックを離した瞬間
-            if (this.input.isRightClickReleased() && player.grenades > 0) {
+            if (this.input.isRightClickReleased() && Math.floor(player.grenades) > 0) {
                 if (!this.grenadeWasHeld) {
                     // 短押し確定（閾値未満でリリース）: 投擲
                     const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
                     const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
                     const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
                     this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
-                    player.grenades--;
+                    player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
                     audioManager.playExplosion(false);
                 }
                 // 長押しのリリースはキャンセル（左クリックせずに離した場合）
@@ -848,7 +848,7 @@ const Game = {
 
 
     _fireMissile(player, px, py, angle) {
-        if (player.missiles <= 0) {
+        if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';
             player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
             audioManager.playSwitch();
@@ -860,11 +860,11 @@ const Game = {
         if (active >= MISSILE_MAX_ON_SCREEN) return;
 
         this.projectiles.push(new Missile(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, angle, true));
-        player.missiles--;
+        player.missiles = Math.max(0, Math.floor(player.missiles) - 1);
         player.missileCooldown = 15;
         audioManager.playMissile();
 
-        if (player.missiles <= 0) {
+        if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';
             player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
             audioManager.playSwitch();
@@ -1154,11 +1154,11 @@ const Game = {
      * @returns {{ points: {x,y}[], landX: number, landY: number }}
      */
     _calcGrenadeTrajectory(startX, startY, angle, speed) {
-        const TRAJ_GRAVITY           = 0.20;
+        const TRAJ_GRAVITY = 0.20;
         const TRAJ_MAX_FALLING_SPEED = 6;
-        const TRAJ_BOUNCE            = 0.2;
-        const TRAJ_FRICTION          = 0.9;
-        const TRAJ_LIFETIME          = 90;
+        const TRAJ_BOUNCE = 0.2;
+        const TRAJ_FRICTION = 0.9;
+        const TRAJ_LIFETIME = 90;
 
         const map = this.map;
         const points = [];

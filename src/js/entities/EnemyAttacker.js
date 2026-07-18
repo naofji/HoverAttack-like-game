@@ -454,7 +454,7 @@ export class EnemyAttacker {
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
         } else {
-            const missile = new Missile(this.game, muzzleX, muzzleY, angle, false);
+            const missile = new Missile(this.game, muzzleX, muzzleY, angle, false, this.config.name === 'rival');
             this.game.projectiles.push(missile);
         }
     }

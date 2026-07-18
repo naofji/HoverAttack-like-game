@@ -6,7 +6,7 @@ import {
     CANVAS_WIDTH,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     HUD_FONT, HUD_COLOR, HUD_BG_COLOR,
-    HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP
+    HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL
 } from '../utils/Constants.js';
 
 export class HUD {
@@ -69,7 +69,7 @@ export class HUD {
         ctx.fillStyle = '#FFCC00';
         ctx.fillText('GRENADE', 12, row2Y);
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? player.grenades : 0).padStart(3, ' '), 90, row2Y);
+        ctx.fillText(String(player ? Math.floor(player.grenades) : 0).padStart(3, ' '), 90, row2Y);
 
         this._drawWeaponStatus(ctx, player, row2Y);
         this._drawHoverGauge(ctx, player, row2Y);
@@ -197,7 +197,7 @@ export class HUD {
         ctx.fillStyle = isMissile ? '#FFCC00' : '#444444';
         ctx.fillText('MISSILE', 145, y);
         ctx.fillStyle = isMissile ? '#FFFFFF' : '#666666';
-        ctx.fillText(String(player.missiles).padStart(3, ' '), 220, y);
+        ctx.fillText(String(Math.floor(player.missiles)).padStart(3, ' '), 220, y);
 
         // --- Machine Gun Status ---
         ctx.fillStyle = isMG ? '#FFCC00' : '#444444';
@@ -224,11 +224,12 @@ export class HUD {
         const barX = 485;
         const barY = y + 6; // Anchor to bottom of row
 
-        // Color by fuel level
+        // Color by fuel level — cyan when burst jump is available
+        const canBurst = player && player.hoverFuel >= BURST_MIN_FUEL;
         let fuelColor = '#FF0000';
-        if      (fuelRatio > 0.8) fuelColor = '#00FFFF';
-        else if (fuelRatio > 0.5) fuelColor = '#00FF00';
-        else if (fuelRatio > 0.3) fuelColor = '#FFAA00';
+        if      (canBurst)           fuelColor = '#00FFFF';
+        else if (fuelRatio > 0.5)    fuelColor = '#00FF00';
+        else if (fuelRatio > 0.3)    fuelColor = '#FFAA00';
 
         // Empty background triangle
         ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
@@ -243,7 +244,7 @@ export class HUD {
         const filledW = barW * fuelRatio;
         const filledH = barH * fuelRatio;
 
-        const glowing = fuelRatio >= 0.8;
+        const glowing = canBurst;
         if (glowing) {
             ctx.shadowBlur  = 8;
             ctx.shadowColor = '#FFFFFF';

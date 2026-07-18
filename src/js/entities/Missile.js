@@ -6,7 +6,7 @@ import { MISSILE_SPEED, MISSILE_LIFETIME, TILE_SIZE, PARTICLE_LIFETIME, EXPLOSIO
 import { TrailParticle } from './Particle.js';
 
 export class Missile {
-    constructor(game, x, y, angle, isPlayerOwned = true) {
+    constructor(game, x, y, angle, isPlayerOwned = true, isRival = false) {
         this.game = game;
         this.x = x;
         this.y = y;
@@ -15,6 +15,7 @@ export class Missile {
         this.alive = true;
         this.exploded = false;
         this.isPlayerOwned = isPlayerOwned;
+        this.isRival = isRival; // Rival attacker's missile: distinct color, double damage
         this.lifetime = MISSILE_LIFETIME;
         this.frameCounter = 0;
     }
@@ -68,11 +69,11 @@ export class Missile {
         ctx.rotate(Math.atan2(this.vy, this.vx));
 
         // Body
-        ctx.fillStyle = this.isPlayerOwned ? '#FFFF00' : '#FF4444';
+        ctx.fillStyle = this.isPlayerOwned ? '#FFFF00' : (this.isRival ? '#FF3300' : '#FF4444');
         ctx.fillRect(-4, -1, 8, 2);
 
         // Tip
-        ctx.fillStyle = '#FFFFFF';
+        ctx.fillStyle = this.isRival ? '#FFAA00' : '#FFFFFF';
         ctx.fillRect(3, -1, 2, 2);
 
         ctx.restore();

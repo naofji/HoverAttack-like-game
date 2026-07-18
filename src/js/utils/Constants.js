@@ -33,13 +33,13 @@ export const PLAYER_MAX_FALLING_SPEED = 7.0;  // Terminal velocity for falling
 export const PLAYER_STUN_FALL_SPEED = 6.0;    // Falling speed that triggers landing stun
 export const PLAYER_STUN_DURATION = 20;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
-export const PLAYER_BURST_FORCE = -6.0;
+export const PLAYER_BURST_FORCE = -5.0;
 export const HOVER_THRUST = -0.50;
 export const HOVER_THRUST_MIN = -0.30; // Weak thrust when fuel is low
 export const HOVER_MAX_FUEL = 100;
 export const HOVER_FUEL_CONSUMPTION = 0.4; // per frame while hovering
 export const BURST_FUEL_CONSUMPTION = 30;  // fuel consumed immediately on burst
-export const BURST_MIN_FUEL = 80;          // minimum fuel required to burst (80%)
+export const BURST_MIN_FUEL = 30;          // minimum fuel required to burst (= 1 burst worth)
 export const HOVER_FUEL_RECOVERY = 0.5;     // per frame when not hovering
 export const HOVER_FUEL_RECOVERY_BOOST = 0.75; // per frame when pressing S solo
 export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before hover activates after burst
@@ -82,9 +82,19 @@ export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 deg
 export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
 export const CARRIER_SPEED = 0.4;
-export const CARRIER_MAX_HP = 200;
+export const CARRIER_MAX_HP = 80;
 export const CARRIER_INITIAL_LIVES = 1;
 export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert
+
+// --- Docking Resupply (gradual replenishment per frame while docked) ---
+// HP: 100 / 60 ≈ 1.67/frame → full heal in ~3.6 seconds (at 60fps)
+export const DOCK_HP_RATE = 100 / 216; // ~0.46 HP/frame → full in ~3.6s
+// Missiles: 24 / (6 * 60) = 0.0667/frame → full in 6 seconds
+export const DOCK_MISSILE_RATE = 24 / 360;  // ~0.067 missiles/frame → full in 6s
+// Grenades: 12 / (6 * 60) = 0.0333/frame → full in 6 seconds
+export const DOCK_GRENADE_RATE = 12 / 360;  // ~0.033 grenades/frame → full in 6s
+// Hover fuel: 100 / (4 * 60) → full in 4 seconds (faster, quality-of-life)
+export const DOCK_FUEL_RATE = 100 / 240; // ~0.417 fuel/frame → full in 4s
 
 // --- Camera ---
 export const CAMERA_LERP = 0.08;
@@ -230,6 +240,8 @@ export const ENEMY_DRONE_SPEED = 4.0;       // Dashing speed
 export const ENEMY_DRONE_SPEED_Y_MAX = 3.0; // Dashing vertical speed
 export const ENEMY_DRONE_SIGHT_RANGE = CANVAS_WIDTH * 0.7; // Wide sight range
 export const ENEMY_DRONE_FIRE_INTERVAL = 120; // 2 seconds
+export const ENEMY_DRONE_BURST_COUNT = 5;    // Shots fired per attack
+export const ENEMY_DRONE_BURST_INTERVAL = 6; // Frames between burst shots (0.1s)
 export const ENEMY_DRONE_SCORE = 250;
 export const ENEMY_DRONE_COUNT = 15;        // Number to spawn in air spaces
 export const ENEMY_DRONE_WIDTH = 24;
@@ -237,6 +249,11 @@ export const ENEMY_DRONE_HEIGHT = 16;
 export const ENEMY_DRONE_HOVER_DIST_Y = 120; // Maintain this vertical distance from player
 export const ENEMY_DRONE_HOVER_DIST_X = 180; // Maintain this horizontal distance from player
 export const ENEMY_DRONE_GRENADE_CHANCE = 0.10; // 10% chance to drop grenade
+export const ENEMY_DRONE_KAMIKAZE_CHANCE = 0.10;   // 10% chance to ram instead of shooting when close
+export const ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE = 150; // Must be within this distance to consider ramming
+export const ENEMY_DRONE_KAMIKAZE_SPEED = 6.0;     // Ramming charge speed
+export const ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER = 40;
+export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies in 4 hits
 
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles

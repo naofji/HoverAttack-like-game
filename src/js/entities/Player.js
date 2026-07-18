@@ -14,7 +14,8 @@ import {
     PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES,
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
-    PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME
+    PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME,
+    DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -71,7 +72,10 @@ export class Player {
         if (!this.alive) return;
 
         this._updateTimers();
-        if (this.docked) return;
+        if (this.docked) {
+            this._updateDockedResupply();
+            return;
+        }
 
         const input = this.game.input;
         this._updateCrouching(input);
@@ -468,12 +472,26 @@ export class Player {
         audioManager.playSwitch();
     }
 
+    /** Called every frame while docked — gradually restores HP, ammo, and fuel. */
+    _updateDockedResupply() {
+        if (this.hp < PLAYER_MAX_HP) {
+            this.hp = Math.min(PLAYER_MAX_HP, this.hp + DOCK_HP_RATE);
+        }
+        if (this.missiles < MISSILE_INITIAL_COUNT) {
+            this.missiles = Math.min(MISSILE_INITIAL_COUNT, this.missiles + DOCK_MISSILE_RATE);
+        }
+        if (this.grenades < GRENADE_INITIAL_COUNT) {
+            this.grenades = Math.min(GRENADE_INITIAL_COUNT, this.grenades + DOCK_GRENADE_RATE);
+        }
+        if (this.hoverFuel < HOVER_MAX_FUEL) {
+            this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + DOCK_FUEL_RATE);
+        }
+    }
+
     /** Resupply all resources (when docking). */
     resupply() {
-        this.missiles = MISSILE_INITIAL_COUNT;
-        this.grenades = GRENADE_INITIAL_COUNT;
-        this.hoverFuel = HOVER_MAX_FUEL;
-        this.hp = PLAYER_MAX_HP;
+        // Weapon state is reset immediately on dock; actual HP/ammo/fuel
+        // are restored gradually each frame via _updateDockedResupply().
         this._resetMGState();
         this.currentWeapon = 'missile';
     }

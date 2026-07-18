@@ -6,9 +6,13 @@ import {
     TILE_SIZE,
     ENEMY_DRONE_HP, ENEMY_DRONE_SPEED, ENEMY_DRONE_SPEED_Y_MAX,
     ENEMY_DRONE_SIGHT_RANGE, ENEMY_DRONE_FIRE_INTERVAL, ENEMY_DRONE_SCORE,
+    ENEMY_DRONE_BURST_COUNT, ENEMY_DRONE_BURST_INTERVAL,
     ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT,
     ENEMY_DRONE_HOVER_DIST_Y, ENEMY_DRONE_HOVER_DIST_X,
     ENEMY_DRONE_GRENADE_CHANCE,
+    ENEMY_DRONE_KAMIKAZE_CHANCE, ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE,
+    ENEMY_DRONE_KAMIKAZE_SPEED, ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER,
+    ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER,
     ENEMY_BULLET_SPEED
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
@@ -36,6 +40,9 @@ export class EnemyDrone {
 
         this.stateTimer = 0;
         this.targetAngle = 0;
+        this.burstShotsRemaining = 0;
+        this.burstTimer = 0;
+        this.kamikazeTarget = null;
 
         // Visuals
         this.propellerAngle = 0;
@@ -54,7 +61,9 @@ export class EnemyDrone {
         this.propellerAngle += (this.state === 'dash' || this.state === 'patrol') ? 1.0 : 0.4;
 
         // State Machine
-        if (this.state === 'attack') {
+        if (this.state === 'kamikaze') {
+            this._updateKamikazeState();
+        } else if (this.state === 'attack') {
             this._updateAttackState();
         } else if (this.state === 'hover') {
             this._updateHoverState();
@@ -119,7 +128,15 @@ export class EnemyDrone {
         if (this.stateTimer <= 0) {
             const target = this._findTarget();
             if (target && this.fireTimer <= 0) {
-                this._prepareAttack(target);
+                const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+                const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE && Math.random() < ENEMY_DRONE_KAMIKAZE_CHANCE) {
+                    this._startKamikaze(target);
+                } else {
+                    this._prepareAttack(target);
+                }
             } else if (target) {
                 // Dash to a new position around the target
                 this._startDash(target);
@@ -130,13 +147,25 @@ export class EnemyDrone {
     }
 
     _updateAttackState() {
-        this.stateTimer--;
         this.vx *= 0.8;
         this.vy *= 0.8;
         this.tiltAngle = 0; // Perfectly level to shoot
 
-        if (this.stateTimer <= 0) {
-            this._executeAttack();
+        if (this.stateTimer > 0) {
+            this.stateTimer--;
+            return;
+        }
+
+        // Aiming finished - fire a burst of shots
+        if (this.burstShotsRemaining > 0) {
+            if (this.burstTimer <= 0) {
+                this._executeAttack();
+                this.burstShotsRemaining--;
+                this.burstTimer = ENEMY_DRONE_BURST_INTERVAL;
+            } else {
+                this.burstTimer--;
+            }
+        } else {
             this._startDash(this._findTarget()); // Immediately dash away
             this.fireTimer = ENEMY_DRONE_FIRE_INTERVAL;
         }
@@ -184,6 +213,8 @@ export class EnemyDrone {
     _prepareAttack(target) {
         this.state = 'attack';
         this.stateTimer = 25; // Stop for ~0.4s to aim
+        this.burstShotsRemaining = ENEMY_DRONE_BURST_COUNT;
+        this.burstTimer = 0;
 
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
@@ -211,6 +242,55 @@ export class EnemyDrone {
         }
     }
 
+    _startKamikaze(target) {
+        this.state = 'kamikaze';
+        this.kamikazeTarget = target;
+        this.fireTimer = ENEMY_DRONE_FIRE_INTERVAL;
+    }
+
+    _updateKamikazeState() {
+        const target = this.kamikazeTarget;
+
+        if (!target || !target.alive) {
+            this.state = 'patrol';
+            return;
+        }
+
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const tx = target.x + target.width / 2;
+        const ty = target.y + target.height / 2;
+        const dx = tx - cx;
+        const dy = ty - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // Charge straight at the target
+        const angle = Math.atan2(dy, dx);
+        this.vx = Math.cos(angle) * ENEMY_DRONE_KAMIKAZE_SPEED;
+        this.vy = Math.sin(angle) * ENEMY_DRONE_KAMIKAZE_SPEED;
+        this.tiltAngle = angle * 0.3;
+        this.patrolDir = dx >= 0 ? 1 : -1;
+
+        const hitRadius = (this.width + target.width) / 4 + 4;
+        if (dist < hitRadius) {
+            this._executeKamikaze(target);
+        }
+    }
+
+    _executeKamikaze(target) {
+        if (!this.alive) return;
+
+        if (target === this.game.player) {
+            if (target.invincibleTimer <= 0) {
+                target.takeDamage(ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER);
+            }
+        } else if (target === this.game.carrier) {
+            target.takeDamage(ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER);
+        }
+
+        this.die();
+    }
+
     _moveAndCollide() {
         const map = this.game.map;
 
@@ -219,7 +299,10 @@ export class EnemyDrone {
         if (this._collidesWithMap()) {
             this.x -= this.vx;
             this.vx = 0;
-            if (this.state === 'dash') {
+            if (this.state === 'kamikaze') {
+                this.die(); // Crash into terrain
+                return;
+            } else if (this.state === 'dash') {
                 this._startHover(); // Stop dashing if hit wall
             } else if (this.state === 'patrol') {
                 this.patrolDir *= -1;
@@ -231,7 +314,12 @@ export class EnemyDrone {
         if (this._collidesWithMap()) {
             this.y -= this.vy;
             this.vy = 0;
-            if (this.state === 'dash') this._startHover();
+            if (this.state === 'kamikaze') {
+                this.die(); // Crash into terrain
+                return;
+            } else if (this.state === 'dash') {
+                this._startHover();
+            }
         }
     }
 
@@ -306,7 +394,8 @@ export class EnemyDrone {
 
         // 4. Attack Indicator / Eye
         // Blinks red when attacking, yellow otherwise
-        ctx.fillStyle = (this.state === 'attack' && this.blinkTimer % 8 < 4) ? '#FF2222' : '#FFCC00';
+        const isAlerted = (this.state === 'attack' || this.state === 'kamikaze');
+        ctx.fillStyle = (isAlerted && this.blinkTimer % 8 < 4) ? '#FF2222' : '#FFCC00';
         ctx.beginPath();
         // Positioned on the lower front side of the core
         ctx.arc(4, 2, 2.5, 0, Math.PI * 2);
