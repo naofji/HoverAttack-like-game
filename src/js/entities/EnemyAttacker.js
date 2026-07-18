@@ -43,7 +43,7 @@ export class EnemyAttacker {
         this.facingRight = Math.random() < 0.5;
         this.patrolDir = this.facingRight ? 1 : -1;
         this.fireTimer = Math.floor(Math.random() * config.fireInterval);
-        this.aiState = 'patrol'; // 'patrol' or 'chase'
+        this.aiState = 'patrol'; // 'patrol', 'chase' or 'return'
         this.jumpCooldown = 0;
 
         // Home position (spawn point) — the attacker returns here when displaced
@@ -187,7 +187,7 @@ export class EnemyAttacker {
             if (below && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL && this.jumpCooldown <= 0) {
                 this._jump();
             }
-        } else if (below && this.hoverFuel > 0) {
+        } else if (below && this.hoverFuel > 0 && this.vy > ATTACKER_CLIMB_MAX_RISE) {
             this.hovering = true;
             this.vy -= this.config.climbThrust;
             this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
