@@ -59,6 +59,7 @@
 ### 5. 定数(Constants.js)
 
 ```
+ATTACKER_SLOW_RISE_CAP = -1.5    // 'jump'スタイルの上昇速度上限(ゆっくり上昇)
 ATTACKER_BOOST_MAX_FRAMES = 20   // standardの1空中レグあたりのブースト上限
 RIVAL_ALIGN_THRESHOLD = 24       // 整列判定の距離(px)
 RIVAL_ALIGN_TRIGGER_FRAMES = 45  // 整列→回避発動までのフレーム数
