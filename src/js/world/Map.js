@@ -13,7 +13,8 @@ import {
     ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT,
     COLOR_CAVE_BG, TILE_SIZE,
-    LANDMINE_WIDTH, LANDMINE_HEIGHT
+    LANDMINE_WIDTH, LANDMINE_HEIGHT,
+    STAGE_PALETTES
 } from '../utils/Constants.js';
 
 
@@ -27,16 +28,8 @@ export class Map {
         this.game = game;
         this.missionLevel = missionLevel;
 
-        // Define stage-specific palettes for normal blocks
-        const palettes = [
-            { fill: '#8B4513', border: '#5c2e0b' }, // 1: Brown (Original)
-            { fill: '#A0522D', border: '#70381d' }, // 2: Sienna (Orange-ish)
-            { fill: '#B8860B', border: '#825e07' }, // 3: DarkGoldenrod (Yellowish)
-            { fill: '#2E8B57', border: '#1e5c39' }, // 4: SeaGreen (Greenish)
-            { fill: '#4682B4', border: '#2e5677' }, // 5: SteelBlue (Blueish)
-            { fill: '#4B3621', border: '#2b1e12' }, // 6: Cafe Noir (Indigo-ish dark)
-            { fill: '#483D8B', border: '#2e2759' }  // 7: DarkSlateBlue (Purple-ish)
-        ];
+        // Reference stage-specific palettes for normal blocks
+        const palettes = STAGE_PALETTES;
         const palIdx = (this.missionLevel || 0) % palettes.length;
 
         this.blockStyles = {

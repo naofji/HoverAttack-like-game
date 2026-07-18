@@ -277,6 +277,18 @@ export const ENEMY_BASE_MISSILE_COOLDOWN = 180;
 export const ENEMY_BASE_HOMING_COOLDOWN = 240;
 
 
+// --- Per-stage block palettes (stage 1..7) ---
+// Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.
+export const STAGE_PALETTES = [
+    { fill: '#8B4513', border: '#5c2e0b' }, // 1: Brown
+    { fill: '#A0522D', border: '#70381d' }, // 2: Sienna
+    { fill: '#B8860B', border: '#825e07' }, // 3: DarkGoldenrod
+    { fill: '#2E8B57', border: '#1e5c39' }, // 4: SeaGreen
+    { fill: '#4682B4', border: '#2e5677' }, // 5: SteelBlue
+    { fill: '#4B3621', border: '#2b1e12' }, // 6: Cafe Noir
+    { fill: '#483D8B', border: '#2e2759' }, // 7: DarkSlateBlue
+];
+
 // --- Colors ---
 export const COLOR_NORMAL_BLOCK = '#8B4513';
 export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
