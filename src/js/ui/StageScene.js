@@ -37,14 +37,14 @@ const STAGE_ENEMY_KEY = ['tank', 'attacker', 'heavy', 'drone', 'rival', 'artille
 //   'centerHalf' — draws around (x + w/2, y + h/2) (e.g. drone).
 //   'centerDirect' — draws around (x, y) (e.g. cruise missile).
 const META = {
-    player:    { anchor: 'topleft', k: 2.4, float: false },
-    tank:      { anchor: 'topleft', k: 2.1, float: false },
-    attacker:  { anchor: 'topleft', k: 2.4, float: false },
-    heavy:     { anchor: 'topleft', k: 2.4, float: false },
-    rival:     { anchor: 'topleft', k: 2.4, float: false },
-    artillery: { anchor: 'topleft', k: 2.4, float: false },
-    drone:     { anchor: 'centerHalf', k: 2.2, float: true },
-    cruise:    { anchor: 'centerDirect', k: 2.4, float: true },
+    player:    { anchor: 'topleft', k: 1.6, float: false },
+    tank:      { anchor: 'topleft', k: 1.4, float: false },
+    attacker:  { anchor: 'topleft', k: 1.6, float: false },
+    heavy:     { anchor: 'topleft', k: 1.6, float: false },
+    rival:     { anchor: 'topleft', k: 1.6, float: false },
+    artillery: { anchor: 'topleft', k: 1.6, float: false },
+    drone:     { anchor: 'centerHalf', k: 1.47, float: true },
+    cruise:    { anchor: 'centerDirect', k: 1.6, float: true },
 };
 
 let cache = null;
