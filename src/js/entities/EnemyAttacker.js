@@ -888,7 +888,7 @@ export class EnemyAttacker {
 
             if (crouchOffset > 0) {
                 // Crouching pose (knees bent, feet spread)
-                const spread = type === 'heavy' ? 4 : 2;
+                const spread = this.config.name === 'heavy' ? 4 : 2;
                 this._drawLeg(ctx, 6 - spread, 16 - crouchOffset, -2);
                 this._drawLeg(ctx, 9 + spread, 16 - crouchOffset, 2);
             } else {
