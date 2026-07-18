@@ -297,7 +297,7 @@ export class EnemyAttacker {
                 // Airborne: hover if player is above or to stay in the air while skirmishing
                 if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() * 1.5 < 0.1))) {
                     this.hovering = true;
-                    this.vy -= 0.6; // Hover upward thrust
+                    this.vy -= this.config.climbThrust; // Hover upward thrust
                     this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                     if (this.vy < -4.0) this.vy = -4.0;
                 }
@@ -338,7 +338,7 @@ export class EnemyAttacker {
                 // Use hover to stay at a certain height or prolong jumps
                 if (this.hoverFuel > 0 && (dy < -16 || (this.vy > 0 && Math.random() < 0.05))) {
                     this.hovering = true;
-                    this.vy -= 0.5;
+                    this.vy -= this.config.climbThrust;
                     this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                     if (this.vy < -3.0) this.vy = -3.0;
                 }
@@ -373,10 +373,24 @@ export class EnemyAttacker {
             } else {
                 if (this.hoverFuel > 0 && (dy < -8 || Math.random() < 0.1)) {
                     this.hovering = true;
-                    this.vy -= 0.6;
+                    this.vy -= this.config.climbThrust;
                     this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
                     if (this.vy < -4.0) this.vy = -4.0;
                 }
+            }
+        }
+
+        // --- Vertical pursuit for types without their own hover logic ---
+        if ((mType === 'stop_and_shoot' || mType === 'pace_and_jump') && dy < -32) {
+            if (this.onGround) {
+                if (this.jumpCooldown <= 0 && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL) {
+                    this._jump();
+                }
+            } else if (this.hoverFuel > 0) {
+                this.hovering = true;
+                this.vy -= this.config.climbThrust;
+                this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
+                if (this.vy < ATTACKER_CLIMB_MAX_RISE) this.vy = ATTACKER_CLIMB_MAX_RISE;
             }
         }
     }

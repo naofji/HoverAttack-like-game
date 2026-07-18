@@ -136,3 +136,28 @@ test('heavy attacker climbs an 8-tile step back to its home (no warp)', () => {
   assert.equal(e.returning, false);
   assert.ok(maxStepPerFrame < TILE_SIZE, 'no warp: per-frame movement stays under one tile');
 });
+
+/** Flat floor at row 20 plus a thin platform at row 14 (cols 10-14). */
+function platformWorldRows() {
+  const rows = [];
+  for (let r = 0; r < 14; r++) rows.push('.'.repeat(24));
+  rows.push('.'.repeat(10) + '#####' + '.'.repeat(9)); // row 14
+  for (let r = 15; r < 20; r++) rows.push('.'.repeat(24));
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+test('heavy attacker gains altitude when its target is 4+ tiles above', () => {
+  const game = makeGame(makeMap(platformWorldRows()));
+  game.player = makePlayer(12 * TILE_SIZE, 14 * TILE_SIZE - 24); // on the platform
+  const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+
+  let minY = e.y;
+  for (let i = 0; i < 1200; i++) {
+    e.update();
+    minY = Math.min(minY, e.y);
+  }
+
+  assert.ok(minY < FLOOR_Y - 3 * TILE_SIZE,
+    `should climb at least 3 tiles toward the target, minY=${minY}`);
+});
