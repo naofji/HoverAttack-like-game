@@ -361,6 +361,26 @@ export class ScreenRenderer {
             ctx.fillText('PRESS ANY KEY TO CONTINUE', canvas.width / 2, canvas.height / 2 + 60);
             ctx.restore();
         }
+
+        this._drawStageTop5Notice(ctx, canvas.height / 2 + 90);
+    }
+
+    _drawStageTop5Notice(ctx, y) {
+        const canvas = this.game.canvas;
+        const notices = [];
+        if (this.game.stageTop5Time) notices.push('TOP 5!  FASTEST TIME');
+        if (this.game.stageTop5Score) notices.push('TOP 5!  HIGH SCORE');
+        if (notices.length === 0) return;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 20px "Space Mono", monospace';
+        const blink = Math.floor(Date.now() / 350) % 2 === 0;
+        ctx.fillStyle = blink ? '#FFD700' : '#FFA500';
+        ctx.shadowColor = '#FF8800';
+        ctx.shadowBlur = 12;
+        notices.forEach((t, i) => ctx.fillText(t, canvas.width / 2, y + i * 26));
+        ctx.restore();
+        ctx.textAlign = 'left';
     }
 
     drawGameOver(ctx) {
@@ -418,6 +438,8 @@ export class ScreenRenderer {
             ctx.font = '14px "Space Mono", monospace';
             ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 90);
         }
+
+        this._drawStageTop5Notice(ctx, canvas.height / 2 + 120);
         ctx.textAlign = 'left';
     }
 
