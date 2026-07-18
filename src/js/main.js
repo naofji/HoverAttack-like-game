@@ -38,6 +38,7 @@ import { CollisionManager } from './systems/CollisionManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
+import { StageRankingManager } from './systems/StageRankingManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
@@ -148,6 +149,7 @@ const Game = {
         this.stateManager = new GameStateManager(this);
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
+        this.stageRankingManager = new StageRankingManager(this.week.weekId);
         this.onlineLeaderboard = new OnlineLeaderboard(LEADERBOARD_URL);
         this.onlineData = null;                       // { weekId, ranking, fame } when loaded
         this.onlineStatus = LEADERBOARD_URL ? 'loading' : 'offline';
@@ -321,6 +323,15 @@ const Game = {
                 );
                 this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
                 this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
+                // Persist this run's per-stage results locally (and online in Task 6).
+                for (const r of this.stageResults) {
+                    this.stageRankingManager.addStageResult(r.stage, {
+                        name: this.playerNameInput,
+                        timeMs: r.timeMs,
+                        score: r.score,
+                        country,
+                    });
+                }
                 this.gameState = 'local_ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
