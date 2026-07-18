@@ -70,6 +70,9 @@ export class GameStateManager {
         // Recreate landmines and enemies
         game.spawnManager.spawnLandmines();
         game.spawnManager.spawnEnemies();
+
+        // Remember the furthest stage reached locally (gates the ranking attract screen).
+        if (typeof game._recordStageReached === 'function') game._recordStageReached();
     }
 
     /** Full restart (from game over) */

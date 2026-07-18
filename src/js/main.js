@@ -266,14 +266,40 @@ const Game = {
     _updateGlobalRanking(deltaTime) {
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
-            this.gameState = 'stage_ranking_display';
+            // Only show stage rankings for stages the player has actually reached
+            // locally (keep unseen stages — and their enemies — a surprise).
+            if (this.maxStageReached() >= 1) {
+                this.gameState = 'stage_ranking_display';
+                this.stageDisplayIndex = 0;
+                this.stageDisplayTimer = 0;
+            } else {
+                this.gameState = 'wall_of_fame_display';
+            }
             this.stateTimer = 0;
-            this.stageDisplayIndex = 0;
-            this.stageDisplayTimer = 0;
         } else if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
             audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    /** Highest stage number the player has reached locally (persisted, not weekly). */
+    maxStageReached() {
+        try {
+            return Math.min(7, Number(localStorage.getItem('hoverattack_max_stage_reached') || 0));
+        } catch (e) {
+            return 0;
+        }
+    },
+
+    /** Record that the player has reached the current stage (call at stage start). */
+    _recordStageReached() {
+        const stage = Math.min(7, this.missionsCompleted + 1);
+        try {
+            const prev = Number(localStorage.getItem('hoverattack_max_stage_reached') || 0);
+            if (stage > prev) localStorage.setItem('hoverattack_max_stage_reached', String(stage));
+        } catch (e) {
+            /* ignore storage failures */
         }
     },
 
@@ -283,7 +309,7 @@ const Game = {
         if (this.stageDisplayTimer > 3000) {
             this.stageDisplayTimer = 0;
             this.stageDisplayIndex++;
-            if (this.stageDisplayIndex >= 7) {
+            if (this.stageDisplayIndex >= this.maxStageReached()) {
                 this.gameState = 'wall_of_fame_display';
                 this.stateTimer = 0;
                 return;

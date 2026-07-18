@@ -9,6 +9,7 @@ import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES } from '../utils/modes.js';
+import { drawStageScene } from './StageScene.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -647,20 +648,36 @@ export class ScreenRenderer {
 
     drawStageRankings(ctx, stageIndex, stageData, palette) {
         const canvas = this.game.canvas;
+        const W = canvas.width;
+        const H = canvas.height;
         const stageNo = stageIndex + 1;
+        // Brighten the (often dark) stage colour into a legible accent.
+        const accent = lerpColor(palette.fill, '#ffffff', 0.55);
 
         ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, W, H);
 
-        // Header in this stage's colour.
+        // Title + subtitle
         ctx.textAlign = 'center';
-        this._metallicText(ctx, `STAGE ${stageNo}  RANKINGS`, canvas.width / 2, 44, palette.fill, 34);
-        ctx.fillStyle = palette.border;
+        this._metallicText(ctx, `STAGE ${stageNo}`, W / 2, 46, accent, 40);
+        ctx.fillStyle = lerpColor(palette.fill, '#ffffff', 0.35);
         ctx.font = 'bold 14px "Space Mono", monospace';
-        ctx.fillText('THIS WEEK · TOP 5', canvas.width / 2, 68);
+        ctx.fillText('THIS WEEK · TOP 5', W / 2, 70);
 
-        this._drawStageBlock(ctx, 'FASTEST TIME', stageData.time || [], 100, palette, true);
-        this._drawStageBlock(ctx, 'HIGH SCORE', stageData.score || [], 320, palette, false);
+        // Scene strip (full width)
+        drawStageScene(ctx, 40, 84, W - 80, 150, stageIndex, palette, Date.now());
+
+        // Two side-by-side lists.
+        this._drawStageColumn(ctx, 'FASTEST TIME', stageData.time || [], W * 0.27, 258, accent, true);
+        this._drawStageColumn(ctx, 'HIGH SCORE', stageData.score || [], W * 0.73, 258, accent, false);
+
+        // Divider between columns
+        ctx.strokeStyle = lerpColor(palette.fill, '#000000', 0.1);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(W / 2, 250);
+        ctx.lineTo(W / 2, 250 + 200);
+        ctx.stroke();
 
         ctx.textAlign = 'center';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
@@ -669,40 +686,50 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 18px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 18);
+            ctx.fillText('PRESS ANY KEY TO START', W / 2, H - 18);
             ctx.restore();
         }
         ctx.textAlign = 'left';
     }
 
-    _drawStageBlock(ctx, label, rows, topY, palette, isTime) {
-        const canvas = this.game.canvas;
+    _drawStageColumn(ctx, label, rows, centerX, topY, accent, isTime) {
+        // Header
         ctx.textAlign = 'center';
-        ctx.fillStyle = palette.fill;
-        ctx.font = 'bold 20px "Space Mono", monospace';
-        ctx.fillText(label, canvas.width / 2, topY);
+        ctx.fillStyle = accent;
+        ctx.font = 'bold 18px "Space Mono", monospace';
+        ctx.fillText(label, centerX, topY);
 
         const startY = topY + 30;
         const lineH = 30;
-        const textLeft = canvas.width / 2 - 200;
+        const left = centerX - 150;
         if (rows.length === 0) {
             ctx.textAlign = 'center';
             ctx.fillStyle = '#666666';
-            ctx.font = 'bold 16px "Space Mono", monospace';
-            ctx.fillText('NO RECORDS YET', canvas.width / 2, startY + 20);
+            ctx.font = '15px "Space Mono", monospace';
+            ctx.fillText('NO RECORDS YET', centerX, startY + 16);
             ctx.textAlign = 'left';
             return;
         }
-        ctx.font = 'bold 18px "Space Mono", monospace';
         ctx.textAlign = 'left';
         rows.forEach((entry, i) => {
+            const y = startY + i * lineH;
             const rank = String(i + 1);
-            const name = (entry.name || '').padEnd(10, ' ');
+            const name = (entry.name || '').substring(0, 8);
             const flag = flagEmoji(entry.country);
-            const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).padStart(7, ' ');
-            const rowText = `${rank}. ${name}${flag ? ' ' + flag : ''}   ${valStr}`;
-            ctx.fillStyle = lerpColor(palette.fill, palette.border, Math.min(i / 4, 1));
-            ctx.fillText(rowText, textLeft, startY + i * lineH);
+            const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).toLocaleString();
+
+            // Rank number in accent, dimmer for lower ranks.
+            ctx.font = 'bold 17px "Space Mono", monospace';
+            ctx.fillStyle = lerpColor(accent, '#5a5a5a', Math.min(i / 4, 1) * 0.55);
+            ctx.fillText(rank + '.', left, y);
+            // Name (off-white) + flag
+            ctx.fillStyle = '#EAEAEA';
+            ctx.fillText(name + (flag ? ' ' + flag : ''), left + 30, y);
+            // Value, right-aligned within the column
+            ctx.textAlign = 'right';
+            ctx.fillStyle = isTime ? '#EAEAEA' : accent;
+            ctx.fillText(valStr, left + 300, y);
+            ctx.textAlign = 'left';
         });
     }
 
