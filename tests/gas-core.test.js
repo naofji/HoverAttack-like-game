@@ -84,3 +84,40 @@ test('groupFame groups by week, newest first, entries sorted desc, carries count
   assert.deepEqual(fame[1].entries.map((e) => e.name), ['A', 'B']);
   assert.equal(fame[1].entries[0].country, 'JP');
 });
+
+test('validateStageEntry accepts a well-formed stage batch', () => {
+    const v = ctx.validateStageEntry({ kind: 'stages', name: 'ab', country: 'jp', stages: [{ stage: 1, timeMs: 1000, score: 500 }, { stage: 9, timeMs: 2000, score: 100 }] });
+    assert.equal(v.ok, true);
+    assert.equal(v.value.name, 'AB');
+    assert.equal(v.value.country, 'JP');
+    assert.equal(v.value.stages[0].stage, 1);
+    assert.equal(v.value.stages[1].stage, 7); // clamped 9 -> 7
+});
+
+test('validateStageEntry rejects empty or oversized batch', () => {
+    assert.equal(ctx.validateStageEntry({ stages: [] }).ok, false);
+    const many = Array.from({ length: 8 }, (_, i) => ({ stage: 1, timeMs: 1, score: 1 }));
+    assert.equal(ctx.validateStageEntry({ stages: many }).ok, false);
+});
+
+test('validateStageEntry rejects bad numbers', () => {
+    assert.equal(ctx.validateStageEntry({ stages: [{ stage: 1, timeMs: -5, score: 100 }] }).ok, false);
+    assert.equal(ctx.validateStageEntry({ stages: [{ stage: 1, timeMs: 100, score: 1.5 }] }).ok, false);
+});
+
+test('topStagesForWeek returns 7 stages, time asc / score desc top-n', () => {
+    // rows: [timestamp, weekId, name, stage, timeMs, score, country]
+    const rows = [
+        [new Date(), 'W1', 'A', 1, 5000, 100, 'JP'],
+        [new Date(), 'W1', 'B', 1, 3000, 900, 'US'],
+        [new Date(), 'W1', 'C', 1, 4000, 500, ''],
+        [new Date(), 'W2', 'D', 1, 100, 9999, ''], // other week ignored
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(out.length, 7);
+    const s1 = out[0];
+    assert.equal(s1.stage, 1);
+    assert.equal(s1.time[0].timeMs, 3000);   // fastest
+    assert.equal(s1.score[0].score, 900);    // highest
+    assert.equal(out[1].time.length, 0);     // stage 2 empty
+});

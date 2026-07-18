@@ -11,6 +11,9 @@ var FAME_TOP = 3;
 var MIN_SCORE = 10000;       // score must exceed this to be recorded (matches client)
 var SCORE_CAP = 100000000;   // reject absurd scores
 var RATE_LIMIT_MS = 10000;   // reject same-name resubmit within 10s
+var STAGE_SCORES_SHEET = 'StageScores';
+var STAGE_TOP = 5;
+var STAGE_COUNT = 7;
 
 // ---------- Pure helpers (unit-tested in Node) ----------
 
@@ -80,6 +83,44 @@ function groupFame(fameRows) {
   return out;
 }
 
+function validateStageEntry(entry) {
+  if (!entry || typeof entry !== 'object' || !Array.isArray(entry.stages)) return { ok: false, reason: 'bad-body' };
+  if (entry.stages.length < 1 || entry.stages.length > STAGE_COUNT) return { ok: false, reason: 'stage-count' };
+  var out = [];
+  for (var i = 0; i < entry.stages.length; i++) {
+    var s = entry.stages[i];
+    if (!s || typeof s !== 'object') return { ok: false, reason: 'bad-stage' };
+    var timeMs = Number(s.timeMs);
+    var score = Number(s.score);
+    if (!isFinite(timeMs) || Math.floor(timeMs) !== timeMs || timeMs < 0 || timeMs > SCORE_CAP) return { ok: false, reason: 'bad-time' };
+    if (!isFinite(score) || Math.floor(score) !== score || score < 0 || score > SCORE_CAP) return { ok: false, reason: 'bad-score' };
+    var stage = Math.min(STAGE_COUNT, Math.max(1, Math.floor(Number(s.stage) || 1)));
+    out.push({ stage: stage, timeMs: timeMs, score: score });
+  }
+  return { ok: true, value: { name: sanitizeName(entry.name), country: sanitizeCountry(entry.country), stages: out } };
+}
+
+function topStagesForWeek(rows, weekId, n) {
+  var byStage = [];
+  for (var s = 0; s < STAGE_COUNT; s++) byStage.push([]);
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][1]) !== weekId) continue;
+    var stage = Number(rows[i][3]);
+    if (stage < 1 || stage > STAGE_COUNT) continue;
+    byStage[stage - 1].push({ name: rows[i][2], timeMs: Number(rows[i][4]), score: Number(rows[i][5]), country: rows[i][6] || '' });
+  }
+  var out = [];
+  for (var k = 0; k < STAGE_COUNT; k++) {
+    var entries = byStage[k];
+    var timeSorted = entries.slice().sort(function (a, b) { return a.timeMs - b.timeMs; })
+      .slice(0, n).map(function (e) { return { name: e.name, timeMs: e.timeMs, country: e.country }; });
+    var scoreSorted = entries.slice().sort(function (a, b) { return b.score - a.score; })
+      .slice(0, n).map(function (e) { return { name: e.name, score: e.score, country: e.country }; });
+    out.push({ stage: k + 1, time: timeSorted, score: scoreSorted });
+  }
+  return out;
+}
+
 // ---------- Spreadsheet glue (not unit-tested) ----------
 
 function getSheet_(name) {
@@ -92,6 +133,11 @@ function readRows_(sheet) {
   return sheet.getRange(2, 1, lastRow - 1, 7).getValues();
 }
 
+function readStageRows_() {
+  var sh = getSheet_(STAGE_SCORES_SHEET);
+  return sh ? readRows_(sh) : [];
+}
+
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -100,7 +146,14 @@ function doGet(e) {
   var weekId = isoWeekId(new Date());
   var scores = readRows_(getSheet_(SCORES_SHEET));
   var fame = readRows_(getSheet_(FAME_SHEET));
-  return jsonOut_({ ok: true, weekId: weekId, ranking: topNForWeek(scores, weekId, MAX_RANKING), fame: groupFame(fame) });
+  var stageRows = readStageRows_();
+  return jsonOut_({
+    ok: true,
+    weekId: weekId,
+    ranking: topNForWeek(scores, weekId, MAX_RANKING),
+    fame: groupFame(fame),
+    stageRankings: topStagesForWeek(stageRows, weekId, STAGE_TOP),
+  });
 }
 
 function doPost(e) {
@@ -109,6 +162,30 @@ function doPost(e) {
   try {
     var body;
     try { body = JSON.parse(e.postData.contents); } catch (err) { return jsonOut_({ ok: false, reason: 'bad-json' }); }
+
+    if (body && body.kind === 'stages') {
+      var sv = validateStageEntry(body);
+      if (!sv.ok) return jsonOut_({ ok: false, reason: sv.reason });
+      var stageSheet = getSheet_(STAGE_SCORES_SHEET);
+      if (!stageSheet) return jsonOut_({ ok: false, reason: 'no-stage-sheet' });
+      var stageRows = readRows_(stageSheet);
+      var nowS = new Date();
+      for (var si = stageRows.length - 1; si >= 0; si--) {
+        if (stageRows[si][2] === sv.value.name) {
+          if (nowS.getTime() - new Date(stageRows[si][0]).getTime() < RATE_LIMIT_MS) {
+            return jsonOut_({ ok: false, reason: 'rate-limited' });
+          }
+          break;
+        }
+      }
+      var weekS = isoWeekId(nowS);
+      for (var sj = 0; sj < sv.value.stages.length; sj++) {
+        var st = sv.value.stages[sj];
+        stageSheet.appendRow([nowS, weekS, sv.value.name, st.stage, st.timeMs, st.score, sv.value.country || '']);
+      }
+      return jsonOut_({ ok: true });
+    }
+
     var v = validateEntry(body);
     if (!v.ok) return jsonOut_({ ok: false, reason: v.reason });
     var entry = v.value;
