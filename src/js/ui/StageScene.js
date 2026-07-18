@@ -32,6 +32,11 @@ const stubGame = {
 // Which enemy is signature / first-introduced per stage (index 0..6 = stage 1..7).
 const STAGE_ENEMY_KEY = ['tank', 'attacker', 'heavy', 'drone', 'rival', 'artillery', 'cruise'];
 
+// What that enemy fires back at the player (matches in-game behaviour):
+//   tank/drone -> bullets, attackers -> missiles, artillery -> homing missile,
+//   cruise missile -> fires nothing; the missile itself flies right -> left.
+const STAGE_PROJECTILE = ['bullet', 'missile', 'missile', 'bullet', 'missile', 'homing', 'fly'];
+
 // anchor: how the entity's draw() places itself relative to (this.x, this.y).
 //   'topleft' — draws from top-left; sit its feet on the floor.
 //   'centerHalf' — draws around (x + w/2, y + h/2) (e.g. drone).
@@ -89,17 +94,26 @@ export function drawStageScene(ctx, x, y, w, h, stageIndex, palette, nowMs) {
     const playerX = x + w * 0.17;
     const enemyKey = STAGE_ENEMY_KEY[stageIndex] || 'tank';
     const enemyX = x + w * 0.83;
+    const proj = STAGE_PROJECTILE[stageIndex] || 'missile';
+    const midY = floorY - 26;
 
     drawEntity(ctx, e.player, 'player', playerX, floorY, bob);
-    drawEntity(ctx, e[enemyKey], enemyKey, enemyX, floorY, -bob);
 
-    // Missiles crossing between the two (roughly weapon height).
-    const midY = floorY - 26;
-    drawExchange(ctx, { x: playerX + 26, y: midY + bob }, { x: enemyX - 26, y: midY - bob }, nowMs);
+    if (proj === 'fly') {
+        // Stage 7: the cruise missile itself flies right -> left toward the player
+        // (it fires nothing). The player launches an interceptor missile at it.
+        const phase = (nowMs % 2200) / 2200;
+        const cruiseX = lerp(enemyX + 30, playerX + 40, phase);
+        drawEntity(ctx, e.cruise, 'cruise', cruiseX, floorY, -bob, midY - bob);
+        drawPlayerMissile(ctx, { x: playerX + 26, y: midY + bob }, { x: cruiseX, y: midY - bob }, nowMs);
+    } else {
+        drawEntity(ctx, e[enemyKey], enemyKey, enemyX, floorY, -bob);
+        drawExchange(ctx, { x: playerX + 26, y: midY + bob }, { x: enemyX - 26, y: midY - bob }, nowMs, proj);
+    }
     ctx.restore();
 }
 
-function drawEntity(ctx, ent, key, centerX, floorY, bob) {
+function drawEntity(ctx, ent, key, centerX, floorY, bob, centerYOverride) {
     if (!ent) return;
     const m = META[key];
     const w = ent.width || 16;
@@ -113,8 +127,9 @@ function drawEntity(ctx, ent, key, centerX, floorY, bob) {
         ent.x = -w / 2;
         ent.y = -hgt;
     } else {
-        // Centered sprites float above the floor.
-        ctx.translate(centerX, floorY - 40 + bob);
+        // Centered sprites float above the floor (or at an explicit Y).
+        const cy = (centerYOverride != null) ? centerYOverride : floorY - 40 + bob;
+        ctx.translate(centerX, cy);
         ctx.scale(m.k, m.k);
         if (m.anchor === 'centerHalf') { ent.x = -w / 2; ent.y = -hgt / 2; }
         else { ent.x = 0; ent.y = 0; } // centerDirect
@@ -165,19 +180,44 @@ function drawCave(ctx, x, y, w, h, palette) {
     ctx.stroke();
 }
 
-// Two missiles crossing between the muzzles, with muzzle flashes, on a loop.
-function drawExchange(ctx, p, e, nowMs) {
+// Player missile (yellow, bazooka) travels p -> target on a loop, with a muzzle flash.
+function drawPlayerMissile(ctx, p, target, nowMs) {
     const phase = (nowMs % 1600) / 1600;
     if (phase < 0.6) {
         const t = phase / 0.6;
-        drawFlyingMissile(ctx, lerp(p.x, e.x, t), lerp(p.y, e.y, t), true, '#FFDD33');
-    }
-    if (phase >= 0.35 && phase < 0.95) {
-        const t = (phase - 0.35) / 0.6;
-        drawFlyingMissile(ctx, lerp(e.x, p.x, t), lerp(e.y, p.y, t), false, '#FF5544');
+        drawFlyingMissile(ctx, lerp(p.x, target.x, t), lerp(p.y, target.y, t), true, '#FFDD33');
     }
     if (phase < 0.08) drawFlash(ctx, p.x, p.y, '#FFEE99');
+}
+
+// Player missile out (yellow) + the enemy's own projectile back, typed per enemy.
+function drawExchange(ctx, p, e, nowMs, enemyKind) {
+    drawPlayerMissile(ctx, p, e, nowMs);
+
+    const phase = (nowMs % 1600) / 1600;
+    if (phase >= 0.35 && phase < 0.95) {
+        const t = (phase - 0.35) / 0.6;
+        let mx = lerp(e.x, p.x, t);
+        let my = lerp(e.y, p.y, t);
+        if (enemyKind === 'bullet') {
+            drawBullet(ctx, mx, my, '#FF6644');
+        } else if (enemyKind === 'homing') {
+            my += Math.sin(t * Math.PI * 3) * 7; // wavy homing track
+            drawFlyingMissile(ctx, mx, my, false, '#FF9933');
+        } else {
+            drawFlyingMissile(ctx, mx, my, false, '#FF5544'); // regular missile
+        }
+    }
     if (phase >= 0.35 && phase < 0.43) drawFlash(ctx, e.x, e.y, '#FFB0A0');
+}
+
+function drawBullet(ctx, mx, my, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(mx, my, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 }
 
 function drawFlyingMissile(ctx, mx, my, movingRight, color) {
