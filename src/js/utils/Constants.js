@@ -43,6 +43,13 @@ export const BURST_MIN_FUEL = 30;          // minimum fuel required to burst (= 
 export const HOVER_FUEL_RECOVERY = 0.5;     // per frame when not hovering
 export const HOVER_FUEL_RECOVERY_BOOST = 0.75; // per frame when pressing S solo
 export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before hover activates after burst
+
+// --- Attacker return-home & climbing ---
+export const ATTACKER_RETURN_TRIGGER_Y = 6 * TILE_SIZE;  // start returning when this far BELOW home
+export const ATTACKER_RETURN_TRIGGER_X = 20 * TILE_SIZE; // or this far horizontally from home
+export const ATTACKER_RETURN_DONE = 2 * TILE_SIZE;       // back home when within this distance (both axes)
+export const ATTACKER_CLIMB_MIN_FUEL = 40;               // fuel needed before a climb take-off
+export const ATTACKER_CLIMB_MAX_RISE = -4.0;             // upward speed cap while climbing
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
@@ -171,6 +178,7 @@ export const ENEMY_ATTACKER_TYPES = {
         usesGrenades: false,
         aimAccuracy: 0.6,
         movementType: 'pace_and_jump',
+        climbThrust: 0.55,
         bodyColor: '#55CCDD',
         headColor: '#44AABB',
         visorColor: '#FFFFFF',
@@ -189,6 +197,7 @@ export const ENEMY_ATTACKER_TYPES = {
         usesGrenades: false,
         aimAccuracy: 0.4,
         movementType: 'stop_and_shoot',
+        climbThrust: 0.45,
         bodyColor: '#44AA44',
         headColor: '#338833',
         visorColor: '#FFFF66',
@@ -208,6 +217,7 @@ export const ENEMY_ATTACKER_TYPES = {
         grenadeChance: 0.05,  // 5% chance to throw grenade instead of missile
         aimAccuracy: 0.8,
         movementType: 'zigzag_chase',
+        climbThrust: 0.65,
         bodyColor: '#CC3333',
         headColor: '#AA2222',
         visorColor: '#FFCC00',
@@ -226,6 +236,7 @@ export const ENEMY_ATTACKER_TYPES = {
         usesGrenades: false,
         aimAccuracy: 1.0,
         movementType: 'stop_and_shoot',
+        climbThrust: 0.5,
         bodyColor: '#DDAA00', // Yellow-Orange
         headColor: '#BB8800',
         visorColor: '#FF0000', // Red eye
