@@ -33,7 +33,7 @@ export const PLAYER_MAX_FALLING_SPEED = 7.0;  // Terminal velocity for falling
 export const PLAYER_STUN_FALL_SPEED = 6.0;    // Falling speed that triggers landing stun
 export const PLAYER_STUN_DURATION = 20;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
-export const PLAYER_BURST_FORCE = -5.0;
+export const PLAYER_BURST_FORCE = -5.8;
 export const HOVER_THRUST = -0.50;
 export const HOVER_THRUST_MIN = -0.30; // Weak thrust when fuel is low
 export const HOVER_MAX_FUEL = 100;

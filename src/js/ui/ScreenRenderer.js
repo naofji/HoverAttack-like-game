@@ -8,7 +8,7 @@ import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
-import { MODES } from '../utils/modes.js';
+import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
 
 export class ScreenRenderer {
@@ -56,11 +56,7 @@ export class ScreenRenderer {
         }
 
 
-        // Mode selector
-        ctx.font = '14px "Space Mono", monospace';
-        ctx.fillStyle = '#AAAAAA';
-        ctx.textAlign = 'center';
-        ctx.fillText('[←/→] MODE: ' + MODES[this.game.mode].label, canvas.width / 2, canvas.height - 40);
+        this._drawModeSelector(ctx, canvas);
 
         // Option toggle display
         const liftOn = this.game.options.carrierLift;
@@ -71,6 +67,81 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
         ctx.fillText(liftOn ? 'ON' : 'OFF', canvas.width / 2 + 78, canvas.height - 18);
         ctx.textAlign = 'center';
+    }
+
+    /**
+     * Both modes are drawn side by side so the choice — and which side you are
+     * on — is visible at a glance; the picked one gets its colour, a framed box
+     * and a glow, the other is dimmed back to near-background grey.
+     */
+    _drawModeSelector(ctx, canvas) {
+        const rowY = canvas.height - 74;
+        const GAP = 44;
+        const LABEL_FONT = 'bold 22px "Space Mono", monospace';
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Key hint, so the selection is discoverable without pressing anything.
+        ctx.font = '11px "Space Mono", monospace';
+        ctx.fillStyle = '#666666';
+        ctx.fillText('[ ← / → ]  SELECT MODE', canvas.width / 2, rowY - 34);
+
+        // Lay the labels out around the centre of the canvas.
+        ctx.font = LABEL_FONT;
+        const widths = MODE_ORDER.map((key) => ctx.measureText(MODES[key].label).width);
+        const rowWidth = widths.reduce((a, b) => a + b, 0) + GAP * (MODE_ORDER.length - 1);
+        let x = (canvas.width - rowWidth) / 2;
+
+        MODE_ORDER.forEach((key, i) => {
+            const mode = MODES[key];
+            const width = widths[i];
+            const centerX = x + width / 2;
+            const selected = key === this.game.mode;
+
+            if (selected) {
+                const boxW = width + 34;
+                const boxH = 38;
+
+                // Faint fill so the box reads as "filled in" even without the glow.
+                ctx.fillStyle = mode.color;
+                ctx.globalAlpha = 0.12;
+                ctx.fillRect(centerX - boxW / 2, rowY - boxH / 2, boxW, boxH);
+                ctx.globalAlpha = 1;
+
+                ctx.strokeStyle = mode.color;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = mode.color;
+                ctx.shadowBlur = 12;
+                ctx.strokeRect(centerX - boxW / 2, rowY - boxH / 2, boxW, boxH);
+
+                ctx.font = LABEL_FONT;
+                ctx.fillStyle = mode.color;
+                ctx.fillText(mode.label, centerX, rowY);
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.font = LABEL_FONT;
+                ctx.fillStyle = '#4A4A4A';
+                ctx.fillText(mode.label, centerX, rowY);
+            }
+
+            x += width + GAP;
+        });
+
+        // Arrows flanking the row, so it reads as a left/right selection.
+        const rowLeft = (canvas.width - rowWidth) / 2;
+        ctx.font = 'bold 20px "Space Mono", monospace';
+        ctx.fillStyle = '#888888';
+        ctx.fillText('◀', rowLeft - 34, rowY);
+        ctx.fillText('▶', rowLeft + rowWidth + 34, rowY);
+
+        // What the selected mode actually changes.
+        ctx.font = '13px "Space Mono", monospace';
+        ctx.fillStyle = '#9AA0A6';
+        ctx.fillText(MODES[this.game.mode].desc, canvas.width / 2, rowY + 32);
+
+        ctx.restore();
     }
 
     drawHowToPlay(ctx, page) {
