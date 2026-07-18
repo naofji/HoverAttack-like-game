@@ -386,7 +386,7 @@ export class EnemyAttacker {
                 if (this.jumpCooldown <= 0 && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL) {
                     this._jump();
                 }
-            } else if (this.hoverFuel > 0) {
+            } else if (this.hoverFuel > 0 && this.vy > ATTACKER_CLIMB_MAX_RISE) {
                 this.hovering = true;
                 this.vy -= this.config.climbThrust;
                 this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
