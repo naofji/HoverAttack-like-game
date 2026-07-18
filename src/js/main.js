@@ -18,7 +18,8 @@ import {
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
-    GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST
+    GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
+    STAGE_PALETTES
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -101,10 +102,12 @@ const Game = {
     gameSpeed: MODES.normal.gameSpeed,
     simAccumulator: 0,
     simAlpha: 1,
-    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'wall_of_fame_display'
+    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display'
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
+    stageDisplayIndex: 0,   // which stage (0..6) the attract screen is showing
+    stageDisplayTimer: 0,   // sub-timer for auto-advance
     playerNameInput: "",
     proximityAlertActive: false,
 
@@ -198,6 +201,7 @@ const Game = {
             case 'how_to_play': return this._updateHowToPlay(deltaTime);
             case 'local_ranking_display': return this._updateLocalRanking(deltaTime);
             case 'global_ranking_display': return this._updateGlobalRanking(deltaTime);
+            case 'stage_ranking_display': return this._updateStageRankingDisplay(deltaTime);
             case 'wall_of_fame_display': return this._updateWallOfFameDisplay(deltaTime);
             case 'ranking_entry': return this._updateRankingEntry();
             case 'gameover': return this._updateGameOver(deltaTime);
@@ -262,9 +266,30 @@ const Game = {
     _updateGlobalRanking(deltaTime) {
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
-            this.gameState = 'wall_of_fame_display';
+            this.gameState = 'stage_ranking_display';
             this.stateTimer = 0;
+            this.stageDisplayIndex = 0;
+            this.stageDisplayTimer = 0;
         } else if (this._anyKeyOrClick()) {
+            this.stateManager.restart();
+            this.gameState = 'playing';
+            audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    _updateStageRankingDisplay(deltaTime) {
+        this.stateTimer += deltaTime;
+        this.stageDisplayTimer += deltaTime;
+        if (this.stageDisplayTimer > 3000) {
+            this.stageDisplayTimer = 0;
+            this.stageDisplayIndex++;
+            if (this.stageDisplayIndex >= 7) {
+                this.gameState = 'wall_of_fame_display';
+                this.stateTimer = 0;
+                return;
+            }
+        }
+        if (this._anyKeyOrClick()) {
             this.stateManager.restart();
             this.gameState = 'playing';
             audioManager.startBGM(this.missionsCompleted);
@@ -857,6 +882,17 @@ const Game = {
         if (this.gameState === 'global_ranking_display') {
             const data = this.onlineData || { ranking: [], weekId: this.week.weekId };
             this.screenRenderer.drawGlobalRanking(ctx, data.ranking, this.globalRankIndex, data.weekId);
+            return;
+        }
+        if (this.gameState === 'stage_ranking_display') {
+            const idx = this.stageDisplayIndex;
+            const online = this.onlineData && Array.isArray(this.onlineData.stageRankings)
+                ? this.onlineData.stageRankings.find((e) => e.stage === idx + 1)
+                : null;
+            const data = online
+                ? { time: online.time || [], score: online.score || [] }
+                : this.stageRankingManager.getStage(idx + 1);
+            this.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
             return;
         }
         if (this.gameState === 'wall_of_fame_display') {

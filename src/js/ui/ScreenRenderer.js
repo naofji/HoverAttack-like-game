@@ -623,6 +623,75 @@ export class ScreenRenderer {
         ctx.textAlign = 'left';
     }
 
+    drawStageRankings(ctx, stageIndex, stageData, palette) {
+        const canvas = this.game.canvas;
+        const stageNo = stageIndex + 1;
+
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Header in this stage's colour.
+        ctx.textAlign = 'center';
+        this._metallicText(ctx, `STAGE ${stageNo}  RANKINGS`, canvas.width / 2, 44, palette.fill, 34);
+        ctx.fillStyle = palette.border;
+        ctx.font = 'bold 14px "Space Mono", monospace';
+        ctx.fillText('THIS WEEK · TOP 5', canvas.width / 2, 68);
+
+        this._drawStageBlock(ctx, 'FASTEST TIME', stageData.time || [], 100, palette, true);
+        this._drawStageBlock(ctx, 'HIGH SCORE', stageData.score || [], 320, palette, false);
+
+        ctx.textAlign = 'center';
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = '#FFFFFF';
+            ctx.shadowBlur = 10;
+            ctx.font = 'bold 18px "Space Mono", monospace';
+            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 18);
+            ctx.restore();
+        }
+        ctx.textAlign = 'left';
+    }
+
+    _drawStageBlock(ctx, label, rows, topY, palette, isTime) {
+        const canvas = this.game.canvas;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = palette.fill;
+        ctx.font = 'bold 20px "Space Mono", monospace';
+        ctx.fillText(label, canvas.width / 2, topY);
+
+        const startY = topY + 30;
+        const lineH = 30;
+        const textLeft = canvas.width / 2 - 200;
+        if (rows.length === 0) {
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#666666';
+            ctx.font = 'bold 16px "Space Mono", monospace';
+            ctx.fillText('NO RECORDS YET', canvas.width / 2, startY + 20);
+            ctx.textAlign = 'left';
+            return;
+        }
+        ctx.font = 'bold 18px "Space Mono", monospace';
+        ctx.textAlign = 'left';
+        rows.forEach((entry, i) => {
+            const rank = String(i + 1);
+            const name = (entry.name || '').padEnd(10, ' ');
+            const flag = flagEmoji(entry.country);
+            const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).padStart(7, ' ');
+            const rowText = `${rank}. ${name}${flag ? ' ' + flag : ''}   ${valStr}`;
+            ctx.fillStyle = lerpColor(palette.fill, palette.border, Math.min(i / 4, 1));
+            ctx.fillText(rowText, textLeft, startY + i * lineH);
+        });
+    }
+
+    _formatMs(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        const cs = Math.floor((ms % 1000) / 10);
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+    }
+
     drawMiniMap(ctx) {
         const game = this.game;
         const w = game.canvas.width;
