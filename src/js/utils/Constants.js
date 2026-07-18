@@ -83,7 +83,7 @@ export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
 export const CARRIER_SPEED = 0.4;
 export const CARRIER_MAX_HP = 200;
-export const CARRIER_INITIAL_LIVES = 3;
+export const CARRIER_INITIAL_LIVES = 1;
 export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert
 
 // --- Camera ---
@@ -139,7 +139,7 @@ export const CRUISE_MISSILE_ENGAGE_DISTANCE = 240; // Distance in pixels before 
 export const CRUISE_MISSILE_LIFETIME = 1800; // Very long lifetime (30 seconds)
 export const CRUISE_MISSILE_HP = 9; // 3 machine gun hits
 export const CRUISE_MISSILE_WARNING_TIME = 180; // 3 seconds warning
-export const CRUISE_MISSILE_SCORE = 100;
+export const CRUISE_MISSILE_SCORE = 150;
 export const CRUISE_MISSILE_MIN_DELAY = 1200; // 20 seconds at 60fps
 export const CRUISE_MISSILE_MAX_DELAY = 1800; // 30 seconds at 60fps
 export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement range in pixels
@@ -154,7 +154,7 @@ export const ENEMY_ATTACKER_TYPES = {
         jumpForce: -6.5,
         fireInterval: 120,    // 2 seconds
         sightRange: CANVAS_WIDTH * 0.4,
-        score: 100,
+        score: 300,
         spawnWeight: 60,      // 60%
         usesGrenades: false,
         aimAccuracy: 0.6,
@@ -172,7 +172,7 @@ export const ENEMY_ATTACKER_TYPES = {
         jumpForce: -5.0,
         fireInterval: 90,     // 1.5 seconds
         sightRange: CANVAS_WIDTH * 0.6,
-        score: 300,
+        score: 500,
         spawnWeight: 25,      // 25%
         usesGrenades: false,
         aimAccuracy: 0.4,
@@ -190,7 +190,7 @@ export const ENEMY_ATTACKER_TYPES = {
         jumpForce: -6.0,
         fireInterval: 75,     // 1.25 seconds
         sightRange: CANVAS_WIDTH * 0.5,
-        score: 500,
+        score: 700,
         spawnWeight: 15,      // 15%
         usesGrenades: true,
         grenadeChance: 0.05,  // 5% chance to throw grenade instead of missile
@@ -209,7 +209,7 @@ export const ENEMY_ATTACKER_TYPES = {
         jumpForce: -4.5,
         fireInterval: 300,    // 5 seconds between bursts
         sightRange: CANVAS_WIDTH * 0.8, // Very long sight
-        score: 800,
+        score: 900,
         spawnWeight: 100,     // Increased for testing
         usesGrenades: false,
         aimAccuracy: 1.0,
@@ -223,12 +223,12 @@ export const ENEMY_ATTACKER_TYPES = {
 };
 
 // --- Enemy Drone (Aerial) ---
-export const ENEMY_DRONE_HP = 5;            // Weak armor
+export const ENEMY_DRONE_HP = 8;            // Weak armor
 export const ENEMY_DRONE_SPEED = 4.0;       // Dashing speed
 export const ENEMY_DRONE_SPEED_Y_MAX = 3.0; // Dashing vertical speed
 export const ENEMY_DRONE_SIGHT_RANGE = CANVAS_WIDTH * 0.7; // Wide sight range
 export const ENEMY_DRONE_FIRE_INTERVAL = 120; // 2 seconds
-export const ENEMY_DRONE_SCORE = 150;
+export const ENEMY_DRONE_SCORE = 250;
 export const ENEMY_DRONE_COUNT = 15;        // Number to spawn in air spaces
 export const ENEMY_DRONE_WIDTH = 24;
 export const ENEMY_DRONE_HEIGHT = 16;
