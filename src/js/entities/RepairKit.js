@@ -1,4 +1,4 @@
-import { TILE_SIZE, GRAVITY } from '../utils/Constants.js';
+import { TILE_SIZE, GRAVITY, ITEM_PICKUP_SCORE } from '../utils/Constants.js';
 
 const SIZE = TILE_SIZE;
 const CORNER_RADIUS = 4;
@@ -44,6 +44,7 @@ export class RepairKit {
                 this.y < player.y + player.height &&
                 this.y + this.height > player.y) {
                 player.repairKits++;
+                this.game.addScore(ITEM_PICKUP_SCORE);
                 this.alive = false;
             }
         }

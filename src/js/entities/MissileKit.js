@@ -1,4 +1,4 @@
-import { TILE_SIZE, GRAVITY, MISSILE_INITIAL_COUNT } from '../utils/Constants.js';
+import { TILE_SIZE, GRAVITY, MISSILE_INITIAL_COUNT, ITEM_PICKUP_SCORE } from '../utils/Constants.js';
 
 const SIZE = TILE_SIZE;
 const CORNER_RADIUS = 4;
@@ -43,6 +43,7 @@ export class MissileKit {
                 this.y < player.y + player.height &&
                 this.y + this.height > player.y) {
                 player.missiles = MISSILE_INITIAL_COUNT;
+                this.game.addScore(ITEM_PICKUP_SCORE);
                 this.alive = false;
             }
         }

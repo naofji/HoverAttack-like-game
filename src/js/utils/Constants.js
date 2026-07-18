@@ -108,6 +108,8 @@ export const LANDMINE_KNOCKBACK_VY = -6;  // Upward launch on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
 export const LANDMINE_BLAST_RADIUS = 50;   // Area of effect damage radius (~3 tiles)
 export const LANDMINE_COUNT = 60;          // Number to scatter across the map
+export const LANDMINE_SCORE = 50;      // Player-detonated landmine
+export const ITEM_PICKUP_SCORE = 200;  // Any item (repair / missile / auto-aim) pickup
 
 // --- Enemy Tank (Hover) ---
 export const ENEMY_TANK_WIDTH = 16;

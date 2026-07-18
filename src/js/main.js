@@ -15,7 +15,7 @@ import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
-    LANDMINE_BLAST_RADIUS,
+    LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST
@@ -444,6 +444,7 @@ const Game = {
                         mine.detonate();
                         proj.alive = false;
                         proj.exploded = true;
+                        if (proj.isPlayerOwned) this.addScore(LANDMINE_SCORE);
                         break;
                     }
                 }
