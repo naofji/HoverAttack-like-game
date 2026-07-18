@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   TILE_SIZE, ENEMY_ATTACKER_TYPES,
   ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
-  ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE
+  ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
+  ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES, RIVAL_ALIGN_THRESHOLD,
+  RIVAL_ALIGN_TRIGGER_FRAMES, RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
 
@@ -160,4 +162,21 @@ test('heavy attacker gains altitude when its target is 4+ tiles above', () => {
 
   assert.ok(minY < FLOOR_Y - 3 * TILE_SIZE,
     `should climb at least 3 tiles toward the target, minY=${minY}`);
+});
+
+test('movement personality constants match the spec', () => {
+  assert.equal(ATTACKER_SLOW_RISE_CAP, -1.5);
+  assert.equal(ATTACKER_BOOST_MAX_FRAMES, 20);
+  assert.equal(RIVAL_ALIGN_THRESHOLD, 24);
+  assert.equal(RIVAL_ALIGN_TRIGGER_FRAMES, 45);
+  assert.equal(RIVAL_EVADE_OFFSET_MIN, 60);
+  assert.equal(RIVAL_EVADE_OFFSET_MAX, 120);
+  assert.equal(RIVAL_EVADE_DURATION, 40);
+});
+
+test('every attacker type has the spec climbStyle', () => {
+  const expected = { standard: 'boost', heavy: 'jump', rival: 'hover', artillery: 'jump' };
+  for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
+    assert.equal(type.climbStyle, expected[key], `climbStyle of ${key}`);
+  }
 });

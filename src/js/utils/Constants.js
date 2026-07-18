@@ -50,6 +50,16 @@ export const ATTACKER_RETURN_TRIGGER_X = 20 * TILE_SIZE; // or this far horizont
 export const ATTACKER_RETURN_DONE = 2 * TILE_SIZE;       // back home when within this distance (both axes)
 export const ATTACKER_CLIMB_MIN_FUEL = 40;               // fuel needed before a climb take-off
 export const ATTACKER_CLIMB_MAX_RISE = -4.0;             // upward speed cap while climbing
+export const ATTACKER_SLOW_RISE_CAP = -1.5;  // 'jump' climbStyle ascent cap (slow rise)
+export const ATTACKER_BOOST_MAX_FRAMES = 20; // 'boost' climbStyle thrust frames per airborne leg
+
+// --- Rival alignment avoidance ---
+export const RIVAL_ALIGN_THRESHOLD = 24;      // px: closer than this on an axis = aligned
+export const RIVAL_ALIGN_TRIGGER_FRAMES = 45; // aligned this long -> evade
+export const RIVAL_EVADE_OFFSET_MIN = 60;     // px: evade goal offset from target (min)
+export const RIVAL_EVADE_OFFSET_MAX = 120;    // px: evade goal offset from target (max)
+export const RIVAL_EVADE_DURATION = 40;       // frames an evade maneuver lasts
+
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
@@ -179,6 +189,7 @@ export const ENEMY_ATTACKER_TYPES = {
         aimAccuracy: 0.6,
         movementType: 'pace_and_jump',
         climbThrust: 0.55,
+        climbStyle: 'boost',
         bodyColor: '#55CCDD',
         headColor: '#44AABB',
         visorColor: '#FFFFFF',
@@ -198,6 +209,7 @@ export const ENEMY_ATTACKER_TYPES = {
         aimAccuracy: 0.4,
         movementType: 'stop_and_shoot',
         climbThrust: 0.45,
+        climbStyle: 'jump',
         bodyColor: '#44AA44',
         headColor: '#338833',
         visorColor: '#FFFF66',
@@ -218,6 +230,7 @@ export const ENEMY_ATTACKER_TYPES = {
         aimAccuracy: 0.8,
         movementType: 'zigzag_chase',
         climbThrust: 0.65,
+        climbStyle: 'hover',
         bodyColor: '#CC3333',
         headColor: '#AA2222',
         visorColor: '#FFCC00',
@@ -237,6 +250,7 @@ export const ENEMY_ATTACKER_TYPES = {
         aimAccuracy: 1.0,
         movementType: 'stop_and_shoot',
         climbThrust: 0.5,
+        climbStyle: 'jump',
         bodyColor: '#DDAA00', // Yellow-Orange
         headColor: '#BB8800',
         visorColor: '#FF0000', // Red eye
