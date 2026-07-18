@@ -25,11 +25,13 @@ export class GameStateManager {
             game.score = 0;
             game.missionsCompleted = game.debugStartMission ?? 0;
             game.totalTime = 0;
+            game.stageResults = [];
         }
 
         game.missionTimer = 0;
         game.pendingTimeBonus = 0;
         game.slotRunning = false;
+        game.stageStartScore = game.score;
 
         game.projectiles = [];
         game.particles = [];

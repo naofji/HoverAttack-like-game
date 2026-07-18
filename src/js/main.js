@@ -45,7 +45,7 @@ import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constan
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
-import { computeTimeBonus } from './utils/scoring.js';
+import { computeTimeBonus, buildStageResult } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 
 // ============================================
@@ -115,6 +115,10 @@ const Game = {
     slotRunning: false,
     localRankIndex: -1,
     globalRankIndex: -1,
+    stageStartScore: 0,
+    stageResults: [],
+    stageTop5Time: false,
+    stageTop5Score: false,
 
     // ==========================================
     // INITIALIZATION
@@ -589,12 +593,53 @@ const Game = {
             decayPerSec: MODES[this.mode].timeBonusDecay,
         });
         this.currentTimeBonus = 0;
+
+        // Record this stage's result (finalised: kills + flag + time bonus).
+        const clearedStage = this.missionsCompleted; // already incremented above (1..7)
+        const stageResult = buildStageResult({
+            stage: clearedStage,
+            scoreNow: this.score,
+            stageStartScore: this.stageStartScore,
+            targetTimeBonus: this.targetTimeBonus,
+            timeMs: this.missionTimer,
+        });
+        this.stageResults.push(stageResult);
+
+        // Preliminary "would this make top 5?" notice for the mission-clear screen.
+        // Prefer online stage rankings if loaded, else local manager.
+        this.stageTop5Time = this._wouldStageRankTime(clearedStage, stageResult.timeMs);
+        this.stageTop5Score = this._wouldStageRankScore(clearedStage, stageResult.score);
+
         this.slotRunning = true;
 
         this.gameState = this.missionsCompleted >= 7 ? 'game_clear' : 'mission_clear';
         this.stateTimer = 0;
         audioManager.stopBGM();
         audioManager.playSuccess();
+    },
+
+    _onlineStageEntry(stage) {
+        const sr = this.onlineData && this.onlineData.stageRankings;
+        if (!Array.isArray(sr)) return null;
+        return sr.find((e) => e.stage === stage) || null;
+    },
+
+    _wouldStageRankTime(stage, timeMs) {
+        const online = this._onlineStageEntry(stage);
+        if (online) {
+            const list = online.time || [];
+            return list.length < 5 || timeMs < list[list.length - 1].timeMs;
+        }
+        return this.stageRankingManager ? this.stageRankingManager.wouldRankTime(stage, timeMs) : false;
+    },
+
+    _wouldStageRankScore(stage, score) {
+        const online = this._onlineStageEntry(stage);
+        if (online) {
+            const list = online.score || [];
+            return list.length < 5 || score > list[list.length - 1].score;
+        }
+        return this.stageRankingManager ? this.stageRankingManager.wouldRankScore(stage, score) : false;
     },
 
     // ==========================================
