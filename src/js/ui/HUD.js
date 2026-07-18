@@ -31,16 +31,29 @@ export class HUD {
         // --- ROW 1 ---
         const row1Y = HUD_TOP_HEIGHT * 0.3;
 
-        ctx.fillStyle = '#00CCFF';
-        ctx.fillText('HOVER ATTACK', 12, row1Y);
-
-        const elapsed = this.game.totalTime;
+        // Per-stage elapsed time (not the whole run).
+        const elapsed = this.game.missionTimer;
         const minutes  = Math.floor(elapsed / 60000);
         const seconds  = Math.floor((elapsed % 60000) / 1000);
         const centis   = Math.floor((elapsed % 1000) / 10);
         const timeStr  = `TIME ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
         ctx.fillStyle = HUD_COLOR;
-        ctx.fillText(timeStr, 250, row1Y);
+        ctx.fillText(timeStr, 12, row1Y);
+
+        // Live time bonus: decays as the stage drags on. Colour shifts
+        // green -> yellow -> red (blinking near zero) to convey urgency.
+        const tb = this.game.liveTimeBonus();
+        const frac = tb.max > 0 ? tb.current / tb.max : 0;
+        let bonusColor;
+        if (frac > 0.5) {
+            bonusColor = '#33FF66';
+        } else if (frac > 0.2) {
+            bonusColor = '#FFCC00';
+        } else {
+            bonusColor = (Math.floor(Date.now() / 250) % 2 === 0) ? '#FF3333' : '#992222';
+        }
+        ctx.fillStyle = bonusColor;
+        ctx.fillText('BONUS ' + String(tb.current).padStart(6, '0'), 250, row1Y);
 
         ctx.fillStyle = '#FFCC00';
         ctx.fillText('MISSION', 510, row1Y);

@@ -47,7 +47,7 @@ import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constan
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
-import { computeTimeBonus, buildStageResult } from './utils/scoring.js';
+import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 
 // ============================================
@@ -635,13 +635,8 @@ const Game = {
         this.flag = null;
         this.missionsCompleted++;
 
-        // Time bonus: mode-dependent decay (see utils/scoring.js).
-        const totalTiles = this.map.cols * this.map.rows;
-        this.targetTimeBonus = computeTimeBonus({
-            totalTiles,
-            elapsedMs: this.missionTimer,
-            decayPerSec: MODES[this.mode].timeBonusDecay,
-        });
+        // Time bonus: the live decaying value at the moment of capture (see liveTimeBonus).
+        this.targetTimeBonus = this.liveTimeBonus().current;
         this.currentTimeBonus = 0;
 
         // Record this stage's result (finalised: kills + flag + time bonus).
@@ -1070,6 +1065,23 @@ const Game = {
     /** Add points to the score */
     addScore(points) {
         this.score += points;
+    },
+
+    /**
+     * Live time bonus for the current stage: the amount you'd be awarded if you
+     * captured the flag right now. Decays as missionTimer grows (to 0). `max` is
+     * the value at 0 elapsed, used by the HUD to colour the readout by remaining %.
+     */
+    liveTimeBonus() {
+        if (!this.map) return { current: 0, max: 0 };
+        const totalTiles = this.map.cols * this.map.rows;
+        const max = Math.floor(totalTiles / 100) * 100 * TIME_BONUS_BASE_MULT;
+        const current = computeTimeBonus({
+            totalTiles,
+            elapsedMs: this.missionTimer,
+            decayPerSec: MODES[this.mode].timeBonusDecay,
+        });
+        return { current, max };
     },
 
     /** Transition to game over state (idempotent) */

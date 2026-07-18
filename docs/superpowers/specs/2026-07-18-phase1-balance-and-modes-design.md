@@ -108,6 +108,12 @@
 - 減衰率・基準倍率は定数で保持し調整可能に
   （例: `TIME_BONUS_BASE_MULT = 1.5`、`TIME_BONUS_DECAY = { normal: 40, newtype: 50 }`）。
 - ニュータイプのタイムボーナス優位は意図的に残す（完全な等化はしない）。
+- **HUDライブ表示（2026-07-18 追加）**: `Game.liveTimeBonus()`（今クリアした場合の付与額＝減衰後の現在値と、
+  0秒時の最大値 `max`）を毎フレーム算出し、HUD に `BONUS ######` を表示。残量割合で
+  緑→黄→赤（0付近で点滅）と色が変化し、焦りを演出する。`_onFlagCaptured` の付与額も
+  `liveTimeBonus().current` を用いて表示値と一致させる（DRY）。
+- **HUDの時間表示（2026-07-18 変更）**: 通し時間 `totalTime` ではなく**ステージ経過 `missionTimer`** を表示。
+  （リザルト画面のクリアタイムは従来どおり `totalTime`。）
 
 ---
 
