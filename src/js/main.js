@@ -49,6 +49,7 @@ import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
+import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/renderInterp.js';
 
 // ============================================
 // Game Object
@@ -457,6 +458,7 @@ const Game = {
     },
 
     _simulationTick() {
+        this._snapshotPrevPositions();
         this._updateCarrier();
         this._updatePlayer();
         this._updateCamera();
@@ -472,6 +474,34 @@ const Game = {
         this._checkMissionClear();
         this.collisionManager.update();
         this._updateProximityAlert();
+    },
+
+    // --- Render interpolation (see utils/renderInterp.js) -------------------
+
+    /** Run fn over every entity that moves each tick and is drawn in the world. */
+    _forEachMovingEntity(fn) {
+        if (this.player) fn(this.player);
+        if (this.carrier) fn(this.carrier);
+        for (const e of this.enemies) fn(e);
+        for (const p of this.projectiles) fn(p);
+        for (const b of this.enemyBullets) fn(b);
+        for (const k of this.repairKits) fn(k);
+        for (const u of this.autoAimUnits) fn(u);
+        for (const k of this.missileKits) fn(k);
+    },
+
+    /** Record pre-tick positions so draw() can interpolate towards the new ones. */
+    _snapshotPrevPositions() {
+        this._forEachMovingEntity(snapshotEntity);
+    },
+
+    /** Shift entities to their interpolated draw positions (restore after drawing). */
+    _applyRenderInterpolation(alpha) {
+        this._forEachMovingEntity((e) => interpolateEntity(e, alpha));
+    },
+
+    _restoreRenderInterpolation() {
+        this._forEachMovingEntity(restoreEntity);
     },
 
     _updateMiniMap() {
@@ -936,6 +966,8 @@ const Game = {
         const camX = this.camera.renderX(alpha);
         const camY = this.camera.renderY(alpha);
 
+        this._applyRenderInterpolation(alpha);
+
         ctx.save();
         ctx.translate(-camX, -camY);
 
@@ -974,6 +1006,8 @@ const Game = {
         if (this.flag) this.flag.draw(ctx);
 
         ctx.restore();
+
+        this._restoreRenderInterpolation();
     },
 
     _drawOverlays(ctx) {
