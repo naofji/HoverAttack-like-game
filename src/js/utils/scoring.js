@@ -9,8 +9,10 @@ export function computeTimeBonus({ totalTiles, elapsedMs, decayPerSec, baseMult 
 }
 
 // A single stage's result, finalised at flag capture. score = points earned
-// during the stage (kills + flag) plus that stage's time bonus.
+// during the stage (kills + flag) plus that stage's time bonus. timeMs is
+// rounded to an integer: missionTimer accumulates fractional deltaTimes, and the
+// GAS backend rejects non-integer timeMs.
 export function buildStageResult({ stage, scoreNow, stageStartScore, targetTimeBonus, timeMs }) {
     const score = Math.max(0, (scoreNow - stageStartScore) + targetTimeBonus);
-    return { stage, timeMs, score };
+    return { stage, timeMs: Math.round(timeMs), score };
 }

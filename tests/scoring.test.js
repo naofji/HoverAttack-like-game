@@ -33,3 +33,10 @@ test('buildStageResult clamps negative to 0', () => {
     const r = buildStageResult({ stage: 1, scoreNow: 100, stageStartScore: 5000, targetTimeBonus: 0, timeMs: 1000 });
     assert.equal(r.score, 0);
 });
+
+test('buildStageResult rounds timeMs to an integer (server requires integer ms)', () => {
+    // missionTimer accumulates float deltaTimes, so timeMs arrives fractional.
+    const r = buildStageResult({ stage: 2, scoreNow: 8000, stageStartScore: 0, targetTimeBonus: 0, timeMs: 42315.6 });
+    assert.equal(Number.isInteger(r.timeMs), true);
+    assert.equal(r.timeMs, 42316);
+});
