@@ -8,6 +8,7 @@ import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
+import { MODES } from '../utils/modes.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -53,6 +54,12 @@ export class ScreenRenderer {
             ctx.restore();
         }
 
+
+        // Mode selector
+        ctx.font = '14px "Space Mono", monospace';
+        ctx.fillStyle = '#AAAAAA';
+        ctx.textAlign = 'center';
+        ctx.fillText('[←/→] MODE: ' + MODES[this.game.mode].label, canvas.width / 2, canvas.height - 40);
 
         // Option toggle display
         const liftOn = this.game.options.carrierLift;

@@ -44,6 +44,7 @@ import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
 import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
+import { MODES, cycleMode } from './utils/modes.js';
 
 // ============================================
 // Game Object
@@ -93,6 +94,8 @@ const Game = {
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
+    mode: 'normal',       // 'normal' | 'newtype'
+    gameSpeed: MODES.normal.gameSpeed,
     gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'wall_of_fame_display'
     showMiniMap: false,
     miniMapAlpha: 0,
@@ -196,7 +199,13 @@ const Game = {
 
     _updateTitle(deltaTime) {
         this.stateTimer += deltaTime;
-        if (this.input.isKeyPressed('Tab')) {
+        if (this.input.isKeyPressed('ArrowLeft')) {
+            this.mode = cycleMode(this.mode, -1);
+            this.gameSpeed = MODES[this.mode].gameSpeed;
+        } else if (this.input.isKeyPressed('ArrowRight')) {
+            this.mode = cycleMode(this.mode, +1);
+            this.gameSpeed = MODES[this.mode].gameSpeed;
+        } else if (this.input.isKeyPressed('Tab')) {
             this.options.carrierLift = !this.options.carrierLift;
         } else if (this.stateTimer > 8000) {
             this.gameState = 'how_to_play';
