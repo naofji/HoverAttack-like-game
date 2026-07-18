@@ -343,11 +343,18 @@ const Game = {
                 const displayMission = Math.min(7, this.missionsCompleted + 1);
                 const formattedTime = this.missionsCompleted >= 7 ? this._formatTime(this.totalTime) : null;
                 const country = getCountryCode();
-                this.localRankIndex = this.highScoreManager.addScore(
-                    this.playerNameInput, this.score, displayMission, formattedTime, country
-                );
+                // Overall weekly ranking: only recorded when it's an actual high score.
+                // (A stage-only qualifier reaches naming to save per-stage records, but
+                // must not be inserted into the overall ranking.)
                 this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
-                this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
+                if (this.highScoreManager.isHighScore(this.score)) {
+                    this.localRankIndex = this.highScoreManager.addScore(
+                        this.playerNameInput, this.score, displayMission, formattedTime, country
+                    );
+                    this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
+                } else {
+                    this.localRankIndex = -1;
+                }
                 // Persist this run's per-stage results locally (and online in Task 6).
                 for (const r of this.stageResults) {
                     this.stageRankingManager.addStageResult(r.stage, {
@@ -997,7 +1004,10 @@ const Game = {
 
     /** Navigate to ranking entry if high score, otherwise return to title */
     _tryGoToRanking() {
-        if (this.highScoreManager.isHighScore(this.score)) {
+        // Eligible to name if the overall run is a high score OR any cleared stage
+        // would make its per-stage top 5 (so partial runs can still leave a record).
+        const eligible = this.highScoreManager.isHighScore(this.score) || this._anyStageWouldRank();
+        if (eligible) {
             this.gameState = 'ranking_entry';
             this.playerNameInput = "";
             audioManager.playRankingBGM();
@@ -1006,6 +1016,16 @@ const Game = {
             this.stateTimer = 0;
             audioManager.playTitleBGM();
         }
+    },
+
+    /** True if any buffered stage result would rank top 5 (by time or score). */
+    _anyStageWouldRank() {
+        for (const r of this.stageResults) {
+            if (this._wouldStageRankTime(r.stage, r.timeMs) || this._wouldStageRankScore(r.stage, r.score)) {
+                return true;
+            }
+        }
+        return false;
     },
 
     /** Returns true if any key/click input was pressed this frame */
