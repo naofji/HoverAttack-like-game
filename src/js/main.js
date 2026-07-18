@@ -46,6 +46,7 @@ import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus } from './utils/scoring.js';
+import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 
 // ============================================
 // Game Object
@@ -97,6 +98,8 @@ const Game = {
     missionsCompleted: 0,
     mode: 'normal',       // 'normal' | 'newtype'
     gameSpeed: MODES.normal.gameSpeed,
+    simAccumulator: 0,
+    simAlpha: 1,
     gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'wall_of_fame_display'
     showMiniMap: false,
     miniMapAlpha: 0,
@@ -347,23 +350,33 @@ const Game = {
     // PLAYING STATE UPDATE
     // ==========================================
     _updatePlaying(deltaTime) {
+        // Timers advance in real time (mode does not slow the clock).
         this.totalTime += deltaTime;
         this.missionTimer += deltaTime;
 
+        // Per-frame input / one-shots (run once regardless of tick count).
         // ロック中: 内部マウス座標をクロスヘアのスクリーン位置に固定
         if (this.input.crosshairLocked) {
             this.input.mouse.x = this.input.lockedWorldX - this.camera.x;
             this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
         }
-
         this._updateMiniMap();
-
         if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
             this.player.switchWeapon();
         }
-
         this._handleDocking();
         this._handleShooting();
+
+        // Fixed-timestep physics, scaled by gameSpeed.
+        const { ticks, remainder, alpha } = advanceAccumulator(
+            this.simAccumulator, deltaTime * this.gameSpeed, SIM_STEP, MAX_TICKS
+        );
+        for (let t = 0; t < ticks; t++) this._simulationTick();
+        this.simAccumulator = remainder;
+        this.simAlpha = alpha;
+    },
+
+    _simulationTick() {
         this._updateCarrier();
         this._updatePlayer();
         this._updateCamera();
