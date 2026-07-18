@@ -69,11 +69,11 @@ export class Missile {
         ctx.rotate(Math.atan2(this.vy, this.vx));
 
         // Body
-        ctx.fillStyle = this.isPlayerOwned ? '#FFFF00' : (this.isRival ? '#FF3300' : '#FF4444');
+        ctx.fillStyle = this.isPlayerOwned ? '#FFFF00' : (this.isRival ? '#FF3300' : '#DDDDDD');
         ctx.fillRect(-4, -1, 8, 2);
 
         // Tip
-        ctx.fillStyle = this.isRival ? '#FFAA00' : '#FFFFFF';
+        ctx.fillStyle = this.isRival ? '#FFAA00' : '#888888';
         ctx.fillRect(3, -1, 2, 2);
 
         ctx.restore();

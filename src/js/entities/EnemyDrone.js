@@ -236,8 +236,9 @@ export class EnemyDrone {
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
         } else {
-            // Shoot bullet
-            const bullet = new EnemyBullet(this.game, cx, cy, this.targetAngle);
+            // Shoot bullet - slight per-shot spread within the burst
+            const spread = (Math.random() - 0.5) * 0.1;
+            const bullet = new EnemyBullet(this.game, cx, cy, this.targetAngle + spread);
             this.game.enemyBullets.push(bullet);
         }
     }
