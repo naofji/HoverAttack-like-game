@@ -39,7 +39,7 @@ import { CollisionManager } from './systems/CollisionManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
-import { StageRankingManager } from './systems/StageRankingManager.js';
+import { StageRankingManager, pickStageRanking } from './systems/StageRankingManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
@@ -888,12 +888,8 @@ const Game = {
         }
         if (this.gameState === 'stage_ranking_display') {
             const idx = this.stageDisplayIndex;
-            const online = this.onlineData && Array.isArray(this.onlineData.stageRankings)
-                ? this.onlineData.stageRankings.find((e) => e.stage === idx + 1)
-                : null;
-            const data = online
-                ? { time: online.time || [], score: online.score || [] }
-                : this.stageRankingManager.getStage(idx + 1);
+            const online = this.onlineData ? this.onlineData.stageRankings : null;
+            const data = pickStageRanking(online, idx + 1, this.stageRankingManager.getStage(idx + 1));
             this.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
             return;
         }

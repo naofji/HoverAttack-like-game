@@ -11,6 +11,29 @@ function emptyStages() {
     return Array.from({ length: STAGE_COUNT }, () => ({ time: [], score: [] }));
 }
 
+/**
+ * Choose which per-stage ranking to display: prefer the online list when it has
+ * records, otherwise fall back to local — decided independently for the time and
+ * score lists. This keeps a device's own records visible when the online board
+ * has no entries yet (e.g. the StageScores sheet is empty / not yet created).
+ *
+ * @param {Array|null} onlineStageRankings - onlineData.stageRankings ([] / null when offline)
+ * @param {number} stage - 1..7
+ * @param {{time:Array, score:Array}} localData - StageRankingManager.getStage(stage)
+ */
+export function pickStageRanking(onlineStageRankings, stage, localData) {
+    const entry = Array.isArray(onlineStageRankings)
+        ? onlineStageRankings.find((e) => e && e.stage === stage)
+        : null;
+    const onlineTime = entry && Array.isArray(entry.time) ? entry.time : [];
+    const onlineScore = entry && Array.isArray(entry.score) ? entry.score : [];
+    const local = localData || { time: [], score: [] };
+    return {
+        time: onlineTime.length ? onlineTime : (local.time || []),
+        score: onlineScore.length ? onlineScore : (local.score || []),
+    };
+}
+
 export class StageRankingManager {
     constructor(weekId) {
         this.weekId = weekId;

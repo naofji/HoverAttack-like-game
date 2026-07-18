@@ -13,6 +13,32 @@ function installStorage() {
 }
 beforeEach(() => installStorage());
 
+test('pickStageRanking: empty online stage falls back to local per list', async () => {
+    const { pickStageRanking } = await import('../src/js/systems/StageRankingManager.js');
+    const local = { time: [{ name: 'ME', timeMs: 1000, country: '' }], score: [{ name: 'ME', score: 500, country: '' }] };
+    // Online has the stage entry but both lists are empty (e.g. StageScores sheet empty).
+    const online = [{ stage: 1, time: [], score: [] }, { stage: 2, time: [], score: [] }];
+    assert.deepEqual(pickStageRanking(online, 1, local), local);
+});
+
+test('pickStageRanking: non-empty online wins per list', async () => {
+    const { pickStageRanking } = await import('../src/js/systems/StageRankingManager.js');
+    const local = { time: [{ name: 'ME', timeMs: 1000, country: '' }], score: [{ name: 'ME', score: 500, country: '' }] };
+    const onlineTime = [{ name: 'WORLD', timeMs: 800, country: 'US' }];
+    // Online has time records but no score records -> time from online, score from local.
+    const online = [{ stage: 1, time: onlineTime, score: [] }];
+    const picked = pickStageRanking(online, 1, local);
+    assert.deepEqual(picked.time, onlineTime);
+    assert.deepEqual(picked.score, local.score);
+});
+
+test('pickStageRanking: missing online (offline/no array) falls back to local', async () => {
+    const { pickStageRanking } = await import('../src/js/systems/StageRankingManager.js');
+    const local = { time: [{ name: 'ME', timeMs: 1000, country: '' }], score: [] };
+    assert.deepEqual(pickStageRanking(null, 3, local), local);
+    assert.deepEqual(pickStageRanking([], 3, local), local);
+});
+
 test('empty stage returns empty lists', async () => {
     const { StageRankingManager } = await import('../src/js/systems/StageRankingManager.js');
     const m = new StageRankingManager('2026-W10');
