@@ -7,7 +7,9 @@ import {
     PLAYER_WIDTH, PLAYER_HEIGHT,
     PLAYER_MAX_FALLING_SPEED,
     HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
-    MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT
+    MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT,
+    ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
+    ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -44,6 +46,12 @@ export class EnemyAttacker {
         this.aiState = 'patrol'; // 'patrol' or 'chase'
         this.jumpCooldown = 0;
 
+        // Home position (spawn point) — the attacker returns here when displaced
+        this.homeX = x;
+        this.homeY = y;
+        this.returning = false;
+        this.currentTarget = null;
+
         // Animation & State
         this.walkFrame = 2;
         this.walkTimer = 0;
@@ -67,7 +75,14 @@ export class EnemyAttacker {
         const targetDist = target ? this._distToTarget(target) : Infinity;
 
         // --- AI state decision ---
-        this.aiState = (target && targetDist <= this.config.sightRange) ? 'chase' : 'patrol';
+        this.currentTarget = target;
+        if (target && targetDist <= this.config.sightRange) {
+            this.aiState = 'chase';
+            this.returning = false;
+        } else {
+            this._updateReturnState();
+            this.aiState = this.returning ? 'return' : 'patrol';
+        }
 
         // --- Movement ---
         this._updateMovement(target);
@@ -81,7 +96,7 @@ export class EnemyAttacker {
         this.vy += GRAVITY;
         if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
 
-        if (!this.onGround && this.aiState !== 'chase') {
+        if (!this.onGround && this.aiState === 'patrol') {
             this.vx *= AIR_FRICTION;
             if (Math.abs(this.vx) < 0.1) this.vx = 0;
         }
@@ -100,6 +115,8 @@ export class EnemyAttacker {
             this.vx = 0;
         } else if (this.aiState === 'chase') {
             this._chaseTarget(target);
+        } else if (this.aiState === 'return') {
+            this._patrol(); // placeholder — replaced by _climbToward in the next task
         } else {
             this._patrol();
         }
@@ -136,6 +153,19 @@ export class EnemyAttacker {
     // ------------------------------------------
     // AI
     // ------------------------------------------
+
+    /** Hysteresis: start returning when far below/away from home, stop when back. */
+    _updateReturnState() {
+        const dxHome = this.homeX - this.x;
+        const dyHome = this.homeY - this.y;
+        if (!this.returning) {
+            if (dyHome < -ATTACKER_RETURN_TRIGGER_Y || Math.abs(dxHome) > ATTACKER_RETURN_TRIGGER_X) {
+                this.returning = true;
+            }
+        } else if (Math.abs(dxHome) <= ATTACKER_RETURN_DONE && Math.abs(dyHome) <= ATTACKER_RETURN_DONE) {
+            this.returning = false;
+        }
+    }
 
     _getClosestTarget() {
         // Evaluate player and carrier to find the primary target
