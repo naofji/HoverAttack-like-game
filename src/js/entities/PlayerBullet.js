@@ -19,6 +19,7 @@ export class PlayerBullet {
         this.radius = PLAYER_MG_RADIUS;
         this.alive = true;
         this.lifetime = PLAYER_MG_LIFETIME;
+        this.isPlayerOwned = true;
 
         // Play turret-like firing sound (as requested)
         audioManager.playEnemyFire(); 
