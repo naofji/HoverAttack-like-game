@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeTimeBonus, TIME_BONUS_BASE_MULT } from '../src/js/utils/scoring.js';
+import { computeTimeBonus, TIME_BONUS_BASE_MULT, buildStageResult } from '../src/js/utils/scoring.js';
 
 test('base multiplier is 1.5', () => {
   assert.equal(TIME_BONUS_BASE_MULT, 1.5);
@@ -22,4 +22,14 @@ test('newtype decays 50/sec, normal 40/sec', () => {
 test('never negative', () => {
   const b = computeTimeBonus({ totalTiles: 100, elapsedMs: 999999, decayPerSec: 50, baseMult: 1.5 });
   assert.equal(b, 0);
+});
+
+test('buildStageResult = (scoreNow - stageStartScore) + timeBonus', () => {
+    const r = buildStageResult({ stage: 3, scoreNow: 18000, stageStartScore: 10000, targetTimeBonus: 2500, timeMs: 42000 });
+    assert.deepEqual(r, { stage: 3, timeMs: 42000, score: 8000 + 2500 });
+});
+
+test('buildStageResult clamps negative to 0', () => {
+    const r = buildStageResult({ stage: 1, scoreNow: 100, stageStartScore: 5000, targetTimeBonus: 0, timeMs: 1000 });
+    assert.equal(r.score, 0);
 });

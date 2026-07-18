@@ -7,3 +7,10 @@ export function computeTimeBonus({ totalTiles, elapsedMs, decayPerSec, baseMult 
     const seconds = Math.floor(elapsedMs / 1000);
     return Math.max(0, baseBonus - seconds * decayPerSec);
 }
+
+// A single stage's result, finalised at flag capture. score = points earned
+// during the stage (kills + flag) plus that stage's time bonus.
+export function buildStageResult({ stage, scoreNow, stageStartScore, targetTimeBonus, timeMs }) {
+    const score = Math.max(0, (scoreNow - stageStartScore) + targetTimeBonus);
+    return { stage, timeMs, score };
+}
