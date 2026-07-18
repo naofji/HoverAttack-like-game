@@ -32,6 +32,8 @@ export class GameStateManager {
         game.pendingTimeBonus = 0;
         game.slotRunning = false;
         game.stageStartScore = game.score;
+        game.stageTop5Time = false;
+        game.stageTop5Score = false;
 
         game.projectiles = [];
         game.particles = [];
