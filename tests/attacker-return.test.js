@@ -69,6 +69,41 @@ test('within 2 tiles of home -> return completes, back to patrol', () => {
   assert.equal(e.aiState, 'patrol');
 });
 
+/** Floor row 20 with a pit (cols 10-13, floor at row 22) between two ledges. */
+function pitWorldRows() {
+  const rows = [];
+  for (let r = 0; r < 20; r++) rows.push('.'.repeat(24));
+  for (let r = 20; r < 22; r++) rows.push('#'.repeat(10) + '....' + '#'.repeat(10));
+  for (let r = 22; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+function makePlayer(x, y) {
+  return { x, y, width: 16, height: 24, alive: true, docked: false };
+}
+
+test('chasing attacker does NOT walk off a ledge when the target is level with it', () => {
+  const game = makeGame(makeMap(pitWorldRows()));
+  game.player = makePlayer(16 * TILE_SIZE, FLOOR_Y); // same height, across the pit
+  const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+
+  for (let i = 0; i < 600; i++) e.update();
+
+  assert.equal(e.aiState, 'chase');
+  assert.equal(e.y, FLOOR_Y, 'stays on the upper floor');
+  assert.ok(e.x + e.width <= 10 * TILE_SIZE + 1, 'stops at the ledge');
+});
+
+test('chasing attacker DOES drop down when the target is below', () => {
+  const game = makeGame(makeMap(pitWorldRows()));
+  game.player = makePlayer(11 * TILE_SIZE, 22 * TILE_SIZE - 24); // inside the pit
+  const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+
+  for (let i = 0; i < 600; i++) e.update();
+
+  assert.ok(e.y > FLOOR_Y, 'followed the target down into the pit');
+});
+
 /** 24x24 world: low floor (row 20) on the left, an 8-tile step (top row 12) on the right half. */
 function stepWorldRows() {
   const rows = [];

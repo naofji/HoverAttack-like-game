@@ -549,25 +549,32 @@ export class EnemyAttacker {
 
         // --- Cliff check ---
         if (this.onGround && !hitHMap) {
-            const isPatrolling = (this.aiState === 'patrol');
             const mType = this.config.movementType;
+            const moveDir = this.vx !== 0 ? Math.sign(this.vx) : this.patrolDir;
 
-            const frontX = this.patrolDir > 0
+            const frontX = moveDir > 0
                 ? this.x + this.width + 2
                 : this.x - 2;
             const feetY = this.y + this.height + 4;
 
             if (!map.isSolidAtPixel(frontX, feetY)) {
-                if (isPatrolling) {
+                if (this.aiState === 'patrol') {
                     this.patrolDir *= -1; // Reverse at edge when patrolling naturally
-                } else {
-                    if (mType === 'pace_and_jump' && this.jumpCooldown <= 0) {
-                        this._jump(); // Jump over gap!
+                } else if (this.aiState === 'chase') {
+                    const t = this.currentTarget;
+                    const targetBelow = t && (t.y > this.y + TILE_SIZE);
+                    if (!targetBelow) {
+                        // Don't ratchet downhill: hold the ledge unless the target is below
+                        this.x -= this.vx;
+                        this.vx = 0;
+                        this.patrolDir *= -1;
                     } else if (mType === 'pace_and_jump') {
-                        this.patrolDir *= -1; // Turn back if can't jump
+                        if (this.jumpCooldown <= 0) this._jump(); // Jump over gap!
+                        else this.patrolDir *= -1;
                     }
-                    // For chase_and_jump or stop_and_shoot, just fall down
+                    // Other movement types: drop down toward the target below
                 }
+                // 'return': allow the drop — _climbToward recovers altitude afterwards
             }
         }
 
