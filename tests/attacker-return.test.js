@@ -68,3 +68,36 @@ test('within 2 tiles of home -> return completes, back to patrol', () => {
   assert.equal(e.returning, false);
   assert.equal(e.aiState, 'patrol');
 });
+
+/** 24x24 world: low floor (row 20) on the left, an 8-tile step (top row 12) on the right half. */
+function stepWorldRows() {
+  const rows = [];
+  for (let r = 0; r < 12; r++) rows.push('.'.repeat(24));
+  for (let r = 12; r < 20; r++) rows.push('.'.repeat(12) + '#'.repeat(12));
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+test('heavy attacker climbs an 8-tile step back to its home (no warp)', () => {
+  const game = makeGame(makeMap(stepWorldRows()));
+  const e = makeAttacker(game, 48, FLOOR_Y, 'heavy');
+  // Pretend it originally spawned on top of the step at col 16
+  e.homeX = 16 * TILE_SIZE;              // 256
+  e.homeY = 12 * TILE_SIZE - 24;         // 168 (standing on the step top)
+
+  let prevY = e.y;
+  let maxStepPerFrame = 0;
+  for (let i = 0; i < 3600; i++) {
+    e.update();
+    maxStepPerFrame = Math.max(maxStepPerFrame, Math.abs(e.y - prevY));
+    prevY = e.y;
+    if (!e.returning && Math.abs(e.y - e.homeY) <= 2 * TILE_SIZE) break;
+  }
+
+  assert.ok(Math.abs(e.y - e.homeY) <= 2 * TILE_SIZE,
+    `should be back near home height, got y=${e.y} home=${e.homeY}`);
+  assert.ok(Math.abs(e.x - e.homeX) <= 3 * TILE_SIZE,
+    `should be near homeX, got x=${e.x}`);
+  assert.equal(e.returning, false);
+  assert.ok(maxStepPerFrame < TILE_SIZE, 'no warp: per-frame movement stays under one tile');
+});

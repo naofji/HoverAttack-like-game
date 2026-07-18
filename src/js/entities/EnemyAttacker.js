@@ -116,7 +116,7 @@ export class EnemyAttacker {
         } else if (this.aiState === 'chase') {
             this._chaseTarget(target);
         } else if (this.aiState === 'return') {
-            this._patrol(); // placeholder — replaced by _climbToward in the next task
+            this._climbToward(this.homeX, this.homeY);
         } else {
             this._patrol();
         }
@@ -164,6 +164,34 @@ export class EnemyAttacker {
             }
         } else if (Math.abs(dxHome) <= ATTACKER_RETURN_DONE && Math.abs(dyHome) <= ATTACKER_RETURN_DONE) {
             this.returning = false;
+        }
+    }
+
+    /**
+     * Move toward (targetX, targetY) using walk + jump + hover thrust.
+     * Climbs in legs: waits on the ground for fuel, ascends, falls to recover, repeats.
+     */
+    _climbToward(targetX, targetY) {
+        const dx = targetX - this.x;
+        // Overshoot 8px so ledge lips can be cleared before thrust cuts out
+        const below = this.y > targetY - 8;
+
+        if (Math.abs(dx) > 8) {
+            this.vx = dx > 0 ? this.maxSpeed : -this.maxSpeed;
+        } else {
+            this.vx = 0;
+        }
+
+        if (this.onGround) {
+            // Wait on the ground until there is enough fuel for a climb leg
+            if (below && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL && this.jumpCooldown <= 0) {
+                this._jump();
+            }
+        } else if (below && this.hoverFuel > 0) {
+            this.hovering = true;
+            this.vy -= this.config.climbThrust;
+            this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
+            if (this.vy < ATTACKER_CLIMB_MAX_RISE) this.vy = ATTACKER_CLIMB_MAX_RISE;
         }
     }
 
