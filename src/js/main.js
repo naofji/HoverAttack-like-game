@@ -45,6 +45,7 @@ import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constan
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
+import { computeTimeBonus } from './utils/scoring.js';
 
 // ============================================
 // Game Object
@@ -567,11 +568,13 @@ const Game = {
         this.flag = null;
         this.missionsCompleted++;
 
-        // Time bonus: proportional to map area, decays 50pts/sec
+        // Time bonus: mode-dependent decay (see utils/scoring.js).
         const totalTiles = this.map.cols * this.map.rows;
-        const baseBonus = Math.floor(totalTiles / 100) * 100;
-        const seconds = Math.floor(this.missionTimer / 1000);
-        this.targetTimeBonus = Math.max(0, baseBonus - (seconds * 50));
+        this.targetTimeBonus = computeTimeBonus({
+            totalTiles,
+            elapsedMs: this.missionTimer,
+            decayPerSec: MODES[this.mode].timeBonusDecay,
+        });
         this.currentTimeBonus = 0;
         this.slotRunning = true;
 
