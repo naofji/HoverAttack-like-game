@@ -3,12 +3,15 @@
 // ============================================
 
 import { CAMERA_LERP, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT } from '../utils/Constants.js';
+import { lerp } from '../utils/timestep.js';
 
 export class Camera {
     constructor(game) {
         this.game = game;
         this.x = 0;
         this.y = 0;
+        this.prevX = 0;
+        this.prevY = 0;
         this.target = null;
         this.shakeIntensity = 0;
         this.shakeTimer = 0;
@@ -28,6 +31,7 @@ export class Camera {
         this.y = this.target.y + this.target.height / 2 - HUD_TOP_HEIGHT - visibleHeight / 2;
         
         this._clamp();
+        this.snapshotPrev();
     }
 
     /** Trigger a screen shake effect */
@@ -36,7 +40,17 @@ export class Camera {
         this.shakeTimer = duration;
     }
 
+    /** Record the current position as the previous-tick position (for render interpolation). */
+    snapshotPrev() {
+        this.prevX = this.x;
+        this.prevY = this.y;
+    }
+
+    renderX(alpha) { return lerp(this.prevX, this.x, alpha); }
+    renderY(alpha) { return lerp(this.prevY, this.y, alpha); }
+
     update() {
+        this.snapshotPrev();
         if (!this.target) return;
 
         const targetX = this.target.x + this.target.width / 2 - this.game.canvas.width / 2;

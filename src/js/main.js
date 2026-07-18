@@ -809,11 +809,15 @@ const Game = {
     },
 
     _drawWorld(ctx) {
+        const alpha = (this.gameState === 'playing') ? this.simAlpha : 1;
+        const camX = this.camera.renderX(alpha);
+        const camY = this.camera.renderY(alpha);
+
         ctx.save();
-        ctx.translate(-this.camera.x, -this.camera.y);
+        ctx.translate(-camX, -camY);
 
         ctx.fillStyle = COLOR_CAVE_BG;
-        ctx.fillRect(this.camera.x, this.camera.y, this.canvas.width, this.canvas.height);
+        ctx.fillRect(camX, camY, this.canvas.width, this.canvas.height);
 
         this.map.draw(ctx);
         if (this.carrier) this.carrier.draw(ctx);
