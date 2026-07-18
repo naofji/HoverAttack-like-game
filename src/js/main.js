@@ -332,6 +332,13 @@ const Game = {
                         country,
                     });
                 }
+                if (this.stageResults.length > 0 && this.onlineLeaderboard && this.onlineLeaderboard.url) {
+                    this.onlineLeaderboard.submitStages({
+                        name: this.playerNameInput,
+                        country,
+                        stages: this.stageResults.map((r) => ({ stage: r.stage, timeMs: r.timeMs, score: r.score })),
+                    });
+                }
                 this.gameState = 'local_ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
