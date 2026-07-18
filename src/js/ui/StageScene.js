@@ -9,12 +9,12 @@ import { lerpColor } from '../utils/color.js';
 
 // Which enemy is signature / first-introduced per stage (index 0..6 = stage 1..7).
 const STAGE_ENEMY = [
-    { kind: 'tank',    color: '#9aa15c' }, // 1: Tank
-    { kind: 'soldier', color: '#3fc48f' }, // 2: Attacker (standard) — teal, distinct from player cyan
-    { kind: 'turret',  color: '#9aa2ac' }, // 3: Turret
-    { kind: 'drone',   color: '#c3ccd6' }, // 4: Drone
-    { kind: 'soldier', color: '#d94b4b' }, // 5: Rival (red)
-    { kind: 'soldier', color: '#e0b000' }, // 6: Artillery (yellow-orange)
+    { kind: 'tank',    color: '#E0B000' }, // 1: Yellow tank
+    { kind: 'soldier', color: '#55CCDD' }, // 2: Light-blue attacker
+    { kind: 'soldier', color: '#44AA44' }, // 3: Green robot (heavy)
+    { kind: 'drone',   color: '#4a5058' }, // 4: Blackish drone
+    { kind: 'soldier', color: '#CC3333' }, // 5: Rival (red)
+    { kind: 'soldier', color: '#DDAA00' }, // 6: Yellow missile robot (artillery)
     { kind: 'cruise',  color: '#ff6a52' }, // 7: Cruise missile (the enemy is the missile)
 ];
 
@@ -89,7 +89,7 @@ function drawCave(ctx, x, y, w, h, palette) {
 }
 
 function drawMiniPlayer(ctx, cx, floorY, hover) {
-    const bodyC = '#55CCDD';
+    const bodyC = '#E8E8E8'; // player mech is white (matches in-game sprite)
     const y = floorY - 26 + hover;
     ctx.save();
     // Hover exhaust
@@ -102,10 +102,10 @@ function drawMiniPlayer(ctx, cx, floorY, hover) {
     roundRectPath(ctx, cx - 9, y, 18, 20, 5);
     ctx.fill();
     // Backpack
-    ctx.fillStyle = '#338899';
+    ctx.fillStyle = '#AAAAAA';
     ctx.fillRect(cx - 13, y + 4, 5, 12);
-    // Visor (facing right)
-    ctx.fillStyle = '#ffffff';
+    // Visor (facing right) — blue accent
+    ctx.fillStyle = '#00AAFF';
     ctx.fillRect(cx + 2, y + 4, 5, 4);
     // Bazooka pointing right
     ctx.fillStyle = '#3a3f45';
