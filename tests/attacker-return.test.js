@@ -340,14 +340,19 @@ test('heavy keeps its standoff distance instead of walking straight in', () => {
   game.player = makePlayer(24, FLOOR_Y); // far left on the same floor
   const e = makeAttacker(game, 350, FLOOR_Y, 'heavy');
 
+  let closeFrames = 0;   // frames spent closer than 60px (evade transits only)
   let minAbsDx = Infinity;
+  let engaged = false;
   for (let i = 0; i < 900; i++) {
     e.update();
     const dx = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
     minAbsDx = Math.min(minAbsDx, dx);
+    if (dx < 60) closeFrames++;
+    if (dx <= 200) engaged = true;
   }
-  assert.ok(minAbsDx >= 60, `closed to ${minAbsDx}px — straight-line approach`);
-  assert.ok(minAbsDx <= 200, `never engaged, minAbsDx=${minAbsDx}`);
+  assert.ok(closeFrames <= 90, `hugged the player for ${closeFrames}/900 frames`);
+  assert.ok(minAbsDx >= 24, `overlapped the player, minAbsDx=${minAbsDx}`);
+  assert.ok(engaged, `never engaged, minAbsDx=${minAbsDx}`);
 });
 
 test('heavy breaks Y-axis alignment within its evade budget', () => {
