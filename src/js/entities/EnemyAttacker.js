@@ -12,9 +12,10 @@ import {
     ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
     ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES,
     RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
-    RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION
+    RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
+    ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST
 } from '../utils/Constants.js';
-import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
+import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, hasLineOfSight } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
 import { Grenade } from './Grenade.js';
 import { EnemyHomingMissile } from './EnemyHomingMissile.js';
@@ -62,6 +63,11 @@ export class EnemyAttacker {
         this.evadeTimer = 0;
         this.evadeGoalX = 0;
         this.evadeVertical = 0; // -1 = go up, +1 = drop, 0 = horizontal only
+
+        // Artillery cover-seeking state
+        this.coverCheckTimer = 0;
+        this.coverGoalX = null;
+        this.inCover = false;
 
         // Animation & State
         this.walkFrame = 2;
@@ -318,6 +324,63 @@ export class EnemyAttacker {
         return false;
     }
 
+    /** Artillery: hold a position where terrain blocks the target's line of sight. */
+    _updateCoverSeek(targetX, targetY) {
+        const map = this.game.map;
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        if (Math.abs(targetX - cx) < ATTACKER_COVER_MIN_DIST) {
+            // Too close: let skirmish's retreat drive the movement
+            this.coverGoalX = null;
+            this.inCover = false;
+            return;
+        }
+
+        this.coverCheckTimer--;
+        if (this.coverCheckTimer <= 0) {
+            this.coverCheckTimer = ATTACKER_COVER_CHECK_INTERVAL;
+            if (!hasLineOfSight(cx, cy, targetX, targetY, map)) {
+                this.inCover = true;
+                this.coverGoalX = null;
+            } else {
+                this.inCover = false;
+                this.coverGoalX = this._findCoverX(targetX, targetY);
+            }
+        }
+
+        if (this.inCover) {
+            this.vx = 0; // hold the sniping spot
+        } else if (this.coverGoalX !== null) {
+            if (Math.abs(this.coverGoalX - cx) <= 4) {
+                this.coverGoalX = null; // arrived — next check confirms cover
+            } else {
+                this.vx = this.coverGoalX > cx ? this.maxSpeed : -this.maxSpeed;
+            }
+        }
+        // No cover found: leave skirmish pacing untouched
+    }
+
+    /** Scan +/-ATTACKER_COVER_SCAN_TILES for the nearest LOS-breaking spot with ground and range. */
+    _findCoverX(targetX, targetY) {
+        const map = this.game.map;
+        const cy = this.y + this.height / 2;
+        const feetY = this.y + this.height + 4;
+        const cx = this.x + this.width / 2;
+
+        for (let t = 1; t <= ATTACKER_COVER_SCAN_TILES; t++) {
+            for (const dir of [-1, 1]) {
+                const candX = cx + dir * t * TILE_SIZE;
+                if (candX < 0 || candX >= map.cols * TILE_SIZE) continue;          // stay in bounds (map edges read as solid)
+                if (!map.isSolidAtPixel(candX, feetY)) continue;                    // needs ground
+                if (Math.abs(targetX - candX) < ATTACKER_COVER_MIN_DIST) continue;  // keep range
+                if (hasLineOfSight(candX, cy, targetX, targetY, map)) continue;     // must break LOS
+                return candX;
+            }
+        }
+        return null;
+    }
+
     _chaseTarget(target) {
         if (!target) return;
         // Aim for the center of the target
@@ -405,21 +468,29 @@ export class EnemyAttacker {
                 this.vx = this.patrolDir * this.maxSpeed * 0.7;
 
                 // "Circling" effect: occasionally jump or hover even if target isn't high
-                if (this.onGround && Math.random() < 0.01) {
+                // (suppressed while in cover — a stray hop would pop it back into sight)
+                if (this.onGround && !this.inCover && Math.random() < 0.01) {
                     this._jump();
                 }
             }
 
-            // Vertical movement support
-            if (this.onGround) {
-                if (this.jumpCooldown <= 0 && dy < -32) {
-                    this._jump();
+            // Vertical movement support (suppressed while holding a sniping spot —
+            // climbing toward the target's height would lift it back into their line of sight)
+            if (!this.inCover) {
+                if (this.onGround) {
+                    if (this.jumpCooldown <= 0 && dy < -32) {
+                        this._jump();
+                    }
+                } else {
+                    // Use hover to stay at a certain height or prolong jumps
+                    if (dy < -16 || (this.vy > 0 && Math.random() < 0.05)) {
+                        this._applyAerialThrust(-3.0);
+                    }
                 }
-            } else {
-                // Use hover to stay at a certain height or prolong jumps
-                if (dy < -16 || (this.vy > 0 && Math.random() < 0.05)) {
-                    this._applyAerialThrust(-3.0);
-                }
+            }
+
+            if (this.config.seeksCover) {
+                this._updateCoverSeek(targetX, targetY);
             }
         }
         else if (mType === 'zigzag_chase') {

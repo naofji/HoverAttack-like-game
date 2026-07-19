@@ -9,6 +9,7 @@ import {
   ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
+import { hasLineOfSight } from '../src/js/utils/Physics.js';
 
 test('return thresholds match the spec', () => {
   assert.equal(ATTACKER_RETURN_TRIGGER_Y, 6 * TILE_SIZE);
@@ -370,4 +371,63 @@ test('heavy breaks Y-axis alignment within its evade budget', () => {
   }
   assert.ok(maxAlignedRun <= RIVAL_ALIGN_TRIGGER_FRAMES + 90 + 20,
     `Y alignment persisted ${maxAlignedRun} frames`);
+});
+
+/**
+ * 24x24: player platform (row 14, cols 0-4), a 2-tile pillar at col 12
+ * (rows 18-19), full floor rows 20-23. From the right side the artillery
+ * has clear LOS to the elevated player; spots just right of the pillar
+ * break it.
+ */
+function coverWorldRows() {
+  const rows = [];
+  for (let r = 0; r < 14; r++) rows.push('.'.repeat(24));
+  rows.push('#####' + '.'.repeat(19));                 // row 14 platform
+  for (let r = 15; r < 18; r++) rows.push('.'.repeat(24));
+  for (let r = 18; r < 20; r++) rows.push('.'.repeat(12) + '#' + '.'.repeat(11)); // pillar col 12
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+test('artillery moves to a spot where terrain blocks line of sight and holds it', () => {
+  const game = makeGame(makeMap(coverWorldRows()));
+  game.player = makePlayer(40, 14 * TILE_SIZE - 24); // on the platform
+  const e = makeAttacker(game, 304, FLOOR_Y, 'artillery');
+
+  for (let i = 0; i < 900; i++) e.update();
+
+  const cx = e.x + e.width / 2;
+  const cy = e.y + e.height / 2;
+  const px = game.player.x + 8;
+  const py = game.player.y + 12;
+  assert.equal(hasLineOfSight(cx, cy, px, py, game.map), false,
+    `still exposed at x=${e.x}`);
+  assert.ok(Math.abs(px - cx) >= ATTACKER_COVER_MIN_DIST - 8,
+    `gave up its range, dx=${Math.abs(px - cx)}`);
+});
+
+test('artillery falls back to skirmish standoff on open ground', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.player = makePlayer(40, FLOOR_Y);
+  const e = makeAttacker(game, 340, FLOOR_Y, 'artillery');
+
+  for (let i = 0; i < 900; i++) e.update();
+
+  const dx = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
+  assert.ok(dx >= 120 && dx <= 300, `standoff broken, dx=${dx}`);
+});
+
+test('artillery retreats when the player gets too close, even from cover', () => {
+  const game = makeGame(makeMap(coverWorldRows()));
+  game.player = makePlayer(40, 14 * TILE_SIZE - 24);
+  const e = makeAttacker(game, 304, FLOOR_Y, 'artillery');
+  for (let i = 0; i < 900; i++) e.update(); // settle into cover
+
+  // Player hops down right next to the artillery
+  game.player.x = e.x - 100;
+  game.player.y = FLOOR_Y;
+  const before = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
+  for (let i = 0; i < 300; i++) e.update();
+  const after = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
+  assert.ok(after > before, `did not retreat: before=${before}, after=${after}`);
 });
