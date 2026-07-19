@@ -10,7 +10,9 @@ import {
     MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT,
     ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
     ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
-    ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES
+    ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES,
+    RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
+    RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -53,6 +55,13 @@ export class EnemyAttacker {
         this.returning = false;
         this.currentTarget = null;
         this.boostFrames = ATTACKER_BOOST_MAX_FRAMES;
+
+        // Rival alignment-avoidance state
+        this.alignXFrames = 0;
+        this.alignYFrames = 0;
+        this.evadeTimer = 0;
+        this.evadeGoalX = 0;
+        this.evadeVertical = 0; // -1 = go up, +1 = drop, 0 = horizontal only
 
         // Animation & State
         this.walkFrame = 2;
@@ -370,6 +379,39 @@ export class EnemyAttacker {
             }
         }
         else if (mType === 'zigzag_chase') {
+            // --- Alignment avoidance: never share the target's X or Y axis for long ---
+            if (Math.abs(dx) < RIVAL_ALIGN_THRESHOLD) this.alignXFrames++; else this.alignXFrames = 0;
+            if (Math.abs(dy) < RIVAL_ALIGN_THRESHOLD) this.alignYFrames++; else this.alignYFrames = 0;
+
+            if (this.evadeTimer <= 0 &&
+                (this.alignXFrames > RIVAL_ALIGN_TRIGGER_FRAMES || this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES)) {
+                const range = RIVAL_EVADE_OFFSET_MAX - RIVAL_EVADE_OFFSET_MIN;
+                const offset = RIVAL_EVADE_OFFSET_MIN + Math.random() * range;
+                const dir = Math.random() < 0.5 ? -1 : 1;
+                this.evadeGoalX = targetX + dir * offset;
+                if (this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES) {
+                    // Break Y alignment: climb, or drop if airborne and the coin says so
+                    this.evadeVertical = (!this.onGround && Math.random() < 0.5) ? 1 : -1;
+                } else {
+                    this.evadeVertical = 0;
+                }
+                this.evadeTimer = RIVAL_EVADE_DURATION;
+                this.alignXFrames = 0;
+                this.alignYFrames = 0;
+            }
+
+            if (this.evadeTimer > 0) {
+                this.evadeTimer--;
+                const cx = this.x + this.width / 2;
+                this.vx = this.evadeGoalX > cx ? this.maxSpeed : -this.maxSpeed;
+                if (this.evadeVertical === -1) {
+                    if (this.onGround && this.jumpCooldown <= 0) this._jump();
+                    else if (!this.onGround) this._applyAerialThrust(-4.0);
+                }
+                // evadeVertical === +1: no thrust — gravity drops us out of alignment
+                return; // skip normal zigzag movement while evading
+            }
+
             const absDx = Math.abs(dx);
             const preferredDist = 80; // Try to get closer than artillery
 

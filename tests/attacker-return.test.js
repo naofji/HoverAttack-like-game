@@ -281,3 +281,37 @@ test('still jumps at a 2-tile wall', () => {
   }
   assert.ok(minVy <= -4.0, `should have jumped at the wall, minVy=${minVy}`);
 });
+
+test('rival breaks X-axis alignment within the evade budget', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.player = makePlayer(64, 60); // directly ABOVE the rival (same X, far in Y)
+  const e = makeAttacker(game, 64, FLOOR_Y, 'rival');
+
+  let maxAlignedRun = 0;
+  let run = 0;
+  for (let i = 0; i < 600; i++) {
+    e.update();
+    const dx = (game.player.x + 8) - (e.x + e.width / 2);
+    if (Math.abs(dx) < RIVAL_ALIGN_THRESHOLD) run++; else run = 0;
+    maxAlignedRun = Math.max(maxAlignedRun, run);
+  }
+  assert.ok(maxAlignedRun <= RIVAL_ALIGN_TRIGGER_FRAMES + RIVAL_EVADE_DURATION + 20,
+    `X alignment persisted ${maxAlignedRun} frames`);
+});
+
+test('rival breaks Y-axis alignment within the evade budget', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.player = makePlayer(280, FLOOR_Y); // same height, to the right
+  const e = makeAttacker(game, 64, FLOOR_Y, 'rival');
+
+  let maxAlignedRun = 0;
+  let run = 0;
+  for (let i = 0; i < 600; i++) {
+    e.update();
+    const dy = (game.player.y + 12) - (e.y + e.height / 2);
+    if (Math.abs(dy) < RIVAL_ALIGN_THRESHOLD) run++; else run = 0;
+    maxAlignedRun = Math.max(maxAlignedRun, run);
+  }
+  assert.ok(maxAlignedRun <= RIVAL_ALIGN_TRIGGER_FRAMES + RIVAL_EVADE_DURATION + 20,
+    `Y alignment persisted ${maxAlignedRun} frames`);
+});
