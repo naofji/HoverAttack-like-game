@@ -99,6 +99,10 @@ export class EnemyAttacker {
         } else {
             this._updateReturnState();
             this.aiState = this.returning ? 'return' : 'patrol';
+            // Cover state is chase-scoped: reset so re-engagement re-checks LOS immediately
+            this.inCover = false;
+            this.coverGoalX = null;
+            this.coverCheckTimer = 0;
         }
 
         // --- Movement ---
