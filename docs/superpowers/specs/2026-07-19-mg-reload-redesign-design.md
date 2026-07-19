@@ -9,7 +9,7 @@
 ## 方針(ユーザー決定事項)
 
 1. **補充はリロード完了時**(開始時ではなく)
-2. **リロード開始判断は残弾閾値ベース**: 残弾が25%以下(16発中4発以下)のときだけリロードする
+2. **リロード開始判断は残弾閾値ベース**: 残弾が50%以下(16発中8発以下)のときだけリロードする
 3. **残弾があるうちは撃ち切りを優先**: リロード開始は「射撃キーを離している時 or 残弾0の時」に限る
 4. 判断ロジックは1箇所に集約する
 
@@ -23,7 +23,7 @@
 import { PLAYER_MG_RELOAD_THRESHOLD } from './Constants.js';
 
 export function shouldStartMGReload(burstLeft, burstSize, fireHeld) {
-    if (burstLeft > burstSize * PLAYER_MG_RELOAD_THRESHOLD) return false; // 25%超は温存
+    if (burstLeft > burstSize * PLAYER_MG_RELOAD_THRESHOLD) return false; // 50%超は温存
     return burstLeft === 0 || !fireHeld; // 撃ち切ったか、指を離した時だけ
 }
 ```
@@ -43,19 +43,19 @@ export function shouldStartMGReload(burstLeft, burstSize, fireHeld) {
 
 ### 定数
 
-`Constants.js`: `PLAYER_MG_RELOAD_THRESHOLD = 0.25`
+`Constants.js`: `PLAYER_MG_RELOAD_THRESHOLD = 0.5`
 
 ### 挙動まとめ
 
-- 満タン(または5発以上)でMGへ切替 → リロードなし、即射撃可
-- 4発以下でも射撃キーを押している間は撃ち続けられる(0になったらリロード)
-- 4発以下で射撃キーを離す → リロード開始、60フレーム後に16発回復
+- 満タン(または9発以上)でMGへ切替 → リロードなし、即射撃可
+- 8発以下でも射撃キーを押している間は撃ち続けられる(0になったらリロード)
+- 8発以下で射撃キーを離す → リロード開始、60フレーム後に16発回復
 - リロード途中の武器切替往復では踏み倒せない(補充は完了時のみ。タイマーは切替中も進行)
 - HUD(`RELOAD` / `RDY n` 表示)・`_resetMGState`・ドック補給は変更不要
 
 ## テスト(`tests/mg-reload.test.js` 新規)
 
-- `shouldStartMGReload` 純関数: 25%超→false / 4発+キー押下→false / 4発+キー解放→true / 0発+キー押下→true / 0発+キー解放→true / 境界(4発ちょうど=25%)→開始対象
+- `shouldStartMGReload` 純関数: 50%超(9発)→false / 8発+キー押下→false / 8発+キー解放→true / 0発+キー押下→true / 0発+キー解放→true / 境界(8発ちょうど=50%)→開始対象
 - 統合(可能なら Player をモックgameで駆動、audioManager が node で import 不可なら純関数テストのみ): リロード完了フレームで満タン復帰
 
 ## 変更ファイル
