@@ -206,6 +206,9 @@ export class EnemyAttacker {
         const dx = targetX - this.x;
         // Overshoot 8px so ledge lips can be cleared before thrust cuts out
         const below = this.y > targetY - 8;
+        // Only jump-climb for gaps taller than a single walkable step; 1-tile
+        // gaps are now handled by _moveAndCollide's step-up (walk, don't jump).
+        const needsJumpClimb = this.y > targetY + TILE_SIZE;
 
         if (Math.abs(dx) > 8) {
             this.vx = dx > 0 ? this.maxSpeed : -this.maxSpeed;
@@ -215,7 +218,7 @@ export class EnemyAttacker {
 
         if (this.onGround) {
             // Wait on the ground until there is enough fuel for a climb leg
-            if (below && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL && this.jumpCooldown <= 0) {
+            if (needsJumpClimb && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL && this.jumpCooldown <= 0) {
                 this._jump();
             }
         } else if (below) {
@@ -559,21 +562,35 @@ export class EnemyAttacker {
         // Horizontal Map Collision
         let hitHMap = false;
         if (this._collidesWithMap()) {
-            hitHMap = true;
-            this.x -= this.vx;
-            if (this.vx > 0) {
-                this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
-            } else if (this.vx < 0) {
-                this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
+            // STEP-UP: walk up a single tile instead of jumping (matches Player)
+            let steppedUp = false;
+            if (this.onGround && Math.abs(this.vx) > 0) {
+                const originalY = this.y;
+                this.y -= TILE_SIZE;
+                if (!this._collidesWithMap()) {
+                    steppedUp = true;
+                } else {
+                    this.y = originalY;
+                }
             }
-            this.vx = 0;
 
-            const mType = this.config.movementType || 'stop_and_shoot';
-            // Try to jump over the wall
-            if (this.onGround && this.jumpCooldown <= 0) {
-                this._jump();
-            } else if (this.aiState === 'patrol' || mType === 'pace_and_jump' || mType === 'chase_and_jump') {
-                this.patrolDir *= -1; // Reverse patrol direction
+            if (!steppedUp) {
+                hitHMap = true;
+                this.x -= this.vx;
+                if (this.vx > 0) {
+                    this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
+                } else if (this.vx < 0) {
+                    this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
+                }
+                this.vx = 0;
+
+                const mType = this.config.movementType || 'stop_and_shoot';
+                // Try to jump over the wall
+                if (this.onGround && this.jumpCooldown <= 0) {
+                    this._jump();
+                } else if (this.aiState === 'patrol' || mType === 'pace_and_jump' || mType === 'chase_and_jump') {
+                    this.patrolDir *= -1; // Reverse patrol direction
+                }
             }
         }
 

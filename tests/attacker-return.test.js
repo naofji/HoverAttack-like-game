@@ -233,3 +233,51 @@ test("'hover' style thrusts even while falling (rival floats)", () => {
   assert.equal(e.hovering, true);
   assert.ok(e.vy < 2.0);
 });
+
+/** Flat floor at row 20 with a single 1-tile step up at col 12 (top at row 19). */
+function oneStepWorldRows() {
+  const rows = [];
+  for (let r = 0; r < 19; r++) rows.push('.'.repeat(24));
+  rows.push('.'.repeat(12) + '#'.repeat(12)); // row 19: raised floor right half
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+test('walks up a 1-tile step without jumping', () => {
+  const game = makeGame(makeMap(oneStepWorldRows()));
+  const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+  e.homeX = 18 * TILE_SIZE;            // walk right, over the step
+  e.homeY = 19 * TILE_SIZE - 24;       // standing on the raised floor
+  e.returning = true;
+
+  let minVy = 0;
+  for (let i = 0; i < 600; i++) {
+    e.update();
+    minVy = Math.min(minVy, e.vy);
+    if (e.x > 14 * TILE_SIZE) break;   // crossed the step
+  }
+
+  assert.ok(e.x > 13 * TILE_SIZE, `should cross the step, x=${e.x}`);
+  assert.equal(e.y, 19 * TILE_SIZE - 24, 'standing on the raised floor');
+  assert.ok(minVy > -3.0, `must not jump (jumpForce is -5.0), minVy=${minVy}`);
+});
+
+test('still jumps at a 2-tile wall', () => {
+  const rows = [];
+  for (let r = 0; r < 18; r++) rows.push('.'.repeat(24));
+  rows.push('.'.repeat(12) + '#'.repeat(12)); // row 18
+  rows.push('.'.repeat(12) + '#'.repeat(12)); // row 19 (2-tile wall)
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  const game = makeGame(makeMap(rows));
+  const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+  e.homeX = 18 * TILE_SIZE;
+  e.homeY = 18 * TILE_SIZE - 24;
+  e.returning = true;
+
+  let minVy = 0;
+  for (let i = 0; i < 600; i++) {
+    e.update();
+    minVy = Math.min(minVy, e.vy);
+  }
+  assert.ok(minVy <= -4.0, `should have jumped at the wall, minVy=${minVy}`);
+});
