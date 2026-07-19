@@ -487,17 +487,20 @@ export class Player {
 
     /** Called every frame while docked — gradually restores HP, ammo, and fuel. */
     _updateDockedResupply() {
+        // Rates are defined per real-time frame; sim frames tick gameSpeed× slower
+        // in NORMAL mode, so scale up to keep resupply seconds equal across modes.
+        const scale = 1 / (this.game.gameSpeed || 1);
         if (this.hp < PLAYER_MAX_HP) {
-            this.hp = Math.min(PLAYER_MAX_HP, this.hp + DOCK_HP_RATE);
+            this.hp = Math.min(PLAYER_MAX_HP, this.hp + DOCK_HP_RATE * scale);
         }
         if (this.missiles < MISSILE_INITIAL_COUNT) {
-            this.missiles = Math.min(MISSILE_INITIAL_COUNT, this.missiles + DOCK_MISSILE_RATE);
+            this.missiles = Math.min(MISSILE_INITIAL_COUNT, this.missiles + DOCK_MISSILE_RATE * scale);
         }
         if (this.grenades < GRENADE_INITIAL_COUNT) {
-            this.grenades = Math.min(GRENADE_INITIAL_COUNT, this.grenades + DOCK_GRENADE_RATE);
+            this.grenades = Math.min(GRENADE_INITIAL_COUNT, this.grenades + DOCK_GRENADE_RATE * scale);
         }
         if (this.hoverFuel < HOVER_MAX_FUEL) {
-            this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + DOCK_FUEL_RATE);
+            this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + DOCK_FUEL_RATE * scale);
         }
     }
 
