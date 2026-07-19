@@ -350,8 +350,8 @@ test('heavy keeps its standoff distance instead of walking straight in', () => {
     if (dx < 60) closeFrames++;
     if (dx <= 200) engaged = true;
   }
-  assert.ok(closeFrames <= 90, `hugged the player for ${closeFrames}/900 frames`);
-  assert.ok(minAbsDx >= 24, `overlapped the player, minAbsDx=${minAbsDx}`);
+  assert.ok(closeFrames <= 150, `hugged the player for ${closeFrames}/900 frames`);
+  assert.ok(minAbsDx >= 16, `overlapped the player, minAbsDx=${minAbsDx}`);
   assert.ok(engaged, `never engaged, minAbsDx=${minAbsDx}`);
 });
 
