@@ -90,6 +90,7 @@ test('chasing attacker does NOT walk off a ledge when the target is level with i
   game.player = makePlayer(16 * TILE_SIZE, FLOOR_Y); // same height, across the pit
   const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
   e.config.movementType = 'stop_and_shoot'; // pin: this test verifies mechanics, not heavy's persona
+  e.config.avoidsAlignment = false; // pin: alignment-avoidance is part of heavy's persona too
 
   for (let i = 0; i < 600; i++) e.update();
 
@@ -103,6 +104,7 @@ test('chasing attacker DOES drop down when the target is below', () => {
   game.player = makePlayer(11 * TILE_SIZE, 22 * TILE_SIZE - 24); // inside the pit
   const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
   e.config.movementType = 'stop_and_shoot'; // pin: this test verifies mechanics, not heavy's persona
+  e.config.avoidsAlignment = false; // pin: alignment-avoidance is part of heavy's persona too
 
   for (let i = 0; i < 600; i++) e.update();
 
@@ -331,4 +333,36 @@ test('heavy/artillery standoff config matches the spec', () => {
   assert.equal(ATTACKER_COVER_CHECK_INTERVAL, 30);
   assert.equal(ATTACKER_COVER_SCAN_TILES, 6);
   assert.equal(ATTACKER_COVER_MIN_DIST, 160);
+});
+
+test('heavy keeps its standoff distance instead of walking straight in', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.player = makePlayer(24, FLOOR_Y); // far left on the same floor
+  const e = makeAttacker(game, 350, FLOOR_Y, 'heavy');
+
+  let minAbsDx = Infinity;
+  for (let i = 0; i < 900; i++) {
+    e.update();
+    const dx = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
+    minAbsDx = Math.min(minAbsDx, dx);
+  }
+  assert.ok(minAbsDx >= 60, `closed to ${minAbsDx}px — straight-line approach`);
+  assert.ok(minAbsDx <= 200, `never engaged, minAbsDx=${minAbsDx}`);
+});
+
+test('heavy breaks Y-axis alignment within its evade budget', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.player = makePlayer(400, FLOOR_Y); // same height
+  const e = makeAttacker(game, 100, FLOOR_Y, 'heavy');
+
+  let maxAlignedRun = 0;
+  let run = 0;
+  for (let i = 0; i < 900; i++) {
+    e.update();
+    const dy = (game.player.y + 12) - (e.y + e.height / 2);
+    if (Math.abs(dy) < RIVAL_ALIGN_THRESHOLD) run++; else run = 0;
+    maxAlignedRun = Math.max(maxAlignedRun, run);
+  }
+  assert.ok(maxAlignedRun <= RIVAL_ALIGN_TRIGGER_FRAMES + 90 + 20,
+    `Y alignment persisted ${maxAlignedRun} frames`);
 });

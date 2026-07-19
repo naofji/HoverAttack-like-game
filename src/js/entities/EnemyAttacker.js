@@ -279,6 +279,45 @@ export class EnemyAttacker {
         this.vx = this.patrolDir * this.maxSpeed * 0.5; // Walk slowly when patrolling
     }
 
+    /**
+     * Alignment avoidance: never share the target's X or Y axis for long.
+     * Returns true while an evade maneuver is driving the movement.
+     */
+    _updateAlignmentAvoidance(dx, dy, targetX) {
+        if (Math.abs(dx) < RIVAL_ALIGN_THRESHOLD) this.alignXFrames++; else this.alignXFrames = 0;
+        if (Math.abs(dy) < RIVAL_ALIGN_THRESHOLD) this.alignYFrames++; else this.alignYFrames = 0;
+
+        if (this.evadeTimer <= 0 &&
+            (this.alignXFrames > RIVAL_ALIGN_TRIGGER_FRAMES || this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES)) {
+            const range = RIVAL_EVADE_OFFSET_MAX - RIVAL_EVADE_OFFSET_MIN;
+            const offset = RIVAL_EVADE_OFFSET_MIN + Math.random() * range;
+            const dir = Math.random() < 0.5 ? -1 : 1;
+            this.evadeGoalX = targetX + dir * offset;
+            if (this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES) {
+                // Break Y alignment: climb, or drop if airborne and the coin says so
+                this.evadeVertical = (!this.onGround && Math.random() < 0.5) ? 1 : -1;
+            } else {
+                this.evadeVertical = 0;
+            }
+            this.evadeTimer = this.config.evadeDuration || RIVAL_EVADE_DURATION;
+            this.alignXFrames = 0;
+            this.alignYFrames = 0;
+        }
+
+        if (this.evadeTimer > 0) {
+            this.evadeTimer--;
+            const cx = this.x + this.width / 2;
+            this.vx = this.evadeGoalX > cx ? this.maxSpeed : -this.maxSpeed;
+            if (this.evadeVertical === -1) {
+                if (this.onGround && this.jumpCooldown <= 0) this._jump();
+                else if (!this.onGround) this._applyAerialThrust(-4.0);
+            }
+            // evadeVertical === +1: no thrust — gravity drops us out of alignment
+            return true;
+        }
+        return false;
+    }
+
     _chaseTarget(target) {
         if (!target) return;
         // Aim for the center of the target
@@ -288,6 +327,11 @@ export class EnemyAttacker {
         const dy = targetY - (this.y + this.height / 2);
 
         const mType = this.config.movementType || 'stop_and_shoot';
+
+        // Alignment avoidance (rival, heavy): overrides normal movement while evading
+        if (this.config.avoidsAlignment && this._updateAlignmentAvoidance(dx, dy, targetX)) {
+            return;
+        }
 
         if (mType === 'stop_and_shoot') {
             if (Math.abs(dx) > 16) {
@@ -379,39 +423,6 @@ export class EnemyAttacker {
             }
         }
         else if (mType === 'zigzag_chase') {
-            // --- Alignment avoidance: never share the target's X or Y axis for long ---
-            if (Math.abs(dx) < RIVAL_ALIGN_THRESHOLD) this.alignXFrames++; else this.alignXFrames = 0;
-            if (Math.abs(dy) < RIVAL_ALIGN_THRESHOLD) this.alignYFrames++; else this.alignYFrames = 0;
-
-            if (this.evadeTimer <= 0 &&
-                (this.alignXFrames > RIVAL_ALIGN_TRIGGER_FRAMES || this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES)) {
-                const range = RIVAL_EVADE_OFFSET_MAX - RIVAL_EVADE_OFFSET_MIN;
-                const offset = RIVAL_EVADE_OFFSET_MIN + Math.random() * range;
-                const dir = Math.random() < 0.5 ? -1 : 1;
-                this.evadeGoalX = targetX + dir * offset;
-                if (this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES) {
-                    // Break Y alignment: climb, or drop if airborne and the coin says so
-                    this.evadeVertical = (!this.onGround && Math.random() < 0.5) ? 1 : -1;
-                } else {
-                    this.evadeVertical = 0;
-                }
-                this.evadeTimer = RIVAL_EVADE_DURATION;
-                this.alignXFrames = 0;
-                this.alignYFrames = 0;
-            }
-
-            if (this.evadeTimer > 0) {
-                this.evadeTimer--;
-                const cx = this.x + this.width / 2;
-                this.vx = this.evadeGoalX > cx ? this.maxSpeed : -this.maxSpeed;
-                if (this.evadeVertical === -1) {
-                    if (this.onGround && this.jumpCooldown <= 0) this._jump();
-                    else if (!this.onGround) this._applyAerialThrust(-4.0);
-                }
-                // evadeVertical === +1: no thrust — gravity drops us out of alignment
-                return; // skip normal zigzag movement while evading
-            }
-
             const absDx = Math.abs(dx);
             const preferredDist = 80; // Try to get closer than artillery
 
