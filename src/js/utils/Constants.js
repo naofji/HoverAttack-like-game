@@ -53,6 +53,11 @@ export const ATTACKER_CLIMB_MAX_RISE = -4.0;             // upward speed cap whi
 export const ATTACKER_SLOW_RISE_CAP = -1.5;  // 'jump' climbStyle ascent cap (slow rise)
 export const ATTACKER_BOOST_MAX_FRAMES = 20; // 'boost' climbStyle thrust frames per airborne leg
 
+// --- Artillery cover-seeking ---
+export const ATTACKER_COVER_CHECK_INTERVAL = 30; // frames between line-of-sight checks
+export const ATTACKER_COVER_SCAN_TILES = 6;      // cover candidate scan range (+/- tiles)
+export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least this range
+
 // --- Rival alignment avoidance ---
 export const RIVAL_ALIGN_THRESHOLD = 24;      // px: closer than this on an axis = aligned
 export const RIVAL_ALIGN_TRIGGER_FRAMES = 45; // aligned this long -> evade
@@ -208,9 +213,11 @@ export const ENEMY_ATTACKER_TYPES = {
         spawnWeight: 25,      // 25%
         usesGrenades: false,
         aimAccuracy: 0.4,
-        movementType: 'stop_and_shoot',
+        movementType: 'chase_and_jump',
         climbThrust: 0.45,
         climbStyle: 'jump',
+        avoidsAlignment: true,
+        evadeDuration: 90,
         bodyColor: '#44AA44',
         headColor: '#338833',
         visorColor: '#FFFF66',
@@ -232,6 +239,8 @@ export const ENEMY_ATTACKER_TYPES = {
         movementType: 'zigzag_chase',
         climbThrust: 0.65,
         climbStyle: 'hover',
+        avoidsAlignment: true,
+        evadeDuration: 40,
         bodyColor: '#CC3333',
         headColor: '#AA2222',
         visorColor: '#FFCC00',
@@ -249,9 +258,10 @@ export const ENEMY_ATTACKER_TYPES = {
         spawnWeight: 100,     // Increased for testing
         usesGrenades: false,
         aimAccuracy: 1.0,
-        movementType: 'stop_and_shoot',
+        movementType: 'skirmish',
         climbThrust: 0.5,
         climbStyle: 'jump',
+        seeksCover: true,
         bodyColor: '#DDAA00', // Yellow-Orange
         headColor: '#BB8800',
         visorColor: '#FF0000', // Red eye
@@ -276,7 +286,7 @@ export const ENEMY_DRONE_HOVER_DIST_Y = 120; // Maintain this vertical distance 
 export const ENEMY_DRONE_HOVER_DIST_X = 180; // Maintain this horizontal distance from player
 export const ENEMY_DRONE_GRENADE_CHANCE = 0.10; // 10% chance to drop grenade
 export const ENEMY_DRONE_KAMIKAZE_CHANCE = 0.10;   // 10% chance to ram instead of shooting when close
-export const ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE = 220; // Must be within this distance to consider ramming (hover standoff is ~216)
+export const ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE = 240; // Must be within this distance to consider ramming (hover standoff is ~216)
 export const ENEMY_DRONE_KAMIKAZE_SPEED = 6.0;     // Ramming charge speed
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER = 40;
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies in 4 hits

@@ -5,7 +5,8 @@ import {
   ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
   ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
   ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES, RIVAL_ALIGN_THRESHOLD,
-  RIVAL_ALIGN_TRIGGER_FRAMES, RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION
+  RIVAL_ALIGN_TRIGGER_FRAMES, RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
+  ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
 
@@ -88,6 +89,7 @@ test('chasing attacker does NOT walk off a ledge when the target is level with i
   const game = makeGame(makeMap(pitWorldRows()));
   game.player = makePlayer(16 * TILE_SIZE, FLOOR_Y); // same height, across the pit
   const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+  e.config.movementType = 'stop_and_shoot'; // pin: this test verifies mechanics, not heavy's persona
 
   for (let i = 0; i < 600; i++) e.update();
 
@@ -100,6 +102,7 @@ test('chasing attacker DOES drop down when the target is below', () => {
   const game = makeGame(makeMap(pitWorldRows()));
   game.player = makePlayer(11 * TILE_SIZE, 22 * TILE_SIZE - 24); // inside the pit
   const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
+  e.config.movementType = 'stop_and_shoot'; // pin: this test verifies mechanics, not heavy's persona
 
   for (let i = 0; i < 600; i++) e.update();
 
@@ -314,4 +317,18 @@ test('rival breaks Y-axis alignment within the evade budget', () => {
   }
   assert.ok(maxAlignedRun <= RIVAL_ALIGN_TRIGGER_FRAMES + RIVAL_EVADE_DURATION + 20,
     `Y alignment persisted ${maxAlignedRun} frames`);
+});
+
+test('heavy/artillery standoff config matches the spec', () => {
+  const t = ENEMY_ATTACKER_TYPES;
+  assert.equal(t.heavy.movementType, 'chase_and_jump');
+  assert.equal(t.heavy.avoidsAlignment, true);
+  assert.equal(t.heavy.evadeDuration, 90);
+  assert.equal(t.rival.avoidsAlignment, true);
+  assert.equal(t.rival.evadeDuration, 40);
+  assert.equal(t.artillery.movementType, 'skirmish');
+  assert.equal(t.artillery.seeksCover, true);
+  assert.equal(ATTACKER_COVER_CHECK_INTERVAL, 30);
+  assert.equal(ATTACKER_COVER_SCAN_TILES, 6);
+  assert.equal(ATTACKER_COVER_MIN_DIST, 160);
 });
