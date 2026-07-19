@@ -28,3 +28,39 @@ test('empty magazine: reload regardless of fire key', () => {
   assert.equal(shouldStartMGReload(0, SIZE, true), true);
   assert.equal(shouldStartMGReload(0, SIZE, false), true);
 });
+
+// Integration: refill happens when the reload timer completes
+import { Player } from '../src/js/entities/Player.js';
+
+test('magazine refills exactly when the reload timer reaches zero', () => {
+  const input = {
+    mouse: { left: false },
+    isKeyDown: () => false,
+  };
+  const game = { input, map: { isSolidAtPixel: () => false }, carrier: null };
+  const p = Object.create(Player.prototype);
+  // Minimal state for _updateTimers/_updateMGReload only
+  p.game = game;
+  p.invincibleTimer = 0;
+  p.missileCooldown = 0;
+  p.mgFireTimer = 0;
+  p.mgReloadTimer = 2;
+  p.mgBurstLeft = 0;
+  p.currentWeapon = 'mg';
+
+  p._updateTimers();
+  assert.equal(p.mgReloadTimer, 1);
+  assert.equal(p.mgBurstLeft, 0);      // not yet
+  p._updateTimers();
+  assert.equal(p.mgReloadTimer, 0);
+  assert.equal(p.mgBurstLeft, 16);     // refilled on completion
+
+  // With a full mag and fire released, no new reload starts
+  p._updateMGReload(input);
+  assert.equal(p.mgReloadTimer, 0);
+
+  // Low mag + fire released -> reload starts
+  p.mgBurstLeft = 8;
+  p._updateMGReload(input);
+  assert.ok(p.mgReloadTimer > 0);
+});

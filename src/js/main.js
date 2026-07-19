@@ -16,7 +16,7 @@ import {
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
-    PLAYER_MG_BURST_DELAY, PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, PLAYER_MG_SPREAD,
+    PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES
@@ -880,7 +880,6 @@ const Game = {
     _fireMissile(player, px, py, angle) {
         if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';
-            player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
             audioManager.playSwitch();
             return;
         }
@@ -896,7 +895,6 @@ const Game = {
 
         if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';
-            player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
             audioManager.playSwitch();
         }
     },
@@ -909,11 +907,6 @@ const Game = {
 
         player.mgFireTimer = PLAYER_MG_BURST_DELAY;
         player.mgBurstLeft--;
-
-        if (player.mgBurstLeft <= 0) {
-            player.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
-            player.mgBurstLeft = PLAYER_MG_BURST_SIZE;
-        }
     },
 
     // ==========================================

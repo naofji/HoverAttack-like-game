@@ -17,6 +17,7 @@ import {
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE
 } from '../utils/Constants.js';
+import { shouldStartMGReload } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 
@@ -78,6 +79,7 @@ export class Player {
         }
 
         const input = this.game.input;
+        this._updateMGReload(input);
         this._updateCrouching(input);
         this._updateHorizontal(input);
 
@@ -96,7 +98,21 @@ export class Player {
         if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
         if (this.mgFireTimer > 0) this.mgFireTimer--;
-        if (this.mgReloadTimer > 0) this.mgReloadTimer--;
+        if (this.mgReloadTimer > 0) {
+            this.mgReloadTimer--;
+            if (this.mgReloadTimer === 0) {
+                this.mgBurstLeft = PLAYER_MG_BURST_SIZE; // reload finished — refill now
+            }
+        }
+    }
+
+    /** Start an MG reload when the magazine is low and the trigger allows it. */
+    _updateMGReload(input) {
+        if (this.currentWeapon !== 'mg' || this.mgReloadTimer > 0) return;
+        const fireHeld = input.mouse.left || input.isKeyDown('Space');
+        if (shouldStartMGReload(this.mgBurstLeft, PLAYER_MG_BURST_SIZE, fireHeld)) {
+            this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
+        }
     }
 
     /** Update crouching/stun state. */
@@ -463,9 +479,6 @@ export class Player {
     switchWeapon() {
         if (this.currentWeapon === 'missile') {
             this.currentWeapon = 'mg';
-            // Start reload process when switching to MG (not instant)
-            this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
-            this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         } else {
             this.currentWeapon = 'missile';
         }
