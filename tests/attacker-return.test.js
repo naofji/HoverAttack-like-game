@@ -180,3 +180,56 @@ test('every attacker type has the spec climbStyle', () => {
     assert.equal(type.climbStyle, expected[key], `climbStyle of ${key}`);
   }
 });
+
+test("'jump' style never thrusts while falling (heavy cannot float)", () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = makeAttacker(game, 64, 100, 'heavy'); // in the air, well above floor
+  e.vy = 2.0; // falling
+  const applied = e._applyAerialThrust(-4.0);
+  assert.equal(applied, false);
+  assert.equal(e.hovering, false);
+  assert.equal(e.vy, 2.0);
+});
+
+test("'jump' style thrusts during ascent but stays above the slow-rise cap", () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = makeAttacker(game, 64, 100, 'heavy');
+  e.onGround = false;
+  e.vy = -1.0; // ascending slower than the cap
+  const applied = e._applyAerialThrust(-4.0);
+  assert.equal(applied, true);
+  // heavy climbThrust 0.45: -1.0 - 0.45 = -1.45, still above the -1.5 cap
+  assert.ok(e.vy >= ATTACKER_SLOW_RISE_CAP && e.vy < -1.0, `vy=${e.vy}`);
+});
+
+test("'jump' style clamps to the slow-rise cap exactly", () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = makeAttacker(game, 64, 100, 'heavy');
+  e.onGround = false;
+  e.vy = -1.4; // -1.4 - 0.45 = -1.85 -> clamped to -1.5
+  e._applyAerialThrust(-4.0);
+  assert.equal(e.vy, ATTACKER_SLOW_RISE_CAP);
+});
+
+test("'boost' style stops after ATTACKER_BOOST_MAX_FRAMES per airborne leg", () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = makeAttacker(game, 64, 100, 'standard');
+  e.onGround = false;
+  let appliedCount = 0;
+  for (let i = 0; i < 60; i++) {
+    e.vy = -0.5; // keep it ascending so only the frame budget limits thrust
+    if (e._applyAerialThrust(-4.0)) appliedCount++;
+  }
+  assert.equal(appliedCount, ATTACKER_BOOST_MAX_FRAMES);
+});
+
+test("'hover' style thrusts even while falling (rival floats)", () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = makeAttacker(game, 64, 100, 'rival');
+  e.onGround = false;
+  e.vy = 2.0; // falling
+  const applied = e._applyAerialThrust(-4.0);
+  assert.equal(applied, true);
+  assert.equal(e.hovering, true);
+  assert.ok(e.vy < 2.0);
+});

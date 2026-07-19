@@ -9,7 +9,8 @@ import {
     HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
     MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT,
     ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
-    ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE
+    ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
+    ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -51,6 +52,7 @@ export class EnemyAttacker {
         this.homeY = y;
         this.returning = false;
         this.currentTarget = null;
+        this.boostFrames = ATTACKER_BOOST_MAX_FRAMES;
 
         // Animation & State
         this.walkFrame = 2;
@@ -90,6 +92,7 @@ export class EnemyAttacker {
         // --- Hover Fuel Recovery ---
         if (this.onGround) {
             this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + HOVER_FUEL_RECOVERY);
+            this.boostFrames = ATTACKER_BOOST_MAX_FRAMES;
         }
 
         // --- Physics ---
@@ -168,6 +171,34 @@ export class EnemyAttacker {
     }
 
     /**
+     * Apply one frame of aerial thrust according to this type's climbStyle.
+     * 'jump'  — only extends an ascent (vy < 0), capped at ATTACKER_SLOW_RISE_CAP: never floats.
+     * 'boost' — only during ascent, at most ATTACKER_BOOST_MAX_FRAMES per airborne leg.
+     * 'hover' — free thrust (may reverse a fall). Call only while airborne.
+     * @returns {boolean} true if thrust was applied this frame
+     */
+    _applyAerialThrust(riseCap) {
+        if (this.hoverFuel <= 0) return false;
+
+        const style = this.config.climbStyle || 'hover';
+        let cap = riseCap;
+        if (style === 'jump') {
+            if (this.vy >= 0) return false;
+            cap = Math.max(cap, ATTACKER_SLOW_RISE_CAP);
+        } else if (style === 'boost') {
+            if (this.vy >= 0 || this.boostFrames <= 0) return false;
+        }
+        if (this.vy <= cap) return false; // preserve jump impulse / already at cap
+
+        if (style === 'boost') this.boostFrames--;
+        this.hovering = true;
+        this.vy -= this.config.climbThrust;
+        this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
+        if (this.vy < cap) this.vy = cap;
+        return true;
+    }
+
+    /**
      * Move toward (targetX, targetY) using walk + jump + hover thrust.
      * Climbs in legs: waits on the ground for fuel, ascends, falls to recover, repeats.
      */
@@ -187,11 +218,8 @@ export class EnemyAttacker {
             if (below && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL && this.jumpCooldown <= 0) {
                 this._jump();
             }
-        } else if (below && this.hoverFuel > 0 && this.vy > ATTACKER_CLIMB_MAX_RISE) {
-            this.hovering = true;
-            this.vy -= this.config.climbThrust;
-            this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-            if (this.vy < ATTACKER_CLIMB_MAX_RISE) this.vy = ATTACKER_CLIMB_MAX_RISE;
+        } else if (below) {
+            this._applyAerialThrust(ATTACKER_CLIMB_MAX_RISE);
         }
     }
 
@@ -295,11 +323,8 @@ export class EnemyAttacker {
                 }
             } else {
                 // Airborne: hover if player is above or to stay in the air while skirmishing
-                if (this.hoverFuel > 0 && (dy < -8 || (this.vy > 0 && Math.random() * 1.5 < 0.1))) {
-                    this.hovering = true;
-                    this.vy -= this.config.climbThrust; // Hover upward thrust
-                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                    if (this.vy < -4.0) this.vy = -4.0;
+                if (dy < -8 || (this.vy > 0 && Math.random() * 1.5 < 0.1)) {
+                    this._applyAerialThrust(-4.0);
                 }
             }
         }
@@ -336,11 +361,8 @@ export class EnemyAttacker {
                 }
             } else {
                 // Use hover to stay at a certain height or prolong jumps
-                if (this.hoverFuel > 0 && (dy < -16 || (this.vy > 0 && Math.random() < 0.05))) {
-                    this.hovering = true;
-                    this.vy -= this.config.climbThrust;
-                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                    if (this.vy < -3.0) this.vy = -3.0;
+                if (dy < -16 || (this.vy > 0 && Math.random() < 0.05)) {
+                    this._applyAerialThrust(-3.0);
                 }
             }
         }
@@ -371,11 +393,8 @@ export class EnemyAttacker {
                     this._jump();
                 }
             } else {
-                if (this.hoverFuel > 0 && (dy < -8 || Math.random() < 0.1)) {
-                    this.hovering = true;
-                    this.vy -= this.config.climbThrust;
-                    this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                    if (this.vy < -4.0) this.vy = -4.0;
+                if (dy < -8 || Math.random() < 0.1) {
+                    this._applyAerialThrust(-4.0);
                 }
             }
         }
@@ -386,11 +405,8 @@ export class EnemyAttacker {
                 if (this.jumpCooldown <= 0 && this.hoverFuel >= ATTACKER_CLIMB_MIN_FUEL) {
                     this._jump();
                 }
-            } else if (this.hoverFuel > 0 && this.vy > ATTACKER_CLIMB_MAX_RISE) {
-                this.hovering = true;
-                this.vy -= this.config.climbThrust;
-                this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
-                if (this.vy < ATTACKER_CLIMB_MAX_RISE) this.vy = ATTACKER_CLIMB_MAX_RISE;
+            } else {
+                this._applyAerialThrust(ATTACKER_CLIMB_MAX_RISE);
             }
         }
     }
