@@ -778,9 +778,33 @@ export class Map {
         if (this.blockHP[r][c] <= 0) {
             this.grid[r][c] = BLOCK_EMPTY;
             this.blockHP[r][c] = 0;
+            this.invalidateTileRegion(r, c);
             return true;
         }
         return false;
+    }
+
+    /** Redraw the destroyed tile and its 8 neighbors in the tile cache
+     *  (neighbors' exposure flags/notches depend on this tile's state). */
+    invalidateTileRegion(centerR, centerC) {
+        const S = TILE_SIZE;
+        const startR = Math.max(0, centerR - 1);
+        const endR = Math.min(this.rows - 1, centerR + 1);
+        const startC = Math.max(0, centerC - 1);
+        const endC = Math.min(this.cols - 1, centerC + 1);
+
+        for (let r = startR; r <= endR; r++) {
+            for (let c = startC; c <= endC; c++) {
+                this.tileCacheCtx.clearRect(c * S, r * S, S, S);
+                const block = this.grid[r][c];
+                if (block === BLOCK_EMPTY) continue;
+                if (block === BLOCK_INDESTRUCTIBLE) {
+                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S);
+                } else {
+                    this._drawRockyBlock(this.tileCacheCtx, r, c, block);
+                }
+            }
+        }
     }
 
     /** Destroy blocks in a radius (for grenades) */
