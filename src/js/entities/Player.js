@@ -509,7 +509,6 @@ export class Player {
         // Weapon state is reset immediately on dock; actual HP/ammo/fuel
         // are restored gradually each frame via _updateDockedResupply().
         this._resetMGState();
-        this.currentWeapon = 'missile';
     }
 
     /** Reset machine-gun burst/reload counters to factory defaults. */

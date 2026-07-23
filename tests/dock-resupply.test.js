@@ -42,3 +42,14 @@ test('refill never exceeds the cap', () => {
   for (let i = 0; i < 1000; i++) p._updateDockedResupply();
   assert.ok(p.missiles <= MISSILE_INITIAL_COUNT, `missiles=${p.missiles}`);
 });
+
+test('resupply() no longer forces the weapon to missile (item 1 fix)', () => {
+  const p = Object.create(Player.prototype);
+  p.game = { gameSpeed: 1.0 };
+  p.currentWeapon = 'mg';
+  p.mgBurstLeft = 0;
+  p.mgFireTimer = 5;
+  p.mgReloadTimer = 5;
+  p.resupply();
+  assert.equal(p.currentWeapon, 'mg', 'weapon selection must survive docking');
+});
