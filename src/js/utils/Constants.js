@@ -332,6 +332,10 @@ export const ENEMY_BASE_TURRET_BURST_DELAY = 10;
 export const ENEMY_BASE_MISSILE_COOLDOWN = 180;
 export const ENEMY_BASE_HOMING_COOLDOWN = 240;
 
+// --- Enemy Base Emergency Defense Mode ---
+export const EMERGENCY_DEFENSE_BASE_RADIUS = 120;
+export const EMERGENCY_DEFENSE_SPEED_MULT = 1.15;
+export const EMERGENCY_DEFENSE_SIGHT_RANGE = 250;
 
 // --- Per-stage block palettes (stage 1..7) ---
 // Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.
