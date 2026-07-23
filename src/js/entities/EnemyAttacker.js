@@ -13,7 +13,8 @@ import {
     ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES,
     RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
     RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
-    ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST
+    ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
+    EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT, EMERGENCY_DEFENSE_SIGHT_RANGE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, hasLineOfSight } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -57,6 +58,14 @@ export class EnemyAttacker {
         this.currentTarget = null;
         this.boostFrames = ATTACKER_BOOST_MAX_FRAMES;
 
+        // Emergency base-defense state: when the boss base is attacked (mission 2+),
+        // attackers rush to and guard the base. The redirected home reuses the
+        // return/patrol/chase machine (see setEmergencyDefense).
+        this.emergencyDefense = false;
+        this.emergencyTargetBase = null;
+        this._spawnHomeX = x; // real spawn home, restored when defense ends
+        this._spawnHomeY = y;
+
         // Rival alignment-avoidance state
         this.alignXFrames = 0;
         this.alignYFrames = 0;
@@ -83,6 +92,46 @@ export class EnemyAttacker {
         this.frameCounter = Math.floor(Math.random() * 100);
     }
 
+    /**
+     * Toggle emergency base-defense mode (called by EnemyBase/Game when the boss
+     * base is attacked on mission 2+). Rather than a new aiState, this redirects the
+     * unit's "home" to a spread-out point around the base: the existing
+     * return -> patrol -> chase machine then makes it rush in, guard the perimeter,
+     * and engage any player that comes within the (widened) sight range.
+     * @param {boolean} active
+     * @param {{x:number,y:number,width:number,height:number}} [targetBase]
+     */
+    setEmergencyDefense(active, targetBase = null) {
+        if (active) {
+            if (!targetBase) return;
+            if (!this.emergencyDefense) {
+                // Capture the real spawn home once, on first activation.
+                this._spawnHomeX = this.homeX;
+                this._spawnHomeY = this.homeY;
+            }
+            this.emergencyDefense = true;
+            this.emergencyTargetBase = targetBase;
+
+            // Per-unit angle so multiple defenders spread around the base instead of
+            // stacking on one pixel. Derived once here from Math.random().
+            const angle = Math.random() * Math.PI * 2;
+            const cx = targetBase.x + targetBase.width / 2;
+            const cy = targetBase.y + targetBase.height / 2;
+            this.homeX = cx + Math.cos(angle) * EMERGENCY_DEFENSE_BASE_RADIUS;
+            this.homeY = cy + Math.sin(angle) * EMERGENCY_DEFENSE_BASE_RADIUS;
+
+            // Force the return branch so the unit heads for the base next update().
+            this.returning = true;
+        } else {
+            if (this.emergencyDefense) {
+                this.homeX = this._spawnHomeX;
+                this.homeY = this._spawnHomeY;
+            }
+            this.emergencyDefense = false;
+            this.emergencyTargetBase = null;
+        }
+    }
+
     update() {
         if (!this.alive) return;
 
@@ -93,7 +142,11 @@ export class EnemyAttacker {
 
         // --- AI state decision ---
         this.currentTarget = target;
-        if (target && targetDist <= this.config.sightRange) {
+        // While defending the base, notice approaching players from farther away.
+        const sightRange = this.emergencyDefense
+            ? Math.max(this.config.sightRange, EMERGENCY_DEFENSE_SIGHT_RANGE)
+            : this.config.sightRange;
+        if (target && targetDist <= sightRange) {
             this.aiState = 'chase';
             this.returning = false;
         } else {
@@ -229,8 +282,14 @@ export class EnemyAttacker {
         // gaps are now handled by _moveAndCollide's step-up (walk, don't jump).
         const needsJumpClimb = this.y > targetY + TILE_SIZE;
 
+        // Defenders rush to the base with urgency. When emergency defense is active
+        // every _climbToward call targets the base, so the boost never leaks into the
+        // normal return-to-spawn path (which only runs while defense is inactive).
+        const speed = this.emergencyDefense
+            ? this.maxSpeed * EMERGENCY_DEFENSE_SPEED_MULT
+            : this.maxSpeed;
         if (Math.abs(dx) > 8) {
-            this.vx = dx > 0 ? this.maxSpeed : -this.maxSpeed;
+            this.vx = dx > 0 ? speed : -speed;
         } else {
             this.vx = 0;
         }
