@@ -90,11 +90,6 @@ const Game = {
     leftClickSuppress: false,  // グレネード投擲時の左クリック誤射防止用フラグ
     flag: null,
 
-    // Options
-    options: {
-        carrierLift: true, // false = 持ち上げ無効 & 横当たり無効（上に乗るのみ可）
-    },
-
     // Game state
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
@@ -220,8 +215,6 @@ const Game = {
         } else if (this.input.isKeyPressed('ArrowRight')) {
             this.mode = cycleMode(this.mode, +1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
-        } else if (this.input.isKeyPressed('Tab')) {
-            this.options.carrierLift = !this.options.carrierLift;
         } else if (this.stateTimer > 8000) {
             this.gameState = 'how_to_play';
             this.stateTimer = 0;

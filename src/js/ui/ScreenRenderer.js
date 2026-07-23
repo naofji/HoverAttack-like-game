@@ -57,16 +57,6 @@ export class ScreenRenderer {
 
 
         this._drawModeSelector(ctx, canvas);
-
-        // Option toggle display
-        const liftOn = this.game.options.carrierLift;
-        ctx.font = '13px "Space Mono", monospace';
-        ctx.fillStyle = '#555555';
-        ctx.fillText('[TAB] CARRIER LIFT:', canvas.width / 2 - 30, canvas.height - 18);
-        ctx.fillStyle = liftOn ? '#00FF88' : '#FF4444';
-        ctx.textAlign = 'left';
-        ctx.fillText(liftOn ? 'ON' : 'OFF', canvas.width / 2 + 78, canvas.height - 18);
-        ctx.textAlign = 'center';
     }
 
     /**
