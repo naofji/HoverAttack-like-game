@@ -73,6 +73,10 @@ export class EnemyBase {
         // Destruction Sequence State
         this.dying = false;
         this.dyingTimer = 0;
+
+        // Emergency Defense Alert pulse (visual only, one-shot)
+        this.emergencyPulseTimer = 0;
+        this.emergencyPulseDuration = 45; // ~0.75s of expanding ring
     }
 
     _resetCruiseMissileTimer() {
@@ -89,6 +93,7 @@ export class EnemyBase {
         }
 
         this.coreAnimTimer += 1;
+        if (this.emergencyPulseTimer > 0) this.emergencyPulseTimer--;
         this._updateLaser();
         this._updateBaseTurret();
         this._updateBaseMissile();
@@ -580,6 +585,16 @@ export class EnemyBase {
     takeDamage(amount) {
         if (!this.alive) return;
 
+        // Mission 2+ (missionsCompleted 1+): being hit calls in emergency reinforcements,
+        // but not while the destruction sequence is already underway (dying window).
+        if (this.game.missionsCompleted >= 1 && !this.dying) {
+            const alreadyAlerted = !!this.game.baseEmergencyAlert;
+            this.game.triggerBaseEmergencyAlert(this);
+            // Only spawn the one-shot visual pulse the moment the alert first goes live,
+            // not on every subsequent hit while it's already latched.
+            if (!alreadyAlerted) this._spawnEmergencyPulse();
+        }
+
         // Damage the shield first
         if (this.shields > 0) {
             this.shields--;
@@ -600,6 +615,11 @@ export class EnemyBase {
         this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
     }
 
+    /** One-shot expanding red "rescue pulse" ring shown when the emergency alert first fires. */
+    _spawnEmergencyPulse() {
+        this.emergencyPulseTimer = this.emergencyPulseDuration;
+    }
+
     _die() {
         if (this.dying) return;
         this.dying = true;
@@ -612,11 +632,25 @@ export class EnemyBase {
         this.alive = false;
         // Final massive explosion
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 80);
+
+        // If this base had a live emergency defense alert, clear it and release all
+        // reinforcements back to their normal behavior.
+        if (this.game.baseEmergencyAlert) {
+            this.game.baseEmergencyAlert = false;
+            this.game.emergencyTargetBase = null;
+            const enemies = this.game.enemies || [];
+            for (const e of enemies) {
+                if (typeof e.setEmergencyDefense === 'function') {
+                    e.setEmergencyDefense(false);
+                }
+            }
+        }
     }
 
     draw(ctx) {
         if (!this.alive) return;
         this._drawWarningPath(ctx);
+        this._drawEmergencyPulse(ctx);
 
         const drawX = Math.round(this.x);
         const drawY = Math.round(this.y);
@@ -627,6 +661,25 @@ export class EnemyBase {
         this._drawShields(ctx);
         this._drawCore(ctx);
 
+        ctx.restore();
+    }
+
+    /** Draw the expanding red rescue-pulse ring around the base while the alert is fresh. */
+    _drawEmergencyPulse(ctx) {
+        if (this.emergencyPulseTimer <= 0) return;
+
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const progress = 1 - (this.emergencyPulseTimer / this.emergencyPulseDuration); // 0 -> 1
+        const radius = 20 + progress * 100;
+        const alpha = 1 - progress;
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 40, 40, ${alpha})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
     }
 
