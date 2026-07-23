@@ -117,12 +117,20 @@ export class SpawnManager {
                 rnd -= typeDef.spawnWeight;
             }
             const adjustedPos = resolveOverlap(pos.x, pos.y);
-            game.enemies.push(new EnemyAttacker(game, adjustedPos.x, adjustedPos.y, availableTypes[selectedTypeKey]));
+            const attacker = new EnemyAttacker(game, adjustedPos.x, adjustedPos.y, availableTypes[selectedTypeKey]);
+            if (game.baseEmergencyAlert) {
+                attacker.setEmergencyDefense(true, game.emergencyTargetBase);
+            }
+            game.enemies.push(attacker);
         }
 
         // Spawn aerial drones
         for (const pos of game.map.enemyDroneSpawns) {
-            game.enemies.push(new EnemyDrone(game, pos.x, pos.y));
+            const drone = new EnemyDrone(game, pos.x, pos.y);
+            if (game.baseEmergencyAlert) {
+                drone.setEmergencyDefense(true, game.emergencyTargetBase);
+            }
+            game.enemies.push(drone);
         }
 
         // Spawn stationary turrets

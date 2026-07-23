@@ -116,7 +116,32 @@ export class HUD {
         // --- Carrier Alerts ---
         this._drawCarrierDamageAlert(ctx, w);
         this._drawProximityAlert(ctx, w);
+        this._drawBaseEmergencyAlert(ctx, w);
 
+        ctx.restore();
+    }
+
+    _drawBaseEmergencyAlert(ctx, w) {
+        if (!this.game.baseEmergencyAlert) return;
+        if (Math.floor(Date.now() / 200) % 2 !== 0) return; // Blink
+
+        const centerX = w / 2;
+        const centerY = this.game.canvas.height * 0.15;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(centerX - 340, centerY - 25, 680, 50);
+
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(centerX - 340, centerY - 25, 680, 50);
+
+        ctx.fillStyle = '#FF0000';
+        ctx.font = 'bold 20px "Space Mono", monospace';
+        ctx.fillText('WARNING: ENEMY BASE UNDER ATTACK! DEFENSE MODE ACTIVATED!', centerX, centerY);
         ctx.restore();
     }
 

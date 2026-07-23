@@ -2,13 +2,17 @@
 // Main Game Entry Point - v1.0
 // ============================================
 
-window.onerror = function (msg, url, loc) {
-    const div = document.createElement('div');
-    div.style.position = 'absolute'; div.style.zIndex = '9999'; div.style.background = 'red';
-    div.style.color = 'white'; div.style.padding = '10px'; div.style.fontSize = '20px';
-    div.textContent = `ERROR: ${msg.toString()} at ${loc}`;
-    document.body.appendChild(div);
-};
+// Guarded so this module can be imported in a DOM-less test environment
+// (e.g. `node --test`) purely to unit-test plain methods on `Game`.
+if (typeof window !== 'undefined') {
+    window.onerror = function (msg, url, loc) {
+        const div = document.createElement('div');
+        div.style.position = 'absolute'; div.style.zIndex = '9999'; div.style.background = 'red';
+        div.style.color = 'white'; div.style.padding = '10px'; div.style.fontSize = '20px';
+        div.textContent = `ERROR: ${msg.toString()} at ${loc}`;
+        document.body.appendChild(div);
+    };
+}
 
 import { Input } from './utils/Input.js';
 import {
@@ -32,6 +36,8 @@ import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
 import { Flag } from './entities/Flag.js';
+import { EnemyAttacker } from './entities/EnemyAttacker.js';
+import { EnemyDrone } from './entities/EnemyDrone.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 import { ScreenRenderer } from './ui/ScreenRenderer.js';
@@ -61,7 +67,7 @@ const DEMO_CYCLE_STATES = [
     'global_ranking_display', 'stage_ranking_display', 'wall_of_fame_display'
 ];
 
-const Game = {
+export const Game = {
     canvas: null,
     ctx: null,
     lastTime: 0,
@@ -113,6 +119,8 @@ const Game = {
     stageDisplayTimer: 0,   // sub-timer for auto-advance
     playerNameInput: "",
     proximityAlertActive: false,
+    baseEmergencyAlert: false,
+    emergencyTargetBase: null,
 
     // Time & Bonus Tracking
     totalTime: 0,
@@ -1403,6 +1411,31 @@ const Game = {
         }
     },
 
+    /**
+     * Enter "Enemy Base Emergency Defense Mode" — called by EnemyBase.takeDamage()
+     * on mission 2+ once the base is under attack. One-shot latch: once active,
+     * subsequent calls are no-ops until a fresh mission (or base destruction)
+     * resets the flags.
+     * @param {EnemyBase} enemyBase - the base under attack; stored so redirected
+     *   defenders (and newly-spawned ones, via SpawnManager) know their rally point.
+     */
+    triggerBaseEmergencyAlert(enemyBase) {
+        if (this.baseEmergencyAlert) return; // one-shot latch: already active
+
+        if (this.missionsCompleted < 1) return; // only mission 2+ (defense in depth)
+
+        this.baseEmergencyAlert = true;
+        this.emergencyTargetBase = enemyBase;
+
+        for (const enemy of this.enemies) {
+            if (enemy instanceof EnemyAttacker || enemy instanceof EnemyDrone) {
+                enemy.setEmergencyDefense(true, enemyBase);
+            }
+        }
+
+        audioManager.playAlarm();
+    },
+
     loop(timestamp) {
         let deltaTime = timestamp - this.lastTime;
         this.lastTime = timestamp;
@@ -1421,4 +1454,8 @@ const Game = {
 // ============================================
 // Start (ES modules are deferred, DOM is ready)
 // ============================================
-Game.init();
+// Guarded so this module can be imported in a DOM-less test environment
+// (e.g. `node --test`) purely to unit-test plain methods on `Game`.
+if (typeof document !== 'undefined') {
+    Game.init();
+}
