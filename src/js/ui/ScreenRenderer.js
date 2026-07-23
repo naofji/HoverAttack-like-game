@@ -51,7 +51,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
 
@@ -292,14 +292,15 @@ export class ScreenRenderer {
             ctx.textBaseline = 'alphabetic'; // reset
         }
 
-        // Press Any Key ヒント（点滅）
+        // Press Enter ヒント（点滅）
         if (Math.floor(Date.now() / 600) % 2 === 0) {
             ctx.save();
+            ctx.textAlign = 'center';
             ctx.fillStyle = '#FFFFFF';
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ENTER TO START', cx, H - 70);
+            ctx.fillText('PRESS ENTER TO START', cx, H - 20);
             ctx.restore();
         }
     }
@@ -310,13 +311,13 @@ export class ScreenRenderer {
     drawDemoCycleDots(ctx, currentIndex, total) {
         if (total <= 1) return;
         const canvas = this.game.canvas;
-        const cy = canvas.height - 40;
-        const spacing = 22;
+        const cy = canvas.height - 5;
+        const spacing = 14;
         const startX = canvas.width / 2 - ((total - 1) * spacing) / 2;
 
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.font = '14px sans-serif';
+        ctx.font = '9px sans-serif';
         for (let i = 0; i < total; i++) {
             ctx.fillStyle = i === currentIndex ? '#00FFFF' : '#444444';
             ctx.fillText('●', startX + i * spacing, cy);
@@ -758,8 +759,8 @@ export class ScreenRenderer {
             ctx.fillStyle = '#FFFFFF';
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
-            ctx.font = 'bold 18px "Space Mono", monospace';
-            ctx.fillText('PRESS ENTER TO START', W / 2, H - 18);
+            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillText('PRESS ENTER TO START', W / 2, H - 20);
             ctx.restore();
         }
         ctx.textAlign = 'left';
