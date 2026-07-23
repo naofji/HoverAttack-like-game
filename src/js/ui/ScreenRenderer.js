@@ -614,7 +614,7 @@ export class ScreenRenderer {
             scores.forEach((entry, index) => {
                 const rank = String(index + 1).padStart(2, ' ');
                 const scoreStr = String(entry.score).padStart(7, ' ');
-                const nameStr = (entry.name).padEnd(10, ' ');
+                const nameStr = String(entry.name || '').padEnd(10, ' ');
                 const missionStr = String(entry.mission).padStart(2, ' ');
                 const timeStr = entry.clearTime ? ` (${entry.clearTime})` : '';
                 const flag = flagEmoji(entry.country);
@@ -695,7 +695,7 @@ export class ScreenRenderer {
                 wk.entries.forEach((e, i) => {
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
-                    const nameStr = (e.name).padEnd(10, ' ');
+                    const nameStr = String(e.name || '').padEnd(10, ' ');
                     const flag = flagEmoji(e.country);
                     this._metallicText(ctx, `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y, lerpColor('#FFE680', '#9c7a26', Math.min(i / 2, 1)), 17);
                     y += 22;
@@ -785,7 +785,7 @@ export class ScreenRenderer {
         rows.forEach((entry, i) => {
             const y = startY + i * lineH;
             const rank = String(i + 1);
-            const name = (entry.name || '').substring(0, 8);
+            const name = String(entry.name || '').substring(0, 8);
             const flag = flagEmoji(entry.country);
             const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).toLocaleString();
 

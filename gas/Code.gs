@@ -59,7 +59,7 @@ function topNForWeek(rows, weekId, n) {
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) === weekId) {
-      out.push({ name: rows[i][2], score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '' });
+      out.push({ name: String(rows[i][2]), score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '' });
     }
   }
   out.sort(function (a, b) { return b.score - a.score; });
@@ -72,7 +72,7 @@ function groupFame(fameRows) {
   for (var i = 0; i < fameRows.length; i++) {
     var wk = String(fameRows[i][0]);
     if (!byWeek[wk]) { byWeek[wk] = []; order.push(wk); }
-    byWeek[wk].push({ name: fameRows[i][2], score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '' });
+    byWeek[wk].push({ name: String(fameRows[i][2]), score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '' });
   }
   var out = [];
   for (var j = order.length - 1; j >= 0; j--) {
@@ -107,7 +107,7 @@ function topStagesForWeek(rows, weekId, n) {
     if (String(rows[i][1]) !== weekId) continue;
     var stage = Number(rows[i][3]);
     if (stage < 1 || stage > STAGE_COUNT) continue;
-    byStage[stage - 1].push({ name: rows[i][2], timeMs: Number(rows[i][4]), score: Number(rows[i][5]), country: rows[i][6] || '' });
+    byStage[stage - 1].push({ name: String(rows[i][2]), timeMs: Number(rows[i][4]), score: Number(rows[i][5]), country: rows[i][6] || '' });
   }
   var out = [];
   for (var k = 0; k < STAGE_COUNT; k++) {

@@ -72,6 +72,18 @@ test('topNForWeek filters by weekId, sorts desc, slices n, carries country', () 
   assert.equal(top[0].country, 'US');
 });
 
+test('topNForWeek coerces a numeric-looking sheet cell name to a string', () => {
+  // Sheets' getValues() can return a purely-numeric cell as a JS number even
+  // when it was written as a string (e.g. player name "007"). The client
+  // calls entry.name.padEnd(...), which throws on a number.
+  const rows = [
+    ['t', '2026-W29', 999, 100, 1, '', 'JP'],
+  ];
+  const top = ctx.topNForWeek(rows, '2026-W29', 5);
+  assert.equal(typeof top[0].name, 'string');
+  assert.equal(top[0].name, '999');
+});
+
 test('groupFame groups by week, newest first, entries sorted desc, carries country', () => {
   const fameRows = [
     ['2026-W27', 1, 'A', 500, 3, '', 'JP'],
@@ -120,4 +132,15 @@ test('topStagesForWeek returns 7 stages, time asc / score desc top-n', () => {
     assert.equal(s1.time[0].timeMs, 3000);   // fastest
     assert.equal(s1.score[0].score, 900);    // highest
     assert.equal(out[1].time.length, 0);     // stage 2 empty
+});
+
+test('topStagesForWeek coerces a numeric-looking sheet cell name to a string', () => {
+    const rows = [
+        [new Date(), 'W1', 42, 1, 5000, 100, 'JP'],
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(typeof out[0].time[0].name, 'string');
+    assert.equal(out[0].time[0].name, '42');
+    assert.equal(typeof out[0].score[0].name, 'string');
+    assert.equal(out[0].score[0].name, '42');
 });
