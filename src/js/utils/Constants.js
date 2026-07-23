@@ -51,7 +51,7 @@ export const ATTACKER_RETURN_DONE = 2 * TILE_SIZE;       // back home when withi
 export const ATTACKER_CLIMB_MIN_FUEL = 40;               // fuel needed before a climb take-off
 export const ATTACKER_CLIMB_MAX_RISE = -4.0;             // upward speed cap while climbing
 export const ATTACKER_SLOW_RISE_CAP = -1.5;  // 'jump' climbStyle ascent cap (slow rise)
-export const ATTACKER_BOOST_MAX_FRAMES = 20; // 'boost' climbStyle thrust frames per airborne leg
+export const ATTACKER_BOOST_MAX_FRAMES = 34; // 'boost' climbStyle thrust frames per airborne leg
 
 // --- Artillery cover-seeking ---
 export const ATTACKER_COVER_CHECK_INTERVAL = 30; // frames between line-of-sight checks
@@ -189,7 +189,7 @@ export const ENEMY_ATTACKER_TYPES = {
         name: 'standard',
         hp: 15,
         speed: 0.9,
-        jumpForce: -6.5,
+        jumpForce: -7.5,
         fireInterval: 120,    // 2 seconds
         sightRange: CANVAS_WIDTH * 0.4,
         score: 300,
@@ -197,7 +197,7 @@ export const ENEMY_ATTACKER_TYPES = {
         usesGrenades: false,
         aimAccuracy: 0.6,
         movementType: 'pace_and_jump',
-        climbThrust: 0.55,
+        climbThrust: 0.75,
         climbStyle: 'boost',
         bodyColor: '#55CCDD',
         headColor: '#44AABB',

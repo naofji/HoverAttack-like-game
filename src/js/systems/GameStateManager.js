@@ -52,6 +52,7 @@ export class GameStateManager {
         // spawning fresh enemies below, so new spawns don't inherit a stale flag.
         game.baseEmergencyAlert = false;
         game.emergencyTargetBase = null;
+        game.baseEmergencyAlertStartTime = 0;
 
         // Regenerate map (seeded per week + mission for reproducibility)
         game.rng = new SeededRNG(stageSeed(game.weekSeed, game.missionsCompleted));

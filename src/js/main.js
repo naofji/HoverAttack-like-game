@@ -121,6 +121,7 @@ export const Game = {
     proximityAlertActive: false,
     baseEmergencyAlert: false,
     emergencyTargetBase: null,
+    baseEmergencyAlertStartTime: 0,
 
     // Time & Bonus Tracking
     totalTime: 0,
@@ -1426,6 +1427,7 @@ export const Game = {
 
         this.baseEmergencyAlert = true;
         this.emergencyTargetBase = enemyBase;
+        this.baseEmergencyAlertStartTime = Date.now();
 
         for (const enemy of this.enemies) {
             if (enemy instanceof EnemyAttacker || enemy instanceof EnemyDrone) {

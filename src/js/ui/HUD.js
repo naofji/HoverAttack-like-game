@@ -123,25 +123,46 @@ export class HUD {
 
     _drawBaseEmergencyAlert(ctx, w) {
         if (!this.game.baseEmergencyAlert) return;
-        if (Math.floor(Date.now() / 200) % 2 !== 0) return; // Blink
+
+        // Stop blinking after a handful of cycles so the warning doesn't
+        // stay visually noisy for the rest of the (possibly long) alert.
+        const BLINK_PERIOD_MS = 400; // 200ms on + 200ms off
+        const MAX_BLINKS = 10;
+        const startTime = this.game.baseEmergencyAlertStartTime || Date.now();
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= BLINK_PERIOD_MS * MAX_BLINKS) return;
+        if (Math.floor(elapsed / 200) % 2 !== 0) return; // Blink
 
         const centerX = w / 2;
-        const centerY = this.game.canvas.height * 0.15;
+        const centerY = this.game.canvas.height * 0.35;
+        const boxW = 680;
+        const boxH = 50;
+        const textPadding = 24; // keep text clear of the box border
 
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(centerX - 340, centerY - 25, 680, 50);
+        ctx.fillRect(centerX - boxW / 2, centerY - boxH / 2, boxW, boxH);
 
         ctx.strokeStyle = '#FF0000';
         ctx.lineWidth = 2;
-        ctx.strokeRect(centerX - 340, centerY - 25, 680, 50);
+        ctx.strokeRect(centerX - boxW / 2, centerY - boxH / 2, boxW, boxH);
+
+        // Shrink the font until the text fits inside the box, so the
+        // warning never overflows its frame.
+        const text = 'WARNING: ENEMY BASE UNDER ATTACK! DEFENSE MODE ACTIVATED!';
+        const maxTextW = boxW - textPadding * 2;
+        let fontSize = 20;
+        ctx.font = `bold ${fontSize}px "Space Mono", monospace`;
+        while (fontSize > 10 && ctx.measureText(text).width > maxTextW) {
+            fontSize--;
+            ctx.font = `bold ${fontSize}px "Space Mono", monospace`;
+        }
 
         ctx.fillStyle = '#FF0000';
-        ctx.font = 'bold 20px "Space Mono", monospace';
-        ctx.fillText('WARNING: ENEMY BASE UNDER ATTACK! DEFENSE MODE ACTIVATED!', centerX, centerY);
+        ctx.fillText(text, centerX, centerY);
         ctx.restore();
     }
 

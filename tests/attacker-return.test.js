@@ -20,7 +20,7 @@ test('return thresholds match the spec', () => {
 });
 
 test('every attacker type has a climbThrust that beats gravity', () => {
-  const expected = { standard: 0.55, heavy: 0.45, rival: 0.65, artillery: 0.5 };
+  const expected = { standard: 0.75, heavy: 0.45, rival: 0.65, artillery: 0.5 };
   for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
     assert.equal(type.climbThrust, expected[key], `climbThrust of ${key}`);
     assert.ok(type.climbThrust > 0.30, `${key} must out-thrust GRAVITY`);
@@ -172,7 +172,7 @@ test('heavy attacker gains altitude when its target is 4+ tiles above', () => {
 
 test('movement personality constants match the spec', () => {
   assert.equal(ATTACKER_SLOW_RISE_CAP, -1.5);
-  assert.equal(ATTACKER_BOOST_MAX_FRAMES, 20);
+  assert.equal(ATTACKER_BOOST_MAX_FRAMES, 34);
   assert.equal(RIVAL_ALIGN_THRESHOLD, 24);
   assert.equal(RIVAL_ALIGN_TRIGGER_FRAMES, 45);
   assert.equal(RIVAL_EVADE_OFFSET_MIN, 60);

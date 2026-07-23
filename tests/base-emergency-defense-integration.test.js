@@ -285,21 +285,57 @@ test('GameStateManager.resetLevel() resets baseEmergencyAlert/emergencyTargetBas
 // Step 4: HUD warning banner
 // ---------------------------------------------------------------------------
 
-function makeHudCtx() {
+function makeHudCtx({ textWidth = 100 } = {}) {
+  let currentFontSize = 20;
   return {
     save() {}, restore() {}, beginPath() {}, arc() {}, stroke() {}, fill() {},
     fillRect() {}, strokeRect() {}, translate() {}, moveTo() {}, lineTo() {},
     setLineDash() {}, createRadialGradient: () => ({ addColorStop() {} }),
-    fillText() {}, set fillStyle(v) {}, set strokeStyle(v) {}, set font(v) {},
+    fillText() {},
+    measureText(text) { return { width: textWidth }; },
+    set fillStyle(v) {}, set strokeStyle(v) {},
+    set font(v) { const m = /(\d+)px/.exec(v); if (m) currentFontSize = Number(m[1]); },
+    get font() { return `bold ${currentFontSize}px "Space Mono", monospace`; },
     set textAlign(v) {}, set textBaseline(v) {}, set lineWidth(v) {}
   };
 }
 
 test('HUD._drawBaseEmergencyAlert exists and does not throw when active', () => {
-  const game = { baseEmergencyAlert: true, canvas: { width: 800, height: 600 } };
+  const game = { baseEmergencyAlert: true, baseEmergencyAlertStartTime: Date.now(), canvas: { width: 800, height: 600 } };
   const hud = new HUD(game);
   assert.equal(typeof hud._drawBaseEmergencyAlert, 'function');
   assert.doesNotThrow(() => hud._drawBaseEmergencyAlert(makeHudCtx(), 800));
+});
+
+test('HUD._drawBaseEmergencyAlert shrinks the font until the text fits inside the box', () => {
+  // Box interior is 680 - 2*24 = 632px wide. Report an oversized measured
+  // width so the loop must shrink the font before it fits.
+  const game = { baseEmergencyAlert: true, baseEmergencyAlertStartTime: Date.now(), canvas: { width: 800, height: 600 } };
+  const hud = new HUD(game);
+  const ctx = makeHudCtx({ textWidth: 900 }); // always "too wide" until font shrinks below threshold handled by measureText below
+  // Make measureText width scale down as font size shrinks, mimicking real canvas behavior.
+  let lastFontSize = 20;
+  ctx.measureText = (text) => {
+    const m = /(\d+)px/.exec(ctx.font);
+    lastFontSize = m ? Number(m[1]) : lastFontSize;
+    return { width: text.length * lastFontSize * 0.6 };
+  };
+  hud._drawBaseEmergencyAlert(ctx, 800);
+  // 57 chars * fontSize * 0.6 <= 632  =>  fontSize <= ~18.5, so it must have shrunk from 20.
+  assert.ok(lastFontSize < 20, `expected font to shrink below 20, got ${lastFontSize}`);
+  assert.ok(lastFontSize >= 10, `expected font to stop shrinking at the floor, got ${lastFontSize}`);
+});
+
+test('HUD._drawBaseEmergencyAlert stops blinking after ~10 cycles (visually quiets down)', () => {
+  const longAgo = Date.now() - 100000; // way past the 10-blink window
+  const game = { baseEmergencyAlert: true, baseEmergencyAlertStartTime: longAgo, canvas: { width: 800, height: 600 } };
+  const hud = new HUD(game);
+  let drewSomething = false;
+  const ctx = makeHudCtx();
+  ctx.fillRect = () => { drewSomething = true; };
+  ctx.fillText = () => { drewSomething = true; };
+  hud._drawBaseEmergencyAlert(ctx, 800);
+  assert.equal(drewSomething, false);
 });
 
 test('HUD._drawBaseEmergencyAlert is a no-op (draws nothing) when inactive', () => {
