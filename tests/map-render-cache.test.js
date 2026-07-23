@@ -125,3 +125,42 @@ test('damageBlock invalidates the destroyed tile and its 8 neighbors in the cach
     Map.prototype._drawPolishedBlock = origPolished;
   }
 });
+
+test('damageBlock redraws the center tile in the cache even when the block survives (non-fatal damage)', async () => {
+  const { Map, BLOCK_HARD } = await import('../src/js/world/Map.js');
+  const game = { rng: new SeededRNG(3) };
+  const map = new Map(game, 2);
+
+  // HARD_BLOCK_HP=3 のブロックを探す(1回のダメージでは破壊されない想定)。
+  let targetR = -1, targetC = -1;
+  for (let r = 0; r < map.rows && targetR < 0; r++) {
+    for (let c = 0; c < map.cols; c++) {
+      if (map.grid[r][c] === BLOCK_HARD) {
+        targetR = r;
+        targetC = c;
+        break;
+      }
+    }
+  }
+  assert.ok(targetR >= 0, 'test setup: no BLOCK_HARD block found on map');
+
+  const rockyCalls = [];
+  const origRocky = Map.prototype._drawRockyBlock;
+  Map.prototype._drawRockyBlock = function (ctx, r, c, block) {
+    rockyCalls.push(`${r},${c}`);
+    return origRocky.call(this, ctx, r, c, block);
+  };
+
+  try {
+    const destroyed = map.damageBlock(targetR, targetC, 1);
+    assert.equal(destroyed, false, 'test setup: single hit should not destroy a HARD block (HP=3)');
+    assert.ok(map.blockHP[targetR][targetC] > 0, 'test setup: block should still have HP remaining');
+
+    assert.ok(
+      rockyCalls.includes(`${targetR},${targetC}`),
+      'expected _drawRockyBlock to redraw the center tile after non-fatal damage'
+    );
+  } finally {
+    Map.prototype._drawRockyBlock = origRocky;
+  }
+});

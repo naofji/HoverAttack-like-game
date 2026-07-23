@@ -781,6 +781,9 @@ export class Map {
             this.invalidateTileRegion(r, c);
             return true;
         }
+        // 非致命ダメージ: ブロック自身のひび割れ表現が変わるため中心タイルを再描画する。
+        // (周囲8マスの見た目は自身が空洞化した時のみ変化するため9マス再描画で構わない)
+        this.invalidateTileRegion(r, c);
         return false;
     }
 
@@ -1178,4 +1181,4 @@ export class Map {
     }
 }
 
-export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE } from '../utils/Constants.js';
+export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';
