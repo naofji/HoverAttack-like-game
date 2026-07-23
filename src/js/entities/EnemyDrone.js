@@ -13,7 +13,9 @@ import {
     ENEMY_DRONE_KAMIKAZE_CHANCE, ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE,
     ENEMY_DRONE_KAMIKAZE_SPEED, ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER,
     ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER,
-    ENEMY_BULLET_SPEED
+    ENEMY_BULLET_SPEED,
+    EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
+    EMERGENCY_DEFENSE_SIGHT_RANGE
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -50,6 +52,53 @@ export class EnemyDrone {
         this.blinkTimer = 0;
         this.dashTargetX = 0;
         this.dashTargetY = 0;
+
+        // Emergency base-defense (activated by EnemyBase when it takes damage).
+        // Drones have no fixed "home", so defence is modelled as a persistent
+        // per-unit anchor point on a ring around the base, with a leash back to it.
+        this.emergencyDefense = false;
+        this.emergencyTargetBase = null;
+        this.emergencyAnchorX = null;
+        this.emergencyAnchorY = null;
+        this.dashingToAnchor = false; // true only during the rush-to-anchor dash
+    }
+
+    /**
+     * Toggle emergency base-defense mode.
+     * On activate: pick a persistent, per-unit anchor on a ring around the base
+     * and immediately rush there. On deactivate: clear state; normal patrol/dash/
+     * hover/kamikaze behaviour resumes untouched (drones never had a fixed home).
+     */
+    setEmergencyDefense(active, targetBase = null) {
+        if (active && targetBase) {
+            this.emergencyDefense = true;
+            this.emergencyTargetBase = targetBase;
+
+            const cx = targetBase.x + targetBase.width / 2;
+            const cy = targetBase.y + targetBase.height / 2;
+            // Own random angle, computed once here (not per-frame), so multiple
+            // defenders spread around the base instead of stacking on one point.
+            const angle = Math.random() * Math.PI * 2;
+            this.emergencyAnchorX = cx + Math.cos(angle) * EMERGENCY_DEFENSE_BASE_RADIUS;
+            this.emergencyAnchorY = cy + Math.sin(angle) * EMERGENCY_DEFENSE_BASE_RADIUS;
+
+            this._startDashToAnchor(); // rush toward the base on the very next frame
+        } else {
+            this.emergencyDefense = false;
+            this.emergencyTargetBase = null;
+            this.emergencyAnchorX = null;
+            this.emergencyAnchorY = null;
+            this.dashingToAnchor = false;
+        }
+    }
+
+    /** Dash straight to the defence anchor (boosted speed via dashingToAnchor). */
+    _startDashToAnchor() {
+        this.state = 'dash';
+        this.stateTimer = 30 + Math.random() * 30;
+        this.dashTargetX = this.emergencyAnchorX - this.width / 2;
+        this.dashTargetY = this.emergencyAnchorY - this.height / 2;
+        this.dashingToAnchor = true;
     }
 
     update() {
@@ -85,18 +134,31 @@ export class EnemyDrone {
         const target = this._findTarget();
         if (target) {
             this._startDash(target);
+            return;
+        }
+
+        // While defending, don't drift away: leash back to the anchor near the base.
+        if (this.emergencyDefense && this.emergencyAnchorX !== null) {
+            const ax = this.emergencyAnchorX - (this.x + this.width / 2);
+            const ay = this.emergencyAnchorY - (this.y + this.height / 2);
+            if (Math.hypot(ax, ay) > EMERGENCY_DEFENSE_BASE_RADIUS) {
+                this._startDashToAnchor();
+            }
         }
     }
 
     _updateDashState() {
         this.stateTimer--;
 
+        // The rush-to-base leg specifically gets an urgency speed boost.
+        const speedMult = this.dashingToAnchor ? EMERGENCY_DEFENSE_SPEED_MULT : 1;
+
         // Move aggressively towards dash target
         const dx = this.dashTargetX - this.x;
         const dy = this.dashTargetY - this.y;
 
         if (Math.abs(dx) > 10) {
-            this.vx = Math.sign(dx) * ENEMY_DRONE_SPEED;
+            this.vx = Math.sign(dx) * ENEMY_DRONE_SPEED * speedMult;
             this.tiltAngle = Math.sign(dx) * 0.3; // Tilt in direction of movement
             this.patrolDir = dx >= 0 ? 1 : -1;
         } else {
@@ -104,7 +166,7 @@ export class EnemyDrone {
         }
 
         if (Math.abs(dy) > 10) {
-            this.vy = Math.sign(dy) * ENEMY_DRONE_SPEED_Y_MAX;
+            this.vy = Math.sign(dy) * ENEMY_DRONE_SPEED_Y_MAX * speedMult;
         } else {
             this.vy *= 0.8;
         }
@@ -180,7 +242,15 @@ export class EnemyDrone {
             const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < ENEMY_DRONE_SIGHT_RANGE && this._hasLineOfSight(target)) {
+            // Defenders notice approaching players from farther away. (Drones'
+            // native sight already exceeds EMERGENCY_DEFENSE_SIGHT_RANGE, so this
+            // Math.max never shrinks it — it only widens, and stays correct if the
+            // native range is ever lowered.)
+            const sightRange = Math.max(
+                ENEMY_DRONE_SIGHT_RANGE,
+                this.emergencyDefense ? EMERGENCY_DEFENSE_SIGHT_RANGE : 0
+            );
+            if (dist < sightRange && this._hasLineOfSight(target)) {
                 return target;
             }
         }
@@ -188,6 +258,7 @@ export class EnemyDrone {
     }
 
     _startDash(target) {
+        this.dashingToAnchor = false; // any real-target dash is a normal (unboosted) engage
         if (!target) {
             this.state = 'patrol';
             return;
