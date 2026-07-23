@@ -89,6 +89,8 @@ export const GRENADE_DAMAGE_RADIUS = 40; // in pixels for entity damage
 export const GRENADE_DAMAGE = 80;
 export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
 export const GRENADE_EXPLOSION_COUNT = 150;
+export const GRENADE_KNOCKBACK_VY = -3.5; // Smaller launch than a landmine
+export const GRENADE_KNOCKBACK_VX = 2;    // Smaller sideways push than a landmine
 
 // --- Player Machine Gun (Fallback for missiles) ---
 export const PLAYER_MG_SPEED = 4; // a little bit faster than ENEMY_BULLET_SPEED
@@ -138,6 +140,7 @@ export const LANDMINE_WIDTH = 12;
 export const LANDMINE_HEIGHT = 6;
 export const LANDMINE_DAMAGE = 25;
 export const LANDMINE_KNOCKBACK_VY = -6;  // Upward launch on detonation
+export const LANDMINE_KNOCKBACK_VX = 3;   // Sideways push on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
 export const LANDMINE_BLAST_RADIUS = 50;   // Area of effect damage radius (~3 tiles)
 export const LANDMINE_COUNT = 60;          // Number to scatter across the map
@@ -364,3 +367,7 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbw5qXa2iRnAktsg0ckcxPqFPYLJwSd9VxEAN7CKQbHaRTaW4JP9lb66_f27s8MxhyI-/exec';
+
+// --- Enemy missile hit knockback (smaller than a grenade) ---
+export const MISSILE_HIT_KNOCKBACK_VY = -2;
+export const MISSILE_HIT_KNOCKBACK_VX = 1.5;

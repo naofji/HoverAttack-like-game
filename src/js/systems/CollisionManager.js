@@ -5,6 +5,8 @@
 import { Missile } from '../entities/Missile.js';
 import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
+import { applyKnockback } from '../utils/Knockback.js';
+import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
 
 // Damage values
 const DAMAGE_DEFAULT_BULLET = 10;
@@ -202,6 +204,8 @@ export class CollisionManager {
         if (player && player.alive && !player.docked && player.invincibleTimer <= 0
             && pointInRect(proj.x, proj.y, player)) {
             player.takeDamage(DAMAGE_ENEMY_MISSILE * damageMultiplier);
+            const dx = (player.x + player.width / 2) - proj.x;
+            applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
             game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
             proj.alive = false;
             proj.exploded = true;

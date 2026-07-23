@@ -5,9 +5,11 @@
 import {
     GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
     GRENADE_BLAST_RADIUS, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE,
+    GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
     GRENADE_LIFETIME, GRENADE_EXPLOSION_COUNT,
     TILE_SIZE
 } from '../utils/Constants.js';
+import { applyKnockback } from '../utils/Knockback.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -110,6 +112,7 @@ export class Grenade {
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < GRENADE_DAMAGE_RADIUS) {
                     player.takeDamage(GRENADE_DAMAGE / 2); // Less damage to player
+                    applyKnockback(player, dx, GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX);
                 }
             }
 

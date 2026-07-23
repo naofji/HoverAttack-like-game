@@ -4,11 +4,12 @@
 
 import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    LANDMINE_DAMAGE, LANDMINE_KNOCKBACK_VY,
+    LANDMINE_DAMAGE, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX,
     LANDMINE_BLINK_INTERVAL,
     EXPLOSION_PARTICLE_COUNT,
     LANDMINE_BLAST_RADIUS
 } from '../utils/Constants.js';
+import { applyKnockback } from '../utils/Knockback.js';
 
 export class Landmine {
     constructor(game, x, y) {
@@ -75,11 +76,7 @@ export class Landmine {
             if (dist <= LANDMINE_BLAST_RADIUS) {
                 if (typeof entity.takeDamage === 'function') {
                     entity.takeDamage(LANDMINE_DAMAGE);
-                    if (entity.vy !== undefined) entity.vy = LANDMINE_KNOCKBACK_VY;
-                    if (entity.vx !== undefined) {
-                        const pushDir = dx > 0 ? 1 : -1;
-                        entity.vx = pushDir * 3;
-                    }
+                    applyKnockback(entity, dx, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX);
                 } else if (typeof entity.detonate === 'function') {
                     entity.detonate(); // Chain reaction
                 }
