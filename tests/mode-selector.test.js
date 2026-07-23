@@ -83,7 +83,7 @@ test('labels are laid out left to right in MODE_ORDER, centred on the canvas', (
   assert.ok(right.x > xs[xs.length - 1], 'right arrow should follow the last label');
 });
 
-test('the arrow-key hint is present', () => {
+test('the A/D key hint is present', () => {
   const { texts } = render('normal');
-  assert.ok(texts.some((t) => t.text.includes('←') && t.text.includes('→')));
+  assert.ok(texts.some((t) => t.text.includes('A') && t.text.includes('D')));
 });

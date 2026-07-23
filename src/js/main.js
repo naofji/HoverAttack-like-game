@@ -54,6 +54,13 @@ import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/render
 // ============================================
 // Game Object
 // ============================================
+
+/** Screens that make up the title/attract-mode loop, in cycle order. */
+const DEMO_CYCLE_STATES = [
+    'title', 'how_to_play', 'local_ranking_display',
+    'global_ranking_display', 'stage_ranking_display', 'wall_of_fame_display'
+];
+
 const Game = {
     canvas: null,
     ctx: null,
@@ -207,15 +214,74 @@ const Game = {
         }
     },
 
-    _updateTitle(deltaTime) {
-        this.stateTimer += deltaTime;
+    /** States reachable in the title/demo loop right now — skips global/stage
+     *  ranking screens until that data actually exists, matching the existing
+     *  forward auto-advance logic below. */
+    _availableDemoStates() {
+        return DEMO_CYCLE_STATES.filter((state) => {
+            if (state === 'global_ranking_display') return this.onlineStatus === 'ok' && !!this.onlineData;
+            if (state === 'stage_ranking_display') return this.maxStageReached() >= 1;
+            return true;
+        });
+    },
+
+    /** Index of the current gameState within _availableDemoStates(), for the shared dots UI. */
+    _demoCycleIndex() {
+        const states = this._availableDemoStates();
+        const i = states.indexOf(this.gameState);
+        return i === -1 ? 0 : i;
+    },
+
+    /** ArrowLeft/ArrowRight navigation shared by every state in the title/demo loop. */
+    _handleDemoJump() {
         if (this.input.isKeyPressed('ArrowLeft')) {
+            this._jumpDemo(-1);
+            return true;
+        }
+        if (this.input.isKeyPressed('ArrowRight')) {
+            this._jumpDemo(1);
+            return true;
+        }
+        return false;
+    },
+
+    _jumpDemo(dir) {
+        const states = this._availableDemoStates();
+        const current = states.indexOf(this.gameState);
+        const from = current === -1 ? 0 : current;
+        const next = (from + dir + states.length) % states.length;
+        this._enterDemoState(states[next]);
+    },
+
+    _enterDemoState(state) {
+        this.gameState = state;
+        this.stateTimer = 0;
+        if (state === 'local_ranking_display') {
+            this.localRankIndex = -1;
+            this.globalRankIndex = -1;
+        } else if (state === 'stage_ranking_display') {
+            this.stageDisplayIndex = 0;
+            this.stageDisplayTimer = 0;
+        } else if (state === 'title') {
+            audioManager.playTitleBGM();
+        }
+    },
+
+    _updateTitle(deltaTime) {
+        if (this.input.isKeyPressed('KeyA')) {
             this.mode = cycleMode(this.mode, -1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
-        } else if (this.input.isKeyPressed('ArrowRight')) {
+            return;
+        }
+        if (this.input.isKeyPressed('KeyD')) {
             this.mode = cycleMode(this.mode, +1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
-        } else if (this.stateTimer > 8000) {
+            return;
+        }
+        if (this._handleDemoJump()) return;
+
+        this.stateTimer += deltaTime;
+        if (this.stateTimer > 8000) {
             this.gameState = 'how_to_play';
             this.stateTimer = 0;
             this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
@@ -227,6 +293,8 @@ const Game = {
     },
 
     _updateHowToPlay(deltaTime) {
+        if (this._handleDemoJump()) return;
+
         this.stateTimer += deltaTime;
         if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
             this.gameState = 'local_ranking_display';
@@ -241,6 +309,8 @@ const Game = {
     },
 
     _updateLocalRanking(deltaTime) {
+        if (this._handleDemoJump()) return;
+
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
             if (this.onlineStatus === 'ok' && this.onlineData) {
@@ -258,6 +328,8 @@ const Game = {
     },
 
     _updateGlobalRanking(deltaTime) {
+        if (this._handleDemoJump()) return;
+
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
             // Only show stage rankings for stages the player has actually reached
@@ -298,6 +370,8 @@ const Game = {
     },
 
     _updateStageRankingDisplay(deltaTime) {
+        if (this._handleDemoJump()) return;
+
         this.stateTimer += deltaTime;
         this.stageDisplayTimer += deltaTime;
         if (this.stageDisplayTimer > 3000) {
@@ -317,6 +391,8 @@ const Game = {
     },
 
     _updateWallOfFameDisplay(deltaTime) {
+        if (this._handleDemoJump()) return;
+
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
             this.gameState = 'title';
@@ -1065,9 +1141,9 @@ const Game = {
         return false;
     },
 
-    /** Returns true if any key/click input was pressed this frame */
+    /** Returns true if Enter or a mouse click was pressed this frame (game-start input) */
     _anyKeyOrClick() {
-        return this.input.getTypedChars().length > 0
+        return this.input.isKeyPressed('Enter')
             || this.input.isLeftClickPressed()
             || this.input.isRightClickPressed();
     },

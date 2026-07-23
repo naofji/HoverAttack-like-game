@@ -51,7 +51,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height / 2 + 60);
             ctx.restore();
         }
 
@@ -76,7 +76,7 @@ export class ScreenRenderer {
         // Key hint, so the selection is discoverable without pressing anything.
         ctx.font = '11px "Space Mono", monospace';
         ctx.fillStyle = '#666666';
-        ctx.fillText('[ ← / → ]  SELECT MODE', canvas.width / 2, rowY - 34);
+        ctx.fillText('[ A / D ]  SELECT MODE', canvas.width / 2, rowY - 34);
 
         // Lay the labels out around the centre of the canvas.
         ctx.font = LABEL_FONT;
@@ -307,7 +307,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', cx, H - 70);
+            ctx.fillText('PRESS ENTER TO START', cx, H - 70);
             ctx.restore();
         }
     }
@@ -627,7 +627,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
+            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
         ctx.textAlign = 'left';
@@ -701,7 +701,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 20px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', canvas.width / 2, canvas.height - 20);
+            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
         ctx.textAlign = 'left';
@@ -747,7 +747,7 @@ export class ScreenRenderer {
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 10;
             ctx.font = 'bold 18px "Space Mono", monospace';
-            ctx.fillText('PRESS ANY KEY TO START', W / 2, H - 18);
+            ctx.fillText('PRESS ENTER TO START', W / 2, H - 18);
             ctx.restore();
         }
         ctx.textAlign = 'left';
