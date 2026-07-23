@@ -989,19 +989,23 @@ const Game = {
         // Full-screen states — skip world rendering
         if (this.gameState === 'title') {
             this.screenRenderer.drawTitleScreen(ctx);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
         if (this.gameState === 'how_to_play') {
             this.screenRenderer.drawHowToPlay(ctx, this.stateTimer < 10000 ? 0 : 1);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
         if (this.gameState === 'local_ranking_display') {
             this.screenRenderer.drawLocalRanking(ctx, this.highScoreManager.getTop10(), this.localRankIndex, this.week.weekId);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
         if (this.gameState === 'global_ranking_display') {
             const data = this.onlineData || { ranking: [], weekId: this.week.weekId };
             this.screenRenderer.drawGlobalRanking(ctx, data.ranking, this.globalRankIndex, data.weekId);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
         if (this.gameState === 'stage_ranking_display') {
@@ -1009,11 +1013,13 @@ const Game = {
             const online = this.onlineData ? this.onlineData.stageRankings : null;
             const data = pickStageRanking(online, idx + 1, this.stageRankingManager.getStage(idx + 1));
             this.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
         if (this.gameState === 'wall_of_fame_display') {
             const fame = (this.onlineData && this.onlineData.fame) || [];
             this.screenRenderer.drawWallOfFame(ctx, fame);
+            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
 

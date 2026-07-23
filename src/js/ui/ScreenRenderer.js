@@ -292,14 +292,6 @@ export class ScreenRenderer {
             ctx.textBaseline = 'alphabetic'; // reset
         }
 
-        // ページドット
-        ctx.textAlign = 'center';
-        ctx.font = '18px sans-serif';
-        ctx.fillStyle = page === 0 ? '#00FFFF' : '#444444';
-        ctx.fillText('●', cx - 15, H - 35);
-        ctx.fillStyle = page === 1 ? '#00FFFF' : '#444444';
-        ctx.fillText('●', cx + 15, H - 35);
-
         // Press Any Key ヒント（点滅）
         if (Math.floor(Date.now() / 600) % 2 === 0) {
             ctx.save();
@@ -310,6 +302,26 @@ export class ScreenRenderer {
             ctx.fillText('PRESS ENTER TO START', cx, H - 70);
             ctx.restore();
         }
+    }
+
+    /** Shared position indicator for the title/demo attract-mode loop — every
+     *  screen in the cycle shows the same dots, so "which screen is this" is
+     *  always answerable (item 5: consistency across all demo screens). */
+    drawDemoCycleDots(ctx, currentIndex, total) {
+        if (total <= 1) return;
+        const canvas = this.game.canvas;
+        const cy = canvas.height - 40;
+        const spacing = 22;
+        const startX = canvas.width / 2 - ((total - 1) * spacing) / 2;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = '14px sans-serif';
+        for (let i = 0; i < total; i++) {
+            ctx.fillStyle = i === currentIndex ? '#00FFFF' : '#444444';
+            ctx.fillText('●', startX + i * spacing, cy);
+        }
+        ctx.restore();
     }
 
     _drawPanel(ctx, x, y, w, h, title, titleColor) {
