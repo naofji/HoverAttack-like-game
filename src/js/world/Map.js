@@ -918,17 +918,17 @@ export class Map {
         const endRow = Math.min(this.rows, Math.ceil((cam.y + this.game.canvas.height) / TILE_SIZE));
 
         const S = TILE_SIZE;
-        for (let r = startRow; r < endRow; r++) {
-            for (let c = startCol; c < endCol; c++) {
-                const block = this.grid[r][c];
-                if (block === BLOCK_EMPTY) continue;
-                if (block === BLOCK_INDESTRUCTIBLE) {
-                    this._drawPolishedBlock(ctx, c * S, r * S, S);
-                } else {
-                    this._drawRockyBlock(ctx, r, c, block);
-                }
-            }
-        }
+        const sx = startCol * S;
+        const sy = startRow * S;
+        const sWidth = (endCol - startCol) * S;
+        const sHeight = (endRow - startRow) * S;
+        if (sWidth <= 0 || sHeight <= 0) return;
+
+        ctx.drawImage(
+            this.tileCacheCanvas,
+            sx, sy, sWidth, sHeight,
+            sx, sy, sWidth, sHeight
+        );
     }
 
     _drawRockyBlock(ctx, r, c, block) {
