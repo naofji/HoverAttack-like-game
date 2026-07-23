@@ -182,6 +182,7 @@ export class Map {
 
         // Step 11: Generate off-screen mini-map
         this._generateMiniMap();
+        this._initTileCache();
     }
 
     _generatePlatforms() {
@@ -799,6 +800,33 @@ export class Map {
     }
 
     // ------------------------------------------
+    // Tile Render Cache
+    // ------------------------------------------
+
+    _initTileCache() {
+        this.tileCacheCanvas = document.createElement('canvas');
+        this.tileCacheCanvas.width = this.width;
+        this.tileCacheCanvas.height = this.height;
+        this.tileCacheCtx = this.tileCacheCanvas.getContext('2d');
+        this._renderAllToCache();
+    }
+
+    _renderAllToCache() {
+        const S = TILE_SIZE;
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                const block = this.grid[r][c];
+                if (block === BLOCK_EMPTY) continue;
+                if (block === BLOCK_INDESTRUCTIBLE) {
+                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S);
+                } else {
+                    this._drawRockyBlock(this.tileCacheCtx, r, c, block);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------
     // Mini-Map Generation
     // ------------------------------------------
 
@@ -1125,3 +1153,5 @@ export class Map {
         ctx.fillRect(x + S - 1, y, 1, S);   // 右端
     }
 }
+
+export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE } from '../utils/Constants.js';
