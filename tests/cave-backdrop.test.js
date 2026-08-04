@@ -96,28 +96,69 @@ test('draw issues exactly one drawImage with the parallax source rect', async ()
   ]);
 });
 
-test('generation fills the base, then draws blobs and stipple dots', async () => {
+/** beginPath 〜 fill の間の moveTo/lineTo を1枚の多角形として取り出す。 */
+function extractFilledPolygons(calls) {
+  const out = [];
+  let current = null;
+  for (const c of calls) {
+    if (c.name === 'beginPath') current = [];
+    else if (current && (c.name === 'moveTo' || c.name === 'lineTo')) {
+      current.push({ x: c.args[0], y: c.args[1] });
+    } else if (c.name === 'fill' && current) {
+      out.push(current);
+      current = null;
+    }
+  }
+  return out;
+}
+
+// 遠景は前景と同じ描画言語で描く必要がある。前景 (Map._drawRockyBlock) は
+// 面取り多角形のフラット塗りだけを使い、グラデーションも 1-2px の粒も持たない。
+// 遠景がそこから外れると、ドット絵の前景に対して遠景だけ浮いて見える。
+
+test('generation uses only flat fills — no gradients', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  makeBackdrop(CaveBackdrop, 2400, 1200);
+  const calls = lastFakeCanvas._ctx.calls;
+
+  const nonStringFills = calls.filter(
+    (c) => c.name === 'set:fillStyle' && typeof c.args[0] !== 'string'
+  );
+  assert.deepEqual(
+    nonStringFills.map((c) => c.args[0] && c.args[0].type),
+    [],
+    'fillStyle must only ever receive flat color strings, never a gradient object'
+  );
+});
+
+test('generation draws a base fill plus a handful of large polygons', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
   const calls = lastFakeCanvas._ctx.calls;
 
+  // 全面の地色塗り1回だけ。点描のような大量の小矩形があってはならない。
   const rects = calls.filter((c) => c.name === 'fillRect');
-  // 1 (地色) + 25 (ブロブ) + 2955 (点描)
-  assert.equal(rects.length, 1 + 25 + 2955);
-
-  // 最初の fillRect は canvas 全面の地色塗り
+  assert.equal(rects.length, 1);
   assert.deepEqual(rects[0].args, [0, 0, bd.width, bd.height]);
 
-  const gradients = calls.filter(
-    (c) => c.name === 'set:fillStyle' && c.args[0] && c.args[0].type === 'radialGradient'
-  );
-  assert.equal(gradients.length, 25);
-  // 各ブロブは中心 alpha 0.5 → 外周 alpha 0 の2ストップ
-  for (const g of gradients) {
-    assert.equal(g.args[0].stops.length, 2);
-    assert.equal(g.args[0].stops[0][0], 0);
-    assert.equal(g.args[0].stops[1][0], 1);
-    assert.match(g.args[0].stops[1][1], /, 0\)$/);
+  // 岩は「少数の大きな多角形」。数千の細片ではない。
+  const polygons = extractFilledPolygons(calls);
+  assert.ok(polygons.length >= 2, `expected at least 2 rock polygons, got ${polygons.length}`);
+  assert.ok(polygons.length <= 16, `expected at most 16 rock polygons, got ${polygons.length}`);
+});
+
+test('rock shapes are much larger than a foreground tile', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
+  makeBackdrop(CaveBackdrop, 2400, 1200);
+
+  // 遠景ほど形は大きく単純に見える。前景タイル(16px)と同程度の細片が混ざると
+  // 「遠くにある」と読めなくなる。
+  const MIN_SPAN = TILE_SIZE * 4;
+  for (const poly of extractFilledPolygons(lastFakeCanvas._ctx.calls)) {
+    const xs = poly.map((p) => p.x);
+    const width = Math.max(...xs) - Math.min(...xs);
+    assert.ok(width >= MIN_SPAN, `polygon spans only ${width}px, below ${MIN_SPAN}px`);
   }
 });
 
@@ -222,9 +263,10 @@ test('backdrop generation does not perturb the shared game.rng stream (regressio
   );
 });
 
-// --- 可視性 ---
-// 遠景は「暗いが見える」ことが要件。暗化率を上げすぎると全色が黒に潰れて
-// 画面がベタ塗りの黒に戻ってしまうため、輝度の下限と最低コントラストを固定する。
+// --- 階調 ---
+// 遠景は「目立たないが構造は読める」ことが要件。両側に外れると壊れる:
+// 暗くしすぎれば黒一色に潰れ (実際に一度そうなった)、明るくしすぎれば
+// 前景のシルエットと競合する。3階調の並びと最小/最大の差を固定する。
 
 /** ITU-R BT.709 相対輝度 (0-255)。 */
 function luminance(hex) {
@@ -233,36 +275,40 @@ function luminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-test('backdrop base is never darker than the flat fill it replaced', async () => {
+test('backdrop tones are ordered void < rockDark < rockLight', async () => {
   const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
-  const { STAGE_PALETTES, COLOR_CAVE_BG } = await import('../src/js/utils/Constants.js');
+  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
 
-  const floor = luminance(COLOR_CAVE_BG);
   for (const palette of STAGE_PALETTES) {
-    const { base } = backdropColors(palette.fill);
+    const { voidColor, rockDark, rockLight } = backdropColors(palette.fill);
     assert.ok(
-      luminance(base) >= floor,
-      `base ${base} for palette ${palette.fill} is darker than COLOR_CAVE_BG ${COLOR_CAVE_BG}`
+      luminance(voidColor) < luminance(rockDark) && luminance(rockDark) < luminance(rockLight),
+      `tones out of order for ${palette.fill}: `
+      + `${luminance(voidColor).toFixed(1)} / ${luminance(rockDark).toFixed(1)} / ${luminance(rockLight).toFixed(1)}`
     );
   }
 });
 
-test('backdrop pattern has enough contrast against its base to be visible', async () => {
+test('backdrop reads as dark rock: structure visible but never competing with the foreground', async () => {
   const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
   const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
 
-  // 点描は最大 alpha 0.8 で合成されるので、実際に画面へ出る輝度差はその分減る。
-  const MIN_VISIBLE_CONTRAST = 15;
+  const MIN_VOID = 3;          // 完全な黒ではない
+  const MIN_STRUCTURE = 6;     // 岩と空洞の差がこれ未満だと黒一色に見える
+  const MAX_STRUCTURE = 30;    // これを超えると遠景が主張しすぎる
+  const MAX_VS_FOREGROUND = 0.45; // 前景ブロックに対する遠景最明部の輝度比
+
   for (const palette of STAGE_PALETTES) {
-    const { base, dot, blobLight } = backdropColors(palette.fill);
-    const dotContrast = (luminance(dot) - luminance(base)) * 0.8;
-    assert.ok(
-      dotContrast >= MIN_VISIBLE_CONTRAST,
-      `dot contrast ${dotContrast.toFixed(1)} for palette ${palette.fill} is below ${MIN_VISIBLE_CONTRAST}`
-    );
-    assert.ok(
-      luminance(blobLight) > luminance(base),
-      `blobLight ${blobLight} for palette ${palette.fill} is not lighter than base ${base}`
-    );
+    const { voidColor, rockLight } = backdropColors(palette.fill);
+    const structure = luminance(rockLight) - luminance(voidColor);
+
+    assert.ok(luminance(voidColor) >= MIN_VOID,
+      `void ${voidColor} for ${palette.fill} is effectively pure black`);
+    assert.ok(structure >= MIN_STRUCTURE,
+      `structure contrast ${structure.toFixed(1)} for ${palette.fill} is below ${MIN_STRUCTURE}`);
+    assert.ok(structure <= MAX_STRUCTURE,
+      `structure contrast ${structure.toFixed(1)} for ${palette.fill} exceeds ${MAX_STRUCTURE}`);
+    assert.ok(luminance(rockLight) <= luminance(palette.fill) * MAX_VS_FOREGROUND,
+      `rockLight ${rockLight} is too close to foreground block ${palette.fill}`);
   }
 });

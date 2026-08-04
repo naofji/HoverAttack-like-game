@@ -12,45 +12,48 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     FAR_BG_PARALLAX,
 } from '../utils/Constants.js';
-import { lerpColor, withAlpha } from '../utils/color.js';
+import { lerpColor } from '../utils/color.js';
 
 function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
 }
 
-// --- 遠景の生成パラメータ ---
-// いずれも「実機で見て濃い/薄い」を1値で調整できるよう定数に切り出してある。
-// 下限は最も暗いパレット (#4B3621 Cafe Noir) が黒に潰れない値で決まっている。
-// 上げすぎると画面がベタ塗りの黒に戻るため、輝度テストが下限を守っている。
-const BASE_DARKEN = 0.75;   // 地色: パレット色を黒へ寄せる割合
-const BLOB_DARK_DARKEN = 0.85;
-const BLOB_LIGHT_DARKEN = 0.55;
-const DOT_DARKEN = 0.35;
+// --- 遠景の階調 ---
+// 3階調だけ使う。前景 (Map._drawRockyBlock) が5段階の量子化した陰影で描かれるのに対し
+// 階調を粗くすることで「遠い」と読ませる。両側に外れると壊れるため
+// (暗すぎれば黒一色、明るすぎれば前景のシルエットと競合)、
+// tests/cave-backdrop.test.js の輝度テストが上下限を守っている。
+const VOID_DARKEN = 0.90;       // 空洞: パレット色を黒へ寄せる割合
+const ROCK_DARK_DARKEN = 0.82;  // 岩の陰
+const ROCK_LIGHT_DARKEN = 0.72; // 岩の上端ハイライト
 
 /**
- * ステージパレット色から遠景の4色を導出する。
- * 暗くしすぎると画面が黒一色に潰れるため、可視性は
- * tests/cave-backdrop.test.js の輝度テストで固定してある。
+ * ステージパレット色から遠景の3階調を導出する。
  * @param {string} paletteFill ステージパレットの fill 色 (#rrggbb)
- * @returns {{base:string, blobDark:string, blobLight:string, dot:string}}
+ * @returns {{voidColor:string, rockDark:string, rockLight:string}}
  */
 export function backdropColors(paletteFill) {
     return {
-        base: lerpColor(paletteFill, '#000000', BASE_DARKEN),
-        blobDark: lerpColor(paletteFill, '#000000', BLOB_DARK_DARKEN),
-        blobLight: lerpColor(paletteFill, '#000000', BLOB_LIGHT_DARKEN),
-        dot: lerpColor(paletteFill, '#000000', DOT_DARKEN),
+        voidColor: lerpColor(paletteFill, '#000000', VOID_DARKEN),
+        rockDark: lerpColor(paletteFill, '#000000', ROCK_DARK_DARKEN),
+        rockLight: lerpColor(paletteFill, '#000000', ROCK_LIGHT_DARKEN),
     };
 }
 
-const BLOB_AREA_PER_UNIT = 40000; // この面積あたりブロブ1個
-const BLOB_RADIUS_MIN = 120;
-const BLOB_RADIUS_RANGE = 200;    // 半径 120〜320px
-const BLOB_CENTER_ALPHA = 0.5;
+// --- 遠景の形状パラメータ ---
+// 前景と同じ「フラット塗りの角ばった多角形」だけで描く。グラデーションと
+// 1-2px の細片は使わない (前景はハードエッジのみ、最小ディテールは4px)。
+const BAND_SPACING = 260;         // この間隔ごとに岩の層を1枚
+const BAND_THICKNESS_MIN = 70;
+const BAND_THICKNESS_RANGE = 90;  // 層の厚み 70〜160px
+const SEGMENT_WIDTH = 96;         // 折れ線1区間の幅 = 前景タイル(16px)の6倍
+const EDGE_JITTER = 34;           // 折れ線のY揺らぎ幅
+const HIGHLIGHT_THICKNESS = 14;   // 層の上端に乗せるハイライト帯の厚み
 
-const DOT_AREA_PER_UNIT = 350;    // この面積あたり点1個
-const DOT_ALPHA_MIN = 0.3;
-const DOT_ALPHA_RANGE = 0.5;      // alpha 0.3〜0.8
+const SPIKE_CHANCE = 0.45;        // 区間ごとに鍾乳石が生える確率
+const SPIKE_HALF_WIDTH = 22;
+const SPIKE_LENGTH_MIN = 36;
+const SPIKE_LENGTH_RANGE = 90;    // 鍾乳石の長さ 36〜126px
 
 export class CaveBackdrop {
     /**
@@ -81,9 +84,9 @@ export class CaveBackdrop {
     }
 
     /**
-     * 遠景を1回だけ描き切る。地色 → 大きなブロブ → 点描 の順に重ねる。
-     * 不透明度は globalAlpha ではなく rgba 文字列とカラーストップに畳み込んでいる
-     * (状態が残らず、疑似ctxでも記録・比較できるため)。
+     * 遠景を1回だけ描き切る。空洞を塗り、その上に岩の層を重ねる。
+     * 前景と同じ描画言語 — フラット塗りの角ばった多角形だけ — を使う。
+     * グラデーションも1-2pxの細片も使わない (ドット絵の前景から浮くため)。
      * @param {CanvasRenderingContext2D} ctx
      * @param {string} paletteFill ステージパレットの fill 色
      * @param {SeededRNG} rng
@@ -92,38 +95,79 @@ export class CaveBackdrop {
         const W = this.width;
         const H = this.height;
 
-        const { base: baseColor, blobDark, blobLight, dot: dotColor } = backdropColors(paletteFill);
+        const { voidColor, rockDark, rockLight } = backdropColors(paletteFill);
 
-        // 1) 地色
-        ctx.fillStyle = baseColor;
+        // 1) 空洞
+        ctx.fillStyle = voidColor;
         ctx.fillRect(0, 0, W, H);
 
-        // 2) 大きな洞窟空間のうねり。明暗を交互に置いて奥行きのムラを作る。
-        const blobCount = Math.floor((W * H) / BLOB_AREA_PER_UNIT);
-        for (let i = 0; i < blobCount; i++) {
-            const x = rng.next() * W;
-            const y = rng.next() * H;
-            const radius = BLOB_RADIUS_MIN + rng.next() * BLOB_RADIUS_RANGE;
-            const color = (i % 2 === 0) ? blobLight : blobDark;
+        // 2) 岩の層。層と層の間が空洞として抜けて見える。
+        const bandCount = Math.max(1, Math.round(H / BAND_SPACING));
+        for (let b = 0; b < bandCount; b++) {
+            const centerY = ((b + 0.5) / bandCount) * H;
+            this._drawRockBand(ctx, rng, centerY, rockDark, rockLight);
+        }
+    }
 
-            const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-            grad.addColorStop(0, withAlpha(color, BLOB_CENTER_ALPHA));
-            grad.addColorStop(1, withAlpha(color, 0));
-            ctx.fillStyle = grad;
-            ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    /**
+     * 岩の層を1枚描く。上端・下端とも折れ線で、下端からは鍾乳石が垂れる。
+     * 上端にだけハイライト帯を乗せ、光が上から来ている印象を作る。
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {SeededRNG} rng
+     * @param {number} centerY 層の中心Y
+     * @param {string} rockDark 岩の陰の色
+     * @param {string} rockLight 岩の上端ハイライトの色
+     */
+    _drawRockBand(ctx, rng, centerY, rockDark, rockLight) {
+        const segCount = Math.ceil(this.width / SEGMENT_WIDTH) + 1;
+        const thickness = BAND_THICKNESS_MIN + rng.next() * BAND_THICKNESS_RANGE;
+
+        // 折れ線の頂点。頂点間隔が前景タイルの6倍なので、遠景ほど形が大きく単純に見える。
+        const top = [];
+        const bottom = [];
+        for (let i = 0; i < segCount; i++) {
+            top.push(centerY - thickness / 2 + (rng.next() - 0.5) * EDGE_JITTER);
+            bottom.push(centerY + thickness / 2 + (rng.next() - 0.5) * EDGE_JITTER);
         }
 
-        // 3) 点描。粒状感を与えて「ベタ塗りの黒」に見えないようにする。
-        const dotCount = Math.floor((W * H) / DOT_AREA_PER_UNIT);
-        for (let i = 0; i < dotCount; i++) {
-            const x = Math.floor(rng.next() * W);
-            const y = Math.floor(rng.next() * H);
-            const size = (rng.next() < 0.5) ? 1 : 2;
-            const alpha = DOT_ALPHA_MIN + rng.next() * DOT_ALPHA_RANGE;
-
-            ctx.fillStyle = withAlpha(dotColor, alpha);
-            ctx.fillRect(x, y, size, size);
+        // 区間ごとの鍾乳石の長さ (0 なら生えない)
+        const spikes = [];
+        for (let i = 0; i < segCount - 1; i++) {
+            spikes.push(rng.next() < SPIKE_CHANCE
+                ? SPIKE_LENGTH_MIN + rng.next() * SPIKE_LENGTH_RANGE
+                : 0);
         }
+
+        // 岩本体: 上端を左→右、下端を右→左に辿り、途中で鍾乳石の頂点を差し込む
+        ctx.fillStyle = rockDark;
+        ctx.beginPath();
+        ctx.moveTo(0, top[0]);
+        for (let i = 1; i < segCount; i++) ctx.lineTo(i * SEGMENT_WIDTH, top[i]);
+        ctx.lineTo((segCount - 1) * SEGMENT_WIDTH, bottom[segCount - 1]);
+        for (let i = segCount - 2; i >= 0; i--) {
+            const len = spikes[i];
+            if (len > 0) {
+                const midX = (i + 0.5) * SEGMENT_WIDTH;
+                const baseY = (bottom[i] + bottom[i + 1]) / 2;
+                ctx.lineTo(midX + SPIKE_HALF_WIDTH, baseY);
+                ctx.lineTo(midX, baseY + len);
+                ctx.lineTo(midX - SPIKE_HALF_WIDTH, baseY);
+            }
+            ctx.lineTo(i * SEGMENT_WIDTH, bottom[i]);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // 上端のハイライト帯
+        ctx.fillStyle = rockLight;
+        ctx.beginPath();
+        ctx.moveTo(0, top[0]);
+        for (let i = 1; i < segCount; i++) ctx.lineTo(i * SEGMENT_WIDTH, top[i]);
+        for (let i = segCount - 1; i >= 0; i--) {
+            ctx.lineTo(i * SEGMENT_WIDTH, top[i] + HIGHLIGHT_THICKNESS);
+        }
+        ctx.closePath();
+        ctx.fill();
     }
 
     /** カメラX → 転送元X (整数, canvas内に収まるようクランプ) */
