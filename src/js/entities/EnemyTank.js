@@ -237,6 +237,7 @@ export class EnemyTank {
 
     die() {
         this.alive = false;
+        this.game.spawnDebris(this, 'tank');
         // Explosion effect
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
