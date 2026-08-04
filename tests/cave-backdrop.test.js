@@ -150,3 +150,37 @@ test('different palettes produce different colors', async () => {
 
   assert.notEqual(brown, blue);
 });
+
+/** Map 生成用の軽量 DOM スタブ。呼び出しを記録しないので大きなマップでも軽い。 */
+function withNoopDocument(fn) {
+  const saved = globalThis.document;
+  const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
+  globalThis.document = {
+    createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }),
+  };
+  try {
+    return fn();
+  } finally {
+    globalThis.document = saved;
+  }
+}
+
+test('Map owns a backdrop sized for its own dimensions', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+
+  const map = withNoopDocument(() => new Map({ rng: new SeededRNG(99) }, 0)); // 最小マップ
+  assert.ok(map.backdrop instanceof CaveBackdrop, 'map.backdrop should exist');
+  assert.equal(map.backdrop.width, 1230);
+  assert.equal(map.backdrop.height, 841);
+});
+
+test('Map builds the backdrop from the same stage palette as its blocks', async () => {
+  const { Map, BLOCK_NORMAL } = await import('../src/js/world/Map.js');
+  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
+
+  const level = 4; // STAGE_PALETTES[4] = '#4682B4'
+  const map = withNoopDocument(() => new Map({ rng: new SeededRNG(5) }, level));
+  assert.equal(map.backdrop.paletteFill, map.blockStyles[BLOCK_NORMAL].fill);
+  assert.equal(map.backdrop.paletteFill, STAGE_PALETTES[level].fill);
+});

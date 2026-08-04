@@ -4,7 +4,9 @@ import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 
 // Minimal DOM stub so Map._generateMiniMap() can run under Node.
 before(() => {
-  const noopCtx = new Proxy({}, { get: () => () => {} });
+  // 任意のメソッド呼び出しに応答する。createRadialGradient の戻り値としても
+  // 使えるよう addColorStop を持つオブジェクトを返す。
+  const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
   globalThis.document = {
     createElement: () => ({
       width: 0,

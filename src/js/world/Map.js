@@ -16,6 +16,7 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES
 } from '../utils/Constants.js';
+import { CaveBackdrop } from './CaveBackdrop.js';
 
 
 // --- Map generation constants ---
@@ -183,6 +184,12 @@ export class Map {
         // Step 11: Generate off-screen mini-map
         this._generateMiniMap();
         this._initTileCache();
+
+        // Step 12: Generate the parallax far backdrop (must come last —
+        // it consumes rng, and moving it earlier would shift terrain generation)
+        const palettes = STAGE_PALETTES;
+        const palIdx = (this.missionLevel || 0) % palettes.length;
+        this.backdrop = new CaveBackdrop(this.width, this.height, palettes[palIdx].fill, this.game.rng);
     }
 
     _generatePlatforms() {
@@ -1181,4 +1188,4 @@ export class Map {
     }
 }
 
-export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';
+export { BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';

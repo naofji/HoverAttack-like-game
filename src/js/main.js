@@ -1054,8 +1054,13 @@ export const Game = {
         ctx.save();
         ctx.translate(-camX, -camY);
 
-        ctx.fillStyle = COLOR_CAVE_BG;
-        ctx.fillRect(camX, camY, this.canvas.width, this.canvas.height);
+        // 遠景(洞窟)を視差付きで転送。前景の空タイルは透明なのでここが透けて見える。
+        if (this.map.backdrop) {
+            this.map.backdrop.draw(ctx, camX, camY);
+        } else {
+            ctx.fillStyle = COLOR_CAVE_BG;
+            ctx.fillRect(camX, camY, this.canvas.width, this.canvas.height);
+        }
 
         this.map.draw(ctx);
         if (this.carrier) this.carrier.draw(ctx);
