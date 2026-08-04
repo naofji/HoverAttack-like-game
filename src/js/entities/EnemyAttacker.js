@@ -51,7 +51,7 @@ const LEG_STYLES = {
         hipFar: 7, hipNear: 10, lineWidth: 2,
         footW: 3, footH: 2, strideScale: 1,
         maxSwing: (25 * Math.PI) / 180, phaseOffset: 0.2,
-        crouchSpread: 6, thighPlate: false,
+        crouchSpread: 3, thighPlate: false,
     },
 };
 

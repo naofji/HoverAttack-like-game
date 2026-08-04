@@ -7,14 +7,29 @@ const METHODS = [
   'stroke', 'fill', 'fillRect', 'strokeRect', 'clearRect',
 ];
 
+/** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */
+const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin'];
+
 /** @returns {object} calls 配列を持つ疑似 ctx */
 export function makeFakeCtx() {
   const calls = [];
   const ctx = {
     calls,
-    fillStyle: '', strokeStyle: '', lineWidth: 1,
-    lineCap: '', lineJoin: '', globalAlpha: 1, font: '', textAlign: '',
+    globalAlpha: 1, font: '', textAlign: '',
   };
+  const values = {
+    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '',
+  };
+  for (const prop of TRACKED_PROPS) {
+    Object.defineProperty(ctx, prop, {
+      enumerable: true,
+      get() { return values[prop]; },
+      set(v) {
+        values[prop] = v;
+        calls.push({ name: `set:${prop}`, args: [v] });
+      },
+    });
+  }
   for (const name of METHODS) {
     ctx[name] = (...args) => { calls.push({ name, args }); };
   }
@@ -47,4 +62,17 @@ export function extractFillRects(calls) {
   return calls
     .filter((c) => c.name === 'fillRect')
     .map((c) => ({ x: c.args[0], y: c.args[1], w: c.args[2], h: c.args[3] }));
+}
+
+/**
+ * strokeStyle / fillStyle / lineWidth / lineCap / lineJoin への代入値を、
+ * 代入された順番のまま取り出す。
+ * @param {Array<{name:string,args:any[]}>} calls
+ * @param {string} propName 例: 'lineWidth'
+ * @returns {any[]}
+ */
+export function extractSets(calls, propName) {
+  return calls
+    .filter((c) => c.name === `set:${propName}`)
+    .map((c) => c.args[0]);
 }

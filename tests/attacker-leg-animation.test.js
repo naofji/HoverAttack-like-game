@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
-import { makeFakeCtx, extractPolylines, extractFillRects } from './helpers/fake-ctx.js';
+import { makeFakeCtx, extractPolylines, extractFillRects, extractSets } from './helpers/fake-ctx.js';
 
 const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
 
@@ -170,6 +170,39 @@ test('_drawJointedLeg: save/restore が対で呼ばれる', () => {
   });
   assert.equal(ctx.calls.filter((c) => c.name === 'save').length,
                ctx.calls.filter((c) => c.name === 'restore').length);
+});
+
+test('_drawJointedLeg: lineWidth が ctx に設定される（heavy=4, standard=3）', () => {
+  const heavy = makeAttacker({ config: { name: 'heavy' } });
+  const standard = makeAttacker({ config: { name: 'standard' } });
+
+  const heavyCtx = makeFakeCtx();
+  heavy._drawLegs(heavyCtx, 0);
+  const standardCtx = makeFakeCtx();
+  standard._drawLegs(standardCtx, 0);
+
+  const heavyWidths = extractSets(heavyCtx.calls, 'lineWidth');
+  const standardWidths = extractSets(standardCtx.calls, 'lineWidth');
+
+  assert.ok(heavyWidths.length > 0, 'heavy: lineWidth が設定されること');
+  assert.ok(standardWidths.length > 0, 'standard: lineWidth が設定されること');
+  assert.ok(heavyWidths.every((w) => w === 4), 'heavy は lineWidth 4 で脚を描くこと');
+  assert.ok(standardWidths.every((w) => w === 3), 'standard は lineWidth 3 で脚を描くこと');
+});
+
+test('_drawLegs: 手前脚は bodyColor、奥脚は headColor で描かれる', () => {
+  const a = makeAttacker({
+    onGround: true, vx: 0.9, walkFrame: 0,
+    config: { name: 'standard', bodyColor: '#AAAAAA', headColor: '#BBBBBB' },
+  });
+  const ctx = makeFakeCtx();
+  a._drawLegs(ctx, 0);
+
+  const strokes = extractSets(ctx.calls, 'strokeStyle');
+  // _drawWalkLegs は奥脚→手前脚の順に描く
+  assert.equal(strokes.length, 2);
+  assert.equal(strokes[0], '#BBBBBB', '奥脚は headColor でストロークすること');
+  assert.equal(strokes[1], '#AAAAAA', '手前脚は bodyColor でストロークすること');
 });
 
 // --- 2足型（standard / rival / heavy） ---
