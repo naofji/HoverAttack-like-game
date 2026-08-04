@@ -55,6 +55,31 @@ const LEG_STYLES = {
     },
 };
 
+/** 歩行4フレーム → 手前脚/奥脚のポーズ番号（Player の WALK_POSES と同じ割り当て）。 */
+const WALK_FRAME_POSES = [
+    { near: 0, far: 1 },
+    { near: 2, far: 3 },
+    { near: 2, far: 2 }, // 直立・停止時
+    { near: 3, far: 2 },
+];
+
+/**
+ * ポーズ番号 → 股関節からの相対座標（膝 kdx/kdy、足首 fdx/fdy）。
+ * Player._drawSingleLeg の switch から移植したもの。
+ */
+const LEG_POSES = [
+    { kdx: 2, kdy: 3, fdx: 4, fdy: 6 },
+    { kdx: -3, kdy: 3, fdx: -5, fdy: 4 },
+    { kdx: 0, kdy: 3, fdx: 0, fdy: 6 },
+    { kdx: 4, kdy: 1, fdx: 3, fdy: 3 },
+];
+
+/** 空中で股関節を中心に回転させる基準ポーズ（Player._drawSingleLeg 準拠）。 */
+const AIR_BASE_POSE = {
+    near: { kdx: 1, kdy: 3, fdx: 0, fdy: 6 },
+    far: { kdx: -1, kdy: 3, fdx: -2, fdy: 6 },
+};
+
 export class EnemyAttacker {
     constructor(game, x, y, config) {
         this.game = game;
@@ -1121,32 +1146,100 @@ export class EnemyAttacker {
         }
     }
 
+    /** 2足型（standard / rival / heavy）の脚。しゃがみ／空中／歩行を振り分ける。 */
     _drawLegs(ctx, crouchOffset = 0) {
-        if (!this.onGround) {
-            // 空中: vxの反対方向に足が流れる（慣性で後ろに引っ張られる感じ）
-            const swing = Math.round(Math.max(-3, Math.min(3, -this.vx * 0.8)));
-            this._drawLeg(ctx, 6 + swing, 16 - crouchOffset, swing);
-            this._drawLeg(ctx, 9 + swing, 16 - crouchOffset, swing);
-        } else {
-            // Walk legs based on walkFrame
-            const WALK_POSES = [
-                { near: -2, far: 2 },   // frame 0
-                { near: -1, far: 1 },   // frame 1
-                { near: 0, far: 0 },    // frame 2 (standing)
-                { near: 1, far: -1 },   // frame 3
-            ];
-            const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
+        const style = this._legStyle();
+        // draw() が既に crouchOffset ぶん下へ平行移動しているので、
+        // 股関節を同じだけ上げると足の接地位置が変わらない。
+        const hipY = 16 - crouchOffset;
 
-            if (crouchOffset > 0) {
-                // Crouching pose (knees bent, feet spread)
-                const spread = this.config.name === 'heavy' ? 4 : 2;
-                this._drawLeg(ctx, 6 - spread, 16 - crouchOffset, -2);
-                this._drawLeg(ctx, 9 + spread, 16 - crouchOffset, 2);
-            } else {
-                this._drawLeg(ctx, 6, 16, pose.near);
-                this._drawLeg(ctx, 9, 16, pose.far);
-            }
+        if (crouchOffset > 0) {
+            this._drawCrouchLegs(ctx, hipY, style);
+        } else if (!this.onGround) {
+            this._drawAirLegs(ctx, hipY, style);
+        } else {
+            this._drawWalkLegs(ctx, hipY, style);
         }
+    }
+
+    /** 脚1本ぶんの共通オプションを組み立てる。 */
+    _legPaint(isNear, style) {
+        return {
+            legColor: isNear ? this.config.bodyColor : this.config.headColor,
+            footColor: isNear ? this.config.headColor : this.config.bodyColor,
+            lineWidth: style.lineWidth,
+            footW: style.footW,
+            footH: style.footH,
+            thighPlate: style.thighPlate,
+        };
+    }
+
+    /** 接地時: 4フレームの2足歩行サイクル。 */
+    _drawWalkLegs(ctx, hipY, style) {
+        const frame = WALK_FRAME_POSES[this.walkFrame] || WALK_FRAME_POSES[2];
+
+        const drawOne = (isNear, poseIndex) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            const p = LEG_POSES[poseIndex];
+            const s = style.strideScale;
+            this._drawJointedLeg(ctx, {
+                hipX, hipY,
+                kneeX: hipX + p.kdx * s, kneeY: hipY + p.kdy,
+                footX: hipX + p.fdx * s, footY: hipY + p.fdy,
+                ...this._legPaint(isNear, style),
+            });
+        };
+
+        drawOne(false, frame.far);  // 奥脚を先に（手前脚が上に重なる）
+        drawOne(true, frame.near);
+    }
+
+    /** 空中: 横速度に比例して股関節を中心に脚が振れる。 */
+    _drawAirLegs(ctx, hipY, style) {
+        const swing = this._hoverSwing();
+
+        const drawOne = (isNear, swingAmount) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            const base = isNear ? AIR_BASE_POSE.near : AIR_BASE_POSE.far;
+            const angle = swingAmount * style.maxSwing;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const rot = (dx, dy) => ({
+                x: hipX + (dx * cos - dy * sin),
+                y: hipY + (dx * sin + dy * cos),
+            });
+            const knee = rot(base.kdx, base.kdy);
+            const foot = rot(base.fdx, base.fdy);
+            this._drawJointedLeg(ctx, {
+                hipX, hipY,
+                kneeX: knee.x, kneeY: knee.y,
+                footX: foot.x, footY: foot.y,
+                footRotation: angle / 1.5,
+                ...this._legPaint(isNear, style),
+            });
+        };
+
+        // 奥脚は位相をずらし、左右がぴったり揃わないようにする
+        drawOne(false, swing * 0.8 - style.phaseOffset);
+        drawOne(true, swing);
+    }
+
+    /** しゃがみ（バースト射撃時）: 膝を外に折って車高を下げる。 */
+    _drawCrouchLegs(ctx, hipY, style) {
+        const spread = style.crouchSpread;
+
+        const drawOne = (isNear, dir) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            this._drawJointedLeg(ctx, {
+                hipX, hipY,
+                kneeX: hipX + dir * (spread + 2), kneeY: hipY + 4,
+                footX: hipX + dir * spread, footY: hipY + 6,
+                ...this._legPaint(isNear, style),
+            });
+        };
+
+        drawOne(false, -1);
+        drawOne(true, 1);
     }
 
     /** 型別の脚スタイルを引く。未知の型は standard にフォールバック。 */
@@ -1205,13 +1298,4 @@ export class EnemyAttacker {
         ctx.restore();
     }
 
-    _drawLeg(ctx, legX, legY, offset) {
-        const cfg = this.config;
-        // Upper leg
-        ctx.fillStyle = cfg.bodyColor;
-        ctx.fillRect(legX, legY, 3, 4);
-        // Lower leg
-        ctx.fillStyle = cfg.headColor;
-        ctx.fillRect(legX + offset, legY + 4, 3, 4);
-    }
 }

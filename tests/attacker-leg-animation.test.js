@@ -171,3 +171,94 @@ test('_drawJointedLeg: save/restore が対で呼ばれる', () => {
   assert.equal(ctx.calls.filter((c) => c.name === 'save').length,
                ctx.calls.filter((c) => c.name === 'restore').length);
 });
+
+// --- 2足型（standard / rival / heavy） ---
+
+/** 脚2本ぶんのポリラインを取り出す。[0] が奥脚、[1] が手前脚。 */
+function drawLegsAndExtract(a, crouchOffset = 0) {
+  const ctx = makeFakeCtx();
+  a._drawLegs(ctx, crouchOffset);
+  return { lines: extractPolylines(ctx.calls), rects: extractFillRects(ctx.calls), ctx };
+}
+
+test('2足型: 接地時は脚を2本描く', () => {
+  const a = makeAttacker({ onGround: true, vx: 0.9, walkFrame: 0 });
+  const { lines } = drawLegsAndExtract(a);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].length, 3); // hip, knee, foot
+});
+
+test('2足型: walkFrame 0..3 でそれぞれ異なる足先座標になる', () => {
+  const seen = new Set();
+  for (const frame of [0, 1, 2, 3]) {
+    const a = makeAttacker({ onGround: true, vx: 0.9, walkFrame: frame });
+    const { lines } = drawLegsAndExtract(a);
+    const key = lines.map((l) => `${l[2].x},${l[2].y}`).join('|');
+    seen.add(key);
+  }
+  assert.equal(seen.size, 4, 'walkFrame ごとに異なるポーズになること');
+});
+
+test('2足型: 空中で vx の符号を反転すると足先が股関節の前後に振れる', () => {
+  const fwd = makeAttacker({ onGround: false, vx: 0.9 });
+  const back = makeAttacker({ onGround: false, vx: -0.9 });
+
+  const fwdLines = drawLegsAndExtract(fwd).lines;
+  const backLines = drawLegsAndExtract(back).lines;
+
+  // 手前脚（2本目）の足先の、股関節からの水平オフセット
+  const fwdOffset = fwdLines[1][2].x - fwdLines[1][0].x;
+  const backOffset = backLines[1][2].x - backLines[1][0].x;
+
+  assert.ok(fwdOffset * backOffset < 0, '前進時と後退時で足先が逆側に流れること');
+});
+
+test('2足型: 空中で vx=0 でも位相ずれにより左右の脚が揃わない', () => {
+  const a = makeAttacker({ onGround: false, vx: 0 });
+  const { lines } = drawLegsAndExtract(a);
+  const farOffset = lines[0][2].x - lines[0][0].x;
+  const nearOffset = lines[1][2].x - lines[1][0].x;
+  assert.notEqual(farOffset, nearOffset);
+});
+
+test('2足型: rival の脚の頂点は standard と完全に一致する（プレイヤー同等）', () => {
+  const mk = (name) => makeAttacker({
+    onGround: true, vx: 0.9, walkFrame: 1, config: { name, speed: 1.0 },
+  });
+  const rival = drawLegsAndExtract(mk('rival')).lines;
+  const standard = drawLegsAndExtract(mk('standard')).lines;
+  assert.deepEqual(rival, standard);
+});
+
+test('2足型: heavy は足裏が大きく歩幅が狭い', () => {
+  const mk = (name) => makeAttacker({
+    onGround: true, vx: 0.9, walkFrame: 0, config: { name, speed: 1.0 },
+  });
+
+  const heavy = drawLegsAndExtract(mk('heavy'));
+  const standard = drawLegsAndExtract(mk('standard'));
+
+  // 足裏サイズ（装甲板を除く最後の fillRect が足裏）
+  assert.ok(heavy.rects.at(-1).w > standard.rects.at(-1).w, 'heavy の足裏が大きいこと');
+
+  // 歩幅: 手前脚の足先の股関節からの水平オフセットの大きさ
+  const stride = (r) => Math.abs(r.lines[1][2].x - r.lines[1][0].x);
+  assert.ok(stride(heavy) < stride(standard), 'heavy の歩幅が狭いこと');
+});
+
+test('2足型: しゃがみ時は膝が股関節より外側に開く', () => {
+  const a = makeAttacker({ onGround: true, vx: 0, crouching: true });
+  const { lines } = drawLegsAndExtract(a, 4);
+  assert.equal(lines.length, 2);
+
+  const [far, near] = lines;
+  assert.ok(far[1].x < far[0].x, '奥脚の膝が外(左)に開くこと');
+  assert.ok(near[1].x > near[0].x, '手前脚の膝が外(右)に開くこと');
+});
+
+test('2足型: しゃがみ時は crouchOffset ぶん股関節が上に寄る（足は接地位置を保つ）', () => {
+  const a = makeAttacker({ onGround: true, vx: 0, crouching: true });
+  const standing = drawLegsAndExtract(makeAttacker({ onGround: true, vx: 0 }), 0).lines;
+  const crouched = drawLegsAndExtract(a, 4).lines;
+  assert.equal(crouched[0][0].y, standing[0][0].y - 4);
+});
