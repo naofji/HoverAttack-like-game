@@ -224,7 +224,7 @@ test('full chain: the real EnemyTank keeps patrolling untouched while attacker/d
 //    attacker/drone instances back to normal behavior.
 // ---------------------------------------------------------------------------
 
-test('full chain: driving the base through _die()/_finishDestruction() reverts real attacker/drone instance state', () => {
+test('full chain: driving the base through _die()/_finishDestruction() maintains attacker/drone emergency defense state', () => {
   withStubbedAudio(() => {
     const { game, base, attacker, drone } = buildScenario({ missionsCompleted: 1 });
 
@@ -248,14 +248,12 @@ test('full chain: driving the base through _die()/_finishDestruction() reverts r
     }
 
     assert.equal(base.alive, false, 'base finished its destruction sequence');
-    assert.equal(game.baseEmergencyAlert, false);
-    assert.equal(game.emergencyTargetBase, null);
+    assert.equal(game.baseEmergencyAlert, true, 'alert remains active after base destruction');
+    assert.equal(game.emergencyTargetBase, base);
 
-    // Real instance state reverted (not a spy call record).
-    assert.equal(attacker.emergencyDefense, false);
-    assert.equal(attacker.emergencyTargetBase, null);
-    assert.equal(drone.emergencyDefense, false);
-    assert.equal(drone.emergencyTargetBase, null);
+    // Real instance state stays in defense mode until mission transition/reset
+    assert.equal(attacker.emergencyDefense, true);
+    assert.equal(drone.emergencyDefense, true);
   });
 });
 

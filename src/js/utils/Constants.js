@@ -207,7 +207,7 @@ export const ENEMY_ATTACKER_TYPES = {
     },
     heavy: {
         name: 'heavy',
-        hp: 60,
+        hp: 45,
         speed: 0.5,
         jumpForce: -5.0,
         fireInterval: 90,     // 1.5 seconds

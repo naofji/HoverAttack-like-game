@@ -29,8 +29,8 @@ function makeMockGame({ missionsCompleted = 1, enemies = [] } = {}) {
     enemies,
     baseEmergencyAlert: false,
     emergencyTargetBase: null,
-    spawnSparks: () => {},
-    spawnExplosion: () => {},
+    spawnSparks: () => { },
+    spawnExplosion: () => { },
     triggerAlertCalls: [],
     triggerBaseEmergencyAlert(base) {
       game.triggerAlertCalls.push(base);
@@ -89,14 +89,14 @@ test('takeDamage does NOT call triggerBaseEmergencyAlert once the base is dying'
   assert.equal(game.triggerAlertCalls.length, 0);
 });
 
-test('_finishDestruction clears baseEmergencyAlert / emergencyTargetBase and calls setEmergencyDefense(false) on enemies', () => {
+test('_finishDestruction keeps baseEmergencyAlert and does NOT release defenders (alert remains until stage clear)', () => {
   const game = makeMockGame({ missionsCompleted: 1 });
   const base = makeBase(game);
 
   const enemyCalls = [];
   const attacker = { setEmergencyDefense: (active) => enemyCalls.push(['attacker', active]) };
   const drone = { setEmergencyDefense: (active) => enemyCalls.push(['drone', active]) };
-  const nonEmergencyUnit = { name: 'turret' }; // no setEmergencyDefense — must be skipped safely
+  const nonEmergencyUnit = { name: 'turret' };
   game.enemies = [attacker, drone, nonEmergencyUnit];
 
   // Trigger the alert first.
@@ -105,9 +105,10 @@ test('_finishDestruction clears baseEmergencyAlert / emergencyTargetBase and cal
 
   base._finishDestruction();
 
-  assert.equal(game.baseEmergencyAlert, false);
-  assert.equal(game.emergencyTargetBase, null);
-  assert.deepEqual(enemyCalls, [['attacker', false], ['drone', false]]);
+  // Alert state and defenders stay active
+  assert.equal(game.baseEmergencyAlert, true);
+  assert.equal(game.emergencyTargetBase, base);
+  assert.equal(enemyCalls.length, 0); // setEmergencyDefense(false) was NOT called
   assert.equal(base.alive, false);
 });
 
@@ -138,9 +139,9 @@ test('draw() with an active pulse does not throw (headless canvas stub)', () => 
   base.takeDamage(1);
 
   const ctx = {
-    save() {}, restore() {}, beginPath() {}, arc() {}, stroke() {}, fill() {},
-    fillRect() {}, translate() {}, createRadialGradient: () => ({ addColorStop() {} }),
-    moveTo() {}, lineTo() {}, setLineDash() {}
+    save() { }, restore() { }, beginPath() { }, arc() { }, stroke() { }, fill() { },
+    fillRect() { }, translate() { }, createRadialGradient: () => ({ addColorStop() { } }),
+    moveTo() { }, lineTo() { }, setLineDash() { }
   };
   assert.doesNotThrow(() => base.draw(ctx));
 });

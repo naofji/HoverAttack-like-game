@@ -144,7 +144,7 @@ export const EMERGENCY_DEFENSE_SIGHT_RANGE = 250;
 - `EnemyTank` に配備先変更や緊急防衛モードが適用されないことの検証。
 - 同一基地への連続被弾（`takeDamage()` を複数回呼ぶ）でも `triggerBaseEmergencyAlert()` の本体処理（敵一覧走査・アラート音再生）が1回しか実行されないこと（一発ラッチ）の検証。
 - 基地の `dying` 中（`_die()` 後・`_finishDestruction()` 前）は `takeDamage()` がアラートを再発注しないことの検証。
-- 基地破壊完了（`_finishDestruction()`）後に `baseEmergencyAlert` が `false` に戻り、緊急防衛中だったユニットが通常挙動（`patrol`/`return`）に復帰することの検証。
+- 基地破壊完了（`_finishDestruction()`）後も `baseEmergencyAlert` および緊急防衛モードが維持され、敵ユニットがそのまま警戒・攻撃態勢を継続することの検証。
 - ミッション遷移（`nextMission()` / `restart()`）で `baseEmergencyAlert` / `emergencyTargetBase` がリセットされ、新ミッションの新規スポーン敵が緊急防衛モードで出現しないことの検証。
 - 緊急防衛モード中の `EnemyAttacker` が `_handleShooting()` のゲート変更により迎撃射撃できることの検証。
 - 複数の `EnemyAttacker`/`EnemyDrone` が基地へ収束する際、同一座標に完全一致（スタック）しないこと（分散オフセットが機能していること）の検証。

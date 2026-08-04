@@ -633,18 +633,8 @@ export class EnemyBase {
         // Final massive explosion
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 80);
 
-        // If this base had a live emergency defense alert, clear it and release all
-        // reinforcements back to their normal behavior.
-        if (this.game.baseEmergencyAlert) {
-            this.game.baseEmergencyAlert = false;
-            this.game.emergencyTargetBase = null;
-            const enemies = this.game.enemies || [];
-            for (const e of enemies) {
-                if (typeof e.setEmergencyDefense === 'function') {
-                    e.setEmergencyDefense(false);
-                }
-            }
-        }
+        // Emergency defense alert stays active even after base destruction so remaining
+        // defenders continue their high-alert attack until stage clear / mission transition.
     }
 
     draw(ctx) {

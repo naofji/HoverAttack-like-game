@@ -191,6 +191,12 @@ export const Game = {
     // UPDATE
     // ==========================================
     update(deltaTime) {
+        // Press Escape to return to the title screen from playing or other sub-states
+        if (this.input.isKeyPressed('Escape') && this.gameState !== 'title') {
+            this._enterDemoState('title');
+            return;
+        }
+
         // Lock-on toggle works in all states
         if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
             this.input.crosshairLocked = !this.input.crosshairLocked;

@@ -4,7 +4,7 @@
 
 // Keys that should prevent default browser behavior (scrolling, etc.)
 const PREVENT_DEFAULT_KEYS = new Set([
-    'Space', 'ShiftLeft', 'ShiftRight', 'Tab',
+    'Space', 'ShiftLeft', 'ShiftRight', 'Tab', 'Escape',
     'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyM', 'KeyF',
     'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'
 ]);
