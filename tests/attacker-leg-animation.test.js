@@ -83,3 +83,91 @@ test('_hoverSwing: 型ごとの maxSpeed で正規化される（rival が振り
   assert.equal(rival._hoverSwing(), 1);
   assert.equal(heavy._hoverSwing(), 1);
 });
+
+test('_drawJointedLeg: 股関節→膝→足首の3点ポリラインを1本描く', () => {
+  const a = makeAttacker();
+  const ctx = makeFakeCtx();
+  a._drawJointedLeg(ctx, {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 3, footW: 5, footH: 2,
+  });
+
+  const lines = extractPolylines(ctx.calls);
+  assert.equal(lines.length, 1);
+  assert.deepEqual(lines[0], [
+    { x: 10, y: 16 },
+    { x: 12, y: 19 },
+    { x: 14, y: 22 },
+  ]);
+});
+
+test('_drawJointedLeg: 足裏は足首を原点に translate して描かれる', () => {
+  const a = makeAttacker();
+  const ctx = makeFakeCtx();
+  a._drawJointedLeg(ctx, {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 3, footW: 5, footH: 2,
+  });
+
+  const translates = ctx.calls.filter((c) => c.name === 'translate');
+  assert.deepEqual(translates.at(-1).args, [14, 22]);
+
+  const rects = extractFillRects(ctx.calls);
+  const foot = rects.at(-1);
+  assert.equal(foot.w, 5);
+  assert.equal(foot.h, 2);
+});
+
+test('_drawJointedLeg: footRotation が 0 のときは rotate しない', () => {
+  const a = makeAttacker();
+  const ctx = makeFakeCtx();
+  a._drawJointedLeg(ctx, {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 3, footW: 5, footH: 2, footRotation: 0,
+  });
+  assert.equal(ctx.calls.filter((c) => c.name === 'rotate').length, 0);
+});
+
+test('_drawJointedLeg: footRotation が非0なら足裏を回転する', () => {
+  const a = makeAttacker();
+  const ctx = makeFakeCtx();
+  a._drawJointedLeg(ctx, {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 3, footW: 5, footH: 2, footRotation: 0.5,
+  });
+  const rotates = ctx.calls.filter((c) => c.name === 'rotate');
+  assert.equal(rotates.length, 1);
+  assert.equal(rotates[0].args[0], 0.5);
+});
+
+test('_drawJointedLeg: thighPlate 指定時は腿の装甲板が1枚増える', () => {
+  const a = makeAttacker();
+  const base = makeFakeCtx();
+  const plated = makeFakeCtx();
+  const opts = {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 4, footW: 6, footH: 3,
+  };
+  a._drawJointedLeg(base, { ...opts, thighPlate: false });
+  a._drawJointedLeg(plated, { ...opts, thighPlate: true });
+
+  assert.equal(extractFillRects(plated.calls).length,
+               extractFillRects(base.calls).length + 1);
+});
+
+test('_drawJointedLeg: save/restore が対で呼ばれる', () => {
+  const a = makeAttacker();
+  const ctx = makeFakeCtx();
+  a._drawJointedLeg(ctx, {
+    hipX: 10, hipY: 16, kneeX: 12, kneeY: 19, footX: 14, footY: 22,
+    legColor: '#111111', footColor: '#222222',
+    lineWidth: 3, footW: 5, footH: 2,
+  });
+  assert.equal(ctx.calls.filter((c) => c.name === 'save').length,
+               ctx.calls.filter((c) => c.name === 'restore').length);
+});

@@ -1167,6 +1167,44 @@ export class EnemyAttacker {
         return clamped / max;
     }
 
+    /**
+     * 脚1本を描く唯一のプリミティブ。
+     * ポーズの決定（歩行フレーム→座標、振り子回転、脚上げ）は呼び出し側の責務で、
+     * ここは渡された座標をそのまま描くだけの純粋な描画関数。
+     */
+    _drawJointedLeg(ctx, opts) {
+        const {
+            hipX, hipY, kneeX, kneeY, footX, footY,
+            legColor, footColor, lineWidth, footW, footH,
+            footRotation = 0, thighPlate = false,
+        } = opts;
+
+        // 股関節 → 膝 → 足首
+        ctx.strokeStyle = legColor;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(kneeX, kneeY);
+        ctx.lineTo(footX, footY);
+        ctx.stroke();
+
+        // 腿の装甲板（heavy のバルク感）
+        if (thighPlate) {
+            ctx.fillStyle = footColor;
+            ctx.fillRect((hipX + kneeX) / 2 - 2, (hipY + kneeY) / 2 - 1, 4, 3);
+        }
+
+        // 足裏
+        ctx.save();
+        ctx.translate(footX, footY);
+        if (footRotation !== 0) ctx.rotate(footRotation);
+        ctx.fillStyle = footColor;
+        ctx.fillRect(-Math.floor(footW / 2), 0, footW, footH);
+        ctx.restore();
+    }
+
     _drawLeg(ctx, legX, legY, offset) {
         const cfg = this.config;
         // Upper leg
