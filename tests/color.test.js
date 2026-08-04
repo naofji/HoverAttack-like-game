@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lerpColor } from '../src/js/utils/color.js';
+import { lerpColor, withAlpha } from '../src/js/utils/color.js';
 
 test('lerpColor returns endpoints at t=0 and t=1', () => {
   assert.equal(lerpColor('#000000', '#ffffff', 0), '#000000');
@@ -19,4 +19,12 @@ test('lerpColor clamps t outside [0,1]', () => {
 test('lerpColor handles uppercase and per-channel interpolation', () => {
   // R:0x00->0x10 at .5 = 0x08, G:0x00->0x20 = 0x10, B:0x00->0x40 = 0x20
   assert.equal(lerpColor('#000000', '#102040', 0.5), '#081020');
+});
+
+test('withAlpha converts #rrggbb to an rgba() string', () => {
+  assert.equal(withAlpha('#8B4513', 0.5), 'rgba(139, 69, 19, 0.5)');
+});
+
+test('withAlpha handles the leading # being optional', () => {
+  assert.equal(withAlpha('000000', 0), 'rgba(0, 0, 0, 0)');
 });

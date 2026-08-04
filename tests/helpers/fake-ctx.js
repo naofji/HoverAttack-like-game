@@ -5,20 +5,21 @@ const METHODS = [
   'save', 'restore', 'translate', 'scale', 'rotate',
   'beginPath', 'closePath', 'moveTo', 'lineTo', 'arc',
   'stroke', 'fill', 'fillRect', 'strokeRect', 'clearRect',
+  'drawImage',
 ];
 
 /** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */
-const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin'];
+const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha'];
 
 /** @returns {object} calls 配列を持つ疑似 ctx */
 export function makeFakeCtx() {
   const calls = [];
   const ctx = {
     calls,
-    globalAlpha: 1, font: '', textAlign: '',
+    font: '', textAlign: '',
   };
   const values = {
-    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '',
+    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1,
   };
   for (const prop of TRACKED_PROPS) {
     Object.defineProperty(ctx, prop, {
@@ -33,6 +34,14 @@ export function makeFakeCtx() {
   for (const name of METHODS) {
     ctx[name] = (...args) => { calls.push({ name, args }); };
   }
+  // 実物のグラデーションは比較できないので、生成引数とカラーストップを持つ
+  // プレーンオブジェクトを返す。fillStyle に代入されると set:fillStyle として記録される。
+  ctx.createRadialGradient = (...args) => ({
+    type: 'radialGradient',
+    args,
+    stops: [],
+    addColorStop(offset, color) { this.stops.push([offset, color]); },
+  });
   return ctx;
 }
 

@@ -16,6 +16,8 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES
 } from '../utils/Constants.js';
+import { CaveBackdrop } from './CaveBackdrop.js';
+import { SeededRNG } from '../utils/SeededRNG.js';
 
 
 // --- Map generation constants ---
@@ -183,6 +185,16 @@ export class Map {
         // Step 11: Generate off-screen mini-map
         this._generateMiniMap();
         this._initTileCache();
+
+        // Step 12: Generate the parallax far backdrop (must come last —
+        // it consumes rng, and moving it earlier would shift terrain generation).
+        // Uses a derived RNG stream so the shared game.rng is left untouched for
+        // downstream consumers (e.g. SpawnManager's deterministic weekly seed).
+        this.backdrop = new CaveBackdrop(
+            this.width, this.height,
+            this.blockStyles[BLOCK_NORMAL].fill,
+            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0)
+        );
     }
 
     _generatePlatforms() {
