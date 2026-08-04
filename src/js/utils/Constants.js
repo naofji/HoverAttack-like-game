@@ -381,3 +381,15 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 // --- Enemy missile hit knockback (smaller than a grenade) ---
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
+
+// --- Destruction Debris ---
+// 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
+export const DEBRIS_GRAVITY = 0.22;        // per frame, 通常の GRAVITY より軽い（滞空を長めに見せる）
+export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
+export const DEBRIS_LIFETIME = 55;         // frames
+export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
+export const DEBRIS_SPIN_SCALE = 0.06;     // 横方向初速 → 角速度への係数
+export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
+export const DEBRIS_MAX_ACTIVE = 160;      // 同時に存在できる破片の上限
+export const DEBRIS_FLASH_COLOR = '#FFFFFF'; // ホールド中の白熱色
+export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎたら alpha を落とし始める
