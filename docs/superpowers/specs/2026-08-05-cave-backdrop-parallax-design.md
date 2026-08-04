@@ -85,11 +85,22 @@ camYmax = mapH - viewH + HUD_BOTTOM_HEIGHT
 遠景canvasの寸法:
 
 ```
-backdropW = ceil((camXmax - camXmin) * P) + viewW
-backdropH = ceil((camYmax - camYmin) * P) + viewH
+backdropW = floor((camXmax - camXmin) * P) + viewW
+backdropH = floor((camYmax - camYmin) * P) + viewH
 ```
 
-最大マップ(300×150タイル = 4800×2400px)で約 1590×1023px ≒ 6.5MB。
+`floor` を使うのは転送元計算 (後述の `sx`/`sy`) と丸めを一致させるため。これにより
+`sourceX(camXmax) === backdropW - viewW` が厳密に成立し、`sx` が canvas 幅を超えないことが
+式の上で保証される。`ceil` にすると端で1pxの未使用領域が生じ、この不変条件が崩れる。
+
+具体値:
+
+| マップ | 寸法 | 遠景canvas |
+|---|---|---|
+| 最小 (150×75タイル, missionLevel 0) | 2400×1200 | 1230×841 |
+| 最大 (300×150タイル, missionLevel 4+) | 4800×2400 | 1590×1021 |
+
+最大マップで約 1590×1021px ≒ 6.5MB。
 前景tileCache(4800×2400 ≒ 44MB)より十分小さい。
 マップは最小でも 150×75タイル = 2400×1200px であり、常に viewport(1024×768) より大きい。
 
@@ -136,10 +147,15 @@ ctx.drawImage(canvas, sx, sy, viewW, viewH, camX, camY, viewW, viewH)
 
 1. **地色**: 地色でcanvas全面を `fillRect`。
 2. **ブロブ**: 個数 = `floor(backdropW * backdropH / 40000)` (最大マップで約40個)。
-   各ブロブは中心をcanvas内ランダム、半径120〜320pxの `createRadialGradient` を
-   明/暗交互に選び、`globalAlpha = 0.5` で重ねる。大きな洞窟空間のうねりを表現。
+   各ブロブは中心をcanvas内ランダム、半径120〜320pxの `createRadialGradient`。
+   色は明/暗を交互に選ぶ。中心 `alpha 0.5` → 外周 `alpha 0` のカラーストップ2点で
+   フェードさせる。大きな洞窟空間のうねりを表現。
 3. **点描**: 個数 = `floor(backdropW * backdropH / 350)` (約4600個)。
    1〜2pxの矩形を点描色・`alpha 0.3〜0.8` のランダムでcanvas内に散らす。
+
+不透明度は `ctx.globalAlpha` ではなく `rgba()` 文字列とグラデーションのカラーストップに
+畳み込む。`globalAlpha` は状態が残る副作用があり、また疑似ctxで記録されないためテストで
+検証できないが、`fillStyle` に入る色文字列なら記録・比較できる。
 
 生成はマップ読み込み時の1回のみ。矩形約5000個 + グラデーション40個で、前景tileCacheが
 数万ブロックを描くコストに比べれば誤差。
