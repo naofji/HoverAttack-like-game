@@ -29,24 +29,24 @@ function makeBackdrop(BackdropClass, mapW, mapH, seed = 1) {
   return new BackdropClass(mapW, mapH, '#8B4513', new SeededRNG(seed));
 }
 
-test('parallax factor constant is 0.15', () => {
-  assert.equal(FAR_BG_PARALLAX, 0.15);
+test('parallax factor constant is 0.25', () => {
+  assert.equal(FAR_BG_PARALLAX, 0.25);
 });
 
 test('backdrop canvas is sized for the smallest map', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
-  assert.equal(bd.width, 1230);
-  assert.equal(bd.height, 841);
-  assert.equal(bd.canvas.width, 1230);
-  assert.equal(bd.canvas.height, 841);
+  assert.equal(bd.width, 1368);
+  assert.equal(bd.height, 891);
+  assert.equal(bd.canvas.width, 1368);
+  assert.equal(bd.canvas.height, 891);
 });
 
 test('backdrop canvas is sized for the largest map', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 4800, 2400);
-  assert.equal(bd.width, 1590);
-  assert.equal(bd.height, 1021);
+  assert.equal(bd.width, 1968);
+  assert.equal(bd.height, 1191);
 });
 
 test('source rect exactly spans the canvas across the camera range', async () => {
@@ -64,10 +64,10 @@ test('source rect is an integer for fractional camera positions', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
 
-  // floor(500.7 * 0.15) = floor(75.105) = 75
-  assert.equal(bd.sourceX(500.7), 75);
-  // floor((100.3 - (-60)) * 0.15) = floor(24.045) = 24
-  assert.equal(bd.sourceY(100.3), 24);
+  // floor(500.7 * 0.25) = floor(125.175) = 125
+  assert.equal(bd.sourceX(500.7), 125);
+  // floor((100.3 - (-60)) * 0.25) = floor(40.075) = 40
+  assert.equal(bd.sourceY(100.3), 40);
 });
 
 test('source rect clamps outside the camera range', async () => {
@@ -91,7 +91,7 @@ test('draw issues exactly one drawImage with the parallax source rect', async ()
   assert.equal(draws.length, 1);
   assert.deepEqual(draws[0].args, [
     bd.canvas,
-    75, 24, CANVAS_WIDTH, CANVAS_HEIGHT,   // 転送元 (整数化済み)
+    125, 40, CANVAS_WIDTH, CANVAS_HEIGHT,   // 転送元 (整数化済み)
     500.7, 100.3, CANVAS_WIDTH, CANVAS_HEIGHT, // 転送先 = ワールド座標
   ]);
 });
@@ -213,8 +213,8 @@ test('Map owns a backdrop sized for its own dimensions', async () => {
 
   const map = withNoopDocument(() => new Map({ rng: new SeededRNG(99) }, 0)); // 最小マップ
   assert.ok(map.backdrop instanceof CaveBackdrop, 'map.backdrop should exist');
-  assert.equal(map.backdrop.width, 1230);
-  assert.equal(map.backdrop.height, 841);
+  assert.equal(map.backdrop.width, 1368);
+  assert.equal(map.backdrop.height, 891);
 });
 
 test('Map builds the backdrop from the same stage palette as its blocks', async () => {
