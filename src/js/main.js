@@ -23,7 +23,7 @@ import {
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
-    STAGE_PALETTES
+    STAGE_PALETTES, DEBRIS_MAX_ACTIVE
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -35,6 +35,8 @@ import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
+import { buildDebris } from './entities/debris/index.js';
+import { DebrisPart } from './entities/DebrisPart.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { EnemyDrone } from './entities/EnemyDrone.js';
@@ -1192,6 +1194,32 @@ export const Game = {
             const dx = (mine.x + mine.width / 2) - x;
             const dy = (mine.y + mine.height / 2) - y;
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
+        }
+    },
+
+    /**
+     * 破壊された機体のパーツを破片として撒く。
+     * 当たり判定は持たず、既存の particles 配列に相乗りするだけ。
+     * @param {object} entity 破壊された機体
+     * @param {string} kind DEBRIS_SPECS のキー
+     */
+    spawnDebris(entity, kind) {
+        const debris = buildDebris(entity, kind);
+        if (debris.length === 0) return;
+        this.particles.push(...debris);
+        this._trimDebris();
+    },
+
+    /** 破片の同時存在数を上限内に収める。古い破片から落とす。 */
+    _trimDebris() {
+        let excess = this.particles.filter((p) => p instanceof DebrisPart).length - DEBRIS_MAX_ACTIVE;
+        if (excess <= 0) return;
+        for (let i = 0; i < this.particles.length && excess > 0; i++) {
+            if (this.particles[i] instanceof DebrisPart) {
+                this.particles.splice(i, 1);
+                i--;
+                excess--;
+            }
         }
     },
 
