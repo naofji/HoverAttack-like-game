@@ -13,6 +13,7 @@ import {
     DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
+import { playerDebris } from './playerParts.js';
 
 // 呼び出し側の利便のために再エクスポートする。
 // ただし *Parts.js からは shapes.js を直接 import すること（循環参照になるため）。
@@ -21,6 +22,7 @@ export { segmentPart } from './shapes.js';
 /** kind 文字列 → 機体スペック。各機体の die() が渡す文字列に対応する。 */
 export const DEBRIS_SPECS = {
     drone: droneDebris,
+    player: playerDebris,
 };
 
 /** 既定の向き判定。facingRight を持たない機体はスペック側で上書きする。 */
