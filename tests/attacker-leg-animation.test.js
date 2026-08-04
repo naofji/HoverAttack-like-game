@@ -262,3 +262,110 @@ test('2足型: しゃがみ時は crouchOffset ぶん股関節が上に寄る（
   const crouched = drawLegsAndExtract(a, 4).lines;
   assert.equal(crouched[0][0].y, standing[0][0].y - 4);
 });
+
+// --- artillery（4脚クモ歩行） ---
+
+function drawArtilleryAndExtract(a, crouchOffset = 0) {
+  const ctx = makeFakeCtx();
+  a._drawArtilleryLegs(ctx, crouchOffset);
+  return extractPolylines(ctx.calls);
+}
+
+function makeArtillery(overrides = {}) {
+  return makeAttacker({
+    onGround: true, vx: 0.4,
+    ...overrides,
+    config: { name: 'artillery', speed: 0.4, bodyColor: '#DDAA00',
+              headColor: '#AA7700', ...(overrides.config || {}) },
+  });
+}
+
+test('artillery: 脚を4本描く', () => {
+  const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: 0 }));
+  assert.equal(lines.length, 4);
+  for (const l of lines) assert.equal(l.length, 3);
+});
+
+test('artillery: 全脚の膝が股関節より上にある（クモ型の逆へ字）', () => {
+  for (const frame of [0, 1, 2, 3]) {
+    const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: frame }));
+    for (const [hip, knee] of lines.map((l) => [l[0], l[1]])) {
+      assert.ok(knee.y < hip.y, `frame ${frame}: 膝(${knee.y}) が股関節(${hip.y}) より上にあること`);
+    }
+  }
+});
+
+test('artillery: グループAとグループBの足先は常に逆位相', () => {
+  // SPIDER_LEGS の並び順は [手前前脚, 奥前脚, 手前後脚, 奥後脚]。
+  // グループA = index 0 と 3、グループB = index 1 と 2。
+  // walkFrame 2 は両グループとも中立なので、これを基準に差分を取る。
+  const baseline = drawArtilleryAndExtract(makeArtillery({ walkFrame: 2 }));
+  const baseOffset = (i) => baseline[i][2].x - baseline[i][0].x;
+
+  for (const frame of [0, 1, 2, 3]) {
+    const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: frame }));
+    const offset = (i) => lines[i][2].x - lines[i][0].x;
+
+    // 同じグループの2本は同じスイープ量ぶん動く
+    assert.equal(offset(0) - baseOffset(0), offset(3) - baseOffset(3),
+                 `frame ${frame}: グループAの2本が同位相であること`);
+    assert.equal(offset(1) - baseOffset(1), offset(2) - baseOffset(2),
+                 `frame ${frame}: グループBの2本が同位相であること`);
+
+    // A と B のスイープは互いに逆符号（中立フレームでは両方 0）。
+    // 中立フレームでは両辺が数学的に 0 になるが、`-(0)` は IEEE754 上 -0 になり、
+    // node:assert/strict の equal（Object.is 相当）は +0 と -0 を区別してしまうため、
+    // `+ 0` で -0 を +0 に正規化してから比較する（符号を無視する意図は変えない）。
+    assert.equal(offset(0) - baseOffset(0), -(offset(1) - baseOffset(1)) + 0,
+                 `frame ${frame}: A と B のスイープが逆位相であること`);
+  }
+});
+
+test('artillery: 接地脚が常に2本以上ある', () => {
+  for (const frame of [0, 1, 2, 3]) {
+    const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: frame }));
+    const footYs = lines.map((l) => l[2].y);
+    const lowest = Math.max(...footYs);
+    const grounded = footYs.filter((y) => y === lowest).length;
+    assert.ok(grounded >= 2, `frame ${frame}: 接地脚が ${grounded} 本（2本以上必要）`);
+  }
+});
+
+test('artillery: 遊脚は接地脚より足先が高い位置にある', () => {
+  const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: 1 }));
+  const footYs = lines.map((l) => l[2].y);
+  assert.ok(new Set(footYs).size > 1, 'frame 1 では脚の高さに差が出ること');
+});
+
+test('artillery: 停止時（walkFrame 2）は全脚が同じ高さで静止する', () => {
+  const lines = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2 }));
+  const footYs = lines.map((l) => l[2].y);
+  assert.equal(new Set(footYs).size, 1);
+});
+
+test('artillery: 空中では脚が丸まり、接地時より足先が股関節に近づく', () => {
+  const ground = drawArtilleryAndExtract(makeArtillery({ onGround: true, vx: 0, walkFrame: 2 }));
+  const air = drawArtilleryAndExtract(makeArtillery({ onGround: false, vx: 0 }));
+
+  const reach = (lines, i) => Math.abs(lines[i][2].x - lines[i][0].x);
+  assert.ok(reach(air, 0) < reach(ground, 0), '空中では脚が縮むこと');
+});
+
+test('artillery: 空中で vx の符号を反転すると足先が逆側に流れる', () => {
+  const fwd = drawArtilleryAndExtract(makeArtillery({ onGround: false, vx: 0.4 }));
+  const back = drawArtilleryAndExtract(makeArtillery({ onGround: false, vx: -0.4 }));
+  assert.notDeepEqual(fwd, back);
+  // 前脚(index 0)の足先の高さが振り子で変わる
+  assert.notEqual(fwd[0][2].y, back[0][2].y);
+});
+
+test('artillery: しゃがみ時は接地時より足が左右に広く張り出す', () => {
+  const stand = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2 }), 0);
+  const crouch = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2 }), 4);
+
+  const width = (lines) => {
+    const xs = lines.map((l) => l[2].x);
+    return Math.max(...xs) - Math.min(...xs);
+  };
+  assert.ok(width(crouch) > width(stand), 'しゃがみで脚が広がること');
+});

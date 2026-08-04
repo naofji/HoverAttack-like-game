@@ -80,6 +80,36 @@ const AIR_BASE_POSE = {
     far: { kdx: -1, kdy: 3, fdx: -2, fdy: 6 },
 };
 
+/**
+ * artillery の4脚。並びは [手前前脚, 奥前脚, 手前後脚, 奥後脚]。
+ * group A = 手前前脚 + 奥後脚 / group B = 奥前脚 + 手前後脚 の対角トロット。
+ * reach は股関節からの足先の水平到達距離（前脚が正、後脚が負）。
+ */
+const SPIDER_LEGS = [
+    { hipX: 14, reach: 5, isNear: true, group: 0 },
+    { hipX: 11, reach: 4, isNear: false, group: 1 },
+    { hipX: 7, reach: -4, isNear: true, group: 1 },
+    { hipX: 4, reach: -5, isNear: false, group: 0 },
+];
+
+/**
+ * 参照フレーム → 足先の前後スイープ量。
+ * 半周期ずらすと符号が反転する（sweep[(p+2)%4] === -sweep[p]）ので、
+ * group A / B が常に逆位相になる。frame 2 は両グループとも 0 = 停止時の中立ポーズ。
+ */
+const SPIDER_SWEEP = [0, 2, 0, -2];
+
+/**
+ * 参照フレーム → 遊脚相の足上げ量。
+ * group A は walkFrame 3、group B は walkFrame 1 で持ち上がり、同時には浮かない
+ * （＝常に2本以上が接地する）。
+ */
+const SPIDER_LIFT = [0, 0, 0, 2];
+
+/** 膝の跳ね上げ量（股関節より上）と足首の下がり量。 */
+const SPIDER_KNEE_RISE = 4;
+const SPIDER_FOOT_DROP = 6;
+
 export class EnemyAttacker {
     constructor(game, x, y, config) {
         this.game = game;
@@ -1104,45 +1134,99 @@ export class EnemyAttacker {
         ctx.restore();
     }
 
+    /**
+     * artillery の4脚クモ歩行。
+     * 膝を胴体より上へ跳ね上げた逆へ字シルエットで、対角の2本ずつを
+     * 半周期ずらして動かす（常に2本以上が接地する）。
+     */
     _drawArtilleryLegs(ctx, crouchOffset = 0) {
-        const legColor1 = this.config.bodyColor;
-        const legColor2 = this.config.headColor;
+        const style = this._legStyle();
+        const hipY = 16 - crouchOffset;
 
         if (crouchOffset > 0) {
-            // Low profile quad legs (crouching)
-            ctx.fillStyle = legColor1;
-            ctx.fillRect(2, 15, 4, 4);
-            ctx.fillRect(12, 15, 4, 4);
-            ctx.fillStyle = legColor2;
-            ctx.fillRect(0, 18, 4, 2);
-            ctx.fillRect(14, 18, 4, 2);
+            this._drawSpiderCrouch(ctx, hipY, style);
         } else if (!this.onGround) {
-            // 空中: vxの反対方向に足が流れる
-            const swing = Math.round(Math.max(-3, Math.min(3, -this.vx * 0.8)));
-            ctx.fillStyle = legColor1;
-            ctx.fillRect(4 + swing, 16, 3, 6);
-            ctx.fillRect(11 + swing, 16, 3, 6);
-            ctx.fillStyle = legColor2;
-            ctx.fillRect(2 + swing, 20, 4, 3);
-            ctx.fillRect(12 + swing, 20, 4, 3);
+            this._drawSpiderAir(ctx, hipY, style);
         } else {
-            const WALK_POSES = [
-                { l: -2, r: 2 },
-                { l: -1, r: 1 },
-                { l: 0, r: 0 },
-                { l: 1, r: -1 },
-            ];
-            const isWalking = Math.abs(this.vx) > 0.3;
-            const pose = isWalking ? (WALK_POSES[this.walkFrame] || WALK_POSES[2]) : WALK_POSES[2];
-            const tl = Math.round(pose.l / 2);
-            const tr = Math.round(pose.r / 2);
+            this._drawSpiderWalk(ctx, hipY, style);
+        }
+    }
 
-            ctx.fillStyle = legColor1;
-            ctx.fillRect(4 + tl, 16, 3, 6);
-            ctx.fillRect(11 + tr, 16, 3, 6);
-            ctx.fillStyle = legColor2;
-            ctx.fillRect(2 + pose.l, 20, 4, 3);
-            ctx.fillRect(12 + pose.r, 20, 4, 3);
+    /** 脚1本ぶんの塗り設定（手前脚は bodyColor、奥脚は headColor）。 */
+    _spiderPaint(leg, style) {
+        return {
+            legColor: leg.isNear ? this.config.bodyColor : this.config.headColor,
+            footColor: leg.isNear ? this.config.headColor : this.config.bodyColor,
+            lineWidth: style.lineWidth,
+            footW: style.footW,
+            footH: style.footH,
+        };
+    }
+
+    /** 接地時: 対角トロット。group 0 は walkFrame、group 1 は半周期ずれ。 */
+    _drawSpiderWalk(ctx, hipY, style) {
+        for (const leg of SPIDER_LEGS) {
+            const phase = leg.group === 0
+                ? this.walkFrame
+                : (this.walkFrame + 2) % 4;
+            const sweep = SPIDER_SWEEP[phase];
+            const lift = SPIDER_LIFT[phase];
+
+            const footX = leg.hipX + leg.reach + sweep;
+            const footY = hipY + SPIDER_FOOT_DROP - lift;
+
+            this._drawJointedLeg(ctx, {
+                hipX: leg.hipX, hipY,
+                kneeX: leg.hipX + (leg.reach + sweep) * 0.5,
+                kneeY: hipY - SPIDER_KNEE_RISE,
+                footX, footY,
+                ...this._spiderPaint(leg, style),
+            });
+        }
+    }
+
+    /** 空中: 脚を丸めつつ、横速度に応じて股関節中心に振れる。 */
+    _drawSpiderAir(ctx, hipY, style) {
+        const swing = this._hoverSwing();
+
+        for (const leg of SPIDER_LEGS) {
+            // グループごとに縮み量を変えて非対称にする（クモが落下時に脚を縮める挙動）
+            const curl = leg.group === 0 ? 0.6 : 0.8;
+            const angle = swing * style.maxSwing;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const rot = (dx, dy) => ({
+                x: leg.hipX + (dx * cos - dy * sin),
+                y: hipY + (dx * sin + dy * cos),
+            });
+
+            const knee = rot(leg.reach * 0.5 * curl, -SPIDER_KNEE_RISE * curl);
+            const foot = rot(leg.reach * curl, SPIDER_FOOT_DROP * curl);
+
+            this._drawJointedLeg(ctx, {
+                hipX: leg.hipX, hipY,
+                kneeX: knee.x, kneeY: knee.y,
+                footX: foot.x, footY: foot.y,
+                footRotation: angle / 1.5,
+                ...this._spiderPaint(leg, style),
+            });
+        }
+    }
+
+    /** しゃがみ（狙撃姿勢）: 膝を大きく跳ね上げ、足を広く張って車高を下げる。 */
+    _drawSpiderCrouch(ctx, hipY, style) {
+        const spread = style.crouchSpread;
+
+        for (const leg of SPIDER_LEGS) {
+            const dir = leg.reach >= 0 ? 1 : -1;
+            this._drawJointedLeg(ctx, {
+                hipX: leg.hipX, hipY,
+                kneeX: leg.hipX + dir * spread * 0.5,
+                kneeY: hipY - SPIDER_KNEE_RISE - 2,
+                footX: leg.hipX + leg.reach + dir * spread,
+                footY: hipY + SPIDER_FOOT_DROP,
+                ...this._spiderPaint(leg, style),
+            });
         }
     }
 
