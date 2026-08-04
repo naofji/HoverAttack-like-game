@@ -221,3 +221,48 @@ test('backdrop generation does not perturb the shared game.rng stream (regressio
     'backdrop generation must not consume the shared game.rng stream'
   );
 });
+
+// --- 可視性 ---
+// 遠景は「暗いが見える」ことが要件。暗化率を上げすぎると全色が黒に潰れて
+// 画面がベタ塗りの黒に戻ってしまうため、輝度の下限と最低コントラストを固定する。
+
+/** ITU-R BT.709 相対輝度 (0-255)。 */
+function luminance(hex) {
+  const s = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+test('backdrop base is never darker than the flat fill it replaced', async () => {
+  const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
+  const { STAGE_PALETTES, COLOR_CAVE_BG } = await import('../src/js/utils/Constants.js');
+
+  const floor = luminance(COLOR_CAVE_BG);
+  for (const palette of STAGE_PALETTES) {
+    const { base } = backdropColors(palette.fill);
+    assert.ok(
+      luminance(base) >= floor,
+      `base ${base} for palette ${palette.fill} is darker than COLOR_CAVE_BG ${COLOR_CAVE_BG}`
+    );
+  }
+});
+
+test('backdrop pattern has enough contrast against its base to be visible', async () => {
+  const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
+  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
+
+  // 点描は最大 alpha 0.8 で合成されるので、実際に画面へ出る輝度差はその分減る。
+  const MIN_VISIBLE_CONTRAST = 15;
+  for (const palette of STAGE_PALETTES) {
+    const { base, dot, blobLight } = backdropColors(palette.fill);
+    const dotContrast = (luminance(dot) - luminance(base)) * 0.8;
+    assert.ok(
+      dotContrast >= MIN_VISIBLE_CONTRAST,
+      `dot contrast ${dotContrast.toFixed(1)} for palette ${palette.fill} is below ${MIN_VISIBLE_CONTRAST}`
+    );
+    assert.ok(
+      luminance(blobLight) > luminance(base),
+      `blobLight ${blobLight} for palette ${palette.fill} is not lighter than base ${base}`
+    );
+  }
+});

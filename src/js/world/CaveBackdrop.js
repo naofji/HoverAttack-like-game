@@ -20,10 +20,28 @@ function clamp(v, lo, hi) {
 
 // --- 遠景の生成パラメータ ---
 // いずれも「実機で見て濃い/薄い」を1値で調整できるよう定数に切り出してある。
-const BASE_DARKEN = 0.92;   // 地色: パレット色を黒へ寄せる割合
-const BLOB_DARK_DARKEN = 0.95;
-const BLOB_LIGHT_DARKEN = 0.86;
-const DOT_DARKEN = 0.78;
+// 下限は最も暗いパレット (#4B3621 Cafe Noir) が黒に潰れない値で決まっている。
+// 上げすぎると画面がベタ塗りの黒に戻るため、輝度テストが下限を守っている。
+const BASE_DARKEN = 0.75;   // 地色: パレット色を黒へ寄せる割合
+const BLOB_DARK_DARKEN = 0.85;
+const BLOB_LIGHT_DARKEN = 0.55;
+const DOT_DARKEN = 0.35;
+
+/**
+ * ステージパレット色から遠景の4色を導出する。
+ * 暗くしすぎると画面が黒一色に潰れるため、可視性は
+ * tests/cave-backdrop.test.js の輝度テストで固定してある。
+ * @param {string} paletteFill ステージパレットの fill 色 (#rrggbb)
+ * @returns {{base:string, blobDark:string, blobLight:string, dot:string}}
+ */
+export function backdropColors(paletteFill) {
+    return {
+        base: lerpColor(paletteFill, '#000000', BASE_DARKEN),
+        blobDark: lerpColor(paletteFill, '#000000', BLOB_DARK_DARKEN),
+        blobLight: lerpColor(paletteFill, '#000000', BLOB_LIGHT_DARKEN),
+        dot: lerpColor(paletteFill, '#000000', DOT_DARKEN),
+    };
+}
 
 const BLOB_AREA_PER_UNIT = 40000; // この面積あたりブロブ1個
 const BLOB_RADIUS_MIN = 120;
@@ -74,10 +92,7 @@ export class CaveBackdrop {
         const W = this.width;
         const H = this.height;
 
-        const baseColor = lerpColor(paletteFill, '#000000', BASE_DARKEN);
-        const blobDark = lerpColor(paletteFill, '#000000', BLOB_DARK_DARKEN);
-        const blobLight = lerpColor(paletteFill, '#000000', BLOB_LIGHT_DARKEN);
-        const dotColor = lerpColor(paletteFill, '#000000', DOT_DARKEN);
+        const { base: baseColor, blobDark, blobLight, dot: dotColor } = backdropColors(paletteFill);
 
         // 1) 地色
         ctx.fillStyle = baseColor;
