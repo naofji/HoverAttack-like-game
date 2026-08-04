@@ -34,6 +34,14 @@ export function makeFakeCtx() {
   for (const name of METHODS) {
     ctx[name] = (...args) => { calls.push({ name, args }); };
   }
+  // 実物のグラデーションは比較できないので、生成引数とカラーストップを持つ
+  // プレーンオブジェクトを返す。fillStyle に代入されると set:fillStyle として記録される。
+  ctx.createRadialGradient = (...args) => ({
+    type: 'radialGradient',
+    args,
+    stops: [],
+    addColorStop(offset, color) { this.stops.push([offset, color]); },
+  });
   return ctx;
 }
 

@@ -95,3 +95,58 @@ test('draw issues exactly one drawImage with the parallax source rect', async ()
     500.7, 100.3, CANVAS_WIDTH, CANVAS_HEIGHT, // 転送先 = ワールド座標
   ]);
 });
+
+test('generation fills the base, then draws blobs and stipple dots', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
+  const calls = lastFakeCanvas._ctx.calls;
+
+  const rects = calls.filter((c) => c.name === 'fillRect');
+  // 1 (地色) + 25 (ブロブ) + 2955 (点描)
+  assert.equal(rects.length, 1 + 25 + 2955);
+
+  // 最初の fillRect は canvas 全面の地色塗り
+  assert.deepEqual(rects[0].args, [0, 0, bd.width, bd.height]);
+
+  const gradients = calls.filter(
+    (c) => c.name === 'set:fillStyle' && c.args[0] && c.args[0].type === 'radialGradient'
+  );
+  assert.equal(gradients.length, 25);
+  // 各ブロブは中心 alpha 0.5 → 外周 alpha 0 の2ストップ
+  for (const g of gradients) {
+    assert.equal(g.args[0].stops.length, 2);
+    assert.equal(g.args[0].stops[0][0], 0);
+    assert.equal(g.args[0].stops[1][0], 1);
+    assert.match(g.args[0].stops[1][1], /, 0\)$/);
+  }
+});
+
+test('generation never uses globalAlpha', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  makeBackdrop(CaveBackdrop, 2400, 1200);
+  assert.equal(lastFakeCanvas._ctx.globalAlpha, 1);
+});
+
+test('same seed and palette produce an identical backdrop', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+
+  makeBackdrop(CaveBackdrop, 2400, 1200, 4242);
+  const a = JSON.stringify(lastFakeCanvas._ctx.calls);
+  makeBackdrop(CaveBackdrop, 2400, 1200, 4242);
+  const b = JSON.stringify(lastFakeCanvas._ctx.calls);
+
+  assert.equal(a, b);
+});
+
+test('different palettes produce different colors', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  const rngA = new SeededRNG(7);
+  const rngB = new SeededRNG(7);
+
+  new CaveBackdrop(2400, 1200, '#8B4513', rngA); // ステージ1: 茶
+  const brown = JSON.stringify(lastFakeCanvas._ctx.calls);
+  new CaveBackdrop(2400, 1200, '#4682B4', rngB); // ステージ5: 青
+  const blue = JSON.stringify(lastFakeCanvas._ctx.calls);
+
+  assert.notEqual(brown, blue);
+});
