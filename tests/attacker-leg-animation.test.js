@@ -369,3 +369,56 @@ test('artillery: しゃがみ時は接地時より足が左右に広く張り出
   };
   assert.ok(width(crouch) > width(stand), 'しゃがみで脚が広がること');
 });
+
+// --- 回帰 ---
+
+test('回帰: 4型 × 3状態で draw() が例外を投げない', () => {
+  const types = ['standard', 'heavy', 'rival', 'artillery'];
+  const states = [
+    { name: '接地', patch: { onGround: true, vx: 0.5, walkFrame: 1 } },
+    { name: '空中', patch: { onGround: false, vx: 0.5, hovering: true } },
+    { name: 'しゃがみ', patch: { onGround: true, vx: 0, crouching: true } },
+  ];
+
+  for (const name of types) {
+    for (const state of states) {
+      const a = makeAttacker({ ...state.patch, config: { name } });
+      const ctx = makeFakeCtx();
+      assert.doesNotThrow(() => a.draw(ctx), `${name} / ${state.name}`);
+      assert.ok(ctx.calls.length > 0, `${name} / ${state.name}: 何か描画されること`);
+    }
+  }
+});
+
+test('回帰: 未知の型でも draw() が通り standard 相当の脚になる', () => {
+  const unknown = makeAttacker({ onGround: true, vx: 0.5, walkFrame: 1,
+                                 config: { name: 'nonexistent-type' } });
+  const standard = makeAttacker({ onGround: true, vx: 0.5, walkFrame: 1,
+                                  config: { name: 'standard' } });
+
+  const ctxU = makeFakeCtx();
+  const ctxS = makeFakeCtx();
+  assert.doesNotThrow(() => unknown._drawLegs(ctxU, 0));
+  standard._drawLegs(ctxS, 0);
+  assert.deepEqual(extractPolylines(ctxU.calls), extractPolylines(ctxS.calls));
+});
+
+test('回帰: alive=false の間は draw() が何も描かない', () => {
+  const a = makeAttacker({ alive: false });
+  const ctx = makeFakeCtx();
+  a.draw(ctx);
+  assert.equal(ctx.calls.length, 0);
+});
+
+test('回帰: 左向きでも脚が2本（artillery は4本）描かれる', () => {
+  const left = makeAttacker({ facingRight: false, onGround: false, vx: -0.5 });
+  const ctx = makeFakeCtx();
+  left._drawLegs(ctx, 0);
+  assert.equal(extractPolylines(ctx.calls).length, 2);
+
+  const art = makeAttacker({ facingRight: false, onGround: false, vx: -0.4,
+                             config: { name: 'artillery', speed: 0.4 } });
+  const ctxA = makeFakeCtx();
+  art._drawArtilleryLegs(ctxA, 0);
+  assert.equal(extractPolylines(ctxA.calls).length, 4);
+});
