@@ -12,7 +12,7 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     FAR_BG_PARALLAX,
 } from '../utils/Constants.js';
-import { lerpColor } from '../utils/color.js';
+import { lerpColor, withAlpha } from '../utils/color.js';
 
 function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
@@ -33,15 +33,6 @@ const BLOB_CENTER_ALPHA = 0.5;
 const DOT_AREA_PER_UNIT = 350;    // この面積あたり点1個
 const DOT_ALPHA_MIN = 0.3;
 const DOT_ALPHA_RANGE = 0.5;      // alpha 0.3〜0.8
-
-/** #rrggbb を rgba(r, g, b, a) 文字列にする。 */
-function withAlpha(hex, alpha) {
-    const s = String(hex).replace('#', '');
-    const r = parseInt(s.slice(0, 2), 16);
-    const g = parseInt(s.slice(2, 4), 16);
-    const b = parseInt(s.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export class CaveBackdrop {
     /**

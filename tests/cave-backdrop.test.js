@@ -124,7 +124,8 @@ test('generation fills the base, then draws blobs and stipple dots', async () =>
 test('generation never uses globalAlpha', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   makeBackdrop(CaveBackdrop, 2400, 1200);
-  assert.equal(lastFakeCanvas._ctx.globalAlpha, 1);
+  const sets = lastFakeCanvas._ctx.calls.filter((c) => c.name === 'set:globalAlpha');
+  assert.equal(sets.length, 0);
 });
 
 test('same seed and palette produce an identical backdrop', async () => {
@@ -176,11 +177,47 @@ test('Map owns a backdrop sized for its own dimensions', async () => {
 });
 
 test('Map builds the backdrop from the same stage palette as its blocks', async () => {
-  const { Map, BLOCK_NORMAL } = await import('../src/js/world/Map.js');
-  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
+  const { Map } = await import('../src/js/world/Map.js');
+  const { BLOCK_NORMAL, STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
 
   const level = 4; // STAGE_PALETTES[4] = '#4682B4'
   const map = withNoopDocument(() => new Map({ rng: new SeededRNG(5) }, level));
   assert.equal(map.backdrop.paletteFill, map.blockStyles[BLOCK_NORMAL].fill);
   assert.equal(map.backdrop.paletteFill, STAGE_PALETTES[level].fill);
+});
+
+test('backdrop generation does not perturb the shared game.rng stream (regression)', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+
+  const seed = 12345;
+
+  // Run 1: backdrop generates normally (thousands of draws against ITS OWN rng).
+  const game1 = { rng: new SeededRNG(seed) };
+  withNoopDocument(() => new Map(game1, 0));
+  const stateAfterFullBackdrop = game1.rng.state;
+
+  // Run 2: stub the backdrop's pixel generation to a no-op, so it performs
+  // zero rng draws, while Map still constructs a CaveBackdrop the same way.
+  const originalGenerate = CaveBackdrop.prototype._generate;
+  CaveBackdrop.prototype._generate = function () {};
+  let stateAfterEmptyBackdrop;
+  try {
+    const game2 = { rng: new SeededRNG(seed) };
+    withNoopDocument(() => new Map(game2, 0));
+    stateAfterEmptyBackdrop = game2.rng.state;
+  } finally {
+    CaveBackdrop.prototype._generate = originalGenerate;
+  }
+
+  // Terrain generation ahead of the backdrop step is identical in both runs
+  // (same seed, same missionLevel). If Map correctly hands the backdrop a
+  // DERIVED rng stream, then whether the backdrop's own generation draws 0
+  // or thousands of numbers has zero effect on game.rng's state. If Map
+  // instead passes game.rng straight through (the bug), the two states
+  // diverge because run 1 additionally drains ~11,900 draws from game.rng.
+  assert.equal(
+    stateAfterFullBackdrop, stateAfterEmptyBackdrop,
+    'backdrop generation must not consume the shared game.rng stream'
+  );
 });

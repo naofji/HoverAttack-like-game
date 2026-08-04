@@ -21,3 +21,9 @@ export function lerpColor(a, b, t) {
     const bl = Math.round(pa[2] + (pb[2] - pa[2]) * x);
     return '#' + _toHex(r) + _toHex(g) + _toHex(bl);
 }
+
+/** #rrggbb を rgba(r, g, b, a) 文字列にする。 */
+export function withAlpha(hex, alpha) {
+    const [r, g, b] = _parseHex(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

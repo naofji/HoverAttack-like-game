@@ -9,17 +9,17 @@ const METHODS = [
 ];
 
 /** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */
-const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin'];
+const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha'];
 
 /** @returns {object} calls 配列を持つ疑似 ctx */
 export function makeFakeCtx() {
   const calls = [];
   const ctx = {
     calls,
-    globalAlpha: 1, font: '', textAlign: '',
+    font: '', textAlign: '',
   };
   const values = {
-    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '',
+    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1,
   };
   for (const prop of TRACKED_PROPS) {
     Object.defineProperty(ctx, prop, {

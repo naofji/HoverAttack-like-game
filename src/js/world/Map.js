@@ -17,6 +17,7 @@ import {
     STAGE_PALETTES
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
+import { SeededRNG } from '../utils/SeededRNG.js';
 
 
 // --- Map generation constants ---
@@ -186,10 +187,14 @@ export class Map {
         this._initTileCache();
 
         // Step 12: Generate the parallax far backdrop (must come last —
-        // it consumes rng, and moving it earlier would shift terrain generation)
-        const palettes = STAGE_PALETTES;
-        const palIdx = (this.missionLevel || 0) % palettes.length;
-        this.backdrop = new CaveBackdrop(this.width, this.height, palettes[palIdx].fill, this.game.rng);
+        // it consumes rng, and moving it earlier would shift terrain generation).
+        // Uses a derived RNG stream so the shared game.rng is left untouched for
+        // downstream consumers (e.g. SpawnManager's deterministic weekly seed).
+        this.backdrop = new CaveBackdrop(
+            this.width, this.height,
+            this.blockStyles[BLOCK_NORMAL].fill,
+            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0)
+        );
     }
 
     _generatePlatforms() {
@@ -1188,4 +1193,4 @@ export class Map {
     }
 }
 
-export { BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';
+export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';
