@@ -79,3 +79,19 @@ test('source rect clamps outside the camera range', async () => {
   assert.equal(bd.sourceY(-9999), 0);
   assert.equal(bd.sourceY(9999), bd.height - CANVAS_HEIGHT);
 });
+
+test('draw issues exactly one drawImage with the parallax source rect', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
+
+  const ctx = makeFakeCtx();
+  bd.draw(ctx, 500.7, 100.3);
+
+  const draws = ctx.calls.filter((c) => c.name === 'drawImage');
+  assert.equal(draws.length, 1);
+  assert.deepEqual(draws[0].args, [
+    bd.canvas,
+    75, 24, CANVAS_WIDTH, CANVAS_HEIGHT,   // 転送元 (整数化済み)
+    500.7, 100.3, CANVAS_WIDTH, CANVAS_HEIGHT, // 転送先 = ワールド座標
+  ]);
+});

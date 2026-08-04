@@ -5,6 +5,7 @@ const METHODS = [
   'save', 'restore', 'translate', 'scale', 'rotate',
   'beginPath', 'closePath', 'moveTo', 'lineTo', 'arc',
   'stroke', 'fill', 'fillRect', 'strokeRect', 'clearRect',
+  'drawImage',
 ];
 
 /** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */

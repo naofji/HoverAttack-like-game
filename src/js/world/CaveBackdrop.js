@@ -52,4 +52,19 @@ export class CaveBackdrop {
         const raw = Math.floor((camY - this.camYMin) * FAR_BG_PARALLAX);
         return clamp(raw, 0, this.height - CANVAS_HEIGHT);
     }
+
+    /**
+     * 遠景の可視矩形をブロック転送する。
+     * ctx は translate(-camX, -camY) 済みのため、転送先はワールド座標を指定する。
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} camX 補間済みカメラX
+     * @param {number} camY 補間済みカメラY
+     */
+    draw(ctx, camX, camY) {
+        ctx.drawImage(
+            this.canvas,
+            this.sourceX(camX), this.sourceY(camY), CANVAS_WIDTH, CANVAS_HEIGHT,
+            camX, camY, CANVAS_WIDTH, CANVAS_HEIGHT
+        );
+    }
 }
