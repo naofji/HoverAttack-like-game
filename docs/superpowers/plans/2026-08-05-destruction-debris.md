@@ -857,7 +857,7 @@ python3 -m http.server 8000
 **Files:**
 - Create: `src/js/entities/debris/playerParts.js`
 - Modify: `src/js/entities/debris/index.js`（スペック登録）
-- Modify: `src/js/entities/Player.js`（`_aimAngle()` 抽出、`getDebrisParts()` 追加、`die()` に1行）
+- Modify: `src/js/entities/Player.js`（`_aimAngle()` と `_legPose()` / `_collectLegPoses()` の抽出、`getDebrisParts()` 追加、`die()` に1行）
 - Test: `tests/debris-player.test.js`
 
 **Interfaces:**
@@ -867,8 +867,14 @@ python3 -m http.server 8000
   - `PLAYER_STATIC_PARTS` — 頭部・胴体・バックパック・スラスター
   - `playerLegParts(player)` → `Part[]`（4パーツ: 各脚の腿と脛）
   - `playerWeaponParts(player)` → `Part[]`（2パーツ）
-  - `Player.prototype._aimAngle()` → `number`（機体ローカルでの武装の向き。ラジアン）
+  - `Player.prototype._aimAngle(crouchOffset)` → `number`（機体ローカルでの武装の向き。ラジアン）
+  - `Player.prototype._legPose(isNear, walkPose, hoverSwing)` → `{hipX, hipY, kx, ky, fx, fy}`
+  - `Player.prototype._collectLegPoses()` → `Array<{isNear, hipX, hipY, kneeX, kneeY, footX, footY, lineWidth}>`
   - `Player.prototype.getDebrisParts()` → `Part[]`
+
+**重要（脚ポーズ計算の一本化）:** 脚の関節座標の計算は `Player` 側の `_legPose()` / `_collectLegPoses()`
+だけが持つ。`playerParts.js` は**座標計算を一切再実装せず**、受け取った関節座標を線分パーツへ落とすだけにする。
+EnemyAttacker（Task 5）と同じ構造で、脚のポーズを直したときに破片だけ古いまま取り残される事故を防ぐ。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -880,6 +886,7 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { buildDebris, DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 import { PLAYER_WIDTH, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
+import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
 
 function makeGame() {
   return {
@@ -971,6 +978,37 @@ test('input が無くても getDebrisParts が例外を投げない', () => {
   p.game.input = null;
   assert.doesNotThrow(() => p.getDebrisParts());
 });
+
+// これが描画と破片のポーズ一致を守る要のテスト。
+// _collectLegPoses() が _drawSingleLeg と別のポーズを返すようになったら、ここで落ちる。
+test('_collectLegPoses が実際に描かれた脚のポリラインと一致する', () => {
+  const states = [
+    { onGround: true, crouching: false, docked: false, walkFrame: 0 },
+    { onGround: true, crouching: false, docked: false, walkFrame: 3 },
+    { onGround: false, crouching: false, docked: false, vx: 1.2 },
+    { onGround: true, crouching: true, docked: false },
+  ];
+  for (const state of states) {
+    const p = makePlayer();
+    Object.assign(p, state);
+    p.facingRight = true;
+    p.invincibleTimer = 0;
+
+    const ctx = makeFakeCtx();
+    p.draw(ctx);
+    const drawn = extractPolylines(ctx.calls);
+    const label = JSON.stringify(state);
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+
+    for (const pose of p._collectLegPoses()) {
+      const found = drawn.some((line) =>
+        line.length >= 2 &&
+        near(line[0].x, pose.hipX) && near(line[0].y, pose.hipY) &&
+        near(line[1].x, pose.kneeX) && near(line[1].y, pose.kneeY));
+      assert.ok(found, `${label}: 描画に一致する脚が無い hip=(${pose.hipX},${pose.hipY}) knee=(${pose.kneeX},${pose.kneeY})`);
+    }
+  }
+});
 ```
 
 - [ ] **Step 2: テストを実行して失敗を確認する**
@@ -1017,12 +1055,115 @@ Expected: FAIL — `DEBRIS_SPECS.player` が undefined
 
 `_drawMachineGun` も同じ形に書き換える。
 
-- [ ] **Step 4: テストを実行して既存の描画が壊れていないことを確認する**
+- [ ] **Step 4: Player の脚ポーズ計算を抽出する**
+
+`_drawSingleLeg`（`src/js/entities/Player.js:614`）は「関節座標の計算」と「描画」を1つのメソッドで
+やっている。破片生成が同じ計算を再実装しないよう、計算部分を切り出す。**見た目は変えない。**
+
+`_drawSingleLeg` の直前に追加:
+
+```js
+    /**
+     * 脚1本の関節座標を求める（描画はしない）。
+     * 描画と破片生成の両方から使うので、ここが唯一の計算箇所。
+     * @param {boolean} isNear 手前脚か
+     * @param {number|null} walkPose 歩行ポーズ番号。ホバー中は null
+     * @param {number|null} hoverSwing ホバー中の振り子量 -1..+1。接地中は null
+     * @returns {{hipX:number,hipY:number,kx:number,ky:number,fx:number,fy:number}}
+     */
+    _legPose(isNear, walkPose, hoverSwing) {
+        const hipX = isNear ? 10 : 7;
+        const hipY = 16;
+        let kx, ky, fx, fy;
+
+        if (hoverSwing !== null) {
+            const maxAngle = Math.PI / 4;
+            const angle = hoverSwing * maxAngle;
+            const baseKx = isNear ? 1 : -1;
+            const baseKy = 3;
+            const baseFx = isNear ? 0 : -2;
+            const baseFy = 6;
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+
+            kx = hipX + (baseKx * cosA - baseKy * sinA);
+            ky = hipY + (baseKx * sinA + baseKy * cosA);
+            fx = hipX + (baseFx * cosA - baseFy * sinA);
+            fy = hipY + (baseFx * sinA + baseFy * cosA);
+        } else {
+            switch (walkPose) {
+                case 0: kx = hipX + 2; ky = hipY + 3; fx = kx + 2; fy = 22; break;
+                case 1: kx = hipX - 3; ky = hipY + 3; fx = kx - 2; fy = 20; break;
+                case 2: kx = hipX; ky = hipY + 3; fx = kx; fy = 22; break;
+                case 3: kx = hipX + 4; ky = hipY + 1; fx = kx - 1; fy = 19; break;
+            }
+        }
+
+        return { hipX, hipY, kx, ky, fx, fy };
+    }
+
+    /**
+     * 死亡時の両脚の関節座標を集める（描画はしない）。
+     * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
+     * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
+     */
+    _collectLegPoses() {
+        const out = [];
+        const push = (isNear, pose) => {
+            out.push({
+                isNear,
+                hipX: pose.hipX, hipY: pose.hipY,
+                kneeX: pose.kx, kneeY: pose.ky,
+                footX: pose.fx, footY: pose.fy,
+                lineWidth: 3,
+            });
+        };
+
+        if (this.crouching || this.docked) {
+            // _drawCrouchedLegs の固定ポーズ（座標はそちらのポリラインと同一）
+            push(false, { hipX: 7, hipY: 16, kx: 2, ky: 20, fx: 6, fy: 22 });
+            push(true, { hipX: 10, hipY: 16, kx: 15, ky: 20, fx: 11, fy: 22 });
+            return out;
+        }
+
+        if (!this.onGround) {
+            let localVx = this.facingRight ? this.vx : -this.vx;
+            localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
+            const hoverSwing = localVx / PLAYER_MAX_SPEED;
+            push(false, this._legPose(false, null, hoverSwing * 0.8 - 0.2));
+            push(true, this._legPose(true, null, hoverSwing));
+            return out;
+        }
+
+        const WALK_POSES = [
+            { near: 0, far: 1 },
+            { near: 2, far: 3 },
+            { near: 2, far: 2 },
+            { near: 3, far: 2 },
+        ];
+        const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
+        push(false, this._legPose(false, pose.far, null));
+        push(true, this._legPose(true, pose.near, null));
+        return out;
+    }
+```
+
+`_drawSingleLeg` の冒頭を、抽出したメソッドを使う形に書き換える:
+
+```js
+    _drawSingleLeg(ctx, isNear, walkPose, hoverSwing) {
+        const { hipX, hipY, kx, ky, fx, fy } = this._legPose(isNear, walkPose, hoverSwing);
+```
+
+（元の `const hipX = ...` から `switch` ブロックの終わりまでを、この1行に置き換える。
+以降の「Leg stroke」以下の描画コードはそのまま。）
+
+- [ ] **Step 5: テストを実行して既存の描画が壊れていないことを確認する**
 
 Run: `npm test`
 Expected: 全 PASS（`debris-player.test.js` を除く）
 
-- [ ] **Step 5: playerParts.js を実装する**
+- [ ] **Step 6: playerParts.js を実装する**
 
 `src/js/entities/debris/playerParts.js` を新規作成。
 
@@ -1036,7 +1177,6 @@ Expected: 全 PASS（`debris-player.test.js` を除く）
 // 頭部とバイザーは1パーツにまとめてある（別々に飛ぶと顔が割れて見えるため）。
 
 import { segmentPart } from './shapes.js';
-import { PLAYER_MAX_SPEED } from '../../utils/Constants.js';
 
 /** しゃがみ/ホバーで動かない部品。x, y はパーツ中心。 */
 export const PLAYER_STATIC_PARTS = [
@@ -1047,72 +1187,18 @@ export const PLAYER_STATIC_PARTS = [
 ];
 
 /**
- * 死亡時の脚のポーズを再現する。
- * Player._drawSingleLeg と同じ計算を行い、股関節→膝、膝→足首 の
- * 2本の線分をそれぞれ破片にする。
- * @returns {Array} パーツ4個（近脚の腿・脛、遠脚の腿・脛）
+ * 死亡時の脚のポーズを破片にする。
+ * 関節座標の計算そのものは Player._collectLegPoses() が持っており、
+ * ここは受け取った座標を線分パーツへ落とすだけ。
+ * @returns {Array} パーツ4個（各脚の腿と脛）
  */
 export function playerLegParts(player) {
-    const isCrouched = player.crouching || player.docked;
     const out = [];
-
-    if (isCrouched) {
-        // _drawCrouchedLegs の固定ポーズ
-        out.push(segmentPart(7, 16, 2, 20, 3, '#DDDDDD', 0.8));
-        out.push(segmentPart(2, 20, 6, 22, 3, '#888888', 0.6));
-        out.push(segmentPart(10, 16, 15, 20, 3, '#AAAAAA', 0.8));
-        out.push(segmentPart(15, 20, 11, 22, 3, '#666666', 0.6));
-        return out;
-    }
-
-    const addLeg = (isNear, walkPose, hoverSwing) => {
-        const hipX = isNear ? 10 : 7;
-        const hipY = 16;
-        let kx, ky, fx, fy;
-
-        if (hoverSwing !== null) {
-            const angle = hoverSwing * (Math.PI / 4);
-            const baseKx = isNear ? 1 : -1;
-            const baseKy = 3;
-            const baseFx = isNear ? 0 : -2;
-            const baseFy = 6;
-            const cosA = Math.cos(angle);
-            const sinA = Math.sin(angle);
-            kx = hipX + (baseKx * cosA - baseKy * sinA);
-            ky = hipY + (baseKx * sinA + baseKy * cosA);
-            fx = hipX + (baseFx * cosA - baseFy * sinA);
-            fy = hipY + (baseFx * sinA + baseFy * cosA);
-        } else {
-            switch (walkPose) {
-                case 0: kx = hipX + 2; ky = hipY + 3; fx = kx + 2; fy = 22; break;
-                case 1: kx = hipX - 3; ky = hipY + 3; fx = kx - 2; fy = 20; break;
-                case 3: kx = hipX + 4; ky = hipY + 1; fx = kx - 1; fy = 19; break;
-                default: kx = hipX; ky = hipY + 3; fx = kx; fy = 22; break;
-            }
-        }
-
-        const legColor = isNear ? '#DDDDDD' : '#AAAAAA';
-        const footColor = isNear ? '#888888' : '#666666';
-        out.push(segmentPart(hipX, hipY, kx, ky, 3, legColor, 0.9));
-        out.push(segmentPart(kx, ky, fx, fy, 3, footColor, 0.7));
-    };
-
-    if (!player.onGround) {
-        let localVx = player.facingRight ? player.vx : -player.vx;
-        localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
-        const swing = localVx / PLAYER_MAX_SPEED;
-        addLeg(false, null, swing * 0.8 - 0.2);
-        addLeg(true, null, swing);
-    } else {
-        const WALK_POSES = [
-            { near: 0, far: 1 },
-            { near: 2, far: 3 },
-            { near: 2, far: 2 },
-            { near: 3, far: 2 },
-        ];
-        const pose = WALK_POSES[player.walkFrame] || WALK_POSES[2];
-        addLeg(false, pose.far, null);
-        addLeg(true, pose.near, null);
+    for (const pose of player._collectLegPoses()) {
+        const legColor = pose.isNear ? '#DDDDDD' : '#AAAAAA';
+        const footColor = pose.isNear ? '#888888' : '#666666';
+        out.push(segmentPart(pose.hipX, pose.hipY, pose.kneeX, pose.kneeY, pose.lineWidth, legColor, 0.9));
+        out.push(segmentPart(pose.kneeX, pose.kneeY, pose.footX, pose.footY, pose.lineWidth, footColor, 0.7));
     }
     return out;
 }
@@ -1159,7 +1245,7 @@ export const playerDebris = {
 };
 ```
 
-- [ ] **Step 6: Player に getDebrisParts と die() の呼び出しを追加する**
+- [ ] **Step 7: Player に getDebrisParts と die() の呼び出しを追加する**
 
 `src/js/entities/Player.js` の import に追加:
 
@@ -1197,7 +1283,7 @@ import { PLAYER_STATIC_PARTS, playerLegParts, playerWeaponParts } from './debris
     }
 ```
 
-- [ ] **Step 7: スペックを登録する**
+- [ ] **Step 8: スペックを登録する**
 
 `src/js/entities/debris/index.js` を変更:
 
@@ -1214,17 +1300,17 @@ export const DEBRIS_SPECS = {
 注意: `playerParts.js` は `segmentPart` を **`./shapes.js` から直接** import すること。
 `./index.js` 経由にすると `index.js` ↔ `playerParts.js` の循環参照になる。
 
-- [ ] **Step 8: テストを実行して通ることを確認する**
+- [ ] **Step 9: テストを実行して通ることを確認する**
 
 Run: `npm test -- tests/debris-player.test.js`
-Expected: PASS（8テスト）
+Expected: PASS（9テスト）
 
 - [ ] **Step 9: 全テストを実行する**
 
 Run: `npm test`
 Expected: 全 PASS
 
-- [ ] **Step 10: コミット**
+- [ ] **Step 11: コミット**
 
 ```bash
 git add src/js/entities/debris/playerParts.js src/js/entities/debris/index.js src/js/entities/Player.js tests/debris-player.test.js
@@ -1497,7 +1583,12 @@ EOF
   - `attackerDebris` スペック（`holdFrames: 4`, `burst: 2.4`）
   - `attackerBodyParts(attacker)` → `Part[]`（`config.name` 別の胴体・頭部・装甲・砲）
   - `attackerLegParts(attacker)` → `Part[]`（歩行/空中/しゃがみ、2脚または4脚）
+  - `EnemyAttacker.prototype._collectLegPoses()` → `Array<{isNear, hipX, hipY, kneeX, kneeY, footX, footY, lineWidth}>`
   - `EnemyAttacker.prototype.getDebrisParts()` → `Part[]`
+
+**重要（ポーズの厳密一致）:** `_collectLegPoses()` は 2足型（`_drawLegs` 系）と 4脚クモ型
+（`_drawArtilleryLegs` 系）の**両方を、描画と同じ分岐・同じ式で**再現する。近似で済ませてはならない。
+テストが描画されたポリラインと関節座標を突き合わせて一致を検証する。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -1509,6 +1600,7 @@ import assert from 'node:assert/strict';
 import { makeMap, makeGame, makeAttacker } from './helpers/enemy-world.js';
 import { DEBRIS_SPECS, buildDebris } from '../src/js/entities/debris/index.js';
 import { ENEMY_ATTACKER_TYPES, PLAYER_WIDTH, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
+import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
 
 const FLAT = [
   '................',
@@ -1575,6 +1667,40 @@ test('buildDebris で破片オブジェクトになる', () => {
   const debris = buildDebris(e, 'attacker');
   assert.ok(debris.length >= 6);
   assert.ok(debris.every((d) => d.alive));
+});
+
+// これが描画と破片のポーズ一致を守る要のテスト。
+// _collectLegPoses() が _drawLegs / _drawArtilleryLegs と別のポーズを返すように
+// なったら、ここで落ちる。
+test('_collectLegPoses が実際に描かれた脚のポリラインと一致する', () => {
+  for (const typeKey of Object.keys(ENEMY_ATTACKER_TYPES)) {
+    for (const state of [{ onGround: true, crouching: false }, { onGround: false, crouching: false }, { onGround: true, crouching: true }]) {
+      const e = attackerOf(typeKey);
+      Object.assign(e, state);
+      e.burstCount = 0;
+      e.facingRight = true;
+
+      const ctx = makeFakeCtx();
+      e.draw(ctx);
+      const drawn = extractPolylines(ctx.calls);
+      const poses = e._collectLegPoses();
+      const label = `${typeKey}/${JSON.stringify(state)}`;
+
+      // 描画された脚のポリラインの中に、各ポーズの股関節→膝→足首が存在すること。
+      // draw() は crouchOffset ぶん translate してから描くので、Y はその分だけずれる。
+      const crouchOffset = state.crouching ? 4 : 0;
+      for (const pose of poses) {
+        const wantHip = { x: pose.hipX, y: pose.hipY - crouchOffset };
+        const wantKnee = { x: pose.kneeX, y: pose.kneeY - crouchOffset };
+        const near = (a, b) => Math.abs(a - b) < 1e-6;
+        const found = drawn.some((line) =>
+          line.length >= 2 &&
+          near(line[0].x, wantHip.x) && near(line[0].y, wantHip.y) &&
+          near(line[1].x, wantKnee.x) && near(line[1].y, wantKnee.y));
+        assert.ok(found, `${label}: 描画に一致する脚が無い hip=${JSON.stringify(wantHip)} knee=${JSON.stringify(wantKnee)}`);
+      }
+    }
+  }
 });
 ```
 
@@ -1702,15 +1828,47 @@ export const attackerDebris = {
         };
 
         if (this.config.name === 'artillery') {
-            // 4脚: 前後2組を左右に開いた逆へ字で近似する
-            const spread = style.crouchSpread || 4;
-            for (const [i, hipX] of [style.hipFar, style.hipNear, style.hipFar + 3, style.hipNear + 3].entries()) {
-                const dir = (i % 2 === 0) ? -1 : 1;
+            // 4脚クモ型。_drawSpiderWalk / _drawSpiderAir / _drawSpiderCrouch と
+            // 同じ分岐・同じ式で関節座標を求める（描画とズレると破片だけ別ポーズになる）。
+            if (isCrouching) {
+                const spread = style.crouchSpread;
+                for (const leg of SPIDER_LEGS) {
+                    const dir = leg.reach >= 0 ? 1 : -1;
+                    push(
+                        leg.isNear, leg.hipX,
+                        leg.hipX + dir * spread * 0.5, hipY - SPIDER_KNEE_RISE - 2,
+                        leg.hipX + leg.reach + dir * spread, hipY + SPIDER_FOOT_DROP,
+                    );
+                }
+                return out;
+            }
+
+            if (!this.onGround) {
+                const swing = this._hoverSwing();
+                const angle = swing * style.maxSwing;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                for (const leg of SPIDER_LEGS) {
+                    const curl = leg.group === 0 ? 0.6 : 0.8;
+                    const rot = (dx, dy) => ({
+                        x: leg.hipX + (dx * cos - dy * sin),
+                        y: hipY + (dx * sin + dy * cos),
+                    });
+                    const knee = rot(leg.reach * 0.5 * curl, -SPIDER_KNEE_RISE * curl);
+                    const foot = rot(leg.reach * curl, SPIDER_FOOT_DROP * curl);
+                    push(leg.isNear, leg.hipX, knee.x, knee.y, foot.x, foot.y);
+                }
+                return out;
+            }
+
+            for (const leg of SPIDER_LEGS) {
+                const phase = leg.group === 0 ? this.walkFrame : (this.walkFrame + 2) % 4;
+                const sweep = SPIDER_SWEEP[phase];
+                const lift = SPIDER_LIFT[phase];
                 push(
-                    i % 2 === 1,
-                    hipX,
-                    hipX + dir * (spread + 2), hipY - 2,
-                    hipX + dir * spread, hipY + 6 - crouchOffset,
+                    leg.isNear, leg.hipX,
+                    leg.hipX + (leg.reach + sweep) * 0.5, hipY - SPIDER_KNEE_RISE,
+                    leg.hipX + leg.reach + sweep, hipY + SPIDER_FOOT_DROP - lift,
                 );
             }
             return out;
@@ -1798,19 +1956,19 @@ export const DEBRIS_SPECS = {
 - [ ] **Step 7: テストを実行して通ることを確認する**
 
 Run: `npm test -- tests/debris-attacker.test.js`
-Expected: PASS（6テスト）
+Expected: PASS（7テスト）
 
 - [ ] **Step 8: 既存の脚アニメーションテストが壊れていないことを確認する**
 
 Run: `npm test -- tests/attacker-leg-animation.test.js`
 Expected: PASS（描画コードには手を入れていないため）
 
-- [ ] **Step 9: 全テストを実行する**
+- [ ] **Step 10: 全テストを実行する**
 
 Run: `npm test`
 Expected: 全 PASS
 
-- [ ] **Step 10: コミット**
+- [ ] **Step 11: コミット**
 
 ```bash
 git add src/js/entities/debris/attackerParts.js src/js/entities/debris/index.js src/js/entities/EnemyAttacker.js tests/debris-attacker.test.js
