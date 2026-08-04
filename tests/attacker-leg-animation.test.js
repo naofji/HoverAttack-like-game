@@ -298,10 +298,27 @@ test('2足型: しゃがみ時は crouchOffset ぶん股関節が上に寄る（
 
 // --- artillery（4脚クモ歩行） ---
 
+/**
+ * artillery の脚は「腿(股関節→膝)」「下腿(膝→足首)」の2ストロークで描かれる
+ * （腿だけ赤く、下腿だけ太くするため）。テストの扱いやすさのために
+ * 1本の脚を [股関節, 膝, 足首] の3点へ組み直して返す。
+ */
 function drawArtilleryAndExtract(a, crouchOffset = 0) {
   const ctx = makeFakeCtx();
   a._drawArtilleryLegs(ctx, crouchOffset);
-  return extractPolylines(ctx.calls);
+  const segments = extractPolylines(ctx.calls);
+
+  assert.equal(segments.length % 2, 0, '脚ごとに腿と下腿の2本が出ること');
+  const legs = [];
+  for (let i = 0; i < segments.length; i += 2) {
+    const thigh = segments[i];
+    const shin = segments[i + 1];
+    assert.equal(thigh.length, 2, '腿は2点');
+    assert.equal(shin.length, 2, '下腿は2点');
+    assert.deepEqual(shin[0], thigh[1], '下腿は膝から始まること');
+    legs.push([thigh[0], thigh[1], shin[1]]);
+  }
+  return legs;
 }
 
 function makeArtillery(overrides = {}) {
@@ -312,6 +329,35 @@ function makeArtillery(overrides = {}) {
               headColor: '#AA7700', ...(overrides.config || {}) },
   });
 }
+
+test('artillery: 下腿は腿より太く描かれる', () => {
+  const ctx = makeFakeCtx();
+  makeArtillery({ walkFrame: 0 })._drawArtilleryLegs(ctx, 0);
+
+  // 脚ごとに [腿の太さ, 下腿の太さ] の順で lineWidth が設定される
+  const widths = extractSets(ctx.calls, 'lineWidth');
+  assert.equal(widths.length, 8, '4脚 × 2セグメントぶん設定されること');
+  for (let i = 0; i < widths.length; i += 2) {
+    assert.ok(widths[i + 1] > widths[i],
+              `脚 ${i / 2}: 下腿(${widths[i + 1]}) が腿(${widths[i]}) より太いこと`);
+  }
+});
+
+test('artillery: 腿は赤系、下腿は機体色で描かれる', () => {
+  const ctx = makeFakeCtx();
+  makeArtillery({ walkFrame: 0 })._drawArtilleryLegs(ctx, 0);
+
+  const strokes = extractSets(ctx.calls, 'strokeStyle');
+  assert.equal(strokes.length, 8);
+
+  const thighs = strokes.filter((_, i) => i % 2 === 0);
+  const shins = strokes.filter((_, i) => i % 2 === 1);
+
+  // 腿は手前 #DD3322 / 奥 #992222 の2色だけ、いずれも機体色ではない
+  assert.deepEqual([...new Set(thighs)].sort(), ['#992222', '#DD3322']);
+  // 下腿は機体色（手前 bodyColor / 奥 headColor）
+  assert.deepEqual([...new Set(shins)].sort(), ['#AA7700', '#DDAA00']);
+});
 
 test('artillery: 脚を4本描く', () => {
   const lines = drawArtilleryAndExtract(makeArtillery({ walkFrame: 0 }));
@@ -451,7 +497,6 @@ test('回帰: 左向きでも脚が2本（artillery は4本）描かれる', () 
 
   const art = makeAttacker({ facingRight: false, onGround: false, vx: -0.4,
                              config: { name: 'artillery', speed: 0.4 } });
-  const ctxA = makeFakeCtx();
-  art._drawArtilleryLegs(ctxA, 0);
-  assert.equal(extractPolylines(ctxA.calls).length, 4);
+  // 腿と下腿の2ストロークを1本へ組み直したうえで4本
+  assert.equal(drawArtilleryAndExtract(art, 0).length, 4);
 });

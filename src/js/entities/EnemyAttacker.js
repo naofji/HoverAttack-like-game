@@ -48,10 +48,13 @@ const LEG_STYLES = {
         crouchSpread: 5, thighPlate: true,
     },
     artillery: {
-        hipFar: 7, hipNear: 10, lineWidth: 2,
-        footW: 3, footH: 2, strideScale: 1,
+        hipFar: 7, hipNear: 10, lineWidth: 3,
+        footW: 4, footH: 2, strideScale: 1,
         maxSwing: (25 * Math.PI) / 180, phaseOffset: 0.2,
         crouchSpread: 3, thighPlate: false,
+        // 腿は赤、下腿は腿より太く（手前脚/奥脚で明度を変えて奥行きを出す）
+        shinWidth: 4,
+        thighNear: '#DD3322', thighFar: '#992222',
     },
 };
 
@@ -1065,7 +1068,7 @@ export class EnemyAttacker {
             ctx.fillRect(16, 7, -6, 3);
             this._drawLegs(ctx, crouchOffset);
             // Backpack
-            ctx.fillStyle = cfg.backpackColorColor;
+            ctx.fillStyle = cfg.backpackColor;
             ctx.fillRect(1, 6, 5, 5);
             ctx.fillRect(5, 4, -3, 9);
         }
@@ -1160,6 +1163,8 @@ export class EnemyAttacker {
             lineWidth: style.lineWidth,
             footW: style.footW,
             footH: style.footH,
+            shinWidth: style.shinWidth,
+            thighColor: leg.isNear ? style.thighNear : style.thighFar,
         };
     }
 
@@ -1354,18 +1359,38 @@ export class EnemyAttacker {
             hipX, hipY, kneeX, kneeY, footX, footY,
             legColor, footColor, lineWidth, footW, footH,
             footRotation = 0, thighPlate = false,
+            thighColor = null, shinWidth = null,
         } = opts;
 
-        // 股関節 → 膝 → 足首
-        ctx.strokeStyle = legColor;
-        ctx.lineWidth = lineWidth;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(hipX, hipY);
-        ctx.lineTo(kneeX, kneeY);
-        ctx.lineTo(footX, footY);
-        ctx.stroke();
+
+        if (thighColor !== null || shinWidth !== null) {
+            // 腿と下腿を別々に描く（artillery: 赤い腿＋太い下腿）。
+            // 腿を先に描き、下腿を上に重ねて膝の関節を下腿側で締める。
+            ctx.strokeStyle = thighColor !== null ? thighColor : legColor;
+            ctx.lineWidth = lineWidth;
+            ctx.beginPath();
+            ctx.moveTo(hipX, hipY);
+            ctx.lineTo(kneeX, kneeY);
+            ctx.stroke();
+
+            ctx.strokeStyle = legColor;
+            ctx.lineWidth = shinWidth !== null ? shinWidth : lineWidth;
+            ctx.beginPath();
+            ctx.moveTo(kneeX, kneeY);
+            ctx.lineTo(footX, footY);
+            ctx.stroke();
+        } else {
+            // 股関節 → 膝 → 足首 を1本のポリラインで
+            ctx.strokeStyle = legColor;
+            ctx.lineWidth = lineWidth;
+            ctx.beginPath();
+            ctx.moveTo(hipX, hipY);
+            ctx.lineTo(kneeX, kneeY);
+            ctx.lineTo(footX, footY);
+            ctx.stroke();
+        }
 
         // 腿の装甲板（heavy のバルク感）
         if (thighPlate) {
