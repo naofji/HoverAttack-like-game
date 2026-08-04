@@ -359,6 +359,12 @@ export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_CAVE_BG = '#1a0a00';
+
+// --- Far cave backdrop (parallax) ---
+// 遠景がカメラに追従する割合。0 = 完全固定、1 = 前景と等速。
+// 見た目が弱すぎ/強すぎる場合はこの1値だけを調整する。
+export const FAR_BG_PARALLAX = 0.15;
+
 export const COLOR_CROSSHAIR = 'rgba(255, 255, 0, 0.8)';
 export const COLOR_HOVER_EXHAUST = 'rgba(0, 255, 255, 0.6)';
 
