@@ -24,6 +24,37 @@ import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 
+/**
+ * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
+ * rival は「プレイヤーと対等な好敵手」なので standard = プレイヤーと同じ値を共有する。
+ */
+const LEG_STYLES = {
+    standard: {
+        hipFar: 7, hipNear: 10, lineWidth: 3,
+        footW: 5, footH: 2, strideScale: 1,
+        maxSwing: Math.PI / 4, phaseOffset: 0.2,
+        crouchSpread: 3, thighPlate: false,
+    },
+    rival: {
+        hipFar: 7, hipNear: 10, lineWidth: 3,
+        footW: 5, footH: 2, strideScale: 1,
+        maxSwing: Math.PI / 4, phaseOffset: 0.2,
+        crouchSpread: 3, thighPlate: false,
+    },
+    heavy: {
+        hipFar: 6, hipNear: 11, lineWidth: 4,
+        footW: 6, footH: 3, strideScale: 0.7,
+        maxSwing: Math.PI / 6, phaseOffset: 0.15,
+        crouchSpread: 5, thighPlate: true,
+    },
+    artillery: {
+        hipFar: 7, hipNear: 10, lineWidth: 2,
+        footW: 3, footH: 2, strideScale: 1,
+        maxSwing: (25 * Math.PI) / 180, phaseOffset: 0.2,
+        crouchSpread: 6, thighPlate: false,
+    },
+};
+
 export class EnemyAttacker {
     constructor(game, x, y, config) {
         this.game = game;
@@ -1116,6 +1147,24 @@ export class EnemyAttacker {
                 this._drawLeg(ctx, 9, 16, pose.far);
             }
         }
+    }
+
+    /** 型別の脚スタイルを引く。未知の型は standard にフォールバック。 */
+    _legStyle() {
+        return LEG_STYLES[this.config.name] || LEG_STYLES.standard;
+    }
+
+    /**
+     * 空中の振り子量を -1..+1 で返す。
+     * 進行方向ローカルの横速度を、その機体の最高速で正規化する。
+     * 型ごとに最高速が 2.4 倍違う（heavy 0.5 / rival 1.20）ため、
+     * プレイヤーのような固定定数ではなく this.maxSpeed を分母にする。
+     */
+    _hoverSwing() {
+        const localVx = this.facingRight ? this.vx : -this.vx;
+        const max = this.maxSpeed;
+        const clamped = Math.max(-max, Math.min(max, localVx));
+        return clamped / max;
     }
 
     _drawLeg(ctx, legX, legY, offset) {
