@@ -74,6 +74,38 @@ test('rotation フックが指定されると機体中心まわりに回転す�
   delete DEBRIS_SPECS['__rot__'];
 });
 
+test('mirrored かつ rotation が同時に非ゼロだと「先に反転、次に回転」で合成される', () => {
+  // 実際の描画（例: EnemyDrone.draw()）は
+  //   translate(center) → rotate(rotation) → scale(mirrored ? -1 : 1, 1)
+  // の順でキャンバス変換を積む。これは点への適用としては
+  // 「先に mirror → 次に rotate」（= R(θ)·M）と同じ。
+  //
+  // 機体中心 (12, 8) から見て相対座標 (10, 0) の点、θ = 90°、mirrored = true で手計算する:
+  //   1. mirror:  (10, 0) -> (-10, 0)
+  //   2. rotate 90°: (x,y) -> (x*cos90 - y*sin90, x*sin90 + y*cos90)
+  //                  (-10, 0) -> (-10*0 - 0*1, -10*1 + 0*0) = (0, -10)
+  // 機体は width=24, height=16 なので中心は (entity.x+12, entity.y+8)。
+  // よってワールド座標はその中心から (0, -10) だけ動いた
+  // (entity.x+12, entity.y-2) になるはず。
+  DEBRIS_SPECS['__mirror_rot__'] = {
+    holdFrames: 0, burst: 0,
+    rotation: () => Math.PI / 2,
+    // 機体中心 (12, 8) の真右 10px、角度 0.4 を持つ点
+    parts: [{ x: 22, y: 8, w: 2, h: 2, color: '#000', angle: 0.4 }],
+  };
+  const entity = makeEntity({ facingRight: false }); // mirrored = true
+  const [p] = buildDebris(entity, '__mirror_rot__');
+
+  assert.ok(Math.abs(p.x - (200 + 12 + 0)) < 1e-6, `x=${p.x}`);
+  assert.ok(Math.abs(p.y - (100 + 8 - 10)) < 1e-6, `y=${p.y}`);
+
+  // 角度も同じ順序: 先に mirror で符号反転(-0.4)、その後 rotation(90°) を加算
+  const expectedAngle = -0.4 + Math.PI / 2;
+  assert.ok(Math.abs(p.angle - expectedAngle) < 1e-9, `angle=${p.angle}`);
+
+  delete DEBRIS_SPECS['__mirror_rot__'];
+});
+
 test('getDebrisParts があればスペックの静的パーツより優先される', () => {
   const entity = makeEntity();
   entity.getDebrisParts = () => [{ x: 0, y: 0, w: 1, h: 1, color: '#FFF' }];

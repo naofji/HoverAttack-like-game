@@ -51,27 +51,39 @@ export function buildDebris(entity, kind) {
 
     const out = [];
     for (const part of parts) {
-        // 1. 機体中心まわりの回転（ドローンの傾きなど）
-        let lx = part.x;
-        let ly = part.y;
+        // 実際の描画（例: EnemyDrone.draw()）は
+        //   translate(center) → rotate(rotation) → scale(mirrored ? -1 : 1, 1)
+        // の順でキャンバス変換を積む。座標変換としては点に対して
+        // 「先に mirror → 次に rotate」の順で適用されるのと同じ（R(θ)·M）。
+        // ここも同じ順序で合成しないと、mirror と rotation が同時に
+        // 非ゼロのとき符号がずれる（R(θ)·M ≠ M·R(θ)）。
+
+        // 1. 機体中心からの相対座標
+        const dx = part.x - cx;
+        const dy = part.y - cy;
+
+        // 2. 向きの反転（先に mirror）
+        const mdx = mirrored ? -dx : dx;
+
+        // 3. 機体中心まわりの回転（ドローンの傾きなど。mirror の後に適用）
+        let rx = mdx;
+        let ry = dy;
         if (rotation !== 0) {
-            const dx = lx - cx;
-            const dy = ly - cy;
-            lx = cx + (dx * cos - dy * sin);
-            ly = cy + (dx * sin + dy * cos);
+            rx = mdx * cos - dy * sin;
+            ry = mdx * sin + dy * cos;
         }
 
-        // 2. 向きの反転
-        const worldX = entity.x + (mirrored ? entity.width - lx : lx);
-        const worldY = entity.y + ly;
+        const worldX = entity.x + cx + rx;
+        const worldY = entity.y + cy + ry;
 
-        let angle = (part.angle || 0) + rotation;
-        if (mirrored) angle = -angle;
+        let angle = mirrored ? -(part.angle || 0) : (part.angle || 0);
+        angle += rotation;
 
-        // 3. 初速 = 慣性 + 機体中心からの放射 / weight + 散らし
+        // 4. 初速 = 慣性 + 機体中心からの放射 / weight + 散らし
+        //    放射方向は上で mirror→rotate 済みの (rx, ry) をそのまま使う。
         const weight = part.weight || 1;
-        const radialX = (mirrored ? -(lx - cx) : (lx - cx));
-        const radialY = ly - cy;
+        const radialX = rx;
+        const radialY = ry;
         const radialLen = Math.hypot(radialX, radialY) || 1;
         const power = spec.burst / weight;
         const vx = (entity.vx || 0)
