@@ -1250,7 +1250,6 @@ export class EnemyAttacker {
     _collectLegPoses() {
         const style = this._legStyle();
         const isCrouching = this.crouching || this.burstCount > 0;
-        const crouchOffset = isCrouching ? 4 : 0;
         const hipY = 16;   // draw() の平行移動込みで見た絶対位置に合わせる
         const out = [];
         const push = (isNear, hipX, kneeX, kneeY, footX, footY) => {
