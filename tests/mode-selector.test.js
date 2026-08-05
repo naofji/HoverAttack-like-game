@@ -15,7 +15,25 @@ function stubCtx() {
     fillText(text, x, y) { texts.push({ text, x, y, fill: ctx.fillStyle }); },
     strokeRect(x, y, w, h) { rects.push({ x, y, w, h, stroke: ctx.strokeStyle, type: 'stroke' }); },
     fillRect(x, y, w, h) { rects.push({ x, y, w, h, fill: ctx.fillStyle, type: 'fill' }); },
+
+    // 選択枠は面取りしたパスで描かれるので、パスの外接矩形を矩形として記録する。
+    // こうしておくと「枠が1つだけ、選択色で引かれている」という検証はそのまま通る。
+    beginPath() { path.length = 0; },
+    closePath() {},
+    moveTo(x, y) { path.push({ x, y }); },
+    lineTo(x, y) { path.push({ x, y }); },
+    stroke() { const b = bbox(); if (b) rects.push({ ...b, stroke: ctx.strokeStyle, type: 'stroke' }); },
+    fill() { const b = bbox(); if (b) rects.push({ ...b, fill: ctx.fillStyle, type: 'fill' }); },
   };
+  const path = [];
+  function bbox() {
+    if (!path.length) return null;
+    const xs = path.map((p) => p.x);
+    const ys = path.map((p) => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  }
   return { ctx, texts, rects };
 }
 

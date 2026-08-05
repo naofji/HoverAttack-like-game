@@ -10,6 +10,7 @@ import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
+import { UI, font, glow, drawFrame } from './theme.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -27,30 +28,30 @@ export class ScreenRenderer {
 
         const canvas = this.game.canvas;
 
-        ctx.fillStyle = '#00FF00'; // Retro green
-        ctx.font = 'bold 16px "Space Mono", monospace';
+        // ロゴは画面の主役なので、いちばん強い発光をかける。
+        ctx.save();
+        ctx.fillStyle = UI.ok;
+        ctx.font = font('body', true);
         ctx.textAlign = 'left';
+        glow(ctx, UI.ok, 'hard');
 
-        // Approx character width for 16px Courier New is ~9.6px
-        const logoWidth = 72 * 9.6;
-        const startX = (canvas.width - logoWidth) / 2;
+        // 実測して中央に置く（従来は 1文字9.6px という近似だった）
+        const logoWidth = ctx.measureText(ASCII_LOGO[4]).width;
+        const startX = Math.round((canvas.width - logoWidth) / 2);
         const startY = canvas.height / 3 - 40;
 
         for (let i = 0; i < ASCII_LOGO.length; i++) {
             ctx.fillText(ASCII_LOGO[i], startX, startY + (i * 18));
         }
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px "Space Mono", monospace';
-        ctx.textAlign = 'center';
+        ctx.restore();
 
         // Blinking text
         if (Math.floor(Date.now() / 500) % 2 === 0) {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            ctx.font = font('sub', true);
+            ctx.textAlign = 'center';
+            glow(ctx, UI.info, 'mid');
             ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
@@ -67,15 +68,15 @@ export class ScreenRenderer {
     _drawModeSelector(ctx, canvas) {
         const rowY = canvas.height - 74;
         const GAP = 44;
-        const LABEL_FONT = 'bold 22px "Space Mono", monospace';
+        const LABEL_FONT = font('head', true);
 
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         // Key hint, so the selection is discoverable without pressing anything.
-        ctx.font = '11px "Space Mono", monospace';
-        ctx.fillStyle = '#666666';
+        ctx.font = font('micro');
+        ctx.fillStyle = UI.faint;
         ctx.fillText('[ A / D ]  SELECT MODE', canvas.width / 2, rowY - 34);
 
         // Lay the labels out around the centre of the canvas.
@@ -94,25 +95,19 @@ export class ScreenRenderer {
                 const boxW = width + 34;
                 const boxH = 38;
 
-                // Faint fill so the box reads as "filled in" even without the glow.
-                ctx.fillStyle = mode.color;
-                ctx.globalAlpha = 0.12;
-                ctx.fillRect(centerX - boxW / 2, rowY - boxH / 2, boxW, boxH);
-                ctx.globalAlpha = 1;
+                // 選択中は面取りフレーム＋発光で示す。角丸は使わない。
+                drawFrame(ctx, centerX - boxW / 2, rowY - boxH / 2, boxW, boxH,
+                    mode.color, { fill: UI.panelFill, glow: 'mid', cut: 8 });
 
-                ctx.strokeStyle = mode.color;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = mode.color;
-                ctx.shadowBlur = 12;
-                ctx.strokeRect(centerX - boxW / 2, rowY - boxH / 2, boxW, boxH);
-
+                ctx.save();
                 ctx.font = LABEL_FONT;
                 ctx.fillStyle = mode.color;
+                glow(ctx, mode.color, 'soft');
                 ctx.fillText(mode.label, centerX, rowY);
-                ctx.shadowBlur = 0;
+                ctx.restore();
             } else {
                 ctx.font = LABEL_FONT;
-                ctx.fillStyle = '#4A4A4A';
+                ctx.fillStyle = UI.faint;
                 ctx.fillText(mode.label, centerX, rowY);
             }
 
@@ -121,14 +116,14 @@ export class ScreenRenderer {
 
         // Arrows flanking the row, so it reads as a left/right selection.
         const rowLeft = (canvas.width - rowWidth) / 2;
-        ctx.font = 'bold 20px "Space Mono", monospace';
-        ctx.fillStyle = '#888888';
+        ctx.font = font('sub', true);
+        ctx.fillStyle = UI.dim;
         ctx.fillText('◀', rowLeft - 34, rowY);
         ctx.fillText('▶', rowLeft + rowWidth + 34, rowY);
 
         // What the selected mode actually changes.
-        ctx.font = '13px "Space Mono", monospace';
-        ctx.fillStyle = '#9AA0A6';
+        ctx.font = font('small');
+        ctx.fillStyle = UI.dim;
         ctx.fillText(MODES[this.game.mode].desc, canvas.width / 2, rowY + 32);
 
         ctx.restore();
