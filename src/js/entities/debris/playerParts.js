@@ -5,13 +5,23 @@
 
 import { segmentPart } from './shapes.js';
 
-/** しゃがみ/ホバーで動かない部品。x, y はパーツ中心。 */
-export const PLAYER_STATIC_PARTS = [
-    { x: 10, y: 2.5, w: 8, h: 5, color: '#CCCCCC', weight: 1.0 },   // 頭部
-    { x: 10, y: 10, w: 10, h: 12, color: '#E8E8E8', weight: 1.6 },  // 胴体
-    { x: 4, y: 9, w: 4, h: 8, color: '#AAAAAA', weight: 1.0 },      // バックパック
-    { x: 4, y: 13, w: 4, h: 2, color: '#FF6600', weight: 0.5 },     // スラスター
-];
+/**
+ * しゃがみ/ホバーで動かない部品。x, y はパーツ中心。
+ * Player._drawBody() の fillRect と同じ crouchOffset を使って、
+ * しゃがみ中・ドッキング中は胴体一式を脚と同じだけ下げる
+ * （しゃがまないと頭部・胴体・バックパック・スラスターが直立時の位置のまま浮いてしまう）。
+ * @returns {Array}
+ */
+export function playerBodyParts(player) {
+    const isCrouched = player.crouching || player.docked;
+    const crouchOffset = isCrouched ? 8 : 0;   // Player.draw() が _drawBody に渡す crouchOffset と同じ
+    return [
+        { x: 10, y: crouchOffset + 2.5, w: 8, h: 5, color: '#CCCCCC', weight: 1.0 },                                          // 頭部
+        { x: 10, y: 4 + crouchOffset + (isCrouched ? 4 : 6), w: 10, h: isCrouched ? 8 : 12, color: '#E8E8E8', weight: 1.6 },  // 胴体
+        { x: 4, y: 5 + crouchOffset + (isCrouched ? 3 : 4), w: 4, h: isCrouched ? 6 : 8, color: '#AAAAAA', weight: 1.0 },     // バックパック
+        { x: 4, y: (isCrouched ? 10 : 12) + crouchOffset + 1, w: 4, h: 2, color: '#FF6600', weight: 0.5 },                    // スラスター
+    ];
+}
 
 /**
  * 死亡時の脚のポーズを破片にする。
@@ -68,5 +78,4 @@ export function playerWeaponParts(player) {
 export const playerDebris = {
     holdFrames: 5,   // 自機の破壊は重い出来事なので、はっきりタメる
     burst: 2.6,
-    parts: PLAYER_STATIC_PARTS,
 };

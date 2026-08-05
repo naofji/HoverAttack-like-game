@@ -20,7 +20,7 @@ import {
 import { shouldStartMGReload } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
-import { PLAYER_STATIC_PARTS, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
+import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -523,7 +523,7 @@ export class Player {
     /** 破壊時の破片パーツ。静的部位に、死亡時のポーズを焼き込んだ脚と武装を足す。 */
     getDebrisParts() {
         return [
-            ...PLAYER_STATIC_PARTS,
+            ...playerBodyParts(this),
             ...playerLegParts(this),
             ...playerWeaponParts(this),
         ];

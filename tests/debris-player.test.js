@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { buildDebris, DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
-import { PLAYER_WIDTH, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
-import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
+import { playerBodyParts } from '../src/js/entities/debris/playerParts.js';
+import { PLAYER_WIDTH } from '../src/js/utils/Constants.js';
+import { makeFakeCtx, extractPolylines, extractFillRectsWithColor } from './helpers/fake-ctx.js';
 
 function makeGame() {
   return {
@@ -50,11 +51,30 @@ test('getDebrisParts が静的パーツ・脚・武装をすべて返す', () =>
   }
 });
 
-test('パーツが機体枠から極端に外れていない', () => {
-  const p = makePlayer();
-  for (const part of p.getDebrisParts()) {
-    assert.ok(part.x >= -PLAYER_WIDTH && part.x <= PLAYER_WIDTH * 2, `x=${part.x}`);
-    assert.ok(part.y >= -PLAYER_HEIGHT && part.y <= PLAYER_HEIGHT * 2, `y=${part.y}`);
+// しゃがみ/ドッキング中は Player._drawBody() が胴体一式を crouchOffset ぶん
+// 下げて描く。playerBodyParts() がそれを追わずに直立座標を返し続けると、
+// しゃがみ死亡時に胴体だけ脚から浮いた破片になる（過去に実際に起きた不具合）。
+// 直立・しゃがみ両方で、パーツ定義の中心が実際の fillRect の中心と一致することを固定する。
+test('playerBodyParts の座標は直立・しゃがみ両方で _drawBody() の fillRect と一致する', () => {
+  for (const isCrouched of [false, true]) {
+    const p = makePlayer({ crouching: isCrouched, docked: false });
+    p.facingRight = true;
+    p.invincibleTimer = 0;
+
+    const ctx = makeFakeCtx();
+    p.draw(ctx);
+    const rects = extractFillRectsWithColor(ctx.calls);
+
+    for (const part of playerBodyParts(p)) {
+      const found = rects.some((r) => {
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h / 2;
+        return r.color === part.color &&
+          Math.abs(cx - part.x) < 1e-6 && Math.abs(cy - part.y) < 1e-6 &&
+          Math.abs(r.w - part.w) < 1e-6 && Math.abs(r.h - part.h) < 1e-6;
+      });
+      assert.ok(found, `isCrouched=${isCrouched}: 描画に一致する矩形が無い part=${JSON.stringify(part)}`);
+    }
   }
 });
 
@@ -118,11 +138,15 @@ test('_collectLegPoses が実際に描かれた脚のポリラインと一致す
     const near = (a, b) => Math.abs(a - b) < 1e-6;
 
     for (const pose of p._collectLegPoses()) {
+      // Player は hip→knee→foot を1本のポリラインで描く（line[0]=股関節,
+      // line[1]=膝, line[2]=足首）。膝までしか見ないと、足首側の座標だけ
+      // ズレても検出できない。
       const found = drawn.some((line) =>
-        line.length >= 2 &&
+        line.length >= 3 &&
         near(line[0].x, pose.hipX) && near(line[0].y, pose.hipY) &&
-        near(line[1].x, pose.kneeX) && near(line[1].y, pose.kneeY));
-      assert.ok(found, `${label}: 描画に一致する脚が無い hip=(${pose.hipX},${pose.hipY}) knee=(${pose.kneeX},${pose.kneeY})`);
+        near(line[1].x, pose.kneeX) && near(line[1].y, pose.kneeY) &&
+        near(line[2].x, pose.footX) && near(line[2].y, pose.footY));
+      assert.ok(found, `${label}: 描画に一致する脚が無い hip=(${pose.hipX},${pose.hipY}) knee=(${pose.kneeX},${pose.kneeY}) foot=(${pose.footX},${pose.footY})`);
     }
   }
 });
