@@ -23,7 +23,7 @@ import {
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
-    STAGE_PALETTES, DEBRIS_MAX_ACTIVE
+    STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -45,6 +45,7 @@ import { ScreenRenderer } from './ui/ScreenRenderer.js';
 import { CollisionManager } from './systems/CollisionManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
+import { DeathHold } from './systems/DeathHold.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
 import { StageRankingManager, pickStageRanking } from './systems/StageRankingManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
@@ -84,6 +85,7 @@ export const Game = {
     collisionManager: null,
     spawnManager: null,
     stateManager: null,
+    deathHold: null,
     screenRenderer: null,
     highScoreManager: null,
 
@@ -163,6 +165,7 @@ export const Game = {
         this.collisionManager = new CollisionManager(this);
         this.spawnManager = new SpawnManager(this);
         this.stateManager = new GameStateManager(this);
+        this.deathHold = new DeathHold(DEATH_HOLD_FRAMES);
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
         this.stageRankingManager = new StageRankingManager(this.week.weekId);
@@ -546,6 +549,7 @@ export const Game = {
         this._snapshotPrevPositions();
         this._updateCarrier();
         this._updatePlayer();
+        this._updateDeathHold();
         this._updateCamera();
         this._updateProjectiles();
         this._updateParticles();
@@ -603,28 +607,55 @@ export const Game = {
             : Math.max(0, this.miniMapAlpha - fadeSpeed);
     },
 
+    /**
+     * 自機・母艦の破壊演出のホールドを進める。
+     * ホールド中はリスポーンもゲームオーバー遷移もしない（_updatePlayer /
+     * _updateCarrier がそれを見て待つ）。明けた tick で通常の後始末が走る。
+     * シミュレーション自体は止めないので、破片や爆発はその間も動き続ける。
+     */
+    _updateDeathHold() {
+        this.deathHold.tick();
+
+        if (this.deathHold.active) return;
+
+        // ホールドが明けた（あるいは最初から無い）ので、死んだままの対象を後始末する。
+        // 母艦を先に見るのは、自機のリスポーン先が母艦だから。
+        if (this.carrier && !this.carrier.alive) {
+            if (this.carrier.lives > 0) this.stateManager.respawnCarrier();
+            else this._triggerGameOver();
+        }
+        if (this.player && !this.player.alive) {
+            if (this.player.lives > 0) this.stateManager.respawnPlayer();
+            else this._triggerGameOver();
+        }
+    },
+
+    /** 自機・母艦が壊れた最初の tick でホールドを立てる。 */
+    _beginDeathHoldIfDestroyed(entity) {
+        if (!entity || entity.alive || this.deathHold.active) return;
+        this.deathHold.begin(
+            entity.x + entity.width / 2,
+            entity.y + entity.height / 2,
+        );
+    },
+
     _updateCarrier() {
         if (!this.carrier) return;
         this.carrier.update();
-        if (!this.carrier.alive && this.carrier.lives > 0) {
-            this.stateManager.respawnCarrier();
-        } else if (!this.carrier.alive && this.carrier.lives <= 0) {
-            this._triggerGameOver();
-        }
+        this._beginDeathHoldIfDestroyed(this.carrier);
     },
 
     _updatePlayer() {
         if (!this.player) return;
         this.player.update();
-        if (!this.player.alive && this.player.lives > 0) {
-            this.stateManager.respawnPlayer();
-        } else if (!this.player.alive && this.player.lives <= 0) {
-            this._triggerGameOver();
-        }
+        this._beginDeathHoldIfDestroyed(this.player);
     },
 
     _updateCamera() {
-        if (this.player && !this.player.docked && this.player.alive) {
+        // 破壊演出中は撃破地点に留まる（リスポーン先へ視点が飛ばない）
+        if (this.deathHold.active) {
+            this.camera.follow(this.deathHold.focus);
+        } else if (this.player && !this.player.docked && this.player.alive) {
             this.camera.follow(this.player);
         } else if (this.carrier && this.carrier.alive) {
             this.camera.follow(this.carrier);

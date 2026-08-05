@@ -382,6 +382,12 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 
+// --- Death Hold ---
+// 自機・母艦の破壊時、演出を見せるためにリスポーン／ゲームオーバー遷移／
+// カメラの切り替えを止める長さ。破片の寿命が最長 75 tick なので、
+// 破片が消えきるところまで見える 90 tick（60fps で 1.5 秒）とする。
+export const DEATH_HOLD_FRAMES = 90;
+
 // --- Destruction Debris ---
 // 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
 export const DEBRIS_GRAVITY = 0.22;        // per frame, 通常の GRAVITY より軽い（滞空を長めに見せる）

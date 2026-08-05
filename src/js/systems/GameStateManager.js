@@ -48,6 +48,10 @@ export class GameStateManager {
         game.flag = null;
         game.gameState = 'playing';
 
+        // 前ステージの破壊演出が残っていると、新ステージの開幕でカメラが
+        // 前の撃破地点に釘付けになる
+        if (game.deathHold) game.deathHold.clear();
+
         // Clear any emergency-defense alert from a previous mission before
         // spawning fresh enemies below, so new spawns don't inherit a stale flag.
         game.baseEmergencyAlert = false;
