@@ -2,18 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEBRIS_SPECS, buildDebris } from '../src/js/entities/debris/index.js';
 import { turretBaseParts, turretHeadParts } from '../src/js/entities/debris/turretParts.js';
+import { EnemyTurret } from '../src/js/entities/EnemyTurret.js';
+import { makeMap, makeGame, flatFloorRows } from './helpers/enemy-world.js';
 import {
-  ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
   ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
 } from '../src/js/utils/Constants.js';
 
-test('tank のパーツが機体枠に概ね収まる', () => {
+test('tank のパーツが基本的な形を満たす（座標と draw() の一致は debris-static-parts-match-draw.test.js で検証）', () => {
   const spec = DEBRIS_SPECS.tank;
   assert.ok(spec);
   assert.ok(spec.parts.length >= 5, `パーツが少なすぎる: ${spec.parts.length}`);
   for (const p of spec.parts) {
-    assert.ok(p.x >= -ENEMY_TANK_WIDTH && p.x <= ENEMY_TANK_WIDTH * 2, `x=${p.x}`);
-    assert.ok(p.y >= -ENEMY_TANK_HEIGHT && p.y <= ENEMY_TANK_HEIGHT * 2, `y=${p.y}`);
     assert.ok(p.w > 0 && p.h > 0);
   }
 });
@@ -42,12 +41,14 @@ test('turret の旋回体は currentAngle を反映する', () => {
   );
 });
 
-test('turret の破片は基部と旋回体の両方を含む', () => {
-  const turret = {
-    x: 300, y: 400, width: ENEMY_TURRET_WIDTH, height: ENEMY_TURRET_HEIGHT,
-    vx: 0, vy: 0, currentAngle: 0.3, recoil: 0, isCeilingMounted: false,
-    getDebrisParts() { return [...turretBaseParts(this), ...turretHeadParts(this)]; },
-  };
+test('turret の破片は基部と旋回体の両方を含む（実クラスの getDebrisParts() を使う）', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const turret = new EnemyTurret(game, 300, 400, false);
+  turret.currentAngle = 0.3;
+  turret.recoil = 0;
+  assert.equal(turret.width, ENEMY_TURRET_WIDTH);
+  assert.equal(turret.height, ENEMY_TURRET_HEIGHT);
+
   const debris = buildDebris(turret, 'turret');
   assert.ok(debris.length >= 5, `破片が少なすぎる: ${debris.length}`);
 });
