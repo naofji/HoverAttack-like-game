@@ -11,7 +11,8 @@ import { DebrisPart } from '../DebrisPart.js';
 import {
     DEBRIS_LIFETIME, DEBRIS_LIFETIME_JITTER,
     DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
-    DEBRIS_SUBDIVIDE, DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPREAD_JITTER,
+    DEBRIS_SPLIT_PIECES, DEBRIS_SPLIT_MIN_SIZE, DEBRIS_SPLIT_RATIO_JITTER,
+    DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPREAD_JITTER,
     DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER, DEBRIS_SPLIT_SPIN_VARY,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
@@ -118,56 +119,102 @@ export function buildDebris(entity, kind) {
 }
 
 /**
- * 1つのパーツを DEBRIS_SUBDIVIDE x DEBRIS_SUBDIVIDE の破片に割って push する。
- * 分割片のローカルオフセットはパーツの回転角ぶん回してからワールドに置くので、
- * 傾いたパーツもその向きのまま格子状に割れる。
+ * 矩形を「いちばん面積の大きい片の長い辺を、ランダムな比率で2つに割る」を
+ * 繰り返して砕く（ギロチン分割）。均等な格子と違って大きさがまちまちになり、
+ * かつ分割片は元の矩形を隙間なく・重なりなく埋める（面積の合計が保存される）。
  *
- * 4片がまったく同じ動きをすると全パーツが同じ開き方になって単調に見えるため、
+ * 辺が DEBRIS_SPLIT_MIN_SIZE の2倍未満になった片はそれ以上割らないので、
+ * 小さなパーツ（バイザーなど）が視認できない点まで砕けることはない。
+ *
+ * @param {number} w 元の矩形の幅
+ * @param {number} h 元の矩形の高さ
+ * @returns {Array<{cx:number,cy:number,w:number,h:number}>} 矩形中心を原点とした分割片
+ */
+export function splitRect(w, h) {
+    const pieces = [{ cx: 0, cy: 0, w, h }];
+
+    while (pieces.length < DEBRIS_SPLIT_PIECES) {
+        // まだ割れる片のうち、いちばん面積の大きいものを選ぶ
+        let target = -1;
+        let largest = 0;
+        for (let i = 0; i < pieces.length; i++) {
+            const r = pieces[i];
+            if (Math.max(r.w, r.h) < DEBRIS_SPLIT_MIN_SIZE * 2) continue;
+            const area = r.w * r.h;
+            if (area > largest) {
+                largest = area;
+                target = i;
+            }
+        }
+        if (target < 0) break;   // これ以上割れない
+
+        const r = pieces.splice(target, 1)[0];
+        const alongX = r.w >= r.h;          // 長い辺を割る
+        const len = alongX ? r.w : r.h;
+
+        // 分割位置。どちら側も MIN_SIZE を下回らないよう内側へ寄せる
+        const minT = DEBRIS_SPLIT_MIN_SIZE / len;
+        let t = 0.5 + (Math.random() - 0.5) * DEBRIS_SPLIT_RATIO_JITTER;
+        t = Math.max(minT, Math.min(1 - minT, t));
+
+        const a = len * t;
+        const b = len - a;
+        if (alongX) {
+            pieces.push({ cx: r.cx - r.w / 2 + a / 2, cy: r.cy, w: a, h: r.h });
+            pieces.push({ cx: r.cx + r.w / 2 - b / 2, cy: r.cy, w: b, h: r.h });
+        } else {
+            pieces.push({ cx: r.cx, cy: r.cy - r.h / 2 + a / 2, w: r.w, h: a });
+            pieces.push({ cx: r.cx, cy: r.cy + r.h / 2 - b / 2, w: r.w, h: b });
+        }
+    }
+
+    return pieces;
+}
+
+/**
+ * 1つのパーツをギロチン分割して破片として push する。
+ * 分割片のローカルオフセットはパーツの回転角ぶん回してからワールドに置くので、
+ * 傾いたパーツもその向きのまま割れる。
+ *
+ * 分割片がまったく同じ動きをすると全パーツが同じ開き方になって単調に見えるため、
  * 開く強さ・等方な散らし・角速度を分割片ごとに乱数でずらす。散らしは速度と
  * 角速度にだけ乗せ、初期位置には乗せない（飛び出しの瞬間は元のパーツのかたちを
  * 保ち、飛びながらばらけて見せるため）。
  */
 function pushSubdivided(out, p) {
-    const n = DEBRIS_SUBDIVIDE;
-    const sw = p.w / n;
-    const sh = p.h / n;
     const cos = Math.cos(p.angle);
     const sin = Math.sin(p.angle);
 
-    for (let row = 0; row < n; row++) {
-        for (let col = 0; col < n; col++) {
-            // パーツ中心を原点とした、分割片の中心オフセット
-            const ox = (col - (n - 1) / 2) * sw;
-            const oy = (row - (n - 1) / 2) * sh;
+    for (const piece of splitRect(p.w, p.h)) {
+        // パーツの向きに合わせてオフセットを回す
+        const rx = piece.cx * cos - piece.cy * sin;
+        const ry = piece.cx * sin + piece.cy * cos;
 
-            // パーツの向きに合わせて回す
-            const rx = ox * cos - oy * sin;
-            const ry = ox * sin + oy * cos;
+        // 開く方向はパーツ中心から見た外向き。分割片がちょうど中心に乗った
+        // 場合（割れなかったパーツなど）はゼロ除算を避けて開かせない。
+        const len = Math.hypot(rx, ry);
+        const ux = len > 0 ? rx / len : 0;
+        const uy = len > 0 ? ry / len : 0;
 
-            // 開く方向はパーツ中心から見た外向き。中心に乗る分割片は無い
-            // （n が偶数なのでオフセットは必ず非ゼロ）が、念のため 0 を避ける。
-            const len = Math.hypot(rx, ry) || 1;
+        // 開く強さを片ごとにばらつかせる。負にはしないので、平均としては
+        // 必ず外向きに開く（= 元のかたちが保たれたまま散る）。
+        const spread = DEBRIS_SPLIT_SPREAD
+            * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPREAD_JITTER);
 
-            // 開く強さを片ごとにばらつかせる。負にはしないので、平均としては
-            // 必ず外向きに開く（= 元のかたちが保たれたまま散る）。
-            const spread = DEBRIS_SPLIT_SPREAD
-                * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPREAD_JITTER);
-
-            out.push(new DebrisPart({
-                x: p.worldX + rx,
-                y: p.worldY + ry,
-                w: sw, h: sh,
-                color: p.color,
-                angle: p.angle,
-                vx: p.vx + (rx / len) * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
-                vy: p.vy + (ry / len) * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
-                spin: p.spin * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_VARY)
-                    + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER,
-                holdFrames: p.holdFrames,
-                lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
-                game: p.game,
-            }));
-        }
+        out.push(new DebrisPart({
+            x: p.worldX + rx,
+            y: p.worldY + ry,
+            w: piece.w, h: piece.h,
+            color: p.color,
+            angle: p.angle,
+            vx: p.vx + ux * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
+            vy: p.vy + uy * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
+            spin: p.spin * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_VARY)
+                + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER,
+            holdFrames: p.holdFrames,
+            lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
+            game: p.game,
+        }));
     }
 }
 

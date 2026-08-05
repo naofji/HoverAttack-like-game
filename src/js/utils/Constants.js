@@ -390,7 +390,9 @@ export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
 export const DEBRIS_SPIN_SCALE = 0.06;     // 横方向初速 → 角速度への係数
 export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
-export const DEBRIS_MAX_ACTIVE = 560;      // 同時に存在できる破片の上限（1パーツ4分割ぶんを見込む）
+// 1機あたりの破片数は 32〜81 片（最多は artillery の4脚型）。
+// 上限 800 はおよそ10機ぶんで、地雷の誘爆による同時多数撃破でも足りる。
+export const DEBRIS_MAX_ACTIVE = 800;      // 同時に存在できる破片の上限
 export const DEBRIS_FLASH_COLOR = '#FFFFFF'; // ホールド中の白熱色
 export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎたら alpha を落とし始める
 
@@ -399,7 +401,11 @@ export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎた�
 // 4片が同じ動きをすると単調に見えるので、分割片ごとに散らしを効かせる。
 // 散らすのは速度と角速度だけで、初期位置には乗せない（飛び出しの瞬間は
 // 元のパーツのかたちを保ち、飛びながらばらけて見せるため）。
-export const DEBRIS_SUBDIVIDE = 2;         // 1パーツを SUBDIVIDE x SUBDIVIDE に分割
+// パーツは「長い辺をランダムな比率で割る」を繰り返して砕く（ギロチン分割）。
+// 均等な格子と違って大きさがまちまちになり、かつ元のパーツを隙間なく埋める。
+export const DEBRIS_SPLIT_PIECES = 8;      // 1パーツを最大この数まで割る
+export const DEBRIS_SPLIT_MIN_SIZE = 1.4;  // これ以下の辺になる分割はしない（点にならないように）
+export const DEBRIS_SPLIT_RATIO_JITTER = 0.5; // 分割位置の比率 0.5±JITTER/2（大きさのばらつき）
 export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）
 export const DEBRIS_SPLIT_SPREAD_JITTER = 0.7; // 上の倍率のばらつき幅（1±JITTER/2 倍）
 export const DEBRIS_SPLIT_JITTER = 0.5;    // 分割片ごとに速度へ加える等方な散らし

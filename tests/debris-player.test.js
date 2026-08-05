@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { buildDebris, DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 import { playerBodyParts } from '../src/js/entities/debris/playerParts.js';
-import { PLAYER_WIDTH, DEBRIS_SUBDIVIDE } from '../src/js/utils/Constants.js';
+import { PLAYER_WIDTH } from '../src/js/utils/Constants.js';
 import { makeFakeCtx, extractPolylines, extractFillRectsWithColor } from './helpers/fake-ctx.js';
 
 function makeGame() {
@@ -98,11 +98,16 @@ test('武装の種類でパーツが変わる', () => {
 test('左向きなら buildDebris でX座標が反転する', () => {
   const right = makePlayer({ facingRight: true });
   const left = makePlayer({ facingRight: false });
-  // 各パーツは 2x2 に割れる。先頭パーツぶんの分割片の重心が、元のパーツ中心。
-  const n = DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE;
-  const meanX = (debris) => debris.slice(0, n).reduce((a, d) => a + d.x, 0) / n;
-  const localX = meanX(buildDebris(right, 'player')) - right.x;
-  const mirroredX = meanX(buildDebris(left, 'player')) - left.x;
+  // 分割片は元のパーツを隙間なく埋めるので、面積で重み付けした重心は
+  // 分割前のパーツ中心と厳密に一致する。全パーツぶんの重心で比べれば、
+  // 反転がすべてのパーツに一様に効いていることを確かめられる。
+  const weightedX = (debris) => {
+    let area = 0; let x = 0;
+    for (const d of debris) { const a = d.w * d.h; area += a; x += d.x * a; }
+    return x / area;
+  };
+  const localX = weightedX(buildDebris(right, 'player')) - right.x;
+  const mirroredX = weightedX(buildDebris(left, 'player')) - left.x;
   assert.ok(Math.abs(mirroredX - (PLAYER_WIDTH - localX)) < 1e-9,
     `反転していない: ${mirroredX} vs ${PLAYER_WIDTH - localX}`);
 });

@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDebris, DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 import { segmentPart } from '../src/js/entities/debris/shapes.js';
-import { DEBRIS_SUBDIVIDE } from '../src/js/utils/Constants.js';
+import { DEBRIS_SPLIT_PIECES, DEBRIS_SPLIT_MIN_SIZE } from '../src/js/utils/Constants.js';
 
 /** 乱数の影響を消して変換だけを見るための最小エンティティ。 */
 function makeEntity(overrides = {}) {
@@ -14,20 +14,26 @@ function makeEntity(overrides = {}) {
 }
 
 /**
- * 1つのパーツは DEBRIS_SUBDIVIDE^2 個の破片に分割されて飛ぶ。
- * 分割片のオフセットはパーツ中心について対称なので、重心は元のパーツ中心と
- * 厳密に一致し、平均速度も元のパーツの速度と一致する。座標変換の検証は
- * この重心・平均に対して行えば、分割前と同じ精度で確かめられる。
+ * パーツはギロチン分割で大きさのまちまちな破片になる。分割片は元のパーツを
+ * 隙間なく埋めるので、**面積で重み付けした**重心は元のパーツ中心と厳密に一致する
+ * （単純平均は不均等分割では一致しない）。座標変換の検証はこの重心に対して
+ * 行えば、分割前と同じ精度で確かめられる。
  */
 function centroid(debris) {
-  const n = debris.length;
-  const sum = debris.reduce((acc, d) => ({
-    x: acc.x + d.x, y: acc.y + d.y, vx: acc.vx + d.vx, vy: acc.vy + d.vy,
-  }), { x: 0, y: 0, vx: 0, vy: 0 });
-  return { x: sum.x / n, y: sum.y / n, vx: sum.vx / n, vy: sum.vy / n, count: n };
+  let area = 0;
+  let x = 0; let y = 0; let vx = 0; let vy = 0;
+  for (const d of debris) {
+    const a = d.w * d.h;
+    area += a;
+    x += d.x * a;
+    y += d.y * a;
+    vx += d.vx * a;
+    vy += d.vy * a;
+  }
+  return { x: x / area, y: y / area, vx: vx / area, vy: vy / area, area };
 }
 
-/** 1パーツぶんの分割片が占める総面積は、元のパーツの面積と等しい。 */
+/** 分割片が占める総面積。元のパーツの面積と等しくなる（増減しない）。 */
 function totalArea(debris) {
   return debris.reduce((acc, d) => acc + d.w * d.h, 0);
 }
@@ -40,15 +46,45 @@ DEBRIS_SPECS[TEST_KIND] = {
   parts: [{ x: 4, y: 6, w: 8, h: 4, color: '#123456', weight: 1 }],
 };
 
-test('1つのパーツが 2x2 に分割され、面積の合計は元のパーツと等しい', () => {
+test('1つのパーツが複数に分割され、面積の合計は元のパーツと等しい', () => {
   const debris = buildDebris(makeEntity(), TEST_KIND);
-  assert.equal(debris.length, DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE);
-  assert.equal(totalArea(debris), 8 * 4, '分割で面積が増減してはいけない');
+  assert.ok(debris.length > 1, `分割されていない: ${debris.length}`);
+  assert.ok(debris.length <= DEBRIS_SPLIT_PIECES, `割りすぎ: ${debris.length}`);
+  assert.ok(Math.abs(totalArea(debris) - 8 * 4) < 1e-9, '分割で面積が増減してはいけない');
   for (const d of debris) {
-    assert.equal(d.w, 8 / DEBRIS_SUBDIVIDE);
-    assert.equal(d.h, 4 / DEBRIS_SUBDIVIDE);
     assert.equal(d.color, '#123456');
+    assert.ok(d.w > 0 && d.h > 0);
   }
+});
+
+test('分割片の大きさがまちまちになる', () => {
+  // 均等な格子だと全片が同じ面積になり、砕けた感じが出ない。
+  let sawUneven = false;
+  for (let i = 0; i < 20 && !sawUneven; i++) {
+    const areas = buildDebris(makeEntity(), TEST_KIND).map((d) => d.w * d.h);
+    sawUneven = (Math.max(...areas) - Math.min(...areas)) > 1e-6;
+  }
+  assert.ok(sawUneven, '分割片の面積がすべて同じ（均等分割になっている）');
+});
+
+test('分割片は元のパーツより小さい辺しか持たない', () => {
+  for (const d of buildDebris(makeEntity(), TEST_KIND)) {
+    assert.ok(d.w <= 8 + 1e-9, `幅が元より大きい: ${d.w}`);
+    assert.ok(d.h <= 4 + 1e-9, `高さが元より大きい: ${d.h}`);
+  }
+});
+
+test('小さすぎるパーツは点になるまで割られない', () => {
+  DEBRIS_SPECS['__tiny__'] = {
+    holdFrames: 0, burst: 0,
+    parts: [{ x: 12, y: 8, w: 2, h: 2, color: '#000' }],
+  };
+  const debris = buildDebris(makeEntity(), '__tiny__');
+  for (const d of debris) {
+    assert.ok(Math.min(d.w, d.h) >= DEBRIS_SPLIT_MIN_SIZE - 1e-9,
+      `${DEBRIS_SPLIT_MIN_SIZE}px 未満に砕けた: ${d.w}x${d.h}`);
+  }
+  delete DEBRIS_SPECS['__tiny__'];
 });
 
 test('分割片は平均として元のパーツ中心から外向きへ開く', () => {
@@ -180,7 +216,7 @@ test('getDebrisParts があればスペックの静的パーツより優先さ�
   const entity = makeEntity();
   entity.getDebrisParts = () => [{ x: 0, y: 0, w: 1, h: 1, color: '#FFF' }];
   const debris = buildDebris(entity, TEST_KIND);
-  assert.equal(debris.length, DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE, '1パーツぶんだけ出る');
+  assert.ok(debris.length >= 1 && debris.length <= DEBRIS_SPLIT_PIECES, '1パーツぶんだけ出る');
   assert.ok(debris.every((d) => d.color === '#FFF'));
 });
 
