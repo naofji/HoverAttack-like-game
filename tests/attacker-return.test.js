@@ -336,6 +336,21 @@ test('heavy/artillery standoff config matches the spec', () => {
   assert.equal(ATTACKER_COVER_MIN_DIST, 160);
 });
 
+/**
+ * artillery が遮蔽位置へ落ち着くのを待つフレーム数。
+ *
+ * EnemyAttacker の AI は Math.random() を直接使っており（初期の向き、1%で徘徊方向を
+ * 切り替える処理、ジャンプ判定など）、遮蔽に入りきるまでのフレーム数は毎回ぶれる。
+ * 900 では運の悪い乱数列が時間内に収まらず失敗していた。機能の不具合ではなく
+ * 余裕不足だったので、予算を増やして吸収する。
+ *
+ * この予算は「収束を待つ」テストだけに使う。下の heavy スタンドオフや
+ * Y軸アライメントは累積量・連続長の上限を見るテストなので、窓を伸ばすと
+ * 基準が変わってしまう（実測: heavy の closeFrames は窓900で最大174、
+ * 窓1500では最大585まで伸びた）。
+ */
+const SETTLE_FRAMES = 1500;
+
 test('heavy keeps its standoff distance instead of walking straight in', () => {
   const game = makeGame(makeMap(flatFloorRows()));
   game.player = makePlayer(24, FLOOR_Y); // far left on the same floor
@@ -394,7 +409,7 @@ test('artillery moves to a spot where terrain blocks line of sight and holds it'
   game.player = makePlayer(40, 14 * TILE_SIZE - 24); // on the platform
   const e = makeAttacker(game, 304, FLOOR_Y, 'artillery');
 
-  for (let i = 0; i < 900; i++) e.update();
+  for (let i = 0; i < SETTLE_FRAMES; i++) e.update();
 
   const cx = e.x + e.width / 2;
   const cy = e.y + e.height / 2;
@@ -411,7 +426,7 @@ test('artillery falls back to skirmish standoff on open ground', () => {
   game.player = makePlayer(40, FLOOR_Y);
   const e = makeAttacker(game, 340, FLOOR_Y, 'artillery');
 
-  for (let i = 0; i < 900; i++) e.update();
+  for (let i = 0; i < SETTLE_FRAMES; i++) e.update();
 
   const dx = Math.abs((game.player.x + 8) - (e.x + e.width / 2));
   assert.ok(dx >= 120 && dx <= 300, `standoff broken, dx=${dx}`);
@@ -421,7 +436,7 @@ test('artillery retreats when the player gets too close, even from cover', () =>
   const game = makeGame(makeMap(coverWorldRows()));
   game.player = makePlayer(40, 14 * TILE_SIZE - 24);
   const e = makeAttacker(game, 304, FLOOR_Y, 'artillery');
-  for (let i = 0; i < 900; i++) e.update(); // settle into cover
+  for (let i = 0; i < SETTLE_FRAMES; i++) e.update(); // settle into cover
 
   // Player hops down right next to the artillery
   game.player.x = e.x - 100;
