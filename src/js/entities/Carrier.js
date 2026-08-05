@@ -183,8 +183,8 @@ export class Carrier {
     }
 
     die() {
-        this.game.spawnDebris(this, 'carrier');
         this.alive = false;
+        this.game.spawnDebris(this, 'carrier');
         this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 25, { debrisSmoke: false });
         this.lives--;
 
