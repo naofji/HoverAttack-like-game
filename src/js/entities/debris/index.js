@@ -17,6 +17,7 @@ import { playerDebris } from './playerParts.js';
 import { tankDebris } from './tankParts.js';
 import { turretDebris } from './turretParts.js';
 import { attackerDebris } from './attackerParts.js';
+import { carrierDebris } from './carrierParts.js';
 
 // 呼び出し側の利便のために再エクスポートする。
 // ただし *Parts.js からは shapes.js を直接 import すること（循環参照になるため）。
@@ -29,6 +30,7 @@ export const DEBRIS_SPECS = {
     tank: tankDebris,
     turret: turretDebris,
     attacker: attackerDebris,
+    carrier: carrierDebris,
 };
 
 /** 既定の向き判定。facingRight を持たない機体はスペック側で上書きする。 */
