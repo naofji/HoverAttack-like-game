@@ -16,7 +16,8 @@ import {
     ENEMY_BASE_TURRET_BURST_DELAY,
     ENEMY_BASE_MISSILE_COOLDOWN,
     ENEMY_BASE_HOMING_COOLDOWN,
-    CRUISE_MISSILE_ACTIVATION_RANGE
+    CRUISE_MISSILE_ACTIVATION_RANGE,
+    BASE_FINALE_SHAKE_INTENSITY, BASE_FINALE_SHAKE_DURATION
 } from '../utils/Constants.js';
 import { BaseLaser } from './BaseLaser.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -24,6 +25,7 @@ import { Missile } from './Missile.js';
 import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { EnemyCruiseMissile } from './EnemyCruiseMissile.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { createBaseDestructionFx } from './BaseDestructionFx.js';
 
 export class EnemyBase {
     constructor(game, x, y) {
@@ -630,8 +632,18 @@ export class EnemyBase {
 
     _finishDestruction() {
         this.alive = false;
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
         // Final massive explosion
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 80);
+        this.game.spawnExplosion(cx, cy, 80);
+
+        // フィナーレ（閃光→集中線→衝撃波リング）。爆発より後に push することで
+        // パーティクルの描画順で手前に出る。
+        this.game.particles.push(...createBaseDestructionFx(cx, cy));
+        if (this.game.camera) {
+            this.game.camera.shake(BASE_FINALE_SHAKE_INTENSITY, BASE_FINALE_SHAKE_DURATION);
+        }
 
         // Emergency defense alert stays active even after base destruction so remaining
         // defenders continue their high-alert attack until stage clear / mission transition.

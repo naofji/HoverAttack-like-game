@@ -382,6 +382,20 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 
+// --- 敵基地破壊のフィナーレ演出 ---
+// 閃光 → 集中線 → 衝撃波リング の順に効き、寿命もこの順に長くなる。
+export const BASE_FINALE_FLASH_LIFETIME = 5;    // 閃光（爆発の起点を作る）
+export const BASE_FINALE_FLASH_RADIUS = 90;     // 閃光の最大半径
+export const BASE_FINALE_LINE_COUNT = 40;       // 集中線の本数
+export const BASE_FINALE_LINE_LIFETIME = 10;    // 集中線
+export const BASE_FINALE_LINE_INNER_MIN = 40;   // 線の内側の始点までの距離（下限）
+export const BASE_FINALE_LINE_INNER_MAX = 140;  // 同（上限）。1本ずつばらつかせる
+export const BASE_FINALE_RING_MAX_RADIUS = 320; // 衝撃波リングの到達半径
+export const BASE_FINALE_RING_LIFETIME = 30;    // 衝撃波リング
+export const BASE_FINALE_RING_WIDTH = 9;        // リングの初期の線幅（細くなっていく）
+export const BASE_FINALE_SHAKE_INTENSITY = 20;  // 小爆発の shake(8,3) より明確に強く
+export const BASE_FINALE_SHAKE_DURATION = 24;
+
 // --- Auto Aim: 偏差射撃 ---
 // 自機の武器は直進弾なので、動く敵には「弾が届くころに敵がいる場所」を狙わせる。
 export const AUTO_AIM_LEAD_STRENGTH = 0.5;   // 偏差の強さ 0..1。1 で完全に合わせる

@@ -100,6 +100,8 @@ function buildScenario({ missionsCompleted = 1 } = {}) {
     emergencyTargetBase: null,
     spawnSparks: () => {},
     spawnExplosion: () => {},
+    // _finishDestruction がフィナーレ演出を積む先
+    particles: [],
     triggerBaseEmergencyAlert: Game.triggerBaseEmergencyAlert
   };
 

@@ -31,6 +31,8 @@ function makeMockGame({ missionsCompleted = 1, enemies = [] } = {}) {
     emergencyTargetBase: null,
     spawnSparks: () => { },
     spawnExplosion: () => { },
+    // _finishDestruction がフィナーレ演出を積む先
+    particles: [],
     triggerAlertCalls: [],
     triggerBaseEmergencyAlert(base) {
       game.triggerAlertCalls.push(base);
