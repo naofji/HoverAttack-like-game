@@ -16,12 +16,10 @@ test('carrier スペックは大物らしいタメを持つ', () => {
   assert.ok(spec.holdFrames >= 5, `タメが短い: ${spec.holdFrames}`);
 });
 
-test('パーツが機体枠に概ね収まる', () => {
+test('パーツが基本的な形を満たす（座標と draw() の一致は debris-static-parts-match-draw.test.js で検証）', () => {
   const spec = DEBRIS_SPECS.carrier;
   assert.ok(spec.parts.length >= 6, `パーツが少なすぎる: ${spec.parts.length}`);
   for (const p of spec.parts) {
-    assert.ok(p.x >= -CARRIER_WIDTH && p.x <= CARRIER_WIDTH * 2, `x=${p.x}`);
-    assert.ok(p.y >= -CARRIER_HEIGHT && p.y <= CARRIER_HEIGHT * 2, `y=${p.y}`);
     assert.ok(p.w > 0 && p.h > 0);
   }
 });

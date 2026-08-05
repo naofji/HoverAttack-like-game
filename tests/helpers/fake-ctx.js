@@ -73,6 +73,31 @@ export function extractFillRects(calls) {
     .map((c) => ({ x: c.args[0], y: c.args[1], w: c.args[2], h: c.args[3] }));
 }
 
+/** arc 呼び出しだけを {x,y,radius} の配列で取り出す（円で描かれたパーツ用）。 */
+export function extractArcs(calls) {
+  return calls
+    .filter((c) => c.name === 'arc')
+    .map((c) => ({ x: c.args[0], y: c.args[1], radius: c.args[2] }));
+}
+
+/**
+ * fillRect 呼び出しを、その時点で有効な fillStyle 込みで取り出す
+ * ({x,y,w,h,color})。パーツ定義の座標「かつ」色が描画側に存在することを
+ * 確認したいときに使う。
+ */
+export function extractFillRectsWithColor(calls) {
+  const out = [];
+  let color = '';
+  for (const c of calls) {
+    if (c.name === 'set:fillStyle') {
+      color = c.args[0];
+    } else if (c.name === 'fillRect') {
+      out.push({ x: c.args[0], y: c.args[1], w: c.args[2], h: c.args[3], color });
+    }
+  }
+  return out;
+}
+
 /**
  * strokeStyle / fillStyle / lineWidth / lineCap / lineJoin への代入値を、
  * 代入された順番のまま取り出す。

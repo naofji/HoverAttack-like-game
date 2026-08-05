@@ -129,16 +129,13 @@ test('segmentPart は線分を回転矩形に変換する', () => {
   assert.equal(p.weight, 0.7);
 });
 
-test('EnemyDrone のパーツが機体枠から極端に外れていない', () => {
+test('EnemyDrone のパーツが基本的な形を満たす（座標と draw() の一致は debris-static-parts-match-draw.test.js で検証）', () => {
   const spec = DEBRIS_SPECS.drone;
   assert.ok(spec, 'drone スペックが登録されている');
   assert.ok(spec.parts.length >= 5, `パーツが少なすぎる: ${spec.parts.length}`);
-  const W = 24, H = 16;
   for (const part of spec.parts) {
     assert.ok(typeof part.color === 'string' && part.color.length > 0);
     assert.ok(part.w > 0 && part.h > 0);
-    assert.ok(part.x >= -W && part.x <= W * 2, `x が範囲外: ${part.x}`);
-    assert.ok(part.y >= -H && part.y <= H * 2, `y が範囲外: ${part.y}`);
   }
 });
 

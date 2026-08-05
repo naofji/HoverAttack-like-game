@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeMap, makeGame, makeAttacker } from './helpers/enemy-world.js';
 import { DEBRIS_SPECS, buildDebris } from '../src/js/entities/debris/index.js';
-import { ENEMY_ATTACKER_TYPES, PLAYER_WIDTH, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
+import { ENEMY_ATTACKER_TYPES } from '../src/js/utils/Constants.js';
 import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
 
 const FLAT = [
@@ -23,7 +23,9 @@ test('attackerDebris スペックが登録されている', () => {
   assert.ok(DEBRIS_SPECS.attacker.holdFrames >= 3);
 });
 
-test('全機種でパーツが生成され、機体枠から極端に外れない', () => {
+// 座標が draw() の fillRect と一致することは
+// debris-static-parts-match-draw.test.js が保証する。ここでは形の妥当性だけを見る。
+test('全機種でパーツが生成され、形が妥当', () => {
   for (const typeKey of Object.keys(ENEMY_ATTACKER_TYPES)) {
     const e = attackerOf(typeKey);
     const parts = e.getDebrisParts();
@@ -32,8 +34,6 @@ test('全機種でパーツが生成され、機体枠から極端に外れな�
       assert.ok(typeof p.color === 'string' && p.color.length > 0, `${typeKey}: 色が無い`);
       assert.ok(p.w > 0 && p.h > 0, `${typeKey}: サイズ不正 ${JSON.stringify(p)}`);
       assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y), `${typeKey}: 座標不正`);
-      assert.ok(p.x >= -PLAYER_WIDTH * 2 && p.x <= PLAYER_WIDTH * 3, `${typeKey}: x=${p.x}`);
-      assert.ok(p.y >= -PLAYER_HEIGHT && p.y <= PLAYER_HEIGHT * 2, `${typeKey}: y=${p.y}`);
     }
   }
 });
