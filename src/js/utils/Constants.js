@@ -456,3 +456,9 @@ export const DEBRIS_SPLIT_SPIN_VARY = 0.8; // 親の角速度に掛かる倍率�
 // 爆発の広がり。本物のパーツ破片を撒く機体では、爆発が破片を覆い隠さないよう
 // 粒子の初速と中央フラッシュを縮める（粒子数は減らさないので密度は保たれる）。
 export const EXPLOSION_SPREAD_WITH_DEBRIS = 0.6;
+
+// 自機の死だけは別格に扱う。全機体で最小(15)だったうえ広がりも 0.6 倍だったため、
+// 中央フラッシュが自機(16x24px)より小さくなり、破片の白熱シルエットに埋もれて
+// 「爆発が無い」ように見えていた。死亡ホールドで90tick見せる作りとも釣り合わない。
+export const PLAYER_DEATH_EXPLOSION_COUNT = 45;   // 他機体の最大(36)より多い
+export const PLAYER_DEATH_EXPLOSION_SPREAD = 0.9; // 破片は隠さないが確実に見える広さ

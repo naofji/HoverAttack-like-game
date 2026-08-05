@@ -12,6 +12,7 @@ import {
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
     HOVER_COOLDOWN_AFTER_BURST,
     PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES,
+    PLAYER_DEATH_EXPLOSION_COUNT,
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME,
@@ -21,7 +22,7 @@ import { shouldStartMGReload } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
-import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
+import { PLAYER_EXPLOSION_OPTS } from './Particle.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -438,7 +439,10 @@ export class Player {
         this.alive = false;
         this.game.spawnDebris(this, 'player');
         // Spawn explosion particles
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15, MACHINE_EXPLOSION_OPTS);
+        this.game.spawnExplosion(
+            this.x + this.width / 2, this.y + this.height / 2,
+            PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS,
+        );
         this.lives--;
 
         // Release lock-on when dead

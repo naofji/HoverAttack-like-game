@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createExplosion, MACHINE_EXPLOSION_OPTS } from '../src/js/entities/Particle.js';
+import {
+  createExplosion, MACHINE_EXPLOSION_OPTS, PLAYER_EXPLOSION_OPTS,
+} from '../src/js/entities/Particle.js';
+import {
+  PLAYER_DEATH_EXPLOSION_COUNT, EXPLOSION_PARTICLE_COUNT, PLAYER_WIDTH, PLAYER_HEIGHT,
+} from '../src/js/utils/Constants.js';
 
 test('既定では従来どおり灰色のデブリ粒子が混ざりうる', () => {
   let sawGrey = false;
@@ -51,4 +56,38 @@ test('破片を撒く機体の爆発は、既定より広がりが小さい', ()
   assert.ok(MACHINE_EXPLOSION_OPTS.spread < 1,
     `spread が絞られていない: ${MACHINE_EXPLOSION_OPTS.spread}`);
   assert.equal(MACHINE_EXPLOSION_OPTS.debrisSmoke, false);
+});
+
+// --- 自機の死の爆発 ----------------------------------------------------------
+// 実機で「自機の破壊に爆発が無いように見える」と報告された件の回帰テスト。
+// 爆発自体は出ていたが、全機体で最小(15粒子・フラッシュ半径8.3px)だったため、
+// 自機(16x24px)より小さく、破片の白熱シルエットに埋もれていた。
+
+/** createExplosion が積む中央フラッシュの半径。 */
+function flashRadius(count, opts) {
+  return createExplosion(0, 0, count, opts).find((p) => p.maxSize !== undefined).maxSize;
+}
+
+test('自機の死の爆発は他のどの機体よりも大きい', () => {
+  const player = flashRadius(PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
+  // 他機体の最大はアタッカー/戦車の EXPLOSION_PARTICLE_COUNT
+  const biggestEnemy = flashRadius(EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
+  assert.ok(player > biggestEnemy,
+    `自機の爆発が敵より小さい: ${player} vs ${biggestEnemy}`);
+});
+
+test('自機の死の爆発は自機の体格より確実に大きい', () => {
+  // これが破られると「爆発が無いように見える」状態に戻る。
+  // maxSize は半径なので、自機を囲む円の半径（対角の半分）と比べる。
+  const radius = flashRadius(PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
+  const playerRadius = Math.hypot(PLAYER_WIDTH, PLAYER_HEIGHT) / 2;
+  assert.ok(radius > playerRadius,
+    `フラッシュ半径(${radius.toFixed(1)})が自機を囲む円(${playerRadius.toFixed(1)})以下`);
+});
+
+test('自機の爆発も擬似デブリ粒子は混ぜない（本物の破片を撒くため）', () => {
+  for (let i = 0; i < 40; i++) {
+    const parts = createExplosion(0, 0, PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
+    assert.ok(!parts.some((p) => p.color === '#888888'));
+  }
 });
