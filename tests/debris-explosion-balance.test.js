@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createExplosion, MACHINE_EXPLOSION_OPTS, PLAYER_EXPLOSION_OPTS,
+  createExplosion, MACHINE_EXPLOSION_OPTS,
+  PLAYER_EXPLOSION_OPTS, CARRIER_EXPLOSION_OPTS,
 } from '../src/js/entities/Particle.js';
 import {
-  PLAYER_DEATH_EXPLOSION_COUNT, EXPLOSION_PARTICLE_COUNT, PLAYER_WIDTH, PLAYER_HEIGHT,
+  PLAYER_DEATH_EXPLOSION_COUNT, CARRIER_DEATH_EXPLOSION_COUNT,
+  EXPLOSION_PARTICLE_COUNT,
+  PLAYER_WIDTH, PLAYER_HEIGHT, CARRIER_WIDTH, CARRIER_HEIGHT,
 } from '../src/js/utils/Constants.js';
 
 test('既定では従来どおり灰色のデブリ粒子が混ざりうる', () => {
@@ -58,7 +61,7 @@ test('破片を撒く機体の爆発は、既定より広がりが小さい', ()
   assert.equal(MACHINE_EXPLOSION_OPTS.debrisSmoke, false);
 });
 
-// --- 自機の死の爆発 ----------------------------------------------------------
+// --- 自機・母艦の死の爆発 ----------------------------------------------------------
 // 実機で「自機の破壊に爆発が無いように見える」と報告された件の回帰テスト。
 // 爆発自体は出ていたが、全機体で最小(15粒子・フラッシュ半径8.3px)だったため、
 // 自機(16x24px)より小さく、破片の白熱シルエットに埋もれていた。
@@ -68,26 +71,43 @@ function flashRadius(count, opts) {
   return createExplosion(0, 0, count, opts).find((p) => p.maxSize !== undefined).maxSize;
 }
 
-test('自機の死の爆発は他のどの機体よりも大きい', () => {
-  const player = flashRadius(PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
-  // 他機体の最大はアタッカー/戦車の EXPLOSION_PARTICLE_COUNT
+test('自機・母艦の爆発は、どの敵機よりも大きい', () => {
+  // 敵機の最大はアタッカー/戦車の EXPLOSION_PARTICLE_COUNT
   const biggestEnemy = flashRadius(EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
-  assert.ok(player > biggestEnemy,
-    `自機の爆発が敵より小さい: ${player} vs ${biggestEnemy}`);
+  for (const [name, count, opts] of HOLD_MACHINES) {
+    const radius = flashRadius(count, opts);
+    assert.ok(radius > biggestEnemy,
+      `${name}の爆発が敵より小さい: ${radius.toFixed(1)} vs ${biggestEnemy.toFixed(1)}`);
+  }
 });
 
-test('自機の死の爆発は自機の体格より確実に大きい', () => {
+/**
+ * 死亡ホールドで90tick寄りで見せられるのは自機と母艦だけ。この2機は
+ * 「体格に対して爆発が十分大きい」ことを比で固定する。個別の粒子数で
+ * 縛ると、機体サイズや spread を変えたときに意味を失うため。
+ * maxSize は半径なので、機体を囲む円の半径（対角の半分）と比べる。
+ */
+const HOLD_MACHINES = [
+  ['自機', PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS, PLAYER_WIDTH, PLAYER_HEIGHT],
+  ['母艦', CARRIER_DEATH_EXPLOSION_COUNT, CARRIER_EXPLOSION_OPTS, CARRIER_WIDTH, CARRIER_HEIGHT],
+];
+
+test('死亡ホールドで見せる機体の爆発は、その体格より確実に大きい', () => {
   // これが破られると「爆発が無いように見える」状態に戻る。
-  // maxSize は半径なので、自機を囲む円の半径（対角の半分）と比べる。
-  const radius = flashRadius(PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
-  const playerRadius = Math.hypot(PLAYER_WIDTH, PLAYER_HEIGHT) / 2;
-  assert.ok(radius > playerRadius,
-    `フラッシュ半径(${radius.toFixed(1)})が自機を囲む円(${playerRadius.toFixed(1)})以下`);
+  // 母艦は 64x32 と最大の機体なのに比 0.27 まで小さくなっていた実績がある。
+  for (const [name, count, opts, w, h] of HOLD_MACHINES) {
+    const radius = flashRadius(count, opts);
+    const bodyRadius = Math.hypot(w, h) / 2;
+    assert.ok(radius > bodyRadius,
+      `${name}: フラッシュ半径(${radius.toFixed(1)})が機体を囲む円(${bodyRadius.toFixed(1)})以下`);
+  }
 });
 
-test('自機の爆発も擬似デブリ粒子は混ぜない（本物の破片を撒くため）', () => {
-  for (let i = 0; i < 40; i++) {
-    const parts = createExplosion(0, 0, PLAYER_DEATH_EXPLOSION_COUNT, PLAYER_EXPLOSION_OPTS);
-    assert.ok(!parts.some((p) => p.color === '#888888'));
+test('自機・母艦の爆発も擬似デブリ粒子は混ぜない（本物の破片を撒くため）', () => {
+  for (const [name, count, opts] of HOLD_MACHINES) {
+    for (let i = 0; i < 30; i++) {
+      const parts = createExplosion(0, 0, count, opts);
+      assert.ok(!parts.some((p) => p.color === '#888888'), `${name}に灰色の粒子が混ざった`);
+    }
   }
 });

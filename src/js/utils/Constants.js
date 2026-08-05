@@ -462,3 +462,9 @@ export const EXPLOSION_SPREAD_WITH_DEBRIS = 0.6;
 // 「爆発が無い」ように見えていた。死亡ホールドで90tick見せる作りとも釣り合わない。
 export const PLAYER_DEATH_EXPLOSION_COUNT = 45;   // 他機体の最大(36)より多い
 export const PLAYER_DEATH_EXPLOSION_SPREAD = 0.9; // 破片は隠さないが確実に見える広さ
+
+// 母艦も同じ理由で別格。しかも自機より深刻だった — 64x32px と最大の機体なのに
+// 粒子25・フラッシュ半径9.8px で、船体を囲む円(35.8px)の 0.27 倍しかなかった。
+// 自機と母艦だけが死亡ホールドで90tick寄りで見せられるので、この2つは体格に見合わせる。
+export const CARRIER_DEATH_EXPLOSION_COUNT = 100;
+export const CARRIER_DEATH_EXPLOSION_SPREAD = 1.3;

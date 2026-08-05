@@ -4,7 +4,7 @@
 
 import {
     PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT, EXPLOSION_SPREAD_WITH_DEBRIS,
-    PLAYER_DEATH_EXPLOSION_SPREAD,
+    PLAYER_DEATH_EXPLOSION_SPREAD, CARRIER_DEATH_EXPLOSION_SPREAD,
 } from '../utils/Constants.js';
 
 /**
@@ -23,6 +23,12 @@ export const MACHINE_EXPLOSION_OPTS = {
 export const PLAYER_EXPLOSION_OPTS = {
     debrisSmoke: false,
     spread: PLAYER_DEATH_EXPLOSION_SPREAD,
+};
+
+/** 母艦の死専用。最大の機体なので、いちばん広く取る。 */
+export const CARRIER_EXPLOSION_OPTS = {
+    debrisSmoke: false,
+    spread: CARRIER_DEATH_EXPLOSION_SPREAD,
 };
 
 // --------------------------------------------
