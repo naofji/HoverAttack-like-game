@@ -151,7 +151,7 @@ export class EnemyTurret {
     die() {
         this.alive = false;
         this.game.spawnDebris(this, 'turret');
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 30);
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 30, { debrisSmoke: false });
         this.game.addScore(ENEMY_TURRET_SCORE);
     }
 

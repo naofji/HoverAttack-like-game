@@ -425,7 +425,7 @@ export class EnemyDrone {
     die() {
         this.alive = false;
         this.game.spawnDebris(this, 'drone');
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 20);
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 20, { debrisSmoke: false });
         this.game.addScore(ENEMY_DRONE_SCORE);
     }
 

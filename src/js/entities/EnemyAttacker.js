@@ -984,7 +984,7 @@ export class EnemyAttacker {
         this.game.spawnDebris(this, 'attacker');
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
+        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, { debrisSmoke: false });
         this.game.addScore(this.score);
 
         // heavy は30%の確率でミサイル・サプライ・キットをドロップ

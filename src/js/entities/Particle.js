@@ -133,7 +133,16 @@ export class FlashParticle {
 // --------------------------------------------
 const EXPLOSION_COLORS = ['#FFFF00', '#FFAA00', '#FF6600', '#FFFFFF', '#FF4400'];
 
-export function createExplosion(x, y, count) {
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {number} count
+ * @param {object} [opts]
+ * @param {boolean} [opts.debrisSmoke=true] 灰色のデブリ粒子を混ぜるか。
+ *   本物のパーツ破片を撒く機体では false にして画面が濁るのを避ける。
+ */
+export function createExplosion(x, y, count, opts = {}) {
+    const { debrisSmoke = true } = opts;
     const particles = [];
 
     // Add a central flash
@@ -145,10 +154,10 @@ export function createExplosion(x, y, count) {
         const speed = 0.5 + Math.random() * (count > 50 ? 5 : 3);
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
-        
+
         // Variety of colors
         let color = EXPLOSION_COLORS[Math.floor(Math.random() * EXPLOSION_COLORS.length)];
-        if (Math.random() < 0.2) color = '#888888'; // Add some debris/smoke particles
+        if (debrisSmoke && Math.random() < 0.2) color = '#888888'; // Add some debris/smoke particles
 
         const size = 1 + Math.random() * 4;
         const lifetime = 15 + Math.floor(Math.random() * 25);

@@ -437,7 +437,7 @@ export class Player {
         this.alive = false;
         this.game.spawnDebris(this, 'player');
         // Spawn explosion particles
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15);
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15, { debrisSmoke: false });
         this.lives--;
 
         // Release lock-on when dead

@@ -1185,8 +1185,8 @@ export const Game = {
     },
 
     /** Spawn explosion particles and chain-detonate nearby landmines */
-    spawnExplosion(x, y, size) {
-        this.particles.push(...createExplosion(x, y, size));
+    spawnExplosion(x, y, size, opts) {
+        this.particles.push(...createExplosion(x, y, size, opts));
         audioManager.playExplosion(size > 10);
 
         for (const mine of this.landmines) {
