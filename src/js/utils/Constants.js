@@ -385,6 +385,7 @@ export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 // --- Destruction Debris ---
 // 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
 export const DEBRIS_GRAVITY = 0.22;        // per frame, 通常の GRAVITY より軽い（滞空を長めに見せる）
+export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以上は速くならない
 export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
 export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅

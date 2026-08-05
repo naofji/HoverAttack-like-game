@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DebrisPart } from '../src/js/entities/DebrisPart.js';
-import { DEBRIS_GRAVITY, DEBRIS_FLASH_COLOR } from '../src/js/utils/Constants.js';
+import {
+  DEBRIS_GRAVITY, DEBRIS_FLASH_COLOR, DEBRIS_MAX_FALL_SPEED,
+} from '../src/js/utils/Constants.js';
 import { makeFakeCtx, extractFillRects, extractSets } from './helpers/fake-ctx.js';
 
 /** 決定的なテストのため乱数要素をすべて明示指定した破片を作る。 */
@@ -43,6 +45,24 @@ test('重力で vy が単調増加する', () => {
     assert.ok(seen[i] > seen[i - 1], `vy が増えていない: ${seen}`);
   }
   assert.ok(Math.abs(seen[0] - DEBRIS_GRAVITY) < 1e-9);
+});
+
+test('落下速度は上限で頭打ちになる', () => {
+  // 上限に達するまで十分な時間を与える。lifetime は打ち切られないよう長めに。
+  const p = makePart({ vy: 0, lifetime: 500 });
+  for (let i = 0; i < 200; i++) {
+    p.update();
+    assert.ok(p.vy <= DEBRIS_MAX_FALL_SPEED + 1e-9, `上限を超えた: ${p.vy}`);
+  }
+  assert.ok(Math.abs(p.vy - DEBRIS_MAX_FALL_SPEED) < 1e-9,
+    `上限に張り付いていない: ${p.vy}`);
+});
+
+test('上限より速い初速で放り出されても、それ以上は加速しない', () => {
+  const p = makePart({ vy: DEBRIS_MAX_FALL_SPEED + 3, lifetime: 500 });
+  const start = p.vy;
+  p.update();
+  assert.ok(p.vy <= start, `上限超えの初速がさらに加速した: ${start} -> ${p.vy}`);
 });
 
 test('空気抵抗で横速度が減衰する', () => {

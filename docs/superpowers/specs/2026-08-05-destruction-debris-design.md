@@ -95,10 +95,13 @@
      + 機体中心からパーツ中心への方向 × 爆発力 / weight
      + 微小なランダム散らし
 
-毎tick: vy    += DEBRIS_GRAVITY
+毎tick: vy    = min(vy + DEBRIS_GRAVITY, DEBRIS_MAX_FALL_SPEED)
         vx    *= DEBRIS_DRAG
         angle += angularVelocity
 ```
+
+落下速度には上限（`DEBRIS_MAX_FALL_SPEED` = 4）を設ける。上限が無いと寿命の後半で
+破片が一直線に加速して画面外へ抜け、「散らばって漂う」感じが失われるため。
 
 角速度は初速の横成分に比例させる。勢いよく横へ飛んだ破片ほど速く回るため、慣性が視覚的に一貫する。
 

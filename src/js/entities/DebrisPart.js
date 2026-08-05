@@ -6,7 +6,8 @@
 // 当たり判定は一切持たず、地形も無視して落下し続ける純粋な演出。
 
 import {
-    DEBRIS_GRAVITY, DEBRIS_DRAG, DEBRIS_FLASH_COLOR, DEBRIS_FADE_START,
+    DEBRIS_GRAVITY, DEBRIS_DRAG, DEBRIS_MAX_FALL_SPEED,
+    DEBRIS_FLASH_COLOR, DEBRIS_FADE_START,
 } from '../utils/Constants.js';
 
 export class DebrisPart {
@@ -68,7 +69,7 @@ export class DebrisPart {
         // 局面2: 飛散。地形は見ない。
         this.x += this.vx;
         this.y += this.vy;
-        this.vy += DEBRIS_GRAVITY;
+        this.vy = Math.min(this.vy + DEBRIS_GRAVITY, DEBRIS_MAX_FALL_SPEED);
         this.vx *= DEBRIS_DRAG;
         this.angle += this.spin;
 
