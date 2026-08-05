@@ -381,3 +381,64 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 // --- Enemy missile hit knockback (smaller than a grenade) ---
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
+
+// --- Auto Aim: 偏差射撃 ---
+// 自機の武器は直進弾なので、動く敵には「弾が届くころに敵がいる場所」を狙わせる。
+export const AUTO_AIM_LEAD_STRENGTH = 0.5;   // 偏差の強さ 0..1。1 で完全に合わせる
+export const AUTO_AIM_LEAD_MAX_TICKS = 60;   // 予測してよい最大の飛行時間（1秒ぶん）
+export const AUTO_AIM_LEAD_ITERATIONS = 3;   // 飛行時間の収束計算の反復回数
+
+// 敵の速度は「窓のあいだの平均」で測る。
+// 地上の戦車は着地スナップの都合で中心Yが +0.3 / +0.6 / -0.9 の3tick周期で
+// 揺れており（実際には上下していない）、1tickの差分や指数平滑ではこれが残る。
+// 飛行時間（最大60tick）で増幅されると照準が激しく振動するため、
+// 周期の倍数を含む長さの窓で平均して往復を相殺する。
+export const AUTO_AIM_LEAD_WINDOW = 13;      // 速度を測る窓（サンプル数。区間は12）
+export const AUTO_AIM_LEAD_DEADZONE = 0.15;  // これ未満の速度は止まっているとみなす
+
+// リードマーカー（戦闘機の HUD 風）。照準は敵に据えたまま、着弾予定地点は
+// 破線と○で示す。照準ごと動かすと敵から外れて目障りなため分けている。
+export const LEAD_MARKER_MIN_OFFSET = 4;     // これ未満のずれならマーカーを出さない
+export const LEAD_MARKER_RADIUS = 5;         // リードサークルの半径
+export const LEAD_MARKER_DASH = [3, 3];      // 破線のパターン
+
+// --- Death Hold ---
+// 自機・母艦の破壊時、演出を見せるためにリスポーン／ゲームオーバー遷移／
+// カメラの切り替えを止める長さ。破片の寿命が最長 75 tick なので、
+// 破片が消えきるところまで見える 90 tick（60fps で 1.5 秒）とする。
+export const DEATH_HOLD_FRAMES = 90;
+
+// --- Destruction Debris ---
+// 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
+export const DEBRIS_GRAVITY = 0.22;        // per frame, 通常の GRAVITY より軽い（滞空を長めに見せる）
+export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以上は速くならない
+export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
+export const DEBRIS_LIFETIME = 55;         // frames
+export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
+export const DEBRIS_SPIN_SCALE = 0.06;     // 横方向初速 → 角速度への係数
+export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
+// 1機あたりの破片数は 32〜81 片（最多は artillery の4脚型）。
+// 上限 800 はおよそ10機ぶんで、地雷の誘爆による同時多数撃破でも足りる。
+export const DEBRIS_MAX_ACTIVE = 800;      // 同時に存在できる破片の上限
+export const DEBRIS_FLASH_COLOR = '#FFFFFF'; // ホールド中の白熱色
+export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎたら alpha を落とし始める
+
+// パーツはさらに 2x2 に割って飛ばす。「飛びながら砕ける」ように、4片は
+// 元パーツの速度を共有したうえで、パーツ中心から外向きへわずかに開く。
+// 4片が同じ動きをすると単調に見えるので、分割片ごとに散らしを効かせる。
+// 散らすのは速度と角速度だけで、初期位置には乗せない（飛び出しの瞬間は
+// 元のパーツのかたちを保ち、飛びながらばらけて見せるため）。
+// パーツは「長い辺をランダムな比率で割る」を繰り返して砕く（ギロチン分割）。
+// 均等な格子と違って大きさがまちまちになり、かつ元のパーツを隙間なく埋める。
+export const DEBRIS_SPLIT_PIECES = 8;      // 1パーツを最大この数まで割る
+export const DEBRIS_SPLIT_MIN_SIZE = 1.4;  // これ以下の辺になる分割はしない（点にならないように）
+export const DEBRIS_SPLIT_RATIO_JITTER = 0.5; // 分割位置の比率 0.5±JITTER/2（大きさのばらつき）
+export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）
+export const DEBRIS_SPLIT_SPREAD_JITTER = 0.7; // 上の倍率のばらつき幅（1±JITTER/2 倍）
+export const DEBRIS_SPLIT_JITTER = 0.5;    // 分割片ごとに速度へ加える等方な散らし
+export const DEBRIS_SPLIT_SPIN_JITTER = 0.10;  // 分割片ごとに角速度へ加える差
+export const DEBRIS_SPLIT_SPIN_VARY = 0.8; // 親の角速度に掛かる倍率のばらつき幅
+
+// 爆発の広がり。本物のパーツ破片を撒く機体では、爆発が破片を覆い隠さないよう
+// 粒子の初速と中央フラッシュを縮める（粒子数は減らさないので密度は保たれる）。
+export const EXPLOSION_SPREAD_WITH_DEBRIS = 0.6;

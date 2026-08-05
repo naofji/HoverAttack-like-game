@@ -23,7 +23,7 @@ import {
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
-    STAGE_PALETTES
+    STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -35,6 +35,7 @@ import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
+import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { EnemyDrone } from './entities/EnemyDrone.js';
@@ -44,12 +45,19 @@ import { ScreenRenderer } from './ui/ScreenRenderer.js';
 import { CollisionManager } from './systems/CollisionManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { GameStateManager } from './systems/GameStateManager.js';
+import { DeathHold } from './systems/DeathHold.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
 import { StageRankingManager, pickStageRanking } from './systems/StageRankingManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
-import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
+import {
+    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
+    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
+    AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
+    MISSILE_SPEED, PLAYER_MG_SPEED,
+} from './utils/Constants.js';
+import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
@@ -83,6 +91,7 @@ export const Game = {
     collisionManager: null,
     spawnManager: null,
     stateManager: null,
+    deathHold: null,
     screenRenderer: null,
     highScoreManager: null,
 
@@ -98,7 +107,9 @@ export const Game = {
     autoAimUnits: [],
     missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
+    autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
+    aimLead: new AimLeadTracker(AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE), // 偏差射撃用の敵速度計測
     grenadeTrajectory: null,   // 長押し中のグレネード軌道プレビュー {points, landX, landY}
     leftClickSuppress: false,  // グレネード投擲時の左クリック誤射防止用フラグ
     flag: null,
@@ -162,6 +173,7 @@ export const Game = {
         this.collisionManager = new CollisionManager(this);
         this.spawnManager = new SpawnManager(this);
         this.stateManager = new GameStateManager(this);
+        this.deathHold = new DeathHold(DEATH_HOLD_FRAMES);
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
         this.stageRankingManager = new StageRankingManager(this.week.weekId);
@@ -545,6 +557,7 @@ export const Game = {
         this._snapshotPrevPositions();
         this._updateCarrier();
         this._updatePlayer();
+        this._updateDeathHold();
         this._updateCamera();
         this._updateProjectiles();
         this._updateParticles();
@@ -602,28 +615,55 @@ export const Game = {
             : Math.max(0, this.miniMapAlpha - fadeSpeed);
     },
 
+    /**
+     * 自機・母艦の破壊演出のホールドを進める。
+     * ホールド中はリスポーンもゲームオーバー遷移もしない（_updatePlayer /
+     * _updateCarrier がそれを見て待つ）。明けた tick で通常の後始末が走る。
+     * シミュレーション自体は止めないので、破片や爆発はその間も動き続ける。
+     */
+    _updateDeathHold() {
+        this.deathHold.tick();
+
+        if (this.deathHold.active) return;
+
+        // ホールドが明けた（あるいは最初から無い）ので、死んだままの対象を後始末する。
+        // 母艦を先に見るのは、自機のリスポーン先が母艦だから。
+        if (this.carrier && !this.carrier.alive) {
+            if (this.carrier.lives > 0) this.stateManager.respawnCarrier();
+            else this._triggerGameOver();
+        }
+        if (this.player && !this.player.alive) {
+            if (this.player.lives > 0) this.stateManager.respawnPlayer();
+            else this._triggerGameOver();
+        }
+    },
+
+    /** 自機・母艦が壊れた最初の tick でホールドを立てる。 */
+    _beginDeathHoldIfDestroyed(entity) {
+        if (!entity || entity.alive || this.deathHold.active) return;
+        this.deathHold.begin(
+            entity.x + entity.width / 2,
+            entity.y + entity.height / 2,
+        );
+    },
+
     _updateCarrier() {
         if (!this.carrier) return;
         this.carrier.update();
-        if (!this.carrier.alive && this.carrier.lives > 0) {
-            this.stateManager.respawnCarrier();
-        } else if (!this.carrier.alive && this.carrier.lives <= 0) {
-            this._triggerGameOver();
-        }
+        this._beginDeathHoldIfDestroyed(this.carrier);
     },
 
     _updatePlayer() {
         if (!this.player) return;
         this.player.update();
-        if (!this.player.alive && this.player.lives > 0) {
-            this.stateManager.respawnPlayer();
-        } else if (!this.player.alive && this.player.lives <= 0) {
-            this._triggerGameOver();
-        }
+        this._beginDeathHoldIfDestroyed(this.player);
     },
 
     _updateCamera() {
-        if (this.player && !this.player.docked && this.player.alive) {
+        // 破壊演出中は撃破地点に留まる（リスポーン先へ視点が飛ばない）
+        if (this.deathHold.active) {
+            this.camera.follow(this.deathHold.focus);
+        } else if (this.player && !this.player.docked && this.player.alive) {
             this.camera.follow(this.player);
         } else if (this.carrier && this.carrier.alive) {
             this.camera.follow(this.carrier);
@@ -695,6 +735,7 @@ export const Game = {
     _updateAutoAim() {
         const player = this.player;
         this.autoAimTarget = null;
+        this.autoAimLeadPoint = null;
 
         // 常にマウス位置を記録しておく（ピックアップ直後に古い位置と比較して即キャンセルされるのを防ぐ）
         const mx = this.input.mouse.x;
@@ -706,6 +747,7 @@ export const Game = {
 
         if (!player || !player.alive || player.docked || player.autoAimTimer <= 0) {
             this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
             return;
         }
 
@@ -714,16 +756,13 @@ export const Game = {
         // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）
         if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD) {
             this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
             return;
         }
 
         // ロック中の敵が生存していればそのまま追跡
         if (this.autoAimLockedEnemy && this.autoAimLockedEnemy.alive) {
-            const e = this.autoAimLockedEnemy;
-            this.autoAimTarget = {
-                x: e.x + (e.width || 0) / 2,
-                y: e.y + (e.height || 0) / 2
-            };
+            this._lockOnEnemy(this.autoAimLockedEnemy);
             return;
         }
 
@@ -743,11 +782,47 @@ export const Game = {
         }
         if (bestEnemy) {
             this.autoAimLockedEnemy = bestEnemy;
-            this.autoAimTarget = {
-                x: bestEnemy.x + (bestEnemy.width || 0) / 2,
-                y: bestEnemy.y + (bestEnemy.height || 0) / 2
-            };
+            this._lockOnEnemy(bestEnemy);
+        } else {
+            this.aimLead.reset();
         }
+    },
+
+    /**
+     * ロック対象の照準位置と着弾予定地点を更新する。
+     *
+     * 照準（autoAimTarget）は敵の中心に据えたままにする。着弾予定地点まで
+     * 照準ごと動かすと、敵から外れた場所に照準が浮いて目障りになるため。
+     * 予測位置は autoAimLeadPoint として別に持ち、戦闘機の HUD のように
+     * 破線とリードサークルで示す（描画は Crosshair）。射撃はそちらを狙う。
+     */
+    _lockOnEnemy(enemy) {
+        const cx = enemy.x + (enemy.width || 0) / 2;
+        const cy = enemy.y + (enemy.height || 0) / 2;
+        this.autoAimTarget = { x: cx, y: cy };
+        this.autoAimLeadPoint = this._leadPointFor(enemy, cx, cy);
+    },
+
+    /**
+     * ロック中の敵に対する着弾予定地点。
+     * 自機の武器は直進弾なので、敵の現在位置を狙うと動く敵には当たらない。
+     */
+    _leadPointFor(enemy, cx, cy) {
+        const player = this.player;
+        const v = this.aimLead.measure(enemy);
+
+        return predictLeadPoint({
+            shooterX: player.x + player.width / 2,
+            shooterY: player.y + player.height / 2,
+            targetX: cx,
+            targetY: cy,
+            targetVx: v.vx,
+            targetVy: v.vy,
+            // 装備中の武器の弾速で予測する（ミサイルとマシンガンで偏差が変わる）
+            projectileSpeed: player.currentWeapon === 'missile' ? MISSILE_SPEED : PLAYER_MG_SPEED,
+            maxLeadTicks: AUTO_AIM_LEAD_MAX_TICKS,
+            strength: AUTO_AIM_LEAD_STRENGTH,
+        });
     },
 
     _updateEnemies() {
@@ -876,10 +951,16 @@ export const Game = {
         if (!player || !player.alive || player.docked) return;
         if (player.crouching || player.stunTimer > 0) return;
 
+        // 照準が指している点（グレネードの投擲と軌道プレビューはこちらを使う。
+        // 放物線で飛行時間も長いため、直進弾用の偏差を当てても正しくない）
         const targetWorld = this.autoAimTarget || this.input.getTargetWorld(this.camera);
+        // 直進弾が狙う点。Auto Aim 中は着弾予定地点、それ以外は照準と同じ
+        const fireWorld = this.autoAimLeadPoint || targetWorld;
+
         const px = player.x + player.width / 2;
         const py = player.y + player.height / 2;
         const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
+        const fireAngle = Math.atan2(fireWorld.y - py, fireWorld.x - px);
 
         // 左クリックが離されたら通常兵器の抑制を解除する
         if (!this.input.mouse.left) {
@@ -888,8 +969,8 @@ export const Game = {
 
         // Primary fire（長押し中および左クリック抑制中は通常兵器を抑制）
         if (!this.leftClickSuppress && !this.grenadeWasHeld && (this.input.mouse.left || this.input.isKeyDown('Space'))) {
-            if (player.currentWeapon === 'missile') this._fireMissile(player, px, py, angle);
-            else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, angle);
+            if (player.currentWeapon === 'missile') this._fireMissile(player, px, py, fireAngle);
+            else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, fireAngle);
         }
 
         // Secondary fire: Grenade（距離に応じた投擲強度）
@@ -1183,8 +1264,8 @@ export const Game = {
     },
 
     /** Spawn explosion particles and chain-detonate nearby landmines */
-    spawnExplosion(x, y, size) {
-        this.particles.push(...createExplosion(x, y, size));
+    spawnExplosion(x, y, size, opts) {
+        this.particles.push(...createExplosion(x, y, size, opts));
         audioManager.playExplosion(size > 10);
 
         for (const mine of this.landmines) {
@@ -1193,6 +1274,24 @@ export const Game = {
             const dy = (mine.y + mine.height / 2) - y;
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
         }
+    },
+
+    /**
+     * 破壊された機体のパーツを破片として撒く。
+     * 当たり判定は持たず、既存の particles 配列に相乗りするだけ。
+     * @param {object} entity 破壊された機体
+     * @param {string} kind DEBRIS_SPECS のキー
+     */
+    spawnDebris(entity, kind) {
+        const debris = buildDebris(entity, kind);
+        if (debris.length === 0) return;
+        this.particles.push(...debris);
+        this._trimDebris();
+    },
+
+    /** 破片の同時存在数を上限内に収める。古い破片から落とす。 */
+    _trimDebris() {
+        trimDebris(this.particles, DEBRIS_MAX_ACTIVE);
     },
 
     /** Spawn damage sparks at position */

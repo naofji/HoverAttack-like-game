@@ -12,6 +12,7 @@ import {
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class EnemyTank {
     constructor(game, x, y) {
@@ -237,10 +238,11 @@ export class EnemyTank {
 
     die() {
         this.alive = false;
+        this.game.spawnDebris(this, 'tank');
         // Explosion effect
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
+        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
         this.game.addScore(this.score);
     }
 

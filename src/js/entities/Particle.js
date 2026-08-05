@@ -2,7 +2,18 @@
 // Particle System - Explosions & Effects
 // ============================================
 
-import { PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT } from '../utils/Constants.js';
+import {
+    PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT, EXPLOSION_SPREAD_WITH_DEBRIS,
+} from '../utils/Constants.js';
+
+/**
+ * 本物のパーツ破片を撒く6機体（Player / Carrier / Drone / Tank / Turret / Attacker）が
+ * 共有する爆発オプション。擬似デブリ粒子を混ぜず、広がりを抑えて破片を隠さない。
+ */
+export const MACHINE_EXPLOSION_OPTS = {
+    debrisSmoke: false,
+    spread: EXPLOSION_SPREAD_WITH_DEBRIS,
+};
 
 // --------------------------------------------
 // Explosion Particle
@@ -133,22 +144,33 @@ export class FlashParticle {
 // --------------------------------------------
 const EXPLOSION_COLORS = ['#FFFF00', '#FFAA00', '#FF6600', '#FFFFFF', '#FF4400'];
 
-export function createExplosion(x, y, count) {
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {number} count
+ * @param {object} [opts]
+ * @param {boolean} [opts.debrisSmoke=true] 灰色のデブリ粒子を混ぜるか。
+ *   本物のパーツ破片を撒く機体では false にして画面が濁るのを避ける。
+ * @param {number} [opts.spread=1] 爆発の広がり倍率。粒子の初速と中央フラッシュの
+ *   大きさに乗る。粒子数は変えないので、下げると密度を保ったまま塊が小さくなる。
+ */
+export function createExplosion(x, y, count, opts = {}) {
+    const { debrisSmoke = true, spread = 1 } = opts;
     const particles = [];
 
     // Add a central flash
-    const flashSize = 10 + count / 4;
+    const flashSize = (10 + count / 4) * spread;
     particles.push(new FlashParticle(x, y, flashSize));
 
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 0.5 + Math.random() * (count > 50 ? 5 : 3);
+        const speed = (0.5 + Math.random() * (count > 50 ? 5 : 3)) * spread;
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
-        
+
         // Variety of colors
         let color = EXPLOSION_COLORS[Math.floor(Math.random() * EXPLOSION_COLORS.length)];
-        if (Math.random() < 0.2) color = '#888888'; // Add some debris/smoke particles
+        if (debrisSmoke && Math.random() < 0.2) color = '#888888'; // Add some debris/smoke particles
 
         const size = 1 + Math.random() * 4;
         const lifetime = 15 + Math.floor(Math.random() * 25);

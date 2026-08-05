@@ -23,6 +23,8 @@ import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
+import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -980,9 +982,10 @@ export class EnemyAttacker {
 
     die() {
         this.alive = false;
+        this.game.spawnDebris(this, 'attacker');
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
+        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
         this.game.addScore(this.score);
 
         // heavy は30%の確率でミサイル・サプライ・キットをドロップ
@@ -1002,6 +1005,11 @@ export class EnemyAttacker {
     // ------------------------------------------
     // Drawing (Player-style, color-swapped)
     // ------------------------------------------
+
+    /** 破壊時の破片パーツ。型別の胴体に、死亡時のポーズの脚を足す。 */
+    getDebrisParts() {
+        return [...attackerBodyParts(this), ...attackerLegParts(this)];
+    }
 
     draw(ctx) {
         if (!this.alive) return;
@@ -1233,6 +1241,105 @@ export class EnemyAttacker {
                 ...this._spiderPaint(leg, style),
             });
         }
+    }
+
+    /**
+     * 死亡時の脚の関節座標を集める（描画はしない）。
+     * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
+     * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
+     */
+    _collectLegPoses() {
+        const style = this._legStyle();
+        const isCrouching = this.crouching || this.burstCount > 0;
+        const hipY = 16;   // draw() の平行移動込みで見た絶対位置に合わせる
+        const out = [];
+        const push = (isNear, hipX, kneeX, kneeY, footX, footY) => {
+            out.push({
+                isNear, hipX, hipY, kneeX, kneeY, footX, footY,
+                lineWidth: style.lineWidth,
+            });
+        };
+
+        if (this.config.name === 'artillery') {
+            // 4脚クモ型。_drawSpiderWalk / _drawSpiderAir / _drawSpiderCrouch と
+            // 同じ分岐・同じ式で関節座標を求める（描画とズレると破片だけ別ポーズになる）。
+            if (isCrouching) {
+                const spread = style.crouchSpread;
+                for (const leg of SPIDER_LEGS) {
+                    const dir = leg.reach >= 0 ? 1 : -1;
+                    push(
+                        leg.isNear, leg.hipX,
+                        leg.hipX + dir * spread * 0.5, hipY - SPIDER_KNEE_RISE - 2,
+                        leg.hipX + leg.reach + dir * spread, hipY + SPIDER_FOOT_DROP,
+                    );
+                }
+                return out;
+            }
+
+            if (!this.onGround) {
+                const swing = this._hoverSwing();
+                const angle = swing * style.maxSwing;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                for (const leg of SPIDER_LEGS) {
+                    const curl = leg.group === 0 ? 0.6 : 0.8;
+                    const rot = (dx, dy) => ({
+                        x: leg.hipX + (dx * cos - dy * sin),
+                        y: hipY + (dx * sin + dy * cos),
+                    });
+                    const knee = rot(leg.reach * 0.5 * curl, -SPIDER_KNEE_RISE * curl);
+                    const foot = rot(leg.reach * curl, SPIDER_FOOT_DROP * curl);
+                    push(leg.isNear, leg.hipX, knee.x, knee.y, foot.x, foot.y);
+                }
+                return out;
+            }
+
+            for (const leg of SPIDER_LEGS) {
+                const phase = leg.group === 0 ? this.walkFrame : (this.walkFrame + 2) % 4;
+                const sweep = SPIDER_SWEEP[phase];
+                const lift = SPIDER_LIFT[phase];
+                push(
+                    leg.isNear, leg.hipX,
+                    leg.hipX + (leg.reach + sweep) * 0.5, hipY - SPIDER_KNEE_RISE,
+                    leg.hipX + leg.reach + sweep, hipY + SPIDER_FOOT_DROP - lift,
+                );
+            }
+            return out;
+        }
+
+        if (isCrouching) {
+            const spread = style.crouchSpread;
+            for (const [isNear, dir] of [[false, -1], [true, 1]]) {
+                const hipX = isNear ? style.hipNear : style.hipFar;
+                push(isNear, hipX, hipX + dir * (spread + 2), hipY + 4, hipX + dir * spread, hipY + 6);
+            }
+            return out;
+        }
+
+        if (!this.onGround) {
+            const swing = this._hoverSwing();
+            for (const [isNear, amount] of [[false, swing * 0.8 - style.phaseOffset], [true, swing]]) {
+                const hipX = isNear ? style.hipNear : style.hipFar;
+                const base = isNear ? AIR_BASE_POSE.near : AIR_BASE_POSE.far;
+                const angle = amount * style.maxSwing;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                const rot = (dx, dy) => ({ x: hipX + (dx * cos - dy * sin), y: hipY + (dx * sin + dy * cos) });
+                const knee = rot(base.kdx, base.kdy);
+                const foot = rot(base.fdx, base.fdy);
+                push(isNear, hipX, knee.x, knee.y, foot.x, foot.y);
+            }
+            return out;
+        }
+
+        const frame = WALK_FRAME_POSES[this.walkFrame] || WALK_FRAME_POSES[2];
+        for (const [isNear, poseIndex] of [[false, frame.far], [true, frame.near]]) {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            const p = LEG_POSES[poseIndex];
+            const s = style.strideScale;
+            push(isNear, hipX, hipX + p.kdx * s, hipY + p.kdy, hipX + p.fdx * s, hipY + p.fdy);
+        }
+        return out;
     }
 
     /** 2足型（standard / rival / heavy）の脚。しゃがみ／空中／歩行を振り分ける。 */

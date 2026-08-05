@@ -2,7 +2,10 @@
 // Crosshair - Mouse aiming reticle
 // ============================================
 
-import { COLOR_CROSSHAIR, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT } from '../utils/Constants.js';
+import {
+    COLOR_CROSSHAIR, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+    LEAD_MARKER_MIN_OFFSET, LEAD_MARKER_RADIUS, LEAD_MARKER_DASH,
+} from '../utils/Constants.js';
 
 export class Crosshair {
     constructor(game) {
@@ -97,6 +100,9 @@ export class Crosshair {
         ctx.fillStyle = color;
         ctx.fillRect(mx - 1, my - 1, 2, 2);
 
+        // リードマーカー（照準は敵に据えたまま、着弾予定地点だけを別に示す）
+        this._drawLeadMarker(ctx, mx, my, color);
+
         // AUTO ラベル（オートエイム有効中のみ）
         if (autoAimActive) {
             ctx.save();
@@ -155,5 +161,46 @@ export class Crosshair {
         }
 
         ctx.lineWidth = 1;
+    }
+
+    /**
+     * 着弾予定地点を戦闘機の HUD 風に示す。
+     * 照準（敵の中心）から予測地点まで破線を引き、その先にリードサークルを描く。
+     * 照準そのものは動かさないので、狙っている敵を見失わない。
+     *
+     * @param {number} tx 照準のスクリーン座標（＝ロック中の敵の中心）
+     * @param {number} ty
+     */
+    _drawLeadMarker(ctx, tx, ty, color) {
+        const lead = this.game.autoAimLeadPoint;
+        const target = this.game.autoAimTarget;
+        if (!lead || !target) return;
+
+        const camera = this.game.camera;
+        const lx = lead.x - camera.x;
+        const ly = lead.y - camera.y;
+
+        // ずれが小さいうちは出さない。止まっている敵に点が重なって見えるだけで、
+        // むしろちらついて目障りになる
+        if (Math.hypot(lx - tx, ly - ty) < LEAD_MARKER_MIN_OFFSET) return;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+
+        // 照準 → 予測地点の破線
+        ctx.setLineDash(LEAD_MARKER_DASH);
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(lx, ly);
+        ctx.stroke();
+
+        // 予測地点のリードサークル（破線は解除して実線で描く）
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(lx, ly, LEAD_MARKER_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
     }
 }

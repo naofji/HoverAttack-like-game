@@ -11,6 +11,7 @@ import {
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class Carrier {
     constructor(game, x, y) {
@@ -184,7 +185,8 @@ export class Carrier {
 
     die() {
         this.alive = false;
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 25);
+        this.game.spawnDebris(this, 'carrier');
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 25, MACHINE_EXPLOSION_OPTS);
         this.lives--;
 
         // Force undock player if docked

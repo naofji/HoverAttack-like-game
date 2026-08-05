@@ -20,6 +20,8 @@ import {
 import { shouldStartMGReload } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -434,8 +436,9 @@ export class Player {
 
     die() {
         this.alive = false;
+        this.game.spawnDebris(this, 'player');
         // Spawn explosion particles
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15);
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15, MACHINE_EXPLOSION_OPTS);
         this.lives--;
 
         // Release lock-on when dead
@@ -516,6 +519,15 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+    }
+
+    /** 破壊時の破片パーツ。静的部位に、死亡時のポーズを焼き込んだ脚と武装を足す。 */
+    getDebrisParts() {
+        return [
+            ...playerBodyParts(this),
+            ...playerLegParts(this),
+            ...playerWeaponParts(this),
+        ];
     }
 
     draw(ctx) {
@@ -611,7 +623,15 @@ export class Player {
         ctx.fillRect(9, 21, 5, 3);
     }
 
-    _drawSingleLeg(ctx, isNear, walkPose, hoverSwing) {
+    /**
+     * 脚1本の関節座標を求める（描画はしない）。
+     * 描画と破片生成の両方から使うので、ここが唯一の計算箇所。
+     * @param {boolean} isNear 手前脚か
+     * @param {number|null} walkPose 歩行ポーズ番号。ホバー中は null
+     * @param {number|null} hoverSwing ホバー中の振り子量 -1..+1。接地中は null
+     * @returns {{hipX:number,hipY:number,kx:number,ky:number,fx:number,fy:number}}
+     */
+    _legPose(isNear, walkPose, hoverSwing) {
         const hipX = isNear ? 10 : 7;
         const hipY = 16;
         let kx, ky, fx, fy;
@@ -638,6 +658,57 @@ export class Player {
                 case 3: kx = hipX + 4; ky = hipY + 1; fx = kx - 1; fy = 19; break;
             }
         }
+
+        return { hipX, hipY, kx, ky, fx, fy };
+    }
+
+    /**
+     * 死亡時の両脚の関節座標を集める（描画はしない）。
+     * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
+     * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
+     */
+    _collectLegPoses() {
+        const out = [];
+        const push = (isNear, pose) => {
+            out.push({
+                isNear,
+                hipX: pose.hipX, hipY: pose.hipY,
+                kneeX: pose.kx, kneeY: pose.ky,
+                footX: pose.fx, footY: pose.fy,
+                lineWidth: 3,
+            });
+        };
+
+        if (this.crouching || this.docked) {
+            // _drawCrouchedLegs の固定ポーズ（座標はそちらのポリラインと同一）
+            push(false, { hipX: 7, hipY: 16, kx: 2, ky: 20, fx: 6, fy: 22 });
+            push(true, { hipX: 10, hipY: 16, kx: 15, ky: 20, fx: 11, fy: 22 });
+            return out;
+        }
+
+        if (!this.onGround) {
+            let localVx = this.facingRight ? this.vx : -this.vx;
+            localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
+            const hoverSwing = localVx / PLAYER_MAX_SPEED;
+            push(false, this._legPose(false, null, hoverSwing * 0.8 - 0.2));
+            push(true, this._legPose(true, null, hoverSwing));
+            return out;
+        }
+
+        const WALK_POSES = [
+            { near: 0, far: 1 },
+            { near: 2, far: 3 },
+            { near: 2, far: 2 },
+            { near: 3, far: 2 },
+        ];
+        const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
+        push(false, this._legPose(false, pose.far, null));
+        push(true, this._legPose(true, pose.near, null));
+        return out;
+    }
+
+    _drawSingleLeg(ctx, isNear, walkPose, hoverSwing) {
+        const { hipX, hipY, kx, ky, fx, fy } = this._legPose(isNear, walkPose, hoverSwing);
 
         // Leg stroke
         ctx.strokeStyle = isNear ? '#DDDDDD' : '#AAAAAA';
@@ -683,15 +754,27 @@ export class Player {
         this._drawSingleLeg(ctx, true, pose.near, null);
     }
 
+    /**
+     * 武装の向き（機体ローカル、ラジアン）。
+     * 描画と破片生成の両方から使うので、ここが唯一の計算箇所。
+     * 照準情報が取れない場合（テスト等）は水平前方を返す。
+     * @param {number} crouchOffset
+     */
+    _aimAngle(crouchOffset) {
+        const input = this.game && this.game.input;
+        if (!input || typeof input.getTargetWorld !== 'function') return 0;
+
+        const targetWorld = input.getTargetWorld(this.game.camera);
+        const cx = Math.round(this.x) + this.width / 2;
+        const cy = Math.round(this.y) + 6 + crouchOffset;
+        const raw = Math.atan2(targetWorld.y - cy, targetWorld.x - cx);
+        return this.facingRight ? raw : Math.PI - raw;
+    }
+
     _drawBazooka(ctx, x, y, crouchOffset) {
-        const targetWorld = this.game.input.getTargetWorld(this.game.camera);
         const cx = x + this.width / 2;
         const cy = y + 6 + crouchOffset;
-
-        let rawAngle = Math.atan2(targetWorld.y - cy, targetWorld.x - cx);
-        if (!this.facingRight) {
-            rawAngle = Math.PI - rawAngle;
-        }
+        const rawAngle = this._aimAngle(crouchOffset);
 
         ctx.save();
         if (this.facingRight) {
@@ -719,14 +802,9 @@ export class Player {
     }
 
     _drawMachineGun(ctx, x, y, crouchOffset) {
-        const targetWorld = this.game.input.getTargetWorld(this.game.camera);
         const cx = x + this.width / 2;
         const cy = y + 6 + crouchOffset;
-
-        let rawAngle = Math.atan2(targetWorld.y - cy, targetWorld.x - cx);
-        if (!this.facingRight) {
-            rawAngle = Math.PI - rawAngle;
-        }
+        const rawAngle = this._aimAngle(crouchOffset);
 
         ctx.save();
         if (this.facingRight) {
