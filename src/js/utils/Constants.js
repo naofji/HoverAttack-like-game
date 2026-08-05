@@ -396,9 +396,15 @@ export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎた�
 
 // パーツはさらに 2x2 に割って飛ばす。「飛びながら砕ける」ように、4片は
 // 元パーツの速度を共有したうえで、パーツ中心から外向きへわずかに開く。
+// 4片が同じ動きをすると単調に見えるので、分割片ごとに散らしを効かせる。
+// 散らすのは速度と角速度だけで、初期位置には乗せない（飛び出しの瞬間は
+// 元のパーツのかたちを保ち、飛びながらばらけて見せるため）。
 export const DEBRIS_SUBDIVIDE = 2;         // 1パーツを SUBDIVIDE x SUBDIVIDE に分割
-export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速
-export const DEBRIS_SPLIT_SPIN_JITTER = 0.04; // 分割片ごとに角速度へ加える差
+export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）
+export const DEBRIS_SPLIT_SPREAD_JITTER = 0.7; // 上の倍率のばらつき幅（1±JITTER/2 倍）
+export const DEBRIS_SPLIT_JITTER = 0.5;    // 分割片ごとに速度へ加える等方な散らし
+export const DEBRIS_SPLIT_SPIN_JITTER = 0.10;  // 分割片ごとに角速度へ加える差
+export const DEBRIS_SPLIT_SPIN_VARY = 0.8; // 親の角速度に掛かる倍率のばらつき幅
 
 // 爆発の広がり。本物のパーツ破片を撒く機体では、爆発が破片を覆い隠さないよう
 // 粒子の初速と中央フラッシュを縮める（粒子数は減らさないので密度は保たれる）。

@@ -51,17 +51,39 @@ test('1つのパーツが 2x2 に分割され、面積の合計は元のパー�
   }
 });
 
-test('分割片は元のパーツ中心から外向きへ開く', () => {
-  const debris = buildDebris(makeEntity(), TEST_KIND);
-  const c = centroid(debris);
-  for (const d of debris) {
-    const ox = d.x - c.x;
-    const oy = d.y - c.y;
-    // 位置のオフセット方向と、速度の中心からのずれが同じ向きを指すこと
-    const dvx = d.vx - c.vx;
-    const dvy = d.vy - c.vy;
-    assert.ok(ox * dvx + oy * dvy > 0, `外向きに開いていない: pos=(${ox},${oy}) dv=(${dvx},${dvy})`);
+test('分割片は平均として元のパーツ中心から外向きへ開く', () => {
+  // 片ごとに乱数で散らしているので、1片単位では内向きになることもある。
+  // 「平均としては必ず外向き」であることを多数回の試行で確かめる。
+  let sum = 0;
+  let outward = 0;
+  let n = 0;
+  for (let i = 0; i < 300; i++) {
+    const debris = buildDebris(makeEntity(), TEST_KIND);
+    const c = centroid(debris);
+    for (const d of debris) {
+      const ox = d.x - c.x;
+      const oy = d.y - c.y;
+      const dot = ox * (d.vx - c.vx) + oy * (d.vy - c.vy);
+      sum += dot;
+      if (dot > 0) outward++;
+      n++;
+    }
   }
+  assert.ok(sum / n > 0.5, `平均が外向きでない: ${sum / n}`);
+  assert.ok(outward / n > 0.7, `外向きの割合が低すぎる: ${outward / n}`);
+});
+
+test('分割片は互いに異なる速度と角速度を持つ（動きが単調にならない）', () => {
+  // 同じパーツから出た4片が同一の動きだと、全パーツが同じ開き方をして単調に見える。
+  const debris = buildDebris(makeEntity({ vx: 2, vy: -1 }), TEST_KIND);
+  const key = (d) => `${d.vx.toFixed(6)},${d.vy.toFixed(6)},${d.spin.toFixed(6)}`;
+  const distinct = new Set(debris.map(key));
+  assert.equal(distinct.size, debris.length, '分割片の動きが重複している');
+
+  // 開く方向の違いだけでなく、大きさにもばらつきがあること
+  const speeds = debris.map((d) => Math.hypot(d.vx, d.vy));
+  const spread = Math.max(...speeds) - Math.min(...speeds);
+  assert.ok(spread > 1e-6, `速さがすべて同じ: ${speeds}`);
 });
 
 test('右向きならローカル座標がそのままワールドへ平行移動される', () => {

@@ -11,7 +11,8 @@ import { DebrisPart } from '../DebrisPart.js';
 import {
     DEBRIS_LIFETIME, DEBRIS_LIFETIME_JITTER,
     DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
-    DEBRIS_SUBDIVIDE, DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPIN_JITTER,
+    DEBRIS_SUBDIVIDE, DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPREAD_JITTER,
+    DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER, DEBRIS_SPLIT_SPIN_VARY,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
 import { playerDebris } from './playerParts.js';
@@ -120,6 +121,11 @@ export function buildDebris(entity, kind) {
  * 1つのパーツを DEBRIS_SUBDIVIDE x DEBRIS_SUBDIVIDE の破片に割って push する。
  * 分割片のローカルオフセットはパーツの回転角ぶん回してからワールドに置くので、
  * 傾いたパーツもその向きのまま格子状に割れる。
+ *
+ * 4片がまったく同じ動きをすると全パーツが同じ開き方になって単調に見えるため、
+ * 開く強さ・等方な散らし・角速度を分割片ごとに乱数でずらす。散らしは速度と
+ * 角速度にだけ乗せ、初期位置には乗せない（飛び出しの瞬間は元のパーツのかたちを
+ * 保ち、飛びながらばらけて見せるため）。
  */
 function pushSubdivided(out, p) {
     const n = DEBRIS_SUBDIVIDE;
@@ -142,15 +148,21 @@ function pushSubdivided(out, p) {
             // （n が偶数なのでオフセットは必ず非ゼロ）が、念のため 0 を避ける。
             const len = Math.hypot(rx, ry) || 1;
 
+            // 開く強さを片ごとにばらつかせる。負にはしないので、平均としては
+            // 必ず外向きに開く（= 元のかたちが保たれたまま散る）。
+            const spread = DEBRIS_SPLIT_SPREAD
+                * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPREAD_JITTER);
+
             out.push(new DebrisPart({
                 x: p.worldX + rx,
                 y: p.worldY + ry,
                 w: sw, h: sh,
                 color: p.color,
                 angle: p.angle,
-                vx: p.vx + (rx / len) * DEBRIS_SPLIT_SPREAD,
-                vy: p.vy + (ry / len) * DEBRIS_SPLIT_SPREAD,
-                spin: p.spin + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER,
+                vx: p.vx + (rx / len) * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
+                vy: p.vy + (ry / len) * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
+                spin: p.spin * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_VARY)
+                    + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER,
                 holdFrames: p.holdFrames,
                 lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
                 game: p.game,
