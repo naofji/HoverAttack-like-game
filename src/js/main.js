@@ -35,8 +35,7 @@ import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
-import { buildDebris } from './entities/debris/index.js';
-import { DebrisPart } from './entities/DebrisPart.js';
+import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { EnemyDrone } from './entities/EnemyDrone.js';
@@ -1212,15 +1211,7 @@ export const Game = {
 
     /** 破片の同時存在数を上限内に収める。古い破片から落とす。 */
     _trimDebris() {
-        let excess = this.particles.filter((p) => p instanceof DebrisPart).length - DEBRIS_MAX_ACTIVE;
-        if (excess <= 0) return;
-        for (let i = 0; i < this.particles.length && excess > 0; i++) {
-            if (this.particles[i] instanceof DebrisPart) {
-                this.particles.splice(i, 1);
-                i--;
-                excess--;
-            }
-        }
+        trimDebris(this.particles, DEBRIS_MAX_ACTIVE);
     },
 
     /** Spawn damage sparks at position */

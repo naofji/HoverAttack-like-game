@@ -19,10 +19,6 @@ import { turretDebris } from './turretParts.js';
 import { attackerDebris } from './attackerParts.js';
 import { carrierDebris } from './carrierParts.js';
 
-// 呼び出し側の利便のために再エクスポートする。
-// ただし *Parts.js からは shapes.js を直接 import すること（循環参照になるため）。
-export { segmentPart } from './shapes.js';
-
 /** kind 文字列 → 機体スペック。各機体の die() が渡す文字列に対応する。 */
 export const DEBRIS_SPECS = {
     drone: droneDebris,
@@ -117,4 +113,23 @@ export function buildDebris(entity, kind) {
         }));
     }
     return out;
+}
+
+/**
+ * particles 配列に含まれる DebrisPart の同時存在数を上限内へ収める。
+ * 古い破片（配列の先頭側）から落とし、破片以外のパーティクルには触れない。
+ * 破壊的に particles を書き換える（main.js の spawnDebris がそのまま使う）。
+ * @param {Array} particles
+ * @param {number} max
+ */
+export function trimDebris(particles, max) {
+    let excess = particles.filter((p) => p instanceof DebrisPart).length - max;
+    if (excess <= 0) return;
+    for (let i = 0; i < particles.length && excess > 0; i++) {
+        if (particles[i] instanceof DebrisPart) {
+            particles.splice(i, 1);
+            i--;
+            excess--;
+        }
+    }
 }

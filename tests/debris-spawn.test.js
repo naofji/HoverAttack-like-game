@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDebris } from '../src/js/entities/debris/index.js';
+import { buildDebris, trimDebris } from '../src/js/entities/debris/index.js';
 import { DebrisPart } from '../src/js/entities/DebrisPart.js';
 import { DEBRIS_MAX_ACTIVE } from '../src/js/utils/Constants.js';
 
 /**
  * main.js の game オブジェクトは DOM に依存するため import できない。
- * spawnDebris と同じ実装を持つ最小の器で振る舞いを固定する。
- * （main.js 側の実装がこの契約から外れたら debris-integration 側で気づく）
+ * ただし spawnDebris / _trimDebris のロジック自体は main.js から
+ * trimDebris() として切り出してあるので、ここでは本物の trimDebris を呼ぶ
+ * 薄い器だけを用意する（ロジックのコピーではない）。
  */
 function makeGame() {
   return {
@@ -18,15 +19,7 @@ function makeGame() {
       const debris = buildDebris(entity, kind);
       if (debris.length === 0) return;
       this.particles.push(...debris);
-      let excess = this.particles.filter((p) => p instanceof DebrisPart).length - DEBRIS_MAX_ACTIVE;
-      if (excess <= 0) return;
-      for (let i = 0; i < this.particles.length && excess > 0; i++) {
-        if (this.particles[i] instanceof DebrisPart) {
-          this.particles.splice(i, 1);
-          i--;
-          excess--;
-        }
-      }
+      trimDebris(this.particles, DEBRIS_MAX_ACTIVE);
     },
   };
 }
@@ -64,4 +57,21 @@ test('上限処理は破片以外のパーティクルを消さない', () => {
   game.particles.push(marker);
   for (let i = 0; i < 40; i++) game.spawnDebris(makeDrone(game, i * 30, 100), 'drone');
   assert.ok(game.particles.includes(marker), '爆発パーティクルが巻き添えで消えた');
+});
+
+// trimDebris 自体を直接叩く単体テスト。main.js._trimDebris はこの関数を
+// 呼ぶだけの薄いラッパーなので、ここが本当の契約になる。
+test('trimDebris は古い DebrisPart から間引く', () => {
+  const oldPart = new DebrisPart({ x: 0, y: 0, w: 1, h: 1, color: '#fff', angle: 0, vx: 0, vy: 0, spin: 0, holdFrames: 0, lifetime: 10, game: null });
+  const newPart = new DebrisPart({ x: 0, y: 0, w: 1, h: 1, color: '#fff', angle: 0, vx: 0, vy: 0, spin: 0, holdFrames: 0, lifetime: 10, game: null });
+  const particles = [oldPart, newPart];
+  trimDebris(particles, 1);
+  assert.deepEqual(particles, [newPart], '古い破片ではなく新しい破片が残った');
+});
+
+test('trimDebris は上限以下なら何もしない', () => {
+  const part = new DebrisPart({ x: 0, y: 0, w: 1, h: 1, color: '#fff', angle: 0, vx: 0, vy: 0, spin: 0, holdFrames: 0, lifetime: 10, game: null });
+  const particles = [part];
+  trimDebris(particles, 5);
+  assert.equal(particles.length, 1);
 });

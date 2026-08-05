@@ -44,5 +44,6 @@ export const turretDebris = {
     holdFrames: 2,
     burst: 1.8,
     mirrored: () => false,   // 砲台は左右反転しない
-    parts: [...turretBaseParts({ isCeilingMounted: false }), ...turretHeadParts({ currentAngle: 0, recoil: 0 })],
+    // 実際のパーツは EnemyTurret.getDebrisParts() が設置向き・砲塔角度を
+    // 焼き込んで供給する（buildDebris は entity.getDebrisParts を優先する）。
 };
