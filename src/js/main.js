@@ -107,6 +107,7 @@ export const Game = {
     autoAimUnits: [],
     missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
+    autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
     aimLead: new AimLeadTracker(AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE), // 偏差射撃用の敵速度計測
     grenadeTrajectory: null,   // 長押し中のグレネード軌道プレビュー {points, landX, landY}
@@ -734,6 +735,7 @@ export const Game = {
     _updateAutoAim() {
         const player = this.player;
         this.autoAimTarget = null;
+        this.autoAimLeadPoint = null;
 
         // 常にマウス位置を記録しておく（ピックアップ直後に古い位置と比較して即キャンセルされるのを防ぐ）
         const mx = this.input.mouse.x;
@@ -760,7 +762,7 @@ export const Game = {
 
         // ロック中の敵が生存していればそのまま追跡
         if (this.autoAimLockedEnemy && this.autoAimLockedEnemy.alive) {
-            this.autoAimTarget = this._leadPointFor(this.autoAimLockedEnemy);
+            this._lockOnEnemy(this.autoAimLockedEnemy);
             return;
         }
 
@@ -780,21 +782,33 @@ export const Game = {
         }
         if (bestEnemy) {
             this.autoAimLockedEnemy = bestEnemy;
-            this.autoAimTarget = this._leadPointFor(bestEnemy);
+            this._lockOnEnemy(bestEnemy);
         } else {
             this.aimLead.reset();
         }
     },
 
     /**
-     * ロック中の敵に対する着弾予定地点。
-     * 自機の武器は直進弾なので、敵の現在位置を狙うと動く敵には当たらない。
-     * 照準マークもこの点に出るので、なぜ当たるのかが見た目に現れる。
+     * ロック対象の照準位置と着弾予定地点を更新する。
+     *
+     * 照準（autoAimTarget）は敵の中心に据えたままにする。着弾予定地点まで
+     * 照準ごと動かすと、敵から外れた場所に照準が浮いて目障りになるため。
+     * 予測位置は autoAimLeadPoint として別に持ち、戦闘機の HUD のように
+     * 破線とリードサークルで示す（描画は Crosshair）。射撃はそちらを狙う。
      */
-    _leadPointFor(enemy) {
-        const player = this.player;
+    _lockOnEnemy(enemy) {
         const cx = enemy.x + (enemy.width || 0) / 2;
         const cy = enemy.y + (enemy.height || 0) / 2;
+        this.autoAimTarget = { x: cx, y: cy };
+        this.autoAimLeadPoint = this._leadPointFor(enemy, cx, cy);
+    },
+
+    /**
+     * ロック中の敵に対する着弾予定地点。
+     * 自機の武器は直進弾なので、敵の現在位置を狙うと動く敵には当たらない。
+     */
+    _leadPointFor(enemy, cx, cy) {
+        const player = this.player;
         const v = this.aimLead.measure(enemy);
 
         return predictLeadPoint({
@@ -937,10 +951,16 @@ export const Game = {
         if (!player || !player.alive || player.docked) return;
         if (player.crouching || player.stunTimer > 0) return;
 
+        // 照準が指している点（グレネードの投擲と軌道プレビューはこちらを使う。
+        // 放物線で飛行時間も長いため、直進弾用の偏差を当てても正しくない）
         const targetWorld = this.autoAimTarget || this.input.getTargetWorld(this.camera);
+        // 直進弾が狙う点。Auto Aim 中は着弾予定地点、それ以外は照準と同じ
+        const fireWorld = this.autoAimLeadPoint || targetWorld;
+
         const px = player.x + player.width / 2;
         const py = player.y + player.height / 2;
         const angle = Math.atan2(targetWorld.y - py, targetWorld.x - px);
+        const fireAngle = Math.atan2(fireWorld.y - py, fireWorld.x - px);
 
         // 左クリックが離されたら通常兵器の抑制を解除する
         if (!this.input.mouse.left) {
@@ -949,8 +969,8 @@ export const Game = {
 
         // Primary fire（長押し中および左クリック抑制中は通常兵器を抑制）
         if (!this.leftClickSuppress && !this.grenadeWasHeld && (this.input.mouse.left || this.input.isKeyDown('Space'))) {
-            if (player.currentWeapon === 'missile') this._fireMissile(player, px, py, angle);
-            else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, angle);
+            if (player.currentWeapon === 'missile') this._fireMissile(player, px, py, fireAngle);
+            else if (player.currentWeapon === 'mg') this._fireMachineGun(player, px, py, fireAngle);
         }
 
         // Secondary fire: Grenade（距離に応じた投擲強度）

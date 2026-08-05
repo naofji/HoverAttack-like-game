@@ -396,6 +396,12 @@ export const AUTO_AIM_LEAD_ITERATIONS = 3;   // 飛行時間の収束計算の�
 export const AUTO_AIM_LEAD_WINDOW = 13;      // 速度を測る窓（サンプル数。区間は12）
 export const AUTO_AIM_LEAD_DEADZONE = 0.15;  // これ未満の速度は止まっているとみなす
 
+// リードマーカー（戦闘機の HUD 風）。照準は敵に据えたまま、着弾予定地点は
+// 破線と○で示す。照準ごと動かすと敵から外れて目障りなため分けている。
+export const LEAD_MARKER_MIN_OFFSET = 4;     // これ未満のずれならマーカーを出さない
+export const LEAD_MARKER_RADIUS = 5;         // リードサークルの半径
+export const LEAD_MARKER_DASH = [3, 3];      // 破線のパターン
+
 // --- Death Hold ---
 // 自機・母艦の破壊時、演出を見せるためにリスポーン／ゲームオーバー遷移／
 // カメラの切り替えを止める長さ。破片の寿命が最長 75 tick なので、
