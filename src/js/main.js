@@ -116,7 +116,7 @@ export const Game = {
 
     // Game state
     score: 0,
-    debugStartMission: 6, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
+    debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
     mode: 'normal',       // 'normal' | 'newtype'
     gameSpeed: MODES.normal.gameSpeed,
