@@ -53,7 +53,8 @@ import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
 import {
     AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
-    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH, AUTO_AIM_LEAD_SMOOTHING,
+    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
+    AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
     MISSILE_SPEED, PLAYER_MG_SPEED,
 } from './utils/Constants.js';
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
@@ -107,7 +108,7 @@ export const Game = {
     missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
-    aimLead: new AimLeadTracker(AUTO_AIM_LEAD_SMOOTHING), // 偏差射撃用の敵速度計測
+    aimLead: new AimLeadTracker(AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE), // 偏差射撃用の敵速度計測
     grenadeTrajectory: null,   // 長押し中のグレネード軌道プレビュー {points, landX, landY}
     leftClickSuppress: false,  // グレネード投擲時の左クリック誤射防止用フラグ
     flag: null,

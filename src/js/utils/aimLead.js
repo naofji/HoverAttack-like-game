@@ -51,33 +51,40 @@ export function predictLeadPoint(o) {
 }
 
 /**
- * ロック中の敵の速度を、中心座標の差分から測る。
+ * ロック中の敵の速度を、中心座標の移動から測る。
  *
  * 敵は種類ごとに移動の実装が違い（vx を積む型、座標を直接動かす型、
  * そもそも動かない砲台）、`vx` を持つとは限らない。実際に描画される中心が
  * どれだけ動いたかを測れば、どの敵にも一様に効く。
  *
- * 1 tick ぶんの差分はぶれるので、指数平滑をかけて照準の揺れを抑える。
+ * 測るのは「窓のあいだの平均速度」（最新と最古の差 ÷ 区間数）。1 tick の差分や
+ * 指数平滑では、実際には動いていない敵の見かけの往復が残ってしまう。
+ * 地上の戦車がその例で、着地スナップの都合で中心Yが 3 tick 周期で
+ * +0.3 / +0.6 / -0.9 と揺れる。正味の移動はゼロなのに、飛行時間（最大60tick）で
+ * 増幅されると照準が激しく振動する。窓で平均すれば往復は打ち消し合う。
+ *
+ * それでも残る微小な値は、デッドゾーンで完全にゼロへ落とす。
  */
 export class AimLeadTracker {
-    /** @param {number} smoothing 平滑化係数 0..1。1 で平滑化なし（生の差分） */
-    constructor(smoothing) {
-        this.smoothing = smoothing;
+    /**
+     * @param {number} window 速度を測る窓のサンプル数（区間数は window - 1）
+     * @param {number} deadzone これ未満の速度は 0 とみなす（1 tick あたりの移動量）
+     */
+    constructor(window, deadzone) {
+        this.window = Math.max(2, window);
+        this.deadzone = deadzone;
         this.reset();
     }
 
     /** 追跡状態を捨てる。次の measure() は初回扱いになる。 */
     reset() {
         this.target = null;
-        this.lastX = 0;
-        this.lastY = 0;
-        this.vx = 0;
-        this.vy = 0;
+        this.samples = [];
     }
 
     /**
-     * 1 tick ぶん計測して、平滑化した速度を返す。
-     * 対象が前回と違う敵なら基準を取り直し、速度はゼロから測り直す
+     * 1 tick ぶん計測して、窓のあいだの平均速度を返す。
+     * 対象が前回と違う敵なら履歴を捨てて測り直す
      * （前の敵の速度を引き継ぐと、乗り換えた瞬間に的外れな偏差が出る）。
      * @param {{x:number,y:number,width:number,height:number}} enemy
      * @returns {{vx:number, vy:number}}
@@ -88,21 +95,28 @@ export class AimLeadTracker {
 
         if (enemy !== this.target) {
             this.target = enemy;
-            this.lastX = cx;
-            this.lastY = cy;
-            this.vx = 0;
-            this.vy = 0;
+            this.samples = [{ x: cx, y: cy }];
             return { vx: 0, vy: 0 };
         }
 
-        const dx = cx - this.lastX;
-        const dy = cy - this.lastY;
-        this.lastX = cx;
-        this.lastY = cy;
+        this.samples.push({ x: cx, y: cy });
+        if (this.samples.length > this.window) this.samples.shift();
 
-        const a = this.smoothing;
-        this.vx += (dx - this.vx) * a;
-        this.vy += (dy - this.vy) * a;
-        return { vx: this.vx, vy: this.vy };
+        const n = this.samples.length;
+        // 窓が埋まるまでは速度を報告しない。区間数が半端だと、戦車の見かけの
+        // 往復が打ち消し合わずに残り、ロック直後だけ照準が飛んでしまう。
+        if (n < this.window) return { vx: 0, vy: 0 };
+
+        const oldest = this.samples[0];
+        const newest = this.samples[n - 1];
+        const span = n - 1;
+        return {
+            vx: this._applyDeadzone((newest.x - oldest.x) / span),
+            vy: this._applyDeadzone((newest.y - oldest.y) / span),
+        };
+    }
+
+    _applyDeadzone(v) {
+        return Math.abs(v) < this.deadzone ? 0 : v;
     }
 }

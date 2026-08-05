@@ -384,10 +384,17 @@ export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 
 // --- Auto Aim: 偏差射撃 ---
 // 自機の武器は直進弾なので、動く敵には「弾が届くころに敵がいる場所」を狙わせる。
-export const AUTO_AIM_LEAD_STRENGTH = 1.0;   // 偏差の強さ 0..1。1 で完全に合わせる
+export const AUTO_AIM_LEAD_STRENGTH = 0.25;  // 偏差の強さ 0..1。1 で完全に合わせる
 export const AUTO_AIM_LEAD_MAX_TICKS = 60;   // 予測してよい最大の飛行時間（1秒ぶん）
-export const AUTO_AIM_LEAD_SMOOTHING = 0.35; // 敵速度の指数平滑。1 で平滑化なし
 export const AUTO_AIM_LEAD_ITERATIONS = 3;   // 飛行時間の収束計算の反復回数
+
+// 敵の速度は「窓のあいだの平均」で測る。
+// 地上の戦車は着地スナップの都合で中心Yが +0.3 / +0.6 / -0.9 の3tick周期で
+// 揺れており（実際には上下していない）、1tickの差分や指数平滑ではこれが残る。
+// 飛行時間（最大60tick）で増幅されると照準が激しく振動するため、
+// 周期の倍数を含む長さの窓で平均して往復を相殺する。
+export const AUTO_AIM_LEAD_WINDOW = 13;      // 速度を測る窓（サンプル数。区間は12）
+export const AUTO_AIM_LEAD_DEADZONE = 0.15;  // これ未満の速度は止まっているとみなす
 
 // --- Death Hold ---
 // 自機・母艦の破壊時、演出を見せるためにリスポーン／ゲームオーバー遷移／

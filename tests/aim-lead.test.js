@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { predictLeadPoint, AimLeadTracker } from '../src/js/utils/aimLead.js';
-import { AUTO_AIM_LEAD_MAX_TICKS } from '../src/js/utils/Constants.js';
+import {
+  AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
+} from '../src/js/utils/Constants.js';
 
 const base = {
   shooterX: 0, shooterY: 0,
@@ -76,56 +78,114 @@ function enemyAt(cx, cy) {
   return { x: cx - 8, y: cy - 8, width: 16, height: 16 };
 }
 
-test('初回の計測では速度がゼロ（前フレームが無いので推測しない）', () => {
-  const tracker = new AimLeadTracker(1);
+/** 敵を毎tick (dx, dy) ずつ動かしながら n 回計測し、最後の速度を返す。 */
+function trackLinear(tracker, e, dx, dy, n) {
+  let v = { vx: 0, vy: 0 };
+  for (let i = 0; i < n; i++) {
+    v = tracker.measure(e);
+    e.x += dx;
+    e.y += dy;
+  }
+  return v;
+}
+
+test('初回の計測では速度がゼロ（履歴が無いので推測しない）', () => {
+  const tracker = new AimLeadTracker(13, 0);
   const v = tracker.measure(enemyAt(100, 100));
   assert.deepEqual(v, { vx: 0, vy: 0 });
 });
 
-test('2回目以降は中心座標の差分から速度を得る', () => {
-  const tracker = new AimLeadTracker(1);   // smoothing 1 = 平滑化なし
-  const e = enemyAt(100, 100);
-  tracker.measure(e);
-  e.x += 3;
-  e.y -= 2;
-  const v = tracker.measure(e);
-  assert.equal(v.vx, 3);
-  assert.equal(v.vy, -2);
+test('等速で動く敵の速度をそのまま測れる', () => {
+  const tracker = new AimLeadTracker(13, 0);
+  const v = trackLinear(tracker, enemyAt(100, 100), 3, -2, 20);
+  assert.ok(Math.abs(v.vx - 3) < 1e-9, `vx=${v.vx}`);
+  assert.ok(Math.abs(v.vy + 2) < 1e-9, `vy=${v.vy}`);
 });
 
-test('平滑化係数で急な変化がなまる', () => {
-  const tracker = new AimLeadTracker(0.5);
-  const e = enemyAt(100, 100);
-  tracker.measure(e);
-  e.x += 4;
-  const v = tracker.measure(e);
-  assert.equal(v.vx, 2, '0 と 4 の中間になるはず');
+test('窓が埋まるまでは速度を報告しない', () => {
+  // 区間数が半端だと戦車の見かけの往復が打ち消し合わず、
+  // ロック直後だけ照準が飛ぶ。埋まるまでは偏差ゼロで待つ。
+  const tracker = new AimLeadTracker(13, 0);
+  const v = trackLinear(tracker, enemyAt(100, 100), 2, 0, 12);
+  assert.deepEqual(v, { vx: 0, vy: 0 });
 });
 
-test('対象が別の敵に変わったら速度をリセットする', () => {
-  const tracker = new AimLeadTracker(1);
-  const a = enemyAt(100, 100);
-  tracker.measure(a);
-  tracker.measure(enemyAt(110, 100));   // a と同一オブジェクトではない → リセット
-  const v = tracker.measure(enemyAt(120, 100));
-  // 直前のリセットで基準位置が入れ替わっているので、速度は 0 から測り直される
+test('窓が埋まった直後から速度を報告する', () => {
+  const tracker = new AimLeadTracker(13, 0);
+  const v = trackLinear(tracker, enemyAt(100, 100), 2, 0, 13);
+  assert.ok(Math.abs(v.vx - 2) < 1e-9, `vx=${v.vx}`);
+});
+
+test('デッドゾーン未満の速度はゼロに落とす', () => {
+  const tracker = new AimLeadTracker(13, 0.15);
+  const v = trackLinear(tracker, enemyAt(100, 100), 0.05, 0, 20);
   assert.equal(v.vx, 0);
 });
 
-test('同じ敵を追い続けている間は速度が積み上がる', () => {
-  const tracker = new AimLeadTracker(1);
+test('デッドゾーンを超える速度はそのまま通す', () => {
+  const tracker = new AimLeadTracker(13, 0.15);
+  const v = trackLinear(tracker, enemyAt(100, 100), 0.41, 0, 20);
+  assert.ok(Math.abs(v.vx - 0.41) < 1e-9, `戦車の実移動が消えている: ${v.vx}`);
+});
+
+// 実機で報告された不具合の回帰テスト。
+// 地上の戦車は着地スナップの都合で中心Yが 3 tick 周期で +0.3 / +0.6 / -0.9 と
+// 揺れる（正味の移動はゼロ）。1 tick の差分をそのまま使うと、この見かけの
+// 往復が飛行時間で増幅されて照準が激しく上下に振動していた。
+test('上下していない戦車の見かけの往復を速度として拾わない', () => {
+  const tracker = new AimLeadTracker(13, 0.15);
   const e = enemyAt(100, 100);
-  tracker.measure(e);
-  e.x += 5;
-  const v = tracker.measure(e);
-  assert.equal(v.vx, 5);
+  const cycle = [0.3, 0.6, -0.9];   // 実測した戦車の中心Yの変位
+
+  let worst = 0;
+  for (let i = 0; i < 60; i++) {
+    const v = tracker.measure(e);
+    worst = Math.max(worst, Math.abs(v.vy));
+    e.y += cycle[i % cycle.length];
+  }
+  assert.equal(worst, 0, `静止している戦車に縦速度が出た: ${worst}`);
+});
+
+test('往復しながら本当に下降している敵は下降ぶんを拾う', () => {
+  // 見かけの往復を消しても、正味の移動まで消してはいけない
+  const tracker = new AimLeadTracker(13, 0.15);
+  const e = enemyAt(100, 100);
+  const cycle = [0.3 + 0.5, 0.6 + 0.5, -0.9 + 0.5];   // 3tick 周期 + 毎tick 0.5 の下降
+
+  let v = { vx: 0, vy: 0 };
+  for (let i = 0; i < 60; i++) {
+    v = tracker.measure(e);
+    e.y += cycle[i % cycle.length];
+  }
+  assert.ok(Math.abs(v.vy - 0.5) < 1e-9, `正味の下降を拾えていない: ${v.vy}`);
+});
+
+test('対象が別の敵に変わったら履歴を捨てる', () => {
+  const tracker = new AimLeadTracker(13, 0);
+  const a = enemyAt(100, 100);
+  trackLinear(tracker, a, 5, 0, 20);
+  const b = enemyAt(400, 100);
+  const v = tracker.measure(b);
+  assert.deepEqual(v, { vx: 0, vy: 0 }, '前の敵の速度を引き継いでいる');
 });
 
 test('reset() で次の計測が初回扱いに戻る', () => {
-  const tracker = new AimLeadTracker(1);
+  const tracker = new AimLeadTracker(13, 0);
   const e = enemyAt(100, 100);
-  tracker.measure(e);
+  trackLinear(tracker, e, 5, 0, 20);
   tracker.reset();
   e.x += 5;
   assert.deepEqual(tracker.measure(e), { vx: 0, vy: 0 });
+});
+
+test('窓の長さは戦車の振動周期(3tick)の倍数を含む', () => {
+  // 窓の区間数が周期の倍数なら、見かけの往復がちょうど打ち消し合う
+  assert.equal((AUTO_AIM_LEAD_WINDOW - 1) % 3, 0,
+    `窓の区間数 ${AUTO_AIM_LEAD_WINDOW - 1} が 3 の倍数でない`);
+});
+
+test('デッドゾーンは戦車の実移動より十分小さい', () => {
+  // 戦車の水平移動は実測 0.41px/tick。これを消してしまってはいけない
+  assert.ok(AUTO_AIM_LEAD_DEADZONE < 0.41 / 2,
+    `デッドゾーンが大きすぎる: ${AUTO_AIM_LEAD_DEADZONE}`);
 });
