@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDebris, trimDebris } from '../src/js/entities/debris/index.js';
 import { DebrisPart } from '../src/js/entities/DebrisPart.js';
-import { DEBRIS_MAX_ACTIVE } from '../src/js/utils/Constants.js';
+import { DEBRIS_MAX_ACTIVE, DEBRIS_SUBDIVIDE } from '../src/js/utils/Constants.js';
+import { DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 
 /**
  * main.js の game オブジェクトは DOM に依存するため import できない。
@@ -34,7 +35,9 @@ function makeDrone(game, x = 100, y = 100) {
 test('spawnDebris が particles に破片を追加する', () => {
   const game = makeGame();
   game.spawnDebris(makeDrone(game), 'drone');
-  assert.equal(game.particles.length, 7);
+  // 各パーツが DEBRIS_SUBDIVIDE^2 個に割れて飛ぶ
+  const expected = DEBRIS_SPECS.drone.parts.length * DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE;
+  assert.equal(game.particles.length, expected);
   assert.ok(game.particles.every((p) => p instanceof DebrisPart));
 });
 

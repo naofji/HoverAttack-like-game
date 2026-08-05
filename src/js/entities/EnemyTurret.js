@@ -11,6 +11,7 @@ import {
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class EnemyTurret {
     constructor(game, x, y, isCeilingMounted = false) {
@@ -151,7 +152,7 @@ export class EnemyTurret {
     die() {
         this.alive = false;
         this.game.spawnDebris(this, 'turret');
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 30, { debrisSmoke: false });
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 30, MACHINE_EXPLOSION_OPTS);
         this.game.addScore(ENEMY_TURRET_SCORE);
     }
 

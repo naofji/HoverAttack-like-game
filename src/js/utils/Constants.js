@@ -390,6 +390,16 @@ export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
 export const DEBRIS_SPIN_SCALE = 0.06;     // 横方向初速 → 角速度への係数
 export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
-export const DEBRIS_MAX_ACTIVE = 160;      // 同時に存在できる破片の上限
+export const DEBRIS_MAX_ACTIVE = 560;      // 同時に存在できる破片の上限（1パーツ4分割ぶんを見込む）
 export const DEBRIS_FLASH_COLOR = '#FFFFFF'; // ホールド中の白熱色
 export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎたら alpha を落とし始める
+
+// パーツはさらに 2x2 に割って飛ばす。「飛びながら砕ける」ように、4片は
+// 元パーツの速度を共有したうえで、パーツ中心から外向きへわずかに開く。
+export const DEBRIS_SUBDIVIDE = 2;         // 1パーツを SUBDIVIDE x SUBDIVIDE に分割
+export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速
+export const DEBRIS_SPLIT_SPIN_JITTER = 0.04; // 分割片ごとに角速度へ加える差
+
+// 爆発の広がり。本物のパーツ破片を撒く機体では、爆発が破片を覆い隠さないよう
+// 粒子の初速と中央フラッシュを縮める（粒子数は減らさないので密度は保たれる）。
+export const EXPLOSION_SPREAD_WITH_DEBRIS = 0.6;

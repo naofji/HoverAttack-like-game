@@ -21,6 +21,7 @@ import { shouldStartMGReload } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -437,7 +438,7 @@ export class Player {
         this.alive = false;
         this.game.spawnDebris(this, 'player');
         // Spawn explosion particles
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15, { debrisSmoke: false });
+        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 15, MACHINE_EXPLOSION_OPTS);
         this.lives--;
 
         // Release lock-on when dead

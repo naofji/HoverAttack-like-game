@@ -11,6 +11,7 @@ import { DebrisPart } from '../DebrisPart.js';
 import {
     DEBRIS_LIFETIME, DEBRIS_LIFETIME_JITTER,
     DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
+    DEBRIS_SUBDIVIDE, DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPIN_JITTER,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
 import { playerDebris } from './playerParts.js';
@@ -102,17 +103,60 @@ export function buildDebris(entity, kind) {
         // 横へ勢いよく飛んだ破片ほど速く回る（慣性を視覚的に一貫させる）
         const spin = vx * DEBRIS_SPIN_SCALE * (Math.random() < 0.5 ? -1 : 1);
 
-        out.push(new DebrisPart({
-            x: worldX, y: worldY,
-            w: part.w, h: part.h,
-            color: part.color,
-            angle, vx, vy, spin,
+        // 5. パーツをさらに 2x2 に割る。4片は元パーツの速度をそのまま共有し、
+        //    パーツ中心から外向きへわずかに開くだけなので、飛び始めは元の
+        //    かたちを保ったまま、飛びながら徐々にばらけて見える。
+        pushSubdivided(out, {
+            worldX, worldY, w: part.w, h: part.h,
+            color: part.color, angle, vx, vy, spin,
             holdFrames: spec.holdFrames,
-            lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
             game: entity.game || null,
-        }));
+        });
     }
     return out;
+}
+
+/**
+ * 1つのパーツを DEBRIS_SUBDIVIDE x DEBRIS_SUBDIVIDE の破片に割って push する。
+ * 分割片のローカルオフセットはパーツの回転角ぶん回してからワールドに置くので、
+ * 傾いたパーツもその向きのまま格子状に割れる。
+ */
+function pushSubdivided(out, p) {
+    const n = DEBRIS_SUBDIVIDE;
+    const sw = p.w / n;
+    const sh = p.h / n;
+    const cos = Math.cos(p.angle);
+    const sin = Math.sin(p.angle);
+
+    for (let row = 0; row < n; row++) {
+        for (let col = 0; col < n; col++) {
+            // パーツ中心を原点とした、分割片の中心オフセット
+            const ox = (col - (n - 1) / 2) * sw;
+            const oy = (row - (n - 1) / 2) * sh;
+
+            // パーツの向きに合わせて回す
+            const rx = ox * cos - oy * sin;
+            const ry = ox * sin + oy * cos;
+
+            // 開く方向はパーツ中心から見た外向き。中心に乗る分割片は無い
+            // （n が偶数なのでオフセットは必ず非ゼロ）が、念のため 0 を避ける。
+            const len = Math.hypot(rx, ry) || 1;
+
+            out.push(new DebrisPart({
+                x: p.worldX + rx,
+                y: p.worldY + ry,
+                w: sw, h: sh,
+                color: p.color,
+                angle: p.angle,
+                vx: p.vx + (rx / len) * DEBRIS_SPLIT_SPREAD,
+                vy: p.vy + (ry / len) * DEBRIS_SPLIT_SPREAD,
+                spin: p.spin + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER,
+                holdFrames: p.holdFrames,
+                lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
+                game: p.game,
+            }));
+        }
+    }
 }
 
 /**

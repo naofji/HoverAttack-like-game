@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEBRIS_SPECS, buildDebris } from '../src/js/entities/debris/index.js';
-import { CARRIER_WIDTH, CARRIER_HEIGHT } from '../src/js/utils/Constants.js';
+import { CARRIER_WIDTH, CARRIER_HEIGHT, DEBRIS_SUBDIVIDE } from '../src/js/utils/Constants.js';
 
 function makeCarrier() {
   return {
@@ -31,9 +31,18 @@ test('船体が左右2片に割れる', () => {
 });
 
 test('左右の船体片は反対方向へ飛ぶ', () => {
-  const debris = buildDebris(makeCarrier(), 'carrier');
+  const carrier = makeCarrier();
+  const debris = buildDebris(carrier, 'carrier');
+  // 下部船体は左右2パーツ。各パーツはさらに 2x2 に割れるので、
+  // 船体色の破片は 2 * DEBRIS_SUBDIVIDE^2 個になる。
   const hulls = debris.filter((d) => d.color === '#1a3a6a');
-  assert.equal(hulls.length, 2);
-  const [left, right] = hulls[0].x < hulls[1].x ? hulls : [hulls[1], hulls[0]];
-  assert.ok(left.vx < right.vx, `左右へ割れていない: ${left.vx} vs ${right.vx}`);
+  assert.equal(hulls.length, 2 * DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE);
+
+  const midX = carrier.x + carrier.width / 2;
+  const meanVx = (group) => group.reduce((a, d) => a + d.vx, 0) / group.length;
+  const left = hulls.filter((d) => d.x < midX);
+  const right = hulls.filter((d) => d.x >= midX);
+  assert.equal(left.length, right.length, '左右に均等に割れていない');
+  assert.ok(meanVx(left) < meanVx(right),
+    `左右へ割れていない: ${meanVx(left)} vs ${meanVx(right)}`);
 });

@@ -2,6 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDebris, DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 import { segmentPart } from '../src/js/entities/debris/shapes.js';
+import { DEBRIS_SUBDIVIDE } from '../src/js/utils/Constants.js';
 
 /** 乱数の影響を消して変換だけを見るための最小エンティティ。 */
 function makeEntity(overrides = {}) {
@@ -12,6 +13,25 @@ function makeEntity(overrides = {}) {
   };
 }
 
+/**
+ * 1つのパーツは DEBRIS_SUBDIVIDE^2 個の破片に分割されて飛ぶ。
+ * 分割片のオフセットはパーツ中心について対称なので、重心は元のパーツ中心と
+ * 厳密に一致し、平均速度も元のパーツの速度と一致する。座標変換の検証は
+ * この重心・平均に対して行えば、分割前と同じ精度で確かめられる。
+ */
+function centroid(debris) {
+  const n = debris.length;
+  const sum = debris.reduce((acc, d) => ({
+    x: acc.x + d.x, y: acc.y + d.y, vx: acc.vx + d.vx, vy: acc.vy + d.vy,
+  }), { x: 0, y: 0, vx: 0, vy: 0 });
+  return { x: sum.x / n, y: sum.y / n, vx: sum.vx / n, vy: sum.vy / n, count: n };
+}
+
+/** 1パーツぶんの分割片が占める総面積は、元のパーツの面積と等しい。 */
+function totalArea(debris) {
+  return debris.reduce((acc, d) => acc + d.w * d.h, 0);
+}
+
 /** テスト専用スペックを一時的に登録して使う。 */
 const TEST_KIND = '__test__';
 DEBRIS_SPECS[TEST_KIND] = {
@@ -20,19 +40,40 @@ DEBRIS_SPECS[TEST_KIND] = {
   parts: [{ x: 4, y: 6, w: 8, h: 4, color: '#123456', weight: 1 }],
 };
 
+test('1つのパーツが 2x2 に分割され、面積の合計は元のパーツと等しい', () => {
+  const debris = buildDebris(makeEntity(), TEST_KIND);
+  assert.equal(debris.length, DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE);
+  assert.equal(totalArea(debris), 8 * 4, '分割で面積が増減してはいけない');
+  for (const d of debris) {
+    assert.equal(d.w, 8 / DEBRIS_SUBDIVIDE);
+    assert.equal(d.h, 4 / DEBRIS_SUBDIVIDE);
+    assert.equal(d.color, '#123456');
+  }
+});
+
+test('分割片は元のパーツ中心から外向きへ開く', () => {
+  const debris = buildDebris(makeEntity(), TEST_KIND);
+  const c = centroid(debris);
+  for (const d of debris) {
+    const ox = d.x - c.x;
+    const oy = d.y - c.y;
+    // 位置のオフセット方向と、速度の中心からのずれが同じ向きを指すこと
+    const dvx = d.vx - c.vx;
+    const dvy = d.vy - c.vy;
+    assert.ok(ox * dvx + oy * dvy > 0, `外向きに開いていない: pos=(${ox},${oy}) dv=(${dvx},${dvy})`);
+  }
+});
+
 test('右向きならローカル座標がそのままワールドへ平行移動される', () => {
-  const [p] = buildDebris(makeEntity(), TEST_KIND);
-  assert.equal(p.x, 204);
-  assert.equal(p.y, 106);
-  assert.equal(p.w, 8);
-  assert.equal(p.h, 4);
-  assert.equal(p.color, '#123456');
+  const c = centroid(buildDebris(makeEntity(), TEST_KIND));
+  assert.ok(Math.abs(c.x - 204) < 1e-9, `x=${c.x}`);
+  assert.ok(Math.abs(c.y - 106) < 1e-9, `y=${c.y}`);
 });
 
 test('左向きならX座標が機体幅の内側で反転する', () => {
-  const [p] = buildDebris(makeEntity({ facingRight: false }), TEST_KIND);
-  assert.equal(p.x, 200 + 24 - 4, 'x は entity.x + width - localX');
-  assert.equal(p.y, 106, 'y は反転しない');
+  const c = centroid(buildDebris(makeEntity({ facingRight: false }), TEST_KIND));
+  assert.ok(Math.abs(c.x - (200 + 24 - 4)) < 1e-9, 'x は entity.x + width - localX');
+  assert.ok(Math.abs(c.y - 106) < 1e-9, 'y は反転しない');
 });
 
 test('左向きでは初期角度の符号も反転する', () => {
@@ -48,10 +89,11 @@ test('左向きでは初期角度の符号も反転する', () => {
 });
 
 test('機体の速度が破片の初速に継承される', () => {
-  const [p] = buildDebris(makeEntity({ vx: 3, vy: -2 }), TEST_KIND);
-  // burst が 0 なので、慣性 + 微小なランダム散らし のみ
-  assert.ok(Math.abs(p.vx - 3) < 1.0, `慣性が継承されていない: ${p.vx}`);
-  assert.ok(Math.abs(p.vy + 2) < 1.0, `慣性が継承されていない: ${p.vy}`);
+  // burst が 0 なので、慣性 + 微小なランダム散らし のみ。
+  // 分割片の開きは中心対称なので平均を取ると打ち消える。
+  const c = centroid(buildDebris(makeEntity({ vx: 3, vy: -2 }), TEST_KIND));
+  assert.ok(Math.abs(c.vx - 3) < 1.0, `慣性が継承されていない: ${c.vx}`);
+  assert.ok(Math.abs(c.vy + 2) < 1.0, `慣性が継承されていない: ${c.vy}`);
 });
 
 test('スペックの holdFrames が破片に伝わる', () => {
@@ -66,11 +108,14 @@ test('rotation フックが指定されると機体中心まわりに回転す�
     // 機体中心 (12, 8) の真右 4px の点
     parts: [{ x: 16, y: 8, w: 2, h: 2, color: '#000' }],
   };
-  const [p] = buildDebris(makeEntity(), '__rot__');
+  const debris = buildDebris(makeEntity(), '__rot__');
+  const c = centroid(debris);
   // 90度回転すると中心の真下へ移る
-  assert.ok(Math.abs(p.x - (200 + 12)) < 1e-6, `x=${p.x}`);
-  assert.ok(Math.abs(p.y - (100 + 12)) < 1e-6, `y=${p.y}`);
-  assert.ok(Math.abs(p.angle - Math.PI / 2) < 1e-9);
+  assert.ok(Math.abs(c.x - (200 + 12)) < 1e-6, `x=${c.x}`);
+  assert.ok(Math.abs(c.y - (100 + 12)) < 1e-6, `y=${c.y}`);
+  for (const d of debris) {
+    assert.ok(Math.abs(d.angle - Math.PI / 2) < 1e-9, '分割片は元パーツの角度を保つ');
+  }
   delete DEBRIS_SPECS['__rot__'];
 });
 
@@ -94,14 +139,17 @@ test('mirrored かつ rotation が同時に非ゼロだと「先に反転、次�
     parts: [{ x: 22, y: 8, w: 2, h: 2, color: '#000', angle: 0.4 }],
   };
   const entity = makeEntity({ facingRight: false }); // mirrored = true
-  const [p] = buildDebris(entity, '__mirror_rot__');
+  const debris = buildDebris(entity, '__mirror_rot__');
+  const c = centroid(debris);
 
-  assert.ok(Math.abs(p.x - (200 + 12 + 0)) < 1e-6, `x=${p.x}`);
-  assert.ok(Math.abs(p.y - (100 + 8 - 10)) < 1e-6, `y=${p.y}`);
+  assert.ok(Math.abs(c.x - (200 + 12 + 0)) < 1e-6, `x=${c.x}`);
+  assert.ok(Math.abs(c.y - (100 + 8 - 10)) < 1e-6, `y=${c.y}`);
 
   // 角度も同じ順序: 先に mirror で符号反転(-0.4)、その後 rotation(90°) を加算
   const expectedAngle = -0.4 + Math.PI / 2;
-  assert.ok(Math.abs(p.angle - expectedAngle) < 1e-9, `angle=${p.angle}`);
+  for (const d of debris) {
+    assert.ok(Math.abs(d.angle - expectedAngle) < 1e-9, `angle=${d.angle}`);
+  }
 
   delete DEBRIS_SPECS['__mirror_rot__'];
 });
@@ -109,9 +157,9 @@ test('mirrored かつ rotation が同時に非ゼロだと「先に反転、次�
 test('getDebrisParts があればスペックの静的パーツより優先される', () => {
   const entity = makeEntity();
   entity.getDebrisParts = () => [{ x: 0, y: 0, w: 1, h: 1, color: '#FFF' }];
-  const parts = buildDebris(entity, TEST_KIND);
-  assert.equal(parts.length, 1);
-  assert.equal(parts[0].color, '#FFF');
+  const debris = buildDebris(entity, TEST_KIND);
+  assert.equal(debris.length, DEBRIS_SUBDIVIDE * DEBRIS_SUBDIVIDE, '1パーツぶんだけ出る');
+  assert.ok(debris.every((d) => d.color === '#FFF'));
 });
 
 test('未登録の kind では空配列を返す', () => {

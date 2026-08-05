@@ -24,6 +24,7 @@ import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
+import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -984,7 +985,7 @@ export class EnemyAttacker {
         this.game.spawnDebris(this, 'attacker');
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, { debrisSmoke: false });
+        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
         this.game.addScore(this.score);
 
         // heavy は30%の確率でミサイル・サプライ・キットをドロップ
