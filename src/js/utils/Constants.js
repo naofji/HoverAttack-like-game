@@ -384,7 +384,7 @@ export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 
 // --- Auto Aim: 偏差射撃 ---
 // 自機の武器は直進弾なので、動く敵には「弾が届くころに敵がいる場所」を狙わせる。
-export const AUTO_AIM_LEAD_STRENGTH = 0.75;  // 偏差の強さ 0..1。1 で完全に合わせる
+export const AUTO_AIM_LEAD_STRENGTH = 0.5;   // 偏差の強さ 0..1。1 で完全に合わせる
 export const AUTO_AIM_LEAD_MAX_TICKS = 60;   // 予測してよい最大の飛行時間（1秒ぶん）
 export const AUTO_AIM_LEAD_ITERATIONS = 3;   // 飛行時間の収束計算の反復回数
 
