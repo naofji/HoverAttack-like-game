@@ -51,7 +51,12 @@ import { StageRankingManager, pickStageRanking } from './systems/StageRankingMan
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
-import { AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD } from './utils/Constants.js';
+import {
+    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
+    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH, AUTO_AIM_LEAD_SMOOTHING,
+    MISSILE_SPEED, PLAYER_MG_SPEED,
+} from './utils/Constants.js';
+import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { MODES, cycleMode } from './utils/modes.js';
@@ -102,6 +107,7 @@ export const Game = {
     missileKits: [],
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
+    aimLead: new AimLeadTracker(AUTO_AIM_LEAD_SMOOTHING), // 偏差射撃用の敵速度計測
     grenadeTrajectory: null,   // 長押し中のグレネード軌道プレビュー {points, landX, landY}
     leftClickSuppress: false,  // グレネード投擲時の左クリック誤射防止用フラグ
     flag: null,
@@ -738,6 +744,7 @@ export const Game = {
 
         if (!player || !player.alive || player.docked || player.autoAimTimer <= 0) {
             this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
             return;
         }
 
@@ -746,16 +753,13 @@ export const Game = {
         // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）
         if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD) {
             this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
             return;
         }
 
         // ロック中の敵が生存していればそのまま追跡
         if (this.autoAimLockedEnemy && this.autoAimLockedEnemy.alive) {
-            const e = this.autoAimLockedEnemy;
-            this.autoAimTarget = {
-                x: e.x + (e.width || 0) / 2,
-                y: e.y + (e.height || 0) / 2
-            };
+            this.autoAimTarget = this._leadPointFor(this.autoAimLockedEnemy);
             return;
         }
 
@@ -775,11 +779,35 @@ export const Game = {
         }
         if (bestEnemy) {
             this.autoAimLockedEnemy = bestEnemy;
-            this.autoAimTarget = {
-                x: bestEnemy.x + (bestEnemy.width || 0) / 2,
-                y: bestEnemy.y + (bestEnemy.height || 0) / 2
-            };
+            this.autoAimTarget = this._leadPointFor(bestEnemy);
+        } else {
+            this.aimLead.reset();
         }
+    },
+
+    /**
+     * ロック中の敵に対する着弾予定地点。
+     * 自機の武器は直進弾なので、敵の現在位置を狙うと動く敵には当たらない。
+     * 照準マークもこの点に出るので、なぜ当たるのかが見た目に現れる。
+     */
+    _leadPointFor(enemy) {
+        const player = this.player;
+        const cx = enemy.x + (enemy.width || 0) / 2;
+        const cy = enemy.y + (enemy.height || 0) / 2;
+        const v = this.aimLead.measure(enemy);
+
+        return predictLeadPoint({
+            shooterX: player.x + player.width / 2,
+            shooterY: player.y + player.height / 2,
+            targetX: cx,
+            targetY: cy,
+            targetVx: v.vx,
+            targetVy: v.vy,
+            // 装備中の武器の弾速で予測する（ミサイルとマシンガンで偏差が変わる）
+            projectileSpeed: player.currentWeapon === 'missile' ? MISSILE_SPEED : PLAYER_MG_SPEED,
+            maxLeadTicks: AUTO_AIM_LEAD_MAX_TICKS,
+            strength: AUTO_AIM_LEAD_STRENGTH,
+        });
     },
 
     _updateEnemies() {

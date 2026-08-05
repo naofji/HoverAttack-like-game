@@ -382,6 +382,13 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 
+// --- Auto Aim: 偏差射撃 ---
+// 自機の武器は直進弾なので、動く敵には「弾が届くころに敵がいる場所」を狙わせる。
+export const AUTO_AIM_LEAD_STRENGTH = 1.0;   // 偏差の強さ 0..1。1 で完全に合わせる
+export const AUTO_AIM_LEAD_MAX_TICKS = 60;   // 予測してよい最大の飛行時間（1秒ぶん）
+export const AUTO_AIM_LEAD_SMOOTHING = 0.35; // 敵速度の指数平滑。1 で平滑化なし
+export const AUTO_AIM_LEAD_ITERATIONS = 3;   // 飛行時間の収束計算の反復回数
+
 // --- Death Hold ---
 // 自機・母艦の破壊時、演出を見せるためにリスポーン／ゲームオーバー遷移／
 // カメラの切り替えを止める長さ。破片の寿命が最長 75 tick なので、
