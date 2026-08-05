@@ -43,7 +43,7 @@
 
 ### 配置
 
-`src/js/entities/BaseDestructionFx.js` に3クラスとファクトリ `createBaseDestructionFx(x, y)` を置き、
+`src/js/entities/DestructionFinale.js` に3クラスとファクトリ `createDestructionFinale(x, y)` を置き、
 `game.particles` に push する。
 
 既存の `update()` / `draw()` / `alive` 契約に乗るので、ゲームループ（`main.js:641` 付近の更新、
@@ -68,3 +68,17 @@
 - 衝撃波による破片・パーティクルの吹き飛ばし
 - ヒットストップやスローモーション
 - 敵基地以外の機体への適用（テンポが落ちる）
+
+## 母艦への適用（2026-08-05 追記）
+
+母艦の破壊にも同じフィナーレを出す。母艦の喪失は残機1のため**必ずゲームオーバー**であり、
+ゲーム中で最大の見せ場だから。`Carrier.die()` から同じ `createDestructionFinale()` を呼び、
+`camera.shake` も同じ値を使う。
+
+これに伴い、モジュール名を基地専用の `BaseDestructionFx` から中立な `DestructionFinale` へ、
+定数の接頭辞も `BASE_FINALE_*` から `FINALE_*` へ改名した。利用者が2つになった以上、
+基地専用に見える名前は誤解を招く。
+
+なお母艦の爆発そのものも、体格に対して極端に小さかったため別途拡大している
+（粒子25→100、広がり0.6→1.3、フラッシュ半径 9.8→45.5px）。
+64x32px と最大の機体なのに、船体を囲む円の 0.27 倍しかフラッシュが無かった。

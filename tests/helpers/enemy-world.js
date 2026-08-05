@@ -32,6 +32,8 @@ export function makeGame(map) {
     enemyBullets: [],
     missileKits: [],
     repairKits: [],
+    // 破壊時の破片・フィナーレ演出が積まれる先
+    particles: [],
     autoAimUnits: [],
     rng: { next: () => Math.random() },
     spawnSparks() {},

@@ -9,10 +9,10 @@
 // 集中線は画面対角より長く取っておけば基地が画面のどこにあっても端まで届く。
 
 import {
-    BASE_FINALE_FLASH_LIFETIME, BASE_FINALE_FLASH_RADIUS,
-    BASE_FINALE_LINE_COUNT, BASE_FINALE_LINE_LIFETIME,
-    BASE_FINALE_LINE_INNER_MIN, BASE_FINALE_LINE_INNER_MAX,
-    BASE_FINALE_RING_MAX_RADIUS, BASE_FINALE_RING_LIFETIME, BASE_FINALE_RING_WIDTH,
+    FINALE_FLASH_LIFETIME, FINALE_FLASH_RADIUS,
+    FINALE_LINE_COUNT, FINALE_LINE_LIFETIME,
+    FINALE_LINE_INNER_MIN, FINALE_LINE_INNER_MAX,
+    FINALE_RING_MAX_RADIUS, FINALE_RING_LIFETIME, FINALE_RING_WIDTH,
     CANVAS_WIDTH, CANVAS_HEIGHT,
 } from '../utils/Constants.js';
 
@@ -47,7 +47,7 @@ class TimedFx {
  */
 export class FinaleFlash extends TimedFx {
     constructor(x, y) {
-        super(x, y, BASE_FINALE_FLASH_LIFETIME);
+        super(x, y, FINALE_FLASH_LIFETIME);
     }
 
     draw(ctx) {
@@ -55,7 +55,7 @@ export class FinaleFlash extends TimedFx {
 
         const p = this.progress;
         // 一瞬で開いてから閉じる（sin の山）
-        const radius = BASE_FINALE_FLASH_RADIUS * (0.4 + 0.6 * Math.sin(p * Math.PI));
+        const radius = FINALE_FLASH_RADIUS * (0.4 + 0.6 * Math.sin(p * Math.PI));
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -78,18 +78,18 @@ export class FinaleFlash extends TimedFx {
  */
 export class SpeedLines extends TimedFx {
     constructor(x, y) {
-        super(x, y, BASE_FINALE_LINE_LIFETIME);
+        super(x, y, FINALE_LINE_LIFETIME);
 
-        const innerRange = BASE_FINALE_LINE_INNER_MAX - BASE_FINALE_LINE_INNER_MIN;
+        const innerRange = FINALE_LINE_INNER_MAX - FINALE_LINE_INNER_MIN;
         this.lines = [];
-        for (let i = 0; i < BASE_FINALE_LINE_COUNT; i++) {
+        for (let i = 0; i < FINALE_LINE_COUNT; i++) {
             // 均等割りを基準に、隣との間隔ぶんだけランダムにずらす
-            const base = (i / BASE_FINALE_LINE_COUNT) * Math.PI * 2;
-            const angle = base + (Math.random() - 0.5) * (Math.PI * 2 / BASE_FINALE_LINE_COUNT);
+            const base = (i / FINALE_LINE_COUNT) * Math.PI * 2;
+            const angle = base + (Math.random() - 0.5) * (Math.PI * 2 / FINALE_LINE_COUNT);
             this.lines.push({
                 cos: Math.cos(angle),
                 sin: Math.sin(angle),
-                inner: BASE_FINALE_LINE_INNER_MIN + Math.random() * innerRange,
+                inner: FINALE_LINE_INNER_MIN + Math.random() * innerRange,
                 // 画面対角より必ず長くする（基地が画面端にあっても端まで届く）
                 outer: SCREEN_DIAGONAL * (1.05 + Math.random() * 0.35),
                 width: 1.5 + Math.random() * 3.5,
@@ -126,13 +126,13 @@ export class SpeedLines extends TimedFx {
  */
 export class ShockwaveRing extends TimedFx {
     constructor(x, y) {
-        super(x, y, BASE_FINALE_RING_LIFETIME);
+        super(x, y, FINALE_RING_LIFETIME);
     }
 
     /** 減速カーブ。progress 0→1 に対して 0→1 を、最初に速く返す。 */
     get radius() {
         const p = this.progress;
-        return BASE_FINALE_RING_MAX_RADIUS * (1 - (1 - p) * (1 - p));
+        return FINALE_RING_MAX_RADIUS * (1 - (1 - p) * (1 - p));
     }
 
     draw(ctx) {
@@ -143,7 +143,7 @@ export class ShockwaveRing extends TimedFx {
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 1 - p;
         ctx.strokeStyle = '#CCE6FF';
-        ctx.lineWidth = Math.max(1, BASE_FINALE_RING_WIDTH * (1 - p));
+        ctx.lineWidth = Math.max(1, FINALE_RING_WIDTH * (1 - p));
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.stroke();
@@ -156,7 +156,7 @@ export class ShockwaveRing extends TimedFx {
  * particles は配列順に描かれるので、返した順（閃光→集中線→リング）に push すれば
  * リングがいちばん手前に出る。
  */
-export function createBaseDestructionFx(x, y) {
+export function createDestructionFinale(x, y) {
     return [
         new FinaleFlash(x, y),
         new SpeedLines(x, y),

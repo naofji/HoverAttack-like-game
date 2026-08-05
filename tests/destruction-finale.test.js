@@ -1,15 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ShockwaveRing, SpeedLines, FinaleFlash, createBaseDestructionFx,
-} from '../src/js/entities/BaseDestructionFx.js';
+  ShockwaveRing, SpeedLines, FinaleFlash, createDestructionFinale,
+} from '../src/js/entities/DestructionFinale.js';
 import { makeFakeCtx, extractPolylines, extractSets } from './helpers/fake-ctx.js';
 import { EnemyBase } from '../src/js/entities/EnemyBase.js';
+import { Carrier } from '../src/js/entities/Carrier.js';
+import { makeMap, makeGame, flatFloorRows } from './helpers/enemy-world.js';
 import {
-  BASE_FINALE_SHAKE_INTENSITY,
-  BASE_FINALE_RING_MAX_RADIUS, BASE_FINALE_RING_LIFETIME,
-  BASE_FINALE_LINE_COUNT, BASE_FINALE_LINE_LIFETIME,
-  BASE_FINALE_FLASH_LIFETIME,
+  FINALE_SHAKE_INTENSITY,
+  FINALE_RING_MAX_RADIUS, FINALE_RING_LIFETIME,
+  FINALE_LINE_COUNT, FINALE_LINE_LIFETIME,
+  FINALE_FLASH_LIFETIME,
   CANVAS_WIDTH, CANVAS_HEIGHT,
 } from '../src/js/utils/Constants.js';
 
@@ -37,7 +39,7 @@ test('リングの半径は単調増加し、最大半径で頭打ちになる',
   const ring = new ShockwaveRing(CX, CY);
   let prev = -1;
   let last = 0;
-  for (let i = 0; i < BASE_FINALE_RING_LIFETIME; i++) {
+  for (let i = 0; i < FINALE_RING_LIFETIME; i++) {
     const circle = arcs(drawAt(ring, 0))[0];
     assert.ok(circle, `${i} tick 目でリングが描かれない`);
     assert.ok(circle.r >= prev, `半径が縮んだ: ${prev} -> ${circle.r}`);
@@ -46,8 +48,8 @@ test('リングの半径は単調増加し、最大半径で頭打ちになる',
     last = circle.r;
     ring.update();
   }
-  assert.ok(last <= BASE_FINALE_RING_MAX_RADIUS + 1e-6, `最大半径を超えた: ${last}`);
-  assert.ok(last > BASE_FINALE_RING_MAX_RADIUS * 0.9, `最大半径まで届いていない: ${last}`);
+  assert.ok(last <= FINALE_RING_MAX_RADIUS + 1e-6, `最大半径を超えた: ${last}`);
+  assert.ok(last > FINALE_RING_MAX_RADIUS * 0.9, `最大半径まで届いていない: ${last}`);
 });
 
 test('リングは序盤ほど速く広がる（減速する）', () => {
@@ -57,7 +59,7 @@ test('リングは序盤ほど速く広がる（減速する）', () => {
     for (let i = 0; i < n; i++) r.update();
     return arcs(drawAt(r, 0))[0].r;
   };
-  const q = Math.floor(BASE_FINALE_RING_LIFETIME / 4);
+  const q = Math.floor(FINALE_RING_LIFETIME / 4);
   const early = radiusAt(q) - radiusAt(0);
   const late = radiusAt(q * 4 - 1) - radiusAt(q * 3);
   assert.ok(early > late, `減速していない: 序盤${early} 終盤${late}`);
@@ -67,7 +69,7 @@ test('リングは序盤ほど速く広がる（減速する）', () => {
 test('リングの不透明度は単調減少する', () => {
   const ring = new ShockwaveRing(CX, CY);
   let prev = Infinity;
-  for (let i = 0; i < BASE_FINALE_RING_LIFETIME; i++) {
+  for (let i = 0; i < FINALE_RING_LIFETIME; i++) {
     const alpha = extractSets(drawAt(ring, 0), 'globalAlpha')[0];
     assert.ok(alpha <= prev, `不透明度が上がった: ${prev} -> ${alpha}`);
     prev = alpha;
@@ -77,7 +79,7 @@ test('リングの不透明度は単調減少する', () => {
 
 test('リングは寿命で消える', () => {
   const ring = new ShockwaveRing(CX, CY);
-  for (let i = 0; i < BASE_FINALE_RING_LIFETIME - 1; i++) ring.update();
+  for (let i = 0; i < FINALE_RING_LIFETIME - 1; i++) ring.update();
   assert.equal(ring.alive, true);
   ring.update();
   assert.equal(ring.alive, false);
@@ -88,7 +90,7 @@ test('リングは寿命で消える', () => {
 test('集中線は中心から放射状に伸びている', () => {
   const lines = new SpeedLines(CX, CY);
   const drawn = extractPolylines(drawAt(lines, 0));
-  assert.equal(drawn.length, BASE_FINALE_LINE_COUNT);
+  assert.equal(drawn.length, FINALE_LINE_COUNT);
 
   for (const [a, b] of drawn) {
     // 始点・終点とも中心から見て同じ向きにあること（＝中心を消失点とする放射）
@@ -127,11 +129,11 @@ test('集中線の角度と長さは1本ずつばらつく（均等配置に見�
 
 test('集中線は寿命で消え、閃光より長く残る', () => {
   const lines = new SpeedLines(CX, CY);
-  for (let i = 0; i < BASE_FINALE_LINE_LIFETIME - 1; i++) lines.update();
+  for (let i = 0; i < FINALE_LINE_LIFETIME - 1; i++) lines.update();
   assert.equal(lines.alive, true);
   lines.update();
   assert.equal(lines.alive, false);
-  assert.ok(BASE_FINALE_LINE_LIFETIME > BASE_FINALE_FLASH_LIFETIME,
+  assert.ok(FINALE_LINE_LIFETIME > FINALE_FLASH_LIFETIME,
     '閃光より先に集中線が消える');
 });
 
@@ -139,8 +141,8 @@ test('集中線は寿命で消え、閃光より長く残る', () => {
 
 test('閃光は数フレームで消える', () => {
   const flash = new FinaleFlash(CX, CY);
-  assert.ok(BASE_FINALE_FLASH_LIFETIME <= 8, `閃光が長すぎる: ${BASE_FINALE_FLASH_LIFETIME}`);
-  for (let i = 0; i < BASE_FINALE_FLASH_LIFETIME - 1; i++) flash.update();
+  assert.ok(FINALE_FLASH_LIFETIME <= 8, `閃光が長すぎる: ${FINALE_FLASH_LIFETIME}`);
+  for (let i = 0; i < FINALE_FLASH_LIFETIME - 1; i++) flash.update();
   assert.equal(flash.alive, true);
   flash.update();
   assert.equal(flash.alive, false);
@@ -155,7 +157,7 @@ test('閃光は基地の中心に描かれる', () => {
 // --- ファクトリ --------------------------------------------------------------
 
 test('ファクトリが3要素すべてを返す', () => {
-  const fx = createBaseDestructionFx(CX, CY);
+  const fx = createDestructionFinale(CX, CY);
   assert.equal(fx.length, 3);
   assert.ok(fx.some((f) => f instanceof FinaleFlash), '閃光が無い');
   assert.ok(fx.some((f) => f instanceof SpeedLines), '集中線が無い');
@@ -163,7 +165,7 @@ test('ファクトリが3要素すべてを返す', () => {
 });
 
 test('死んだ要素は描画しない', () => {
-  for (const fx of createBaseDestructionFx(CX, CY)) {
+  for (const fx of createDestructionFinale(CX, CY)) {
     while (fx.alive) fx.update();
     const ctx = makeFakeCtx();
     fx.draw(ctx);
@@ -203,7 +205,7 @@ test('基地の破壊完了でフィナーレが particles へ入り、カメラ
   assert.ok(game.particles.some((p) => p instanceof ShockwaveRing));
 
   assert.equal(game.shakeCalls.length, 1, 'カメラが揺れていない');
-  assert.equal(game.shakeCalls[0].intensity, BASE_FINALE_SHAKE_INTENSITY);
+  assert.equal(game.shakeCalls[0].intensity, FINALE_SHAKE_INTENSITY);
   assert.ok(game.shakeCalls[0].intensity > 8,
     '死亡シーケンス中の小爆発 shake(8,3) より弱い');
 });
@@ -216,6 +218,37 @@ test('フィナーレは最後の大爆発より後に push される（手前�
   game.spawnExplosion = () => { game.particles.push(marker); };
 
   new EnemyBase(game, 100, 100)._finishDestruction();
+
+  assert.equal(game.particles[0], marker, '爆発より先にフィナーレが入っている');
+});
+
+test('母艦の破壊でもフィナーレが出て、カメラが強く揺れる', () => {
+  // 母艦の喪失は残機1＝必ずゲームオーバー。ゲーム中で最大の見せ場なので、
+  // 敵基地と同じフィナーレを共有する。
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.shakeCalls = [];
+  game.camera = { shake: (intensity, duration) => game.shakeCalls.push({ intensity, duration }) };
+  game.spawnDebris = () => {};
+  game.spawnExplosion = () => {};
+
+  const carrier = new Carrier(game, 100, 100);
+  carrier.die();
+
+  const finale = game.particles.filter(
+    (p) => p instanceof ShockwaveRing || p instanceof SpeedLines || p instanceof FinaleFlash);
+  assert.equal(finale.length, 3, 'フィナーレ3要素が出ていない');
+  assert.equal(game.shakeCalls.length, 1);
+  assert.equal(game.shakeCalls[0].intensity, FINALE_SHAKE_INTENSITY);
+});
+
+test('母艦のフィナーレは爆発より後に push される（手前に描かれる）', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.camera = { shake: () => {} };
+  game.spawnDebris = () => {};
+  const marker = { alive: true, update() {}, draw() {} };
+  game.spawnExplosion = () => { game.particles.push(marker); };
+
+  new Carrier(game, 100, 100).die();
 
   assert.equal(game.particles[0], marker, '爆発より先にフィナーレが入っている');
 });
