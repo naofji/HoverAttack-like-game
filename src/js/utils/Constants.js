@@ -457,7 +457,8 @@ export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以�
 export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
 export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
-export const DEBRIS_SPIN_SCALE = 0.06;     // 横方向初速 → 角速度への係数
+export const DEBRIS_SPIN_SCALE = 0.08;     // 速さ → 角速度への係数（毎秒約2.8回転）
+export const DEBRIS_SPIN_BASE = 0.06;     // 速さに関わらず加わる回転。止まって見える破片を無くす
 export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
 // 1機あたりの破片数は 32〜81 片（最多は artillery の4脚型）。
 // 上限 800 はおよそ10機ぶんで、地雷の誘爆による同時多数撃破でも足りる。
@@ -483,6 +484,13 @@ export const DEBRIS_SLAT_SPIN_BOOST = 2.4; // 細長い破片は回りやすい
 // 平たく広がる（横長の母艦だと横一直線になる）。等方なランダム方向を混ぜて
 // 球状に散らす。0で放射のみ、1で完全にランダム。
 export const DEBRIS_ISOTROPIC_MIX = 0.55;
+
+// 爆発なので上へ吹き上がる。方向ベクトルの y に足してから正規化する。
+export const DEBRIS_UPWARD_BIAS = 0.3;   // 上向き約75%。上げすぎると放射に見えなくなる
+
+// 初速のばらつき。全部が同じ速さで飛ぶと単調に見える。
+// 1 を中心に ±SPEED_VARY/2 の倍率がかかる。
+export const DEBRIS_SPEED_VARY = 0.9;
 export const DEBRIS_SPLIT_MIN_SIZE = 1.4;  // これ以下の辺になる分割はしない（点にならないように）
 export const DEBRIS_SPLIT_RATIO_JITTER = 0.5; // 分割位置の比率 0.5±JITTER/2（大きさのばらつき）
 export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）

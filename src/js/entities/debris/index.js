@@ -13,6 +13,7 @@ import {
     DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
     DEBRIS_SPLIT_PIECES, DEBRIS_SPLIT_MIN_SIZE, DEBRIS_SPLIT_RATIO_JITTER,
     DEBRIS_SLAT_CHANCE, DEBRIS_SLAT_SPIN_BOOST, DEBRIS_ISOTROPIC_MIX,
+    DEBRIS_UPWARD_BIAS, DEBRIS_SPEED_VARY, DEBRIS_SPIN_BASE,
     DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPREAD_JITTER,
     DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER, DEBRIS_SPLIT_SPIN_VARY,
 } from '../../utils/Constants.js';
@@ -122,24 +123,30 @@ export function buildDebris(entity, kind) {
         const power = spec.burst / weight;
 
         // 放射方向だけだと機体の輪郭に沿って平たく広がる（横長の母艦なら横一直線）。
-        // 等方なランダム方向を混ぜて球状に散らす。
+        // 等方なランダム方向を混ぜて球状に散らし、さらに上向きの偏りを足す。
+        // 爆発で吹き上がるので、上へ飛ぶ破片が多いほうが自然。
         const mix = DEBRIS_ISOTROPIC_MIX;
         const randAngle = Math.random() * Math.PI * 2;
         let dirX = (radX / radialLen) * (1 - mix) + Math.cos(randAngle) * mix;
-        let dirY = (radY / radialLen) * (1 - mix) + Math.sin(randAngle) * mix;
+        let dirY = (radY / radialLen) * (1 - mix) + Math.sin(randAngle) * mix - DEBRIS_UPWARD_BIAS;
         const dirLen = Math.hypot(dirX, dirY) || 1;
         dirX /= dirLen;
         dirY /= dirLen;
 
+        // 破片ごとに速さを変える。全部同じだと爆発が「面」で広がって見える。
+        const speed = power * (1 + (Math.random() - 0.5) * DEBRIS_SPEED_VARY);
+
         const vx = (entity.vx || 0)
-            + dirX * power
+            + dirX * speed
             + (Math.random() - 0.5) * DEBRIS_SPEED_JITTER;
         const vy = (entity.vy || 0)
-            + dirY * power
+            + dirY * speed
             + (Math.random() - 0.5) * DEBRIS_SPEED_JITTER;
 
-        // 横へ勢いよく飛んだ破片ほど速く回る（慣性を視覚的に一貫させる）
-        const spin = vx * DEBRIS_SPIN_SCALE * (Math.random() < 0.5 ? -1 : 1);
+        // 速く飛んだ破片ほど速く回る。加えて、遅い破片も止まって見えないよう
+        // 速さに依らない回転を足す。
+        const spinDir = Math.random() < 0.5 ? -1 : 1;
+        const spin = (Math.hypot(vx, vy) * DEBRIS_SPIN_SCALE + DEBRIS_SPIN_BASE) * spinDir;
 
         // 5. パーツをさらに 2x2 に割る。4片は元パーツの速度をそのまま共有し、
         //    パーツ中心から外向きへわずかに開くだけなので、飛び始めは元の

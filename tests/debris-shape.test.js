@@ -72,23 +72,53 @@ test('柵状分割は一定の割合で混ざる（全部が格子でも全部�
 
 // --- 散らばり方 -------------------------------------------------------------
 
-test('破片は全方位へ散る（機体の輪郭に沿って平たく広がらない）', () => {
-  // 母艦は 64x32 と横長。放射方向だけで決めると横に偏る。
+test('破片は全方位へ散りつつ、上向きに偏る（爆発で吹き上がる）', () => {
   const entity = { x: 0, y: 0, width: 64, height: 32, vx: 0, vy: 0 };
   const buckets = new Array(8).fill(0);
-  for (let i = 0; i < 30; i++) {
+  let up = 0;
+  let total = 0;
+  for (let i = 0; i < 40; i++) {
     for (const d of buildDebris(entity, 'carrier')) {
       const ang = Math.atan2(d.vy, d.vx);
-      const idx = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 8) % 8;
-      buckets[idx]++;
+      buckets[Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 8) % 8]++;
+      if (d.vy < 0) up++;
+      total++;
     }
   }
-  const total = buckets.reduce((a, b) => a + b, 0);
-  const expected = total / 8;
+  // どの方向にも飛ぶ（一方向に潰れていない）
   for (const [i, n] of buckets.entries()) {
-    assert.ok(n > expected * 0.35,
-      `方向 ${i} に破片がほとんど飛んでいない: ${n} (期待 ${expected.toFixed(0)})`);
+    assert.ok(n > 0, `方向 ${i} に破片が1つも飛んでいない`);
   }
+  // ただし上向きが優勢。爆発なので吹き上がるのが自然
+  const upRatio = up / total;
+  assert.ok(upRatio > 0.55, `上向きに偏っていない: ${(upRatio * 100).toFixed(0)}%`);
+  assert.ok(upRatio < 0.9, `上ばかりで放射に見えない: ${(upRatio * 100).toFixed(0)}%`);
+});
+
+test('初速は破片ごとにばらつく', () => {
+  const entity = { x: 0, y: 0, width: 64, height: 32, vx: 0, vy: 0 };
+  const speeds = [];
+  for (let i = 0; i < 20; i++) {
+    for (const d of buildDebris(entity, 'carrier')) speeds.push(Math.hypot(d.vx, d.vy));
+  }
+  const mean = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+  const sd = Math.sqrt(speeds.reduce((a, v) => a + (v - mean) ** 2, 0) / speeds.length);
+  // 変動係数。小さいと全部が同じ速さで飛んで単調に見える
+  assert.ok(sd / mean > 0.25,
+    `初速が揃いすぎている: 変動係数 ${(sd / mean).toFixed(2)}`);
+});
+
+test('破片はよく回る（止まって見える破片が少ない）', () => {
+  const entity = { x: 0, y: 0, width: 64, height: 32, vx: 0, vy: 0 };
+  const spins = [];
+  for (let i = 0; i < 20; i++) {
+    for (const d of buildDebris(entity, 'carrier')) spins.push(Math.abs(d.spin));
+  }
+  const mean = spins.reduce((a, b) => a + b, 0) / spins.length;
+  assert.ok(mean > 0.12, `回転が遅い: 平均 ${mean.toFixed(3)} rad/tick`);
+  const barelySpinning = spins.filter((s) => s < 0.02).length / spins.length;
+  assert.ok(barelySpinning < 0.1,
+    `ほとんど回らない破片が多い: ${(barelySpinning * 100).toFixed(0)}%`);
 });
 
 test('細長い破片ほどよく回る', () => {
