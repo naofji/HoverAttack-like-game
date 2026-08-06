@@ -8,13 +8,13 @@ import {
     ENEMY_TANK_SPEED, ENEMY_TANK_SIGHT_RANGE,
     ENEMY_TANK_FIRE_INTERVAL, ENEMY_TANK_SCORE,
     ENEMY_TANK_MAX_FALLING_SPEED,
-    EXPLOSION_PARTICLE_COUNT,
+    
     ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
-import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
+import { playDestruction } from './destruction.js';
 
 export class EnemyTank {
     constructor(game, x, y) {
@@ -245,11 +245,10 @@ export class EnemyTank {
 
     die() {
         this.alive = false;
-        this.game.spawnDebris(this, 'tank');
+        playDestruction(this.game, this, 'tank');
         // Explosion effect
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
         this.game.addScore(this.score);
     }
 

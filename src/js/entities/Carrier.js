@@ -5,16 +5,16 @@
 import {
     TILE_SIZE,
     CARRIER_WIDTH, CARRIER_HEIGHT, CARRIER_SPEED,
-    CARRIER_DEATH_EXPLOSION_COUNT,
-    FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
+    
+     
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
-import { CARRIER_EXPLOSION_OPTS } from './Particle.js';
 import { createDestructionFinale } from './DestructionFinale.js';
+import { playDestruction } from './destruction.js';
 
 export class Carrier {
     constructor(game, x, y) {
@@ -188,18 +188,12 @@ export class Carrier {
 
     die() {
         this.alive = false;
-        this.game.spawnDebris(this, 'carrier');
+        playDestruction(this.game, this, 'carrier');
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, CARRIER_DEATH_EXPLOSION_COUNT, CARRIER_EXPLOSION_OPTS);
-
         // 母艦の喪失は残機1＝必ずゲームオーバー。ゲーム中で最大の見せ場なので、
-        // 敵基地と同じフィナーレ（閃光→集中線→衝撃波リング）を出す。
-        // 爆発より後に push することで、描画順で手前に出る。
+        // 敵基地と同じフィナーレ（集中線→衝撃波リング）も重ねる。
         this.game.particles.push(...createDestructionFinale(cx, cy));
-        if (this.game.camera) {
-            this.game.camera.shake(FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION);
-        }
 
         this.lives--;
 

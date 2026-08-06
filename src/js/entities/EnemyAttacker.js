@@ -7,8 +7,7 @@ import {
     PLAYER_WIDTH, PLAYER_HEIGHT,
     PLAYER_MAX_FALLING_SPEED,
     HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
-    MISSILE_SPEED, EXPLOSION_PARTICLE_COUNT,
-    ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
+    MISSILE_SPEED, ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
     ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
     ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES,
     RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
@@ -25,8 +24,8 @@ import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
-import { MACHINE_EXPLOSION_OPTS, createDeathFlashes } from './Particle.js';
 import { tickRecoil } from '../utils/Recoil.js';
+import { playDestruction } from './destruction.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -987,12 +986,9 @@ export class EnemyAttacker {
 
     die() {
         this.alive = false;
-        this.game.spawnDebris(this, 'attacker');
+        playDestruction(this.game, this, 'attacker');
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
-        // ミサイル着弾と同じくらいの閃光を時間差で連ねる。誘爆しているように見せる。
-        this.game.particles.push(...createDeathFlashes(this.x, this.y, this.width, this.height));
         this.game.addScore(this.score);
 
         // heavy は30%の確率でミサイル・サプライ・キットをドロップ

@@ -22,7 +22,7 @@ import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 import { tickRecoil } from '../utils/Recoil.js';
-import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
+import { playDestruction } from './destruction.js';
 
 export class EnemyDrone {
     constructor(game, x, y) {
@@ -433,8 +433,7 @@ export class EnemyDrone {
 
     die() {
         this.alive = false;
-        this.game.spawnDebris(this, 'drone');
-        this.game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 20, MACHINE_EXPLOSION_OPTS);
+        playDestruction(this.game, this, 'drone');
         this.game.addScore(ENEMY_DRONE_SCORE);
     }
 

@@ -6,6 +6,7 @@ import {
 import { makeFakeCtx, extractPolylines, extractSets } from './helpers/fake-ctx.js';
 import { EnemyBase } from '../src/js/entities/EnemyBase.js';
 import { Carrier } from '../src/js/entities/Carrier.js';
+import { DESTRUCTION_PROFILES } from '../src/js/entities/destruction.js';
 import { makeMap, makeGame, flatFloorRows } from './helpers/enemy-world.js';
 import {
   FINALE_SHAKE_INTENSITY,
@@ -222,9 +223,10 @@ test('フィナーレは最後の大爆発より後に push される（手前�
   assert.equal(game.particles[0], marker, '爆発より先にフィナーレが入っている');
 });
 
-test('母艦の破壊でもフィナーレが出て、カメラが強く揺れる', () => {
+test('母艦の破壊でフィナーレが出て、爆発の後にカメラが強く揺れる', () => {
   // 母艦の喪失は残機1＝必ずゲームオーバー。ゲーム中で最大の見せ場なので、
   // 敵基地と同じフィナーレを共有する。
+  // 演出は「閃光 → 分解して爆発」の順なので、揺れは爆発と同時＝遅れて来る。
   const game = makeGame(makeMap(flatFloorRows()));
   game.shakeCalls = [];
   game.camera = { shake: (intensity, duration) => game.shakeCalls.push({ intensity, duration }) };
@@ -237,20 +239,34 @@ test('母艦の破壊でもフィナーレが出て、カメラが強く揺れ�
   const finale = game.particles.filter(
     (p) => p instanceof ShockwaveRing || p instanceof SpeedLines || p instanceof FinaleFlash);
   assert.equal(finale.length, 3, 'フィナーレ3要素が出ていない');
-  assert.equal(game.shakeCalls.length, 1);
+  assert.equal(game.shakeCalls.length, 0, '爆発より先に画面が揺れている');
+
+  // 爆発の遅延ぶん進めると揺れる
+  const delay = DESTRUCTION_PROFILES.carrier.blast.delay;
+  for (let i = 0; i < delay; i++) {
+    for (const p of [...game.particles]) p.update();
+    game.particles = game.particles.filter((p) => p.alive);
+  }
+  assert.equal(game.shakeCalls.length, 1, '爆発と同時に揺れていない');
   assert.equal(game.shakeCalls[0].intensity, FINALE_SHAKE_INTENSITY);
 });
 
-test('母艦のフィナーレは爆発より後に push される（手前に描かれる）', () => {
+test('母艦の破壊では閃光が先に出て、爆発は後から来る', () => {
   const game = makeGame(makeMap(flatFloorRows()));
   game.camera = { shake: () => {} };
   game.spawnDebris = () => {};
-  const marker = { alive: true, update() {}, draw() {} };
-  game.spawnExplosion = () => { game.particles.push(marker); };
+  game.explosions = [];
+  game.spawnExplosion = () => { game.explosions.push(1); };
 
   new Carrier(game, 100, 100).die();
+  assert.equal(game.explosions.length, 0, '閃光と同時に爆発している');
 
-  assert.equal(game.particles[0], marker, '爆発より先にフィナーレが入っている');
+  const delay = DESTRUCTION_PROFILES.carrier.blast.delay;
+  for (let i = 0; i < delay; i++) {
+    for (const p of [...game.particles]) p.update();
+    game.particles = game.particles.filter((p) => p.alive);
+  }
+  assert.equal(game.explosions.length, 1, '遅延後に爆発していない');
 });
 
 test('カメラが無くても破壊完了で落ちない', () => {
