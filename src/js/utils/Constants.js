@@ -383,8 +383,13 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 // createExplosion が入れる FlashParticle は柔らかいグラデーションで、粒子に紛れて
 // 「命中した」瞬間が読み取りにくい。輪郭のはっきりした小さな閃光を別に重ねる。
 export const IMPACT_FLASH_LIFETIME = 8;   // 短く。爆発本体を邪魔しない
-export const IMPACT_FLASH_RADIUS = 12;    // 小さく。自機(16x24)を覆い隠さない
+export const IMPACT_FLASH_RADIUS = 18;    // ミサイル着弾。マシンガンとの差が出る大きさ
 export const IMPACT_FLASH_RADIUS_MG = 6;  // マシンガンなど軽い着弾用
+
+// 機体の破壊時は、ミサイル着弾と同じくらいの閃光を時間差で連ねて瞬かせる。
+// 1発の大きな光より、複数が次々に走るほうが「誘爆している」感じが出る。
+export const DEATH_FLASH_COUNT = 5;
+export const DEATH_FLASH_STAGGER = 4;     // 1つあたりの遅延の刻み（tick）
 
 // --- 敵の被弾ノックバック（反動） ---
 // 敵AIは毎tick自分で vx/vy を代入し直す型が多い（EnemyTank の巡回など）。

@@ -25,7 +25,7 @@ import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
-import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
+import { MACHINE_EXPLOSION_OPTS, createDeathFlashes } from './Particle.js';
 import { tickRecoil } from '../utils/Recoil.js';
 
 /**
@@ -991,6 +991,8 @@ export class EnemyAttacker {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
         this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT, MACHINE_EXPLOSION_OPTS);
+        // ミサイル着弾と同じくらいの閃光を時間差で連ねる。誘爆しているように見せる。
+        this.game.particles.push(...createDeathFlashes(this.x, this.y, this.width, this.height));
         this.game.addScore(this.score);
 
         // heavy は30%の確率でミサイル・サプライ・キットをドロップ

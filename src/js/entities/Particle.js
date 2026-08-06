@@ -6,6 +6,7 @@ import {
     PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT, EXPLOSION_SPREAD_WITH_DEBRIS,
     PLAYER_DEATH_EXPLOSION_SPREAD, CARRIER_DEATH_EXPLOSION_SPREAD,
     IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS,
+    DEATH_FLASH_COUNT, DEATH_FLASH_STAGGER,
 } from '../utils/Constants.js';
 
 /**
@@ -167,11 +168,13 @@ export class ImpactFlash {
      * @param {number} x 着弾点
      * @param {number} y
      * @param {number} [radius] 最大半径。弾種で変えられる
+     * @param {number} [delay] 光り始めるまでの待ち。破壊時に連ねて瞬かせるのに使う
      */
-    constructor(x, y, radius = IMPACT_FLASH_RADIUS) {
+    constructor(x, y, radius = IMPACT_FLASH_RADIUS, delay = 0) {
         this.x = x;
         this.y = y;
         this.radius = radius;
+        this.delay = delay;
         this.maxLifetime = IMPACT_FLASH_LIFETIME;
         this.lifetime = IMPACT_FLASH_LIFETIME;
         this.alive = true;
@@ -179,12 +182,17 @@ export class ImpactFlash {
 
     update() {
         if (!this.alive) return;
+        // 待機中は寿命を消費しない。消費すると遅い閃光ほど短命になってしまう
+        if (this.delay > 0) {
+            this.delay--;
+            return;
+        }
         this.lifetime--;
         if (this.lifetime <= 0) this.alive = false;
     }
 
     draw(ctx) {
-        if (!this.alive) return;
+        if (!this.alive || this.delay > 0) return;
 
         const p = 1 - this.lifetime / this.maxLifetime;   // 0 → 1
         const r = this.radius * (0.35 + 0.65 * p);        // 広がる
@@ -209,6 +217,25 @@ export class ImpactFlash {
 
         ctx.restore();
     }
+}
+
+/**
+ * 機体の破壊時に、ミサイル着弾と同じくらいの閃光を機体の範囲へ散らし、
+ * 時間差で瞬かせる。1発の大きな光より誘爆している感じが出る。
+ * @returns {ImpactFlash[]}
+ */
+export function createDeathFlashes(x, y, width, height) {
+    const out = [];
+    for (let i = 0; i < DEATH_FLASH_COUNT; i++) {
+        out.push(new ImpactFlash(
+            x + Math.random() * width,
+            y + Math.random() * height,
+            IMPACT_FLASH_RADIUS * (0.7 + Math.random() * 0.4),
+            // 1つ目は即座に。以降は刻みごとにばらつかせる
+            i === 0 ? 0 : Math.round(i * DEATH_FLASH_STAGGER * (0.6 + Math.random() * 0.8)),
+        ));
+    }
+    return out;
 }
 
 // --------------------------------------------
