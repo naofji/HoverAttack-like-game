@@ -473,6 +473,16 @@ export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎた�
 // パーツは「長い辺をランダムな比率で割る」を繰り返して砕く（ギロチン分割）。
 // 均等な格子と違って大きさがまちまちになり、かつ元のパーツを隙間なく埋める。
 export const DEBRIS_SPLIT_PIECES = 8;      // 1パーツを最大この数まで割る
+
+// 分割の仕方は2通り。長い辺を割り続けると正方形に近づいて塊状になるので、
+// 一定の割合で「短い辺だけを繰り返し割る」柵状の切り方を混ぜ、細長い破片も作る。
+export const DEBRIS_SLAT_CHANCE = 0.35;    // 柵状に割る確率
+export const DEBRIS_SLAT_SPIN_BOOST = 2.4; // 細長い破片は回りやすい
+
+// 破片の飛ぶ向き。機体中心からの放射だけで決めると、機体の輪郭に沿って
+// 平たく広がる（横長の母艦だと横一直線になる）。等方なランダム方向を混ぜて
+// 球状に散らす。0で放射のみ、1で完全にランダム。
+export const DEBRIS_ISOTROPIC_MIX = 0.55;
 export const DEBRIS_SPLIT_MIN_SIZE = 1.4;  // これ以下の辺になる分割はしない（点にならないように）
 export const DEBRIS_SPLIT_RATIO_JITTER = 0.5; // 分割位置の比率 0.5±JITTER/2（大きさのばらつき）
 export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）

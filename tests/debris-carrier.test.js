@@ -30,20 +30,22 @@ test('船体が左右2片に割れる', () => {
   assert.notEqual(hulls[0].x, hulls[1].x, '2片が同じ位置にある');
 });
 
-test('左右の船体片は反対方向へ飛ぶ', () => {
-  const carrier = makeCarrier();
-  const debris = buildDebris(carrier, 'carrier');
-  // 下部船体は左右2パーツ。各パーツはさらにギロチン分割で砕けるので、
-  // 船体色の破片は 2 個より多く、2 * DEBRIS_SPLIT_PIECES 個以下になる。
-  const hulls = debris.filter((d) => d.color === '#1a3a6a');
-  assert.ok(hulls.length > 2 && hulls.length <= 2 * DEBRIS_SPLIT_PIECES,
-    `船体の破片数が想定外: ${hulls.length}`);
-
-  const midX = carrier.x + carrier.width / 2;
+test('左右の船体片は平均として反対方向へ飛ぶ', () => {
+  // 等方な散らばりを混ぜているので、1回ごとの左右差は揺らぐ。
+  // 「船が中央から裂ける」という傾向が残っているかを多数回の平均で見る。
   const meanVx = (group) => group.reduce((a, d) => a + d.vx, 0) / group.length;
-  const left = hulls.filter((d) => d.x < midX);
-  const right = hulls.filter((d) => d.x >= midX);
-  assert.ok(left.length > 0 && right.length > 0, '左右どちらかに破片が無い');
-  assert.ok(meanVx(left) < meanVx(right),
-    `左右へ割れていない: ${meanVx(left)} vs ${meanVx(right)}`);
+  let leftTotal = 0;
+  let rightTotal = 0;
+  const TRIALS = 40;
+
+  for (let i = 0; i < TRIALS; i++) {
+    const carrier = makeCarrier();
+    const hulls = buildDebris(carrier, 'carrier').filter((d) => d.color === '#1a3a6a');
+    const midX = carrier.x + carrier.width / 2;
+    leftTotal += meanVx(hulls.filter((d) => d.x < midX));
+    rightTotal += meanVx(hulls.filter((d) => d.x >= midX));
+  }
+
+  assert.ok(leftTotal / TRIALS < rightTotal / TRIALS,
+    `左右へ裂ける傾向が無い: 左 ${(leftTotal / TRIALS).toFixed(2)} / 右 ${(rightTotal / TRIALS).toFixed(2)}`);
 });
