@@ -379,6 +379,13 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
+// --- 着弾の閃光 ---
+// createExplosion が入れる FlashParticle は柔らかいグラデーションで、粒子に紛れて
+// 「命中した」瞬間が読み取りにくい。輪郭のはっきりした小さな閃光を別に重ねる。
+export const IMPACT_FLASH_LIFETIME = 8;   // 短く。爆発本体を邪魔しない
+export const IMPACT_FLASH_RADIUS = 12;    // 小さく。自機(16x24)を覆い隠さない
+export const IMPACT_FLASH_RADIUS_MG = 6;  // マシンガンなど軽い着弾用
+
 // --- 敵の被弾ノックバック（反動） ---
 // 敵AIは毎tick自分で vx/vy を代入し直す型が多い（EnemyTank の巡回など）。
 // 速度を書き換えるだけでは次のフレームで消えるので、この時間だけ敵側の

@@ -5,6 +5,7 @@
 import {
     PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT, EXPLOSION_SPREAD_WITH_DEBRIS,
     PLAYER_DEATH_EXPLOSION_SPREAD, CARRIER_DEATH_EXPLOSION_SPREAD,
+    IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS,
 } from '../utils/Constants.js';
 
 /**
@@ -151,6 +152,61 @@ export class FlashParticle {
         ctx.beginPath();
         ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+    }
+}
+
+// --------------------------------------------
+// Impact Flash - 着弾の瞬間を示す小さく硬い閃光
+// --------------------------------------------
+// FlashParticle（爆発の中央に入る柔らかいグラデーション）とは役割が違う。
+// あちらは爆発の「熱」を表す下地で、こちらは「命中した」という一瞬の合図。
+// 輪郭をはっきりさせるため、グラデーションではなく単色の円＋外周のリングで描く。
+export class ImpactFlash {
+    /**
+     * @param {number} x 着弾点
+     * @param {number} y
+     * @param {number} [radius] 最大半径。弾種で変えられる
+     */
+    constructor(x, y, radius = IMPACT_FLASH_RADIUS) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.maxLifetime = IMPACT_FLASH_LIFETIME;
+        this.lifetime = IMPACT_FLASH_LIFETIME;
+        this.alive = true;
+    }
+
+    update() {
+        if (!this.alive) return;
+        this.lifetime--;
+        if (this.lifetime <= 0) this.alive = false;
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+
+        const p = 1 - this.lifetime / this.maxLifetime;   // 0 → 1
+        const r = this.radius * (0.35 + 0.65 * p);        // 広がる
+        const alpha = 1 - p;                              // 薄れる
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = alpha;
+
+        // 中心の白い芯。序盤ほど大きく、すぐ縮んで消える
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r * (1 - p) * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 外周のリング。これが「輪郭のある閃光」に見せている部分
+        ctx.strokeStyle = '#FFE8A0';
+        ctx.lineWidth = Math.max(1, 2 * (1 - p));
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+
         ctx.restore();
     }
 }

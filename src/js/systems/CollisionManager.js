@@ -7,6 +7,7 @@ import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { applyRecoil } from '../utils/Recoil.js';
+import { IMPACT_FLASH_RADIUS_MG } from '../utils/Constants.js';
 import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
 
 // Damage values
@@ -92,6 +93,7 @@ export class CollisionManager {
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = DAMAGE_HOMING_MISSILE;
             game.spawnExplosion(bullet.x, bullet.y, EXPLOSION_HOMING_HIT);
+            game.spawnImpactFlash(bullet.x, bullet.y);
         }
 
         target.takeDamage(damage);
@@ -176,6 +178,7 @@ export class CollisionManager {
                 // 据え付け物（砲台・基地）には何も起きない。
                 applyRecoil(enemy, (enemy.x + enemy.width / 2) - proj.x);
                 game.spawnExplosion(proj.x, proj.y, EXPLOSION_PLAYER_MISSILE);
+                game.spawnImpactFlash(proj.x, proj.y);
                 proj.alive = false;
                 proj.exploded = true;
                 break;
@@ -191,6 +194,7 @@ export class CollisionManager {
             if (pointInRect(proj.x, proj.y, enemy)) {
                 if (!enemy.isBase) enemy.takeDamage(DAMAGE_PLAYER_MG);
                 game.spawnExplosion(proj.x, proj.y, EXPLOSION_PLAYER_MG);
+                game.spawnImpactFlash(proj.x, proj.y, IMPACT_FLASH_RADIUS_MG);
                 proj.alive = false;
                 break;
             }
@@ -211,6 +215,7 @@ export class CollisionManager {
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
             game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
+            game.spawnImpactFlash(proj.x, proj.y);
             proj.alive = false;
             proj.exploded = true;
             return;
@@ -219,6 +224,7 @@ export class CollisionManager {
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
             carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
             game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
+            game.spawnImpactFlash(proj.x, proj.y);
             proj.alive = false;
             proj.exploded = true;
         }

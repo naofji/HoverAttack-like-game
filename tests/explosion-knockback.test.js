@@ -12,6 +12,8 @@ import {
 function makeGame(overrides = {}) {
   return {
     spawnExplosion() {},
+    // 着弾の閃光。実ゲームでは main.js が必ず持つ
+    spawnImpactFlash() {},
     addScore() {},
     player: null,
     carrier: null,
