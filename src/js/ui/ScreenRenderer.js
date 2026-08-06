@@ -10,7 +10,7 @@ import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
-import { UI, TIER, ROW_HIGHLIGHT, SIZE, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
+import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -99,7 +99,7 @@ export class ScreenRenderer {
 
                 // 選択中は面取りフレーム＋発光で示す。角丸は使わない。
                 drawFrame(ctx, centerX - boxW / 2, rowY - boxH / 2, boxW, boxH,
-                    mode.color, { fill: UI.panelFill, glow: 'mid', cut: 8 });
+                    mode.color, { fill: UI.panelFill, glow: 'mid', radius: 6 });
 
                 ctx.save();
                 ctx.font = LABEL_FONT;
@@ -497,8 +497,15 @@ export class ScreenRenderer {
         return g;
     }
 
-    /** Draw glossy chrome text: thin dark edge under a chrome vertical gradient fill. */
-    _metallicText(ctx, text, x, y, base, fontPx) {
+    /**
+     * Draw glossy chrome text: thin dark edge under a chrome vertical gradient fill.
+     *
+     * 文字サイズは ctx.font から読む。以前は呼び出し側が px を渡す形で、
+     * ctx.font が16pxなのに17を渡すといったズレが実際に起きていた
+     * （階調の範囲が実際の字面と合わなくなる）。
+     */
+    _metallicText(ctx, text, x, y, base) {
+        const fontPx = parseFloat(/(\d+(?:\.\d+)?)px/.exec(ctx.font)?.[1] ?? 16);
         const top = y - fontPx * 0.78;
         const bottom = y + fontPx * 0.10;
         ctx.strokeStyle = lerpColor(base, '#000000', 0.7);
@@ -517,27 +524,43 @@ export class ScreenRenderer {
 
         ctx.textAlign = 'center';
         ctx.font = font('title', true);
-        this._metallicText(ctx, o.title, canvas.width / 2, 40, o.titleColor, 34);
+        this._metallicText(ctx, o.title, canvas.width / 2, 44, o.titleColor);
 
+        // 副題は表題の説明。小さくして表題との差をはっきりさせる。
         ctx.fillStyle = o.subtitleColor;
-        ctx.font = font('body', true);
-        ctx.fillText(o.subtitle, canvas.width / 2, 66);
-
-        ctx.font = font('sub', true);
-        ctx.fillStyle = o.subtitleColor;
-        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 95);
+        ctx.font = font('small');
+        ctx.fillText(o.subtitle, canvas.width / 2, 44 + SPACE.lg);
 
         const scores = o.scores || [];
+
+        // 行は等幅なので、実測してブロックごと中央に置く。
+        // 以前は canvas.width / 2 - 255 の固定値で、文字サイズを変えるとずれた。
+        ctx.font = font('body', true);
+        const sampleWidth = ctx.measureText(' 1.  9999999     AAAAAAAAAA       7 (00:00)').width;
+        const textLeft = Math.round((canvas.width - sampleWidth) / 2);
+
+        // 見出し行は本文と同じ左端・同じ字送りに揃える（以前は中央揃えで列がずれていた）
+        ctx.textAlign = 'left';
+        ctx.fillStyle = o.subtitleColor;
+        ctx.font = font('small', true);
+        const headerY = 44 + SPACE.lg + SPACE.lg;
+        ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', textLeft, headerY);
+        ctx.strokeStyle = o.subtitleColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(textLeft, headerY + SPACE.sm + 0.5);
+        ctx.lineTo(textLeft + sampleWidth, headerY + SPACE.sm + 0.5);
+        ctx.stroke();
+
         if (scores.length === 0) {
             ctx.textAlign = 'center';
             ctx.fillStyle = o.subtitleColor;
             ctx.font = font('sub', true);
             ctx.fillText('NO RECORDS YET', canvas.width / 2, canvas.height / 2);
         } else {
-            ctx.font = font('sub', true);
-            const startY = 130;
-            const lineH = 22.5;
-            const textLeft = canvas.width / 2 - 255;
+            ctx.font = font('body', true);
+            const startY = headerY + SPACE.lg + SPACE.sm;
+            const lineH = lineHeight('body');
             scores.forEach((entry, index) => {
                 const rank = String(index + 1).padStart(2, ' ');
                 const scoreStr = String(entry.score).padStart(7, ' ');
@@ -552,7 +575,8 @@ export class ScreenRenderer {
                     ctx.fillStyle = ROW_HIGHLIGHT;
                     ctx.fillText(rowText, textLeft, rowY);
                 } else {
-                    this._metallicText(ctx, rowText, textLeft, rowY, lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1)), 19);
+                    this._metallicText(ctx, rowText, textLeft, rowY,
+                        lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1)));
                 }
             });
         }
@@ -597,38 +621,60 @@ export class ScreenRenderer {
         ctx.fillStyle = TIER.fame.bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // 表題。この画面の主役なので最大サイズ＋クローム。
         ctx.font = font('title', true);
         ctx.textAlign = 'center';
-        this._metallicText(ctx, '✦ WALL OF FAME ✦', canvas.width / 2, 44, TIER.fame.title, SIZE.title);
+        this._metallicText(ctx, '✦ WALL OF FAME ✦', canvas.width / 2, 48, TIER.fame.title);
 
+        // 副題は「表題の説明」であって見出しではない。小さく落ち着かせて、
+        // 表題との大小差をはっきりさせる（以前は16px太字で週見出しと同格だった）。
         ctx.fillStyle = TIER.fame.subtitle;
-        ctx.font = font('body', true);
-        ctx.fillText('WEEKLY CHAMPIONS', canvas.width / 2, 70);
+        ctx.font = font('small');
+        ctx.fillText('WEEKLY CHAMPIONS', canvas.width / 2, 48 + SPACE.lg);
 
         if (!fame || fame.length === 0) {
             ctx.fillStyle = TIER.fame.subtitle;
             ctx.font = font('sub', true);
             ctx.fillText('NO CHAMPIONS YET', canvas.width / 2, canvas.height / 2);
         } else {
-            let y = 108;
-            const textLeft = canvas.width / 2 - 255;
+            // 行は等幅なので、いちばん長くなりうる行を実測してブロックごと中央に置く。
+            // 以前は canvas.width / 2 - 255 という固定値で、文字サイズを変えるとずれた。
+            ctx.font = font('sub', true);
+            const sampleWidth = ctx.measureText('  1.  9999999   AAAAAAAAAA  ').width;
+            const textLeft = Math.round((canvas.width - sampleWidth) / 2);
+
+            const weekGap = SPACE.md;      // 週ブロックの間
+            const headGap = SPACE.md + 2;  // 週見出しから1位まで
+            const bottomLimit = canvas.height - 56;
+
+            let y = 48 + SPACE.lg + SPACE.lg;
             for (const wk of fame) {
-                if (y > canvas.height - 60) break;
+                // 週見出しだけ描いて中身が入らない、という切れ方を防ぐ
+                const blockHeight = headGap + lineHeight('sub') + lineHeight('body') * 2 + weekGap;
+                if (y + blockHeight > bottomLimit) break;
+
+                // 週の見出しは「ラベル」。行より小さくして、序列を大きさで示す。
                 ctx.textAlign = 'left';
-                ctx.fillStyle = TIER.fame.rowBright;
-                ctx.font = font('sub', true);
+                ctx.fillStyle = TIER.fame.subtitle;
+                ctx.font = font('small', true);
                 ctx.fillText(wk.weekId, textLeft, y);
-                y += 24;
-                ctx.font = font('body', true);
+                y += headGap;
+
                 wk.entries.forEach((e, i) => {
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
                     const nameStr = String(e.name || '').padEnd(10, ' ');
                     const flag = flagEmoji(e.country);
-                    this._metallicText(ctx, `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y, lerpColor(TIER.fame.rowBright, TIER.fame.rowDim, Math.min(i / 2, 1)), 17);
-                    y += 22;
+                    const row = `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`;
+
+                    // その週の1位だけ一段大きく。殿堂なので優勝者が主役。
+                    const step = i === 0 ? 'sub' : 'body';
+                    ctx.font = font(step, true);
+                    const shade = lerpColor(TIER.fame.rowBright, TIER.fame.rowDim, Math.min(i / 2, 1));
+                    this._metallicText(ctx, row, textLeft, y, shade);
+                    y += lineHeight(step);
                 });
-                y += 8;
+                y += weekGap;
             }
         }
 
@@ -659,7 +705,8 @@ export class ScreenRenderer {
 
         // Title + subtitle
         ctx.textAlign = 'center';
-        this._metallicText(ctx, `STAGE ${stageNo}`, W / 2, 46, accent, 40);
+        ctx.font = font('title', true);
+        this._metallicText(ctx, `STAGE ${stageNo}`, W / 2, 46, accent);
         ctx.fillStyle = lerpColor(palette.fill, '#ffffff', 0.35);
         ctx.font = font('small', true);
         ctx.fillText('THIS WEEK · TOP 5', W / 2, 70);

@@ -9,8 +9,8 @@
 // したがってグローや走査線はむしろ主役として使う。ただし無秩序にかけず、
 // 段階を決めて意味のあるところにだけ効かせる。
 //
-// 逆に、角丸（roundRect）とグレーのグラデーションは 2010年代の Web UI の語彙で、
-// 80年代でも未来でもない。角を落とすなら角丸ではなく面取り（斜めに切る）を使う。
+// 枠の角は角丸。一度面取り（斜め切り）にしたが、この画面では硬すぎたため戻した。
+// 一方でキーキャップのグレーのグラデーションは Web UI の語彙なので使わない。
 //
 // 色相は既存のまま（緑・琥珀・シアン）。近すぎる値を畳み、背景と本文にだけ
 // わずかな青みを入れて CRT の黒に寄せている。
@@ -62,6 +62,12 @@ export function font(step, bold = false) {
     return `${bold ? 'bold ' : ''}${SIZE[step]}px ${FAMILY}`;
 }
 
+/**
+ * 余白の基準。4の倍数に揃えることで、画面全体の間隔が揃う。
+ * 元は 8/15/22/24/26/30/34/45/70 などその場の値が混在していた。
+ */
+export const SPACE = { xs: 4, sm: 8, md: 16, lg: 24, xl: 40 };
+
 /** 行送り。等幅フォントを行グリッドに乗せるための標準値。 */
 export function lineHeight(step) {
     return Math.round(SIZE[step] * 1.45);
@@ -88,20 +94,21 @@ export function noGlow(ctx) {
 }
 
 /**
- * 面取りした矩形のパスを引く（角丸ではなく斜めに切り落とす）。
- * 角丸は Web UI の語彙で浮くため、この方向では使わない。
+ * 枠のパス（角丸）。
+ * roundRect が無い環境（テストのスタブ等）では矩形パスに落とす。
  */
-export function chamferPath(ctx, x, y, w, h, cut) {
-    const c = Math.min(cut, w / 2, h / 2);
+export function framePath(ctx, x, y, w, h, radius) {
+    const r = Math.min(radius, w / 2, h / 2);
+    if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        return;
+    }
     ctx.beginPath();
-    ctx.moveTo(x + c, y);
-    ctx.lineTo(x + w - c, y);
-    ctx.lineTo(x + w, y + c);
-    ctx.lineTo(x + w, y + h - c);
-    ctx.lineTo(x + w - c, y + h);
-    ctx.lineTo(x + c, y + h);
-    ctx.lineTo(x, y + h - c);
-    ctx.lineTo(x, y + c);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
     ctx.closePath();
 }
 
@@ -110,31 +117,30 @@ export function chamferPath(ctx, x, y, w, h, cut) {
  * @param {object} [opts]
  * @param {string} [opts.fill] 内側の塗り
  * @param {keyof GLOW} [opts.glow] 枠にかける発光
- * @param {number} [opts.cut] 面取り量
+ * @param {number} [opts.radius] 角丸の半径
  * @param {number} [opts.lineWidth]
  */
 export function drawFrame(ctx, x, y, w, h, color, opts = {}) {
-    const { fill = null, glow: level = null, cut = 10, lineWidth = 1 } = opts;
+    const { fill = null, glow: level = null, radius = 8, lineWidth = 1 } = opts;
     ctx.save();
     if (fill) {
-        chamferPath(ctx, x, y, w, h, cut);
+        framePath(ctx, x, y, w, h, radius);
         ctx.fillStyle = fill;
         ctx.fill();
     }
     if (level) glow(ctx, color, level);
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
-    chamferPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, cut);
+    framePath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, radius);
     ctx.stroke();
     ctx.restore();
 }
 
 /**
- * 見出し付きのパネル。面取りフレーム＋ヘッダ帯。
- * 角丸・半透明・グラデーションは使わない。
+ * 見出し付きのパネル。角丸フレーム＋ヘッダ帯。半透明とグラデーションは使わない。
  */
 export function drawPanel(ctx, x, y, w, h, title, titleColor = UI.accent) {
-    drawFrame(ctx, x, y, w, h, UI.border, { fill: UI.panelFill, cut: 12 });
+    drawFrame(ctx, x, y, w, h, UI.border, { fill: UI.panelFill, radius: 10 });
 
     if (!title) return;
     const headH = 30;
@@ -170,7 +176,7 @@ export function drawKeyCap(ctx, x, y, text) {
     const rx = x - w;
     const ry = y - h / 2;
 
-    drawFrame(ctx, rx, ry, w, h, UI.info, { fill: UI.panelHead, cut: 5 });
+    drawFrame(ctx, rx, ry, w, h, UI.info, { fill: UI.panelHead, radius: 5 });
 
     ctx.fillStyle = UI.ink;
     ctx.textAlign = 'center';
