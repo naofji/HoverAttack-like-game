@@ -190,3 +190,26 @@ export function drawScanlines(ctx, w, h, spacing = 3, alpha = 0.10) {
     for (let y = 0; y < h; y += spacing) ctx.fillRect(0, y, w, 1);
     ctx.restore();
 }
+
+/**
+ * ランキング3画面の階調。ブロンズ／シルバー／ゴールドで格の違いを示す
+ * （設計: docs/superpowers/specs/2026-07-17-ranking-screens-tiered-theme-design.md）。
+ * 意図のある色分けなのでパレットに畳まず、名前を付けてここに集約する。
+ */
+export const TIER = {
+    local: {
+        bg: '#120B04', title: '#CD7F32', subtitle: '#9C6B34',
+        rowBright: '#F0AE6A', rowDim: '#7A5228',
+    },
+    global: {
+        bg: '#080B0F', title: '#D8DEE6', subtitle: '#95A0AB',
+        rowBright: '#FFFFFF', rowDim: '#5F6B78',
+    },
+    fame: {
+        bg: '#17102B', title: '#FFD700', subtitle: '#C9A94A',
+        rowBright: '#FFE680', rowDim: '#9C7A26',
+    },
+};
+
+/** ランキング行のハイライト（自分の記録の点滅）。 */
+export const ROW_HIGHLIGHT = '#FF00E5';

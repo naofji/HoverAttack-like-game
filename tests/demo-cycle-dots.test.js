@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
+import { UI } from '../src/js/ui/theme.js';
 
 function stubCtx() {
   const texts = [];
@@ -27,9 +28,12 @@ test('draws one dot per screen in the demo cycle', () => {
 });
 
 test('only the current screen dot is highlighted', () => {
+  // 色そのものではなく「現在位置だけが強調色、他は控えめな色」であることを見る。
+  // 色の値は theme.js が持つので、テーマ調整でこのテストが落ちないようにする。
   const texts = render(2, 6);
+  assert.notEqual(UI.info, UI.faint, '強調色と非強調色が同じでは意味が無い');
   texts.forEach((t, i) => {
-    assert.equal(t.fill, i === 2 ? '#00FFFF' : '#444444');
+    assert.equal(t.fill, i === 2 ? UI.info : UI.faint);
   });
 });
 

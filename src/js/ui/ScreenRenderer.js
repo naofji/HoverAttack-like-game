@@ -10,7 +10,7 @@ import { flagEmoji } from '../utils/geo.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
-import { UI, font, glow, drawFrame } from './theme.js';
+import { UI, TIER, ROW_HIGHLIGHT, SIZE, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -44,6 +44,8 @@ export class ScreenRenderer {
             ctx.fillText(ASCII_LOGO[i], startX, startY + (i * 18));
         }
         ctx.restore();
+
+        drawScanlines(ctx, canvas.width, canvas.height);
 
         // Blinking text
         if (Math.floor(Date.now() / 500) % 2 === 0) {
@@ -137,13 +139,13 @@ export class ScreenRenderer {
 
         // Rich Background
         const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-        bgGrad.addColorStop(0, '#0a1020');
-        bgGrad.addColorStop(1, '#000000');
+        bgGrad.addColorStop(0, UI.panelFill);
+        bgGrad.addColorStop(1, UI.bg);
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
 
         // Grid overlay for tech feel
-        ctx.strokeStyle = 'rgba(0, 200, 255, 0.05)';
+        ctx.strokeStyle = 'rgba(0, 204, 255, 0.06)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let i = 0; i < W; i += 40) { ctx.moveTo(i, 0); ctx.lineTo(i, H); }
@@ -154,10 +156,9 @@ export class ScreenRenderer {
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 28px "Space Mono", monospace';
-        ctx.shadowColor = '#00FF00';
-        ctx.shadowBlur = 15;
-        ctx.fillStyle = '#00FF00';
+        ctx.font = font('head', true);
+        glow(ctx, UI.ok, 'mid');
+        ctx.fillStyle = UI.ok;
         ctx.fillText('─── HOW TO PLAY ───', cx, 50);
         ctx.restore();
 
@@ -165,18 +166,18 @@ export class ScreenRenderer {
             // ---- PAGE 1: MISSION & RULES ----
 
             // PANEL 1: OBJECTIVE
-            this._drawPanel(ctx, cx - 400, 80, 800, 100, 'MISSION OBJECTIVE', '#FFCC00');
+            this._drawPanel(ctx, cx - 400, 80, 800, 100, 'MISSION OBJECTIVE', UI.accent);
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '14px "Space Mono", monospace';
+            ctx.font = font('small');
             ctx.textAlign = 'center';
             ctx.fillText('DESTROY ENEMY ROBOTS, OBLITERATE THE ENEMY BASE CORE, AND CAPTURE THE FLAG.', cx, 130);
-            ctx.fillStyle = '#FF5555';
+            ctx.fillStyle = UI.warn;
             ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, 155);
 
             // PANEL 2: BASIC RULES
-            this._drawPanel(ctx, cx - 400, 195, 800, 170, 'BASIC RULES', '#FFCC00');
-            ctx.fillStyle = '#CCCCCC';
-            ctx.font = '13px "Space Mono", monospace';
+            this._drawPanel(ctx, cx - 400, 195, 800, 170, 'BASIC RULES', UI.accent);
+            ctx.fillStyle = UI.dim;
+            ctx.font = font('small');
             ctx.textAlign = 'left';
 
             // Rule 1 (wrapped)
@@ -216,7 +217,7 @@ export class ScreenRenderer {
             ctx.stroke();
 
             // PANEL 3: ITEMS
-            this._drawPanel(ctx, cx - 400, 380, 800, 260, 'ITEMS', '#FFCC00');
+            this._drawPanel(ctx, cx - 400, 380, 800, 260, 'ITEMS', UI.accent);
 
             const items = [
                 { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
@@ -252,17 +253,17 @@ export class ScreenRenderer {
                 // Text
                 ctx.textAlign = 'left';
                 ctx.fillStyle = item.color;
-                ctx.font = 'bold 15px "Space Mono", monospace';
+                ctx.font = font('body', true);
                 ctx.fillText(item.name, cx - 320, y - 8);
 
-                ctx.fillStyle = '#CCCCCC';
-                ctx.font = '13px "Space Mono", monospace';
+                ctx.fillStyle = UI.dim;
+                ctx.font = font('small');
                 ctx.fillText(item.desc, cx - 320, y + 15);
             });
 
         } else {
             // ---- PAGE 2: CONTROLS ----
-            this._drawPanel(ctx, cx - 350, 90, 700, 450, 'CONTROLS', '#FFCC00');
+            this._drawPanel(ctx, cx - 350, 90, 700, 450, 'CONTROLS', UI.accent);
 
             const controls = [
                 { key: 'A / D', action: 'MOVE LEFT / RIGHT' },
@@ -279,22 +280,23 @@ export class ScreenRenderer {
             controls.forEach((c, i) => {
                 const y = 150 + i * 45;
                 this._drawKeyCap(ctx, cx - 180, y, c.key);
-                ctx.fillStyle = '#EEEEEE';
-                ctx.font = '16px "Space Mono", monospace';
+                ctx.fillStyle = UI.ink;
+                ctx.font = font('body');
                 ctx.textBaseline = 'middle';
                 ctx.fillText(c.action, cx - 140, y);
             });
             ctx.textBaseline = 'alphabetic'; // reset
         }
 
+        drawScanlines(ctx, W, H);
+
         // Press Enter ヒント（点滅）
         if (Math.floor(Date.now() / 600) % 2 === 0) {
             ctx.save();
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            glow(ctx, UI.info, 'mid');
+            ctx.font = font('sub', true);
             ctx.fillText('PRESS ENTER TO START', cx, H - 20);
             ctx.restore();
         }
@@ -312,92 +314,21 @@ export class ScreenRenderer {
 
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.font = '9px sans-serif';
+        ctx.font = font('micro');
         for (let i = 0; i < total; i++) {
-            ctx.fillStyle = i === currentIndex ? '#00FFFF' : '#444444';
+            ctx.fillStyle = i === currentIndex ? UI.info : UI.faint;
             ctx.fillText('●', startX + i * spacing, cy);
         }
         ctx.restore();
     }
 
+    /** パネルとキーキャップの見た目は theme.js が持つ（角丸とグラデーションを廃した面取り版）。 */
     _drawPanel(ctx, x, y, w, h, title, titleColor) {
-        ctx.save();
-        // Panel Background
-        ctx.fillStyle = 'rgba(0, 20, 40, 0.7)';
-        ctx.strokeStyle = '#0055AA';
-        ctx.lineWidth = 2;
-        if (ctx.roundRect) {
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, h, 8);
-            ctx.fill();
-            ctx.stroke();
-        } else {
-            ctx.fillRect(x, y, w, h);
-            ctx.strokeRect(x, y, w, h);
-        }
-
-        // Title Bar
-        ctx.fillStyle = 'rgba(0, 85, 170, 0.3)';
-        if (ctx.roundRect) {
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, 35, { tl: 8, tr: 8, bl: 0, br: 0 });
-            ctx.fill();
-        } else {
-            ctx.fillRect(x, y, w, 35);
-        }
-
-        ctx.fillStyle = titleColor;
-        ctx.font = 'bold 18px "Space Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(title, x + w / 2, y + 18);
-        ctx.restore();
+        drawPanel(ctx, x, y, w, h, title, titleColor);
     }
 
     _drawKeyCap(ctx, x, y, text) {
-        ctx.save();
-        ctx.font = 'bold 14px "Space Mono", monospace';
-        const textWidth = ctx.measureText(text).width;
-        const w = Math.max(textWidth + 20, 40);
-        const h = 30;
-        const rx = x - w; // align right visually by shifting
-        const ry = y - h / 2;
-
-        // Key shadow
-        ctx.fillStyle = '#222222';
-        if (ctx.roundRect) {
-            ctx.beginPath(); ctx.roundRect(rx, ry + 3, w, h, 4); ctx.fill();
-        } else {
-            ctx.fillRect(rx, ry + 3, w, h);
-        }
-
-        // Key top
-        const grad = ctx.createLinearGradient(rx, ry, rx, ry + h);
-        grad.addColorStop(0, '#EEEEEE');
-        grad.addColorStop(1, '#AAAAAA');
-        ctx.fillStyle = grad;
-        if (ctx.roundRect) {
-            ctx.beginPath(); ctx.roundRect(rx, ry, w, h, 4); ctx.fill();
-        } else {
-            ctx.fillRect(rx, ry, w, h);
-        }
-
-        // Key border
-        ctx.strokeStyle = '#666666';
-        ctx.lineWidth = 1;
-        if (ctx.roundRect) {
-            ctx.beginPath(); ctx.roundRect(rx, ry, w, h, 4); ctx.stroke();
-        } else {
-            ctx.strokeRect(rx, ry, w, h);
-        }
-
-        // Text
-        ctx.fillStyle = '#000000';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, rx + w / 2, ry + h / 2 + 1);
-
-        ctx.restore();
+        return drawKeyCap(ctx, x, y, text);
     }
 
     drawMissionClear(ctx) {
@@ -407,12 +338,12 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#00FF00';
-        ctx.font = '30px "Space Mono", monospace';
+        ctx.font = font('head');
         ctx.textAlign = 'center';
         ctx.fillText('MISSION COMPLETE', canvas.width / 2, canvas.height / 2 - 40);
 
         ctx.fillStyle = '#FFFF00';
-        ctx.font = '24px "Space Mono", monospace';
+        ctx.font = font('head');
         // Format time mm:ss.xx
         const mm = Math.floor(this.game.missionTimer / 60000).toString().padStart(2, '0');
         const ss = Math.floor((this.game.missionTimer % 60000) / 1000).toString().padStart(2, '0');
@@ -424,10 +355,9 @@ export class ScreenRenderer {
             ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 30);
         } else {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            glow(ctx, UI.info, 'mid');
+            ctx.font = font('sub', true);
             ctx.fillText('PRESS ANY KEY TO CONTINUE', canvas.width / 2, canvas.height / 2 + 60);
             ctx.restore();
         }
@@ -443,11 +373,10 @@ export class ScreenRenderer {
         if (notices.length === 0) return;
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.font = 'bold 20px "Space Mono", monospace';
+        ctx.font = font('sub', true);
         const blink = Math.floor(Date.now() / 350) % 2 === 0;
-        ctx.fillStyle = blink ? '#FFD700' : '#FFA500';
-        ctx.shadowColor = '#FF8800';
-        ctx.shadowBlur = 12;
+        ctx.fillStyle = blink ? UI.gold : UI.accent;
+        glow(ctx, UI.accent, 'mid');
         notices.forEach((t, i) => ctx.fillText(t, canvas.width / 2, y + i * 26));
         ctx.restore();
         ctx.textAlign = 'left';
@@ -460,16 +389,16 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#FF3333';
-        ctx.font = 'bold 36px "Space Mono", monospace';
+        ctx.font = font('title', true);
         ctx.textAlign = 'center';
         ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Space Mono", monospace';
+        ctx.font = font('sub');
         ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 20);
 
         ctx.fillStyle = '#888888';
-        ctx.font = '14px "Space Mono", monospace';
+        ctx.font = font('small');
         ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 60);
         ctx.textAlign = 'left';
     }
@@ -481,16 +410,16 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#00FFFF'; // Cyan for clear
-        ctx.font = 'bold 36px "Space Mono", monospace';
+        ctx.font = font('title', true);
         ctx.textAlign = 'center';
         ctx.fillText('CONGRATULATIONS!', canvas.width / 2, canvas.height / 2 - 60);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Space Mono", monospace';
+        ctx.font = font('sub');
         ctx.fillText(`ALL MISSIONS CLEARED!`, canvas.width / 2, canvas.height / 2 - 20);
 
         ctx.fillStyle = '#FFFF00';
-        ctx.font = '24px "Space Mono", monospace';
+        ctx.font = font('head');
         const mm = Math.floor(this.game.totalTime / 60000).toString().padStart(2, '0');
         const ss = Math.floor((this.game.totalTime % 60000) / 1000).toString().padStart(2, '0');
         const xx = Math.floor((this.game.totalTime % 1000) / 10).toString().padStart(2, '0');
@@ -501,11 +430,11 @@ export class ScreenRenderer {
             ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 50);
         } else {
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '18px "Space Mono", monospace';
+            ctx.font = font('sub');
             ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 60);
 
             ctx.fillStyle = '#888888';
-            ctx.font = '14px "Space Mono", monospace';
+            ctx.font = font('small');
             ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 90);
         }
 
@@ -520,12 +449,12 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.fillStyle = '#FFFF00'; // Yellow
-        ctx.font = 'bold 24px "Space Mono", monospace';
+        ctx.font = font('head', true);
         ctx.textAlign = 'center';
         ctx.fillText('!!! YOU GOT A HIGH SCORE !!!', canvas.width / 2, canvas.height / 4);
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Space Mono", monospace';
+        ctx.font = font('sub');
         ctx.fillText(`YOUR SCORE: ${score}`, canvas.width / 2, canvas.height / 4 + 40);
 
         ctx.fillText('ENTER YOUR NAME:', canvas.width / 2, canvas.height / 2 - 20);
@@ -537,7 +466,7 @@ export class ScreenRenderer {
         ctx.strokeRect(canvas.width / 2 - 100, canvas.height / 2, 200, 40);
 
         ctx.fillStyle = '#00FF00';
-        ctx.font = 'bold 24px "Space Mono", monospace';
+        ctx.font = font('head', true);
         ctx.textAlign = 'left';
 
         // Blink cursor
@@ -549,7 +478,7 @@ export class ScreenRenderer {
         ctx.textAlign = 'left'; // Already left, but kept for consistency
 
         ctx.fillStyle = '#AAAAAA';
-        ctx.font = '14px "Space Mono", monospace';
+        ctx.font = font('small');
         ctx.fillText('PRESS [ENTER] TO SAVE', canvas.width / 2, canvas.height / 2 + 70);
 
         ctx.textAlign = 'left';
@@ -587,14 +516,14 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        ctx.font = 'bold 34px "Space Mono", monospace';
+        ctx.font = font('title', true);
         this._metallicText(ctx, o.title, canvas.width / 2, 40, o.titleColor, 34);
 
         ctx.fillStyle = o.subtitleColor;
-        ctx.font = 'bold 16px "Space Mono", monospace';
+        ctx.font = font('body', true);
         ctx.fillText(o.subtitle, canvas.width / 2, 66);
 
-        ctx.font = 'bold 19px "Space Mono", monospace';
+        ctx.font = font('sub', true);
         ctx.fillStyle = o.subtitleColor;
         ctx.fillText('RANK   SCORE       NAME         MISSION (TIME)', canvas.width / 2, 95);
 
@@ -602,10 +531,10 @@ export class ScreenRenderer {
         if (scores.length === 0) {
             ctx.textAlign = 'center';
             ctx.fillStyle = o.subtitleColor;
-            ctx.font = 'bold 18px "Space Mono", monospace';
+            ctx.font = font('sub', true);
             ctx.fillText('NO RECORDS YET', canvas.width / 2, canvas.height / 2);
         } else {
-            ctx.font = 'bold 19px "Space Mono", monospace';
+            ctx.font = font('sub', true);
             const startY = 130;
             const lineH = 22.5;
             const textLeft = canvas.width / 2 - 255;
@@ -620,7 +549,7 @@ export class ScreenRenderer {
                 const rowY = startY + index * lineH;
                 ctx.textAlign = 'left';
                 if (index === o.highlightIndex && Math.floor(Date.now() / 200) % 2 === 0) {
-                    ctx.fillStyle = '#FF00FF';
+                    ctx.fillStyle = ROW_HIGHLIGHT;
                     ctx.fillText(rowText, textLeft, rowY);
                 } else {
                     this._metallicText(ctx, rowText, textLeft, rowY, lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1)), 19);
@@ -628,13 +557,14 @@ export class ScreenRenderer {
             });
         }
 
+        drawScanlines(ctx, canvas.width, canvas.height);
+
         ctx.textAlign = 'center';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            glow(ctx, UI.info, 'mid');
+            ctx.font = font('sub', true);
             ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
@@ -646,8 +576,8 @@ export class ScreenRenderer {
             scores, highlightIndex,
             title: '▌ LOCAL RANKING — THIS DEVICE',
             subtitle: `${weekId} · YOUR MACHINE`,
-            bg: '#120b04', titleColor: '#CD7F32', subtitleColor: '#9c6b34',
-            rowBright: '#F0AE6A', rowDim: '#7a5228',
+            bg: TIER.local.bg, titleColor: TIER.local.title, subtitleColor: TIER.local.subtitle,
+            rowBright: TIER.local.rowBright, rowDim: TIER.local.rowDim,
         });
     }
 
@@ -656,28 +586,28 @@ export class ScreenRenderer {
             scores, highlightIndex,
             title: '◍ GLOBAL RANKING — THIS WEEK 🌐',
             subtitle: `${weekId} · WORLDWIDE`,
-            bg: '#080b0f', titleColor: '#D8DEE6', subtitleColor: '#95a0ab',
-            rowBright: '#FFFFFF', rowDim: '#5f6b78',
+            bg: TIER.global.bg, titleColor: TIER.global.title, subtitleColor: TIER.global.subtitle,
+            rowBright: TIER.global.rowBright, rowDim: TIER.global.rowDim,
         });
     }
 
     drawWallOfFame(ctx, fame) {
         const canvas = this.game.canvas;
 
-        ctx.fillStyle = '#17102b';
+        ctx.fillStyle = TIER.fame.bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.font = 'bold 40px "Space Mono", monospace';
+        ctx.font = font('title', true);
         ctx.textAlign = 'center';
-        this._metallicText(ctx, '✦ WALL OF FAME ✦', canvas.width / 2, 44, '#FFD700', 40);
+        this._metallicText(ctx, '✦ WALL OF FAME ✦', canvas.width / 2, 44, TIER.fame.title, SIZE.title);
 
-        ctx.fillStyle = '#c9a94a';
-        ctx.font = 'bold 16px "Space Mono", monospace';
+        ctx.fillStyle = TIER.fame.subtitle;
+        ctx.font = font('body', true);
         ctx.fillText('WEEKLY CHAMPIONS', canvas.width / 2, 70);
 
         if (!fame || fame.length === 0) {
-            ctx.fillStyle = '#c9a94a';
-            ctx.font = 'bold 18px "Space Mono", monospace';
+            ctx.fillStyle = TIER.fame.subtitle;
+            ctx.font = font('sub', true);
             ctx.fillText('NO CHAMPIONS YET', canvas.width / 2, canvas.height / 2);
         } else {
             let y = 108;
@@ -685,30 +615,31 @@ export class ScreenRenderer {
             for (const wk of fame) {
                 if (y > canvas.height - 60) break;
                 ctx.textAlign = 'left';
-                ctx.fillStyle = '#e0c060';
-                ctx.font = 'bold 18px "Space Mono", monospace';
+                ctx.fillStyle = TIER.fame.rowBright;
+                ctx.font = font('sub', true);
                 ctx.fillText(wk.weekId, textLeft, y);
                 y += 24;
-                ctx.font = 'bold 17px "Space Mono", monospace';
+                ctx.font = font('body', true);
                 wk.entries.forEach((e, i) => {
                     const rank = String(i + 1);
                     const scoreStr = String(e.score).padStart(7, ' ');
                     const nameStr = String(e.name || '').padEnd(10, ' ');
                     const flag = flagEmoji(e.country);
-                    this._metallicText(ctx, `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y, lerpColor('#FFE680', '#9c7a26', Math.min(i / 2, 1)), 17);
+                    this._metallicText(ctx, `  ${rank}.  ${scoreStr}   ${nameStr}${flag ? '  ' + flag : ''}`, textLeft, y, lerpColor(TIER.fame.rowBright, TIER.fame.rowDim, Math.min(i / 2, 1)), 17);
                     y += 22;
                 });
                 y += 8;
             }
         }
 
+        drawScanlines(ctx, canvas.width, canvas.height);
+
         ctx.textAlign = 'center';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            glow(ctx, UI.info, 'mid');
+            ctx.font = font('sub', true);
             ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
             ctx.restore();
         }
@@ -730,7 +661,7 @@ export class ScreenRenderer {
         ctx.textAlign = 'center';
         this._metallicText(ctx, `STAGE ${stageNo}`, W / 2, 46, accent, 40);
         ctx.fillStyle = lerpColor(palette.fill, '#ffffff', 0.35);
-        ctx.font = 'bold 14px "Space Mono", monospace';
+        ctx.font = font('small', true);
         ctx.fillText('THIS WEEK · TOP 5', W / 2, 70);
 
         // Scene strip (full width)
@@ -748,13 +679,14 @@ export class ScreenRenderer {
         ctx.lineTo(W / 2, 250 + 200);
         ctx.stroke();
 
+        drawScanlines(ctx, canvas.width, canvas.height);
+
         ctx.textAlign = 'center';
         if (Math.floor(Date.now() / 500) % 2 === 0) {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 10;
-            ctx.font = 'bold 20px "Space Mono", monospace';
+            ctx.fillStyle = UI.ink;
+            glow(ctx, UI.info, 'mid');
+            ctx.font = font('sub', true);
             ctx.fillText('PRESS ENTER TO START', W / 2, H - 20);
             ctx.restore();
         }
@@ -765,7 +697,7 @@ export class ScreenRenderer {
         // Header
         ctx.textAlign = 'center';
         ctx.fillStyle = accent;
-        ctx.font = 'bold 18px "Space Mono", monospace';
+        ctx.font = font('sub', true);
         ctx.fillText(label, centerX, topY);
 
         const startY = topY + 30;
@@ -774,7 +706,7 @@ export class ScreenRenderer {
         if (rows.length === 0) {
             ctx.textAlign = 'center';
             ctx.fillStyle = '#666666';
-            ctx.font = '15px "Space Mono", monospace';
+            ctx.font = font('body');
             ctx.fillText('NO RECORDS YET', centerX, startY + 16);
             ctx.textAlign = 'left';
             return;
@@ -788,7 +720,7 @@ export class ScreenRenderer {
             const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).toLocaleString();
 
             // Rank number in accent, dimmer for lower ranks.
-            ctx.font = 'bold 17px "Space Mono", monospace';
+            ctx.font = font('body', true);
             ctx.fillStyle = lerpColor(accent, '#5a5a5a', Math.min(i / 4, 1) * 0.55);
             ctx.fillText(rank + '.', left, y);
             // Name (off-white) + flag
