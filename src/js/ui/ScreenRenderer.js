@@ -165,59 +165,76 @@ export class ScreenRenderer {
         if (page === 0) {
             // ---- PAGE 1: MISSION & RULES ----
 
+            // パネルの高さを中身から求め、余った縦幅を等間隔に配る。
+            // 以前はパネル間15pxに対して最終パネルの下が108px空いていた。
+            const lineH = lineHeight('small');
+            const ILLUST_H = 115;
+            const ITEM_H = 64;
+            const objectiveH = ScreenRenderer.panelHeight(lineH * 2);
+            const rulesH = ScreenRenderer.panelHeight(Math.max(lineH * 6, ILLUST_H));
+            const itemsH = ScreenRenderer.panelHeight(ITEM_H * 3);
+            const areaTop = 80;
+            const areaBottom = H - SPACE.xl;
+            const gap = Math.floor(
+                (areaBottom - areaTop - objectiveH - rulesH - itemsH) / 3,
+            );
+
+            const objectiveY = areaTop;
+            const rulesY = objectiveY + objectiveH + gap;
+            const itemsY = rulesY + rulesH + gap;
+
             // PANEL 1: OBJECTIVE
-            this._drawPanel(ctx, cx - 400, 80, 800, 100, 'MISSION OBJECTIVE', UI.accent);
-            ctx.fillStyle = '#FFFFFF';
+            this._drawPanel(ctx, cx - 400, objectiveY, 800, objectiveH, 'MISSION OBJECTIVE', UI.accent);
             ctx.font = font('small');
             ctx.textAlign = 'center';
-            ctx.fillText('DESTROY ENEMY ROBOTS, OBLITERATE THE ENEMY BASE CORE, AND CAPTURE THE FLAG.', cx, 130);
+            let ty = ScreenRenderer.panelContentTop(objectiveY, lineH);
+            ctx.fillStyle = UI.ink;
+            ctx.fillText('DESTROY ENEMY ROBOTS, OBLITERATE THE ENEMY BASE CORE, AND CAPTURE THE FLAG.', cx, ty);
             ctx.fillStyle = UI.warn;
-            ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, 155);
+            ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, ty + lineH);
 
             // PANEL 2: BASIC RULES
-            this._drawPanel(ctx, cx - 400, 195, 800, 170, 'BASIC RULES', UI.accent);
+            this._drawPanel(ctx, cx - 400, rulesY, 800, rulesH, 'BASIC RULES', UI.accent);
             ctx.fillStyle = UI.dim;
             ctx.font = font('small');
             ctx.textAlign = 'left';
 
-            // Rule 1 (wrapped)
-            ctx.fillText('1) CONTROL CARRIER WHILE DOCKED.', cx - 380, 250);
-            ctx.fillText('   DETACH TO CONTROL ATTACKER (CARRIER BECOMES DEFENSELESS).', cx - 380, 266);
+            const rules = [
+                '1) CONTROL CARRIER WHILE DOCKED.',
+                '   DETACH TO CONTROL ATTACKER (CARRIER BECOMES DEFENSELESS).',
+                '2) DOCKING ATTACKER WITH CARRIER RESUPPLIES AMMO/FUEL',
+                '   AND REPAIRS DAMAGE.',
+                '3) IF ATTACKER IS DESTROYED, RESPAWN AT CARRIER.',
+                '   IF CARRIER IS DESTROYED, RESPAWN AT START.',
+            ];
+            const rulesTop = ScreenRenderer.panelContentTop(rulesY, lineH);
+            rules.forEach((line, i) => ctx.fillText(line, cx - 380, rulesTop + i * lineH));
 
-            // Rule 2 (wrapped)
-            ctx.fillText('2) DOCKING ATTACKER WITH CARRIER RESUPPLIES AMMO/FUEL', cx - 380, 295);
-            ctx.fillText('   AND REPAIRS DAMAGE.', cx - 380, 311);
-
-            // Rule 3 (wrapped)
-            ctx.fillText('3) IF ATTACKER IS DESTROYED, RESPAWN AT CARRIER.', cx - 380, 340);
-            ctx.fillText('   IF CARRIER IS DESTROYED, RESPAWN AT START.', cx - 380, 356);
-
-            // Sub-panel for Illustration on the Right
+            // 右側のイラスト枠。パネルの中身の縦幅に対して中央へ置く。
+            const illustTop = rulesY + ScreenRenderer.PANEL_HEAD
+                + Math.floor((rulesH - ScreenRenderer.PANEL_HEAD - ILLUST_H) / 2);
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.2)';
             ctx.lineWidth = 1;
-            if (ctx.roundRect) {
-                ctx.beginPath(); ctx.roundRect(cx + 220, 238, 140, 115, 6); ctx.stroke();
-            } else {
-                ctx.strokeRect(cx + 220, 238, 140, 115);
-            }
+            drawFrame(ctx, cx + 220, illustTop, 140, ILLUST_H, 'rgba(0, 200, 255, 0.2)', { radius: 6 });
 
             // Draw illustration: Player docking onto Carrier
-            this._drawMiniPlayer(ctx, cx + 290, 260);
-            this._drawMiniCarrier(ctx, cx + 290, 320);
+            const illustMidX = cx + 290;
+            this._drawMiniPlayer(ctx, illustMidX, illustTop + 22);
+            this._drawMiniCarrier(ctx, illustMidX, illustTop + 82);
 
             // Docking arrow
-            ctx.strokeStyle = '#FFCC00';
+            ctx.strokeStyle = UI.accent;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(cx + 290, 275);
-            ctx.lineTo(cx + 290, 305);
-            ctx.lineTo(cx + 286, 301);
-            ctx.moveTo(cx + 290, 305);
-            ctx.lineTo(cx + 294, 301);
+            ctx.moveTo(illustMidX, illustTop + 37);
+            ctx.lineTo(illustMidX, illustTop + 67);
+            ctx.lineTo(illustMidX - 4, illustTop + 63);
+            ctx.moveTo(illustMidX, illustTop + 67);
+            ctx.lineTo(illustMidX + 4, illustTop + 63);
             ctx.stroke();
 
             // PANEL 3: ITEMS
-            this._drawPanel(ctx, cx - 400, 380, 800, 260, 'ITEMS', UI.accent);
+            this._drawPanel(ctx, cx - 400, itemsY, 800, itemsH, 'ITEMS', UI.accent);
 
             const items = [
                 { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
@@ -235,8 +252,9 @@ export class ScreenRenderer {
             // Animate dummy kits
             Object.values(this.dummyKits).forEach(kit => kit.frameCounter++);
 
+            const itemsTop = itemsY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
             items.forEach((item, i) => {
-                const y = 450 + i * 70;
+                const y = itemsTop + i * ITEM_H + Math.round(ITEM_H / 2);
 
                 // Draw Icon using the actual game entity logic scaled up
                 ctx.save();
@@ -263,8 +281,6 @@ export class ScreenRenderer {
 
         } else {
             // ---- PAGE 2: CONTROLS ----
-            this._drawPanel(ctx, cx - 350, 90, 700, 450, 'CONTROLS', UI.accent);
-
             const controls = [
                 { key: 'A / D', action: 'MOVE LEFT / RIGHT' },
                 { key: 'W', action: 'BURST JUMP (GROUND) / HOVER (HOLD) / UNDOCK' },
@@ -276,9 +292,20 @@ export class ScreenRenderer {
                 { key: 'R', action: 'TOGGLE MINI-MAP OVERLAY' },
             ];
 
+            // 行の高さから必要なパネル高を求め、余りを上下に均等に配る。
+            // 以前は高さ450固定で、最終行の下に75px・パネルの下に208px空いていた。
+            const rowH = 46;
+            const panelH = ScreenRenderer.panelHeight(rowH * controls.length);
+            const areaTop = 80;
+            const areaBottom = H - SPACE.xl;
+            const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
+
+            this._drawPanel(ctx, cx - 350, panelY, 700, panelH, 'CONTROLS', UI.accent);
+
+            const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
             ctx.textAlign = 'left';
             controls.forEach((c, i) => {
-                const y = 150 + i * 45;
+                const y = rowsTop + i * rowH + Math.round(rowH / 2);
                 this._drawKeyCap(ctx, cx - 180, y, c.key);
                 ctx.fillStyle = UI.ink;
                 ctx.font = font('body');
@@ -553,6 +580,20 @@ export class ScreenRenderer {
     ];
 
     static FAME_BLOCK_WIDTH = 330;
+
+    /** パネル見出し帯の高さ（theme.drawPanel と揃える）＋内側の余白。 */
+    static PANEL_HEAD = 36;
+    static PANEL_PAD = SPACE.md;
+
+    /** 中身の高さから必要なパネル高を求める。 */
+    static panelHeight(contentH) {
+        return ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD * 2 + contentH;
+    }
+
+    /** パネル内で中身を書き始める y（1行目のベースライン）。 */
+    static panelContentTop(panelY, lineH) {
+        return panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD + Math.round(lineH * 0.75);
+    }
 
     _drawRankingList(ctx, o) {
         const canvas = this.game.canvas;
