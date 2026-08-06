@@ -173,12 +173,8 @@ export function buildDebris(entity, kind) {
  * @param {number} h 元の矩形の高さ
  * @returns {Array<{cx:number,cy:number,w:number,h:number}>} 矩形中心を原点とした分割片
  */
-export function splitRect(w, h, style = 'grid') {
+export function splitRect(w, h) {
     const pieces = [{ cx: 0, cy: 0, w, h }];
-
-    // 柵状: 短い辺だけを繰り返し割る。長い辺は残るので細長い破片になる。
-    // 向きは最初に決めて固定する（混ざると柵に見えない）。
-    const slatAlongX = style === 'slat' ? w < h : null;
 
     while (pieces.length < DEBRIS_SPLIT_PIECES) {
         // まだ割れる片のうち、いちばん面積の大きいものを選ぶ
@@ -186,10 +182,7 @@ export function splitRect(w, h, style = 'grid') {
         let largest = 0;
         for (let i = 0; i < pieces.length; i++) {
             const r = pieces[i];
-            const splittable = style === 'slat'
-                ? (slatAlongX ? r.w : r.h) >= DEBRIS_SPLIT_MIN_SIZE * 2
-                : Math.max(r.w, r.h) >= DEBRIS_SPLIT_MIN_SIZE * 2;
-            if (!splittable) continue;
+            if (Math.max(r.w, r.h) < DEBRIS_SPLIT_MIN_SIZE * 2) continue;
             const area = r.w * r.h;
             if (area > largest) {
                 largest = area;
@@ -199,7 +192,15 @@ export function splitRect(w, h, style = 'grid') {
         if (target < 0) break;   // これ以上割れない
 
         const r = pieces.splice(target, 1)[0];
-        const alongX = style === 'slat' ? slatAlongX : r.w >= r.h;
+
+        // 切るたびに軸を選ぶ。長い辺を割れば正方形へ寄り、短い辺を割れば細長くなる。
+        // ここをパーツ単位で決めると、そのパーツの破片が全部同じ形になってしまう。
+        const longAxisIsX = r.w >= r.h;
+        const wantSlat = Math.random() < DEBRIS_SLAT_CHANCE;
+        let alongX = wantSlat ? !longAxisIsX : longAxisIsX;
+        // 選んだ軸が割れないほど短ければ、もう一方に回す
+        if ((alongX ? r.w : r.h) < DEBRIS_SPLIT_MIN_SIZE * 2) alongX = !alongX;
+
         const len = alongX ? r.w : r.h;
 
         // 分割位置。どちら側も MIN_SIZE を下回らないよう内側へ寄せる
@@ -235,11 +236,11 @@ function pushSubdivided(out, p) {
     const cos = Math.cos(p.angle);
     const sin = Math.sin(p.angle);
 
-    // パーツごとに切り方を選ぶ。塊ばかりだと単調なので柵状を混ぜる。
-    const style = Math.random() < DEBRIS_SLAT_CHANCE ? 'slat' : 'grid';
-    const spinBoost = style === 'slat' ? DEBRIS_SLAT_SPIN_BOOST : 1;
-
-    for (const piece of splitRect(p.w, p.h, style)) {
+    for (const piece of splitRect(p.w, p.h)) {
+        // 細長い破片ほどよく回る。形から決めるので、切り方を先に固定しなくてよい。
+        const elongation = Math.max(piece.w, piece.h) / Math.min(piece.w, piece.h);
+        const spinBoost = 1 + (DEBRIS_SLAT_SPIN_BOOST - 1)
+            * Math.min(1, (elongation - 1) / 3);
         // パーツの向きに合わせてオフセットを回す
         const rx = piece.cx * cos - piece.cy * sin;
         const ry = piece.cx * sin + piece.cy * cos;

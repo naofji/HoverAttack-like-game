@@ -452,7 +452,7 @@ export const DEATH_HOLD_FRAMES = 90;
 
 // --- Destruction Debris ---
 // 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
-export const DEBRIS_GRAVITY = 0.22;        // per frame, 通常の GRAVITY より軽い（滞空を長めに見せる）
+export const DEBRIS_GRAVITY = GRAVITY / 6; // 通常の1/6。吹き飛んで舞う時間を長く取る
 export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以上は速くならない
 export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
 export const DEBRIS_LIFETIME = 55;         // frames
@@ -475,9 +475,9 @@ export const DEBRIS_FADE_START = 0.75;     // 寿命のこの割合を過ぎた�
 // 均等な格子と違って大きさがまちまちになり、かつ元のパーツを隙間なく埋める。
 export const DEBRIS_SPLIT_PIECES = 8;      // 1パーツを最大この数まで割る
 
-// 分割の仕方は2通り。長い辺を割り続けると正方形に近づいて塊状になるので、
-// 一定の割合で「短い辺だけを繰り返し割る」柵状の切り方を混ぜ、細長い破片も作る。
-export const DEBRIS_SLAT_CHANCE = 0.35;    // 柵状に割る確率
+// 切るたびに軸を選ぶ。長い辺を割ると正方形へ寄り、短い辺を割ると細長くなる。
+// パーツ単位で決めるとそのパーツが全部同じ形になってしまうので、1回ごとに選ぶ。
+export const DEBRIS_SLAT_CHANCE = 0.4;     // 短い辺を割る（＝細長くする）確率
 export const DEBRIS_SLAT_SPIN_BOOST = 2.4; // 細長い破片は回りやすい
 
 // 破片の飛ぶ向き。機体中心からの放射だけで決めると、機体の輪郭に沿って

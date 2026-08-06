@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DebrisPart } from '../src/js/entities/DebrisPart.js';
 import {
-  DEBRIS_GRAVITY, DEBRIS_FLASH_COLOR, DEBRIS_MAX_FALL_SPEED,
+  DEBRIS_GRAVITY, DEBRIS_FLASH_COLOR, DEBRIS_MAX_FALL_SPEED, GRAVITY,
 } from '../src/js/utils/Constants.js';
 import { makeFakeCtx, extractFillRects, extractSets } from './helpers/fake-ctx.js';
 
@@ -45,6 +45,12 @@ test('重力で vy が単調増加する', () => {
     assert.ok(seen[i] > seen[i - 1], `vy が増えていない: ${seen}`);
   }
   assert.ok(Math.abs(seen[0] - DEBRIS_GRAVITY) < 1e-9);
+});
+
+test('破片にかかる重力は通常の1/6', () => {
+  // 通常の重力だとすぐ落ちてしまい、吹き飛んで舞う感じが出ない
+  assert.ok(Math.abs(DEBRIS_GRAVITY - GRAVITY / 6) < 1e-9,
+    `1/6 になっていない: ${DEBRIS_GRAVITY} (通常 ${GRAVITY})`);
 });
 
 test('落下速度は上限で頭打ちになる', () => {

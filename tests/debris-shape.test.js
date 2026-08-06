@@ -8,66 +8,63 @@ import {
 /** 縦横比（1 に近いほど正方形、大きいほど細長い）。 */
 const aspect = (p) => Math.max(p.w, p.h) / Math.min(p.w, p.h);
 
-test('格子分割は正方形に近い破片になる', () => {
-  const pieces = splitRect(40, 40, 'grid');
-  const worst = Math.max(...pieces.map(aspect));
-  assert.ok(worst < 4, `格子なのに細長い破片がある: 縦横比 ${worst.toFixed(1)}`);
+test('1つのパーツの中に細長い破片と四角い破片が混ざる', () => {
+  // 切り方をパーツ単位で決めると、そのパーツは全部が細長い（あるいは全部が
+  // 四角い）破片になってしまう。1回の分解の中で混ざることが大事。
+  let mixedRuns = 0;
+  const TRIALS = 40;
+  for (let i = 0; i < TRIALS; i++) {
+    const pieces = splitRect(40, 40);
+    const hasLong = pieces.some((p) => aspect(p) > 2.5);
+    const hasSquare = pieces.some((p) => aspect(p) < 1.6);
+    if (hasLong && hasSquare) mixedRuns++;
+  }
+  assert.ok(mixedRuns / TRIALS > 0.5,
+    `1回の分解に細長いのと四角いのが混ざる割合が低い: ${(mixedRuns / TRIALS * 100).toFixed(0)}%`);
 });
 
-test('柵状分割は細長い破片になる', () => {
-  const pieces = splitRect(40, 40, 'slat');
-  const avg = pieces.reduce((a, p) => a + aspect(p), 0) / pieces.length;
-  assert.ok(avg > 3, `細長くなっていない: 平均の縦横比 ${avg.toFixed(1)}`);
+test('細長すぎる破片ばかりにはならない', () => {
+  const all = [];
+  for (let i = 0; i < 40; i++) all.push(...splitRect(40, 40));
+  const long = all.filter((p) => aspect(p) > 2.5).length / all.length;
+  assert.ok(long > 0.1, `細長い破片が少なすぎる: ${(long * 100).toFixed(0)}%`);
+  assert.ok(long < 0.7, `細長い破片ばかり: ${(long * 100).toFixed(0)}%`);
 });
 
-test('柵状分割は全ての破片が同じ向きに伸びる', () => {
-  // 短い辺だけを繰り返し割るので、破片は全部が横長か全部が縦長になる
-  const pieces = splitRect(40, 40, 'slat');
-  const wide = pieces.filter((p) => p.w > p.h).length;
-  assert.ok(wide === 0 || wide === pieces.length,
-    `向きが混ざっている: 横長 ${wide} / ${pieces.length}`);
-});
-
-test('どちらの分割でも面積は保存される', () => {
-  for (const style of ['grid', 'slat']) {
-    const pieces = splitRect(40, 24, style);
-    const total = pieces.reduce((a, p) => a + p.w * p.h, 0);
-    assert.ok(Math.abs(total - 40 * 24) < 1e-9, `${style}: 面積が変わった ${total}`);
+test('面積は保存される', () => {
+  for (let i = 0; i < 20; i++) {
+    const total = splitRect(40, 24).reduce((a, p) => a + p.w * p.h, 0);
+    assert.ok(Math.abs(total - 40 * 24) < 1e-9, `面積が変わった: ${total}`);
   }
 });
 
-test('どちらの分割でも最小サイズを下回らない', () => {
-  for (const style of ['grid', 'slat']) {
-    for (const p of splitRect(40, 24, style)) {
+test('最小サイズを下回らない', () => {
+  for (let i = 0; i < 20; i++) {
+    for (const p of splitRect(40, 24)) {
       assert.ok(Math.min(p.w, p.h) >= DEBRIS_SPLIT_MIN_SIZE - 1e-9,
-        `${style}: ${p.w}x${p.h} が最小(${DEBRIS_SPLIT_MIN_SIZE})を下回る`);
+        `${p.w}x${p.h} が最小(${DEBRIS_SPLIT_MIN_SIZE})を下回る`);
     }
   }
 });
 
-test('どちらの分割でも片数の上限を守る', () => {
-  for (const style of ['grid', 'slat']) {
-    assert.ok(splitRect(40, 24, style).length <= DEBRIS_SPLIT_PIECES);
+test('片数の上限を守る', () => {
+  for (let i = 0; i < 20; i++) {
+    assert.ok(splitRect(40, 24).length <= DEBRIS_SPLIT_PIECES);
   }
 });
 
-test('柵状分割は一定の割合で混ざる（全部が格子でも全部が柵でもない）', () => {
-  assert.ok(DEBRIS_SLAT_CHANCE > 0 && DEBRIS_SLAT_CHANCE < 1,
-    `混ざらない設定になっている: ${DEBRIS_SLAT_CHANCE}`);
-
-  // 実際に機体1体ぶんを何度も作って、両方の形が現れることを見る
+test('機体を壊すと両方の形の破片が出る', () => {
   const entity = { x: 0, y: 0, width: 64, height: 32, vx: 0, vy: 0 };
-  let sawSlat = false;
-  let sawBlock = false;
-  for (let i = 0; i < 40 && !(sawSlat && sawBlock); i++) {
+  let sawLong = false;
+  let sawSquare = false;
+  for (let i = 0; i < 20 && !(sawLong && sawSquare); i++) {
     for (const d of buildDebris(entity, 'carrier')) {
       const a = Math.max(d.w, d.h) / Math.min(d.w, d.h);
-      if (a > 4) sawSlat = true;
-      if (a < 2) sawBlock = true;
+      if (a > 2.5) sawLong = true;
+      if (a < 1.6) sawSquare = true;
     }
   }
-  assert.ok(sawSlat, '細長い破片が一度も出ない');
-  assert.ok(sawBlock, '塊状の破片が一度も出ない');
+  assert.ok(sawLong && sawSquare, '形が偏っている');
 });
 
 // --- 散らばり方 -------------------------------------------------------------
