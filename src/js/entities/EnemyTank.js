@@ -8,10 +8,12 @@ import {
     ENEMY_TANK_SPEED, ENEMY_TANK_SIGHT_RANGE,
     ENEMY_TANK_FIRE_INTERVAL, ENEMY_TANK_SCORE,
     ENEMY_TANK_MAX_FALLING_SPEED,
-    EXPLOSION_PARTICLE_COUNT
+    EXPLOSION_PARTICLE_COUNT,
+    ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
+import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class EnemyTank {
@@ -23,6 +25,8 @@ export class EnemyTank {
         this.height = ENEMY_TANK_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        this.recoilProfile = ENEMY_RECOIL_PROFILES.tank;
+        this.recoilTimer = 0;
         this.alive = true;
 
         this.hp = ENEMY_TANK_HP;
@@ -43,8 +47,11 @@ export class EnemyTank {
 
         this.exhaustTimer++;
 
+        // 反動中は巡回の速度で上書きしない（上書きすると反動が1tickで消える）
+        const recoiling = tickRecoil(this);
+
         // --- Patrol Movement ---
-        this.vx = this.patrolDir * ENEMY_TANK_SPEED;
+        if (!recoiling) this.vx = this.patrolDir * ENEMY_TANK_SPEED;
 
         // --- Gravity (hover tanks float but are affected by gravity) ---
         this.vy += GRAVITY;
@@ -77,7 +84,7 @@ export class EnemyTank {
         this.y -= 1;
 
         // --- Predictive Navigation (User Rules) ---
-        if (grounded) { // Only decide path when firmly on the ground
+        if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
             const frontX = this.patrolDir > 0 ? this.x + this.width + 1 : this.x - 1;
             const tx = Math.floor(frontX / TILE_SIZE);
             const ty = Math.floor((this.y + this.height - 1) / TILE_SIZE); // Tank body Y
@@ -120,7 +127,7 @@ export class EnemyTank {
         if (this._collidesWithMap()) {
             this.x -= this.vx;
             this.vx = 0;
-            this.patrolDir *= -1;
+            if (!isRecoiling(this)) this.patrolDir *= -1;
         }
 
         // Horizontal Entity Collision

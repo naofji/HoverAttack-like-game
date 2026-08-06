@@ -379,6 +379,22 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
+// --- 敵の被弾ノックバック（反動） ---
+// 敵AIは毎tick自分で vx/vy を代入し直す型が多い（EnemyTank の巡回など）。
+// 速度を書き換えるだけでは次のフレームで消えるので、この時間だけ敵側の
+// 移動制御を止めて反動を成立させる。射撃は止めない（自機の着地スタンと同じ考え方）。
+export const ENEMY_RECOIL_FRAMES = 18;
+
+// 機体ごとの吹き飛び方。重い機体ほど動かない。破片の weight と同じ考え方。
+export const ENEMY_RECOIL_PROFILES = {
+    drone: { vx: 3.0, vy: -2.5 },      // 軽い。よく飛ぶ
+    rival: { vx: 2.6, vy: -2.4 },
+    standard: { vx: 2.0, vy: -2.0 },
+    artillery: { vx: 1.6, vy: -1.6 },
+    tank: { vx: 1.0, vy: -1.0 },       // 重い
+    heavy: { vx: 0.8, vy: -0.8 },      // 最も重い
+};
+
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 

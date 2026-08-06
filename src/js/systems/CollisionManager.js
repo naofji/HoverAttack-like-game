@@ -6,6 +6,7 @@ import { Missile } from '../entities/Missile.js';
 import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
 import { applyKnockback } from '../utils/Knockback.js';
+import { applyRecoil } from '../utils/Recoil.js';
 import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
 
 // Damage values
@@ -171,6 +172,9 @@ export class CollisionManager {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
                 enemy.takeDamage(DAMAGE_PLAYER_MISSILE);
+                // 着弾点から見て外向きへ吹き飛ばす。反動プロファイルを持たない
+                // 据え付け物（砲台・基地）には何も起きない。
+                applyRecoil(enemy, (enemy.x + enemy.width / 2) - proj.x);
                 game.spawnExplosion(proj.x, proj.y, EXPLOSION_PLAYER_MISSILE);
                 proj.alive = false;
                 proj.exploded = true;

@@ -14,7 +14,8 @@ import {
     RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
     RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
     ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
-    EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT, EMERGENCY_DEFENSE_SIGHT_RANGE
+    EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT, EMERGENCY_DEFENSE_SIGHT_RANGE,
+    ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, hasLineOfSight } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -25,6 +26,7 @@ import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
+import { tickRecoil } from '../utils/Recoil.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -124,6 +126,8 @@ export class EnemyAttacker {
         this.height = PLAYER_HEIGHT; // Same size as player (24px)
         this.vx = 0;
         this.vy = 0;
+        this.recoilProfile = ENEMY_RECOIL_PROFILES[config.name] || ENEMY_RECOIL_PROFILES.standard;
+        this.recoilTimer = 0;
         this.alive = true;
         this.onGround = false;
 
@@ -250,7 +254,8 @@ export class EnemyAttacker {
         }
 
         // --- Movement ---
-        this._updateMovement(target);
+        // 反動中は自前の移動制御を飛ばす。重力・地形衝突・射撃はそのまま動く。
+        if (!tickRecoil(this)) this._updateMovement(target);
 
         // --- Hover Fuel Recovery ---
         if (this.onGround) {

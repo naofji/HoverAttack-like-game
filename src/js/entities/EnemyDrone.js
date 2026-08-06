@@ -15,11 +15,13 @@ import {
     ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER,
     ENEMY_BULLET_SPEED,
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
-    EMERGENCY_DEFENSE_SIGHT_RANGE
+    EMERGENCY_DEFENSE_SIGHT_RANGE,
+    ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
+import { tickRecoil } from '../utils/Recoil.js';
 import { MACHINE_EXPLOSION_OPTS } from './Particle.js';
 
 export class EnemyDrone {
@@ -31,6 +33,8 @@ export class EnemyDrone {
         this.height = ENEMY_DRONE_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        this.recoilProfile = ENEMY_RECOIL_PROFILES.drone;
+        this.recoilTimer = 0;
         this.hp = ENEMY_DRONE_HP;
         this.maxHp = this.hp;
         this.alive = true;
@@ -110,17 +114,21 @@ export class EnemyDrone {
         // Spin propellers fast
         this.propellerAngle += (this.state === 'dash' || this.state === 'patrol') ? 1.0 : 0.4;
 
-        // State Machine
-        if (this.state === 'kamikaze') {
-            this._updateKamikazeState();
-        } else if (this.state === 'attack') {
-            this._updateAttackState();
-        } else if (this.state === 'hover') {
-            this._updateHoverState();
-        } else if (this.state === 'dash') {
-            this._updateDashState();
-        } else {
-            this._updatePatrolState();
+        // 反動中は状態機械ごと飛ばす。ドローンは各状態が vx/vy を直接
+        // 決めるので、呼んでしまうと反動が1tickで消える。
+        if (!tickRecoil(this)) {
+            // State Machine
+            if (this.state === 'kamikaze') {
+                this._updateKamikazeState();
+            } else if (this.state === 'attack') {
+                this._updateAttackState();
+            } else if (this.state === 'hover') {
+                this._updateHoverState();
+            } else if (this.state === 'dash') {
+                this._updateDashState();
+            } else {
+                this._updatePatrolState();
+            }
         }
 
         // --- Move & Collide ---
