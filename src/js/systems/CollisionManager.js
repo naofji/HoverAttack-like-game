@@ -7,8 +7,8 @@ import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { applyRecoil } from '../utils/Recoil.js';
-import { IMPACT_FLASH_RADIUS_MG } from '../utils/Constants.js';
 import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
+import { playBlast } from '../entities/destruction.js';
 
 // Damage values
 const DAMAGE_DEFAULT_BULLET = 10;
@@ -22,13 +22,7 @@ const DAMAGE_ENEMY_MISSILE_CARRIER = 10;
 
 // Explosion sizes
 const EXPLOSION_CRUISE_HIT = 40;
-const EXPLOSION_HOMING_HIT = 12;
 const EXPLOSION_CRUISE_KILL = 40;
-const EXPLOSION_HOMING_KILL = 12;
-const EXPLOSION_CRUISE_SPARK = 5;
-const EXPLOSION_PLAYER_MISSILE = 12;
-const EXPLOSION_PLAYER_MG = 4;
-const EXPLOSION_ENEMY_MISSILE = 8;
 
 // Score bonuses for interceptions
 const SCORE_HOMING_INTERCEPT = 20;
@@ -92,8 +86,7 @@ export class CollisionManager {
             bullet._explode();
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = DAMAGE_HOMING_MISSILE;
-            game.spawnExplosion(bullet.x, bullet.y, EXPLOSION_HOMING_HIT);
-            game.spawnImpactFlash(bullet.x, bullet.y);
+            playBlast(game, bullet.x, bullet.y, 'homingHit');
         }
 
         target.takeDamage(damage);
@@ -119,7 +112,7 @@ export class CollisionManager {
                     bullet.exploded = true;
                     proj.alive = false;
                     if (proj instanceof Missile) proj.exploded = true;
-                    game.spawnExplosion(bullet.x, bullet.y, EXPLOSION_HOMING_KILL);
+                    playBlast(game, bullet.x, bullet.y, 'homingHit');
                     game.addScore(SCORE_HOMING_INTERCEPT);
                     return true;
                 }
@@ -134,7 +127,7 @@ export class CollisionManager {
                         bullet._explode();
                         game.addScore(SCORE_CRUISE_DESTROY);
                     } else {
-                        game.spawnExplosion(proj.x, proj.y, EXPLOSION_CRUISE_SPARK);
+                        playBlast(game, proj.x, proj.y, 'cruiseSpark');
                     }
                     return true;
                 }
@@ -177,8 +170,7 @@ export class CollisionManager {
                 // 着弾点から見て外向きへ吹き飛ばす。反動プロファイルを持たない
                 // 据え付け物（砲台・基地）には何も起きない。
                 applyRecoil(enemy, (enemy.x + enemy.width / 2) - proj.x);
-                game.spawnExplosion(proj.x, proj.y, EXPLOSION_PLAYER_MISSILE);
-                game.spawnImpactFlash(proj.x, proj.y);
+                playBlast(game, proj.x, proj.y, 'missileHit');
                 proj.alive = false;
                 proj.exploded = true;
                 break;
@@ -193,8 +185,7 @@ export class CollisionManager {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
                 if (!enemy.isBase) enemy.takeDamage(DAMAGE_PLAYER_MG);
-                game.spawnExplosion(proj.x, proj.y, EXPLOSION_PLAYER_MG);
-                game.spawnImpactFlash(proj.x, proj.y, IMPACT_FLASH_RADIUS_MG);
+                playBlast(game, proj.x, proj.y, 'mgHit');
                 proj.alive = false;
                 break;
             }
@@ -214,8 +205,7 @@ export class CollisionManager {
             player.takeDamage(DAMAGE_ENEMY_MISSILE * damageMultiplier);
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
-            game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
-            game.spawnImpactFlash(proj.x, proj.y);
+            playBlast(game, proj.x, proj.y, 'enemyMissileHit');
             proj.alive = false;
             proj.exploded = true;
             return;
@@ -223,8 +213,7 @@ export class CollisionManager {
 
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
             carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
-            game.spawnExplosion(proj.x, proj.y, EXPLOSION_ENEMY_MISSILE);
-            game.spawnImpactFlash(proj.x, proj.y);
+            playBlast(game, proj.x, proj.y, 'enemyMissileHit');
             proj.alive = false;
             proj.exploded = true;
         }

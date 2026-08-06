@@ -13,6 +13,7 @@ import {
     PARTICLE_LIFETIME
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
+import { playBlast } from './destruction.js';
 
 export class EnemyHomingMissile {
     constructor(game, x, y, initialAngle) {
@@ -60,7 +61,7 @@ export class EnemyHomingMissile {
         const tile = map.pixelToTile(this.x, this.y);
         if (map.isSolid(tile.r, tile.c)) {
             map.damageBlock(tile.r, tile.c, 1);
-            this.game.spawnExplosion(this.x, this.y, EXPLOSION_PARTICLE_COUNT);
+            playBlast(this.game, this.x, this.y, 'missileTerrain');
             this.exploded = true;
             this.alive    = false;
             return;

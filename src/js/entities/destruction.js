@@ -15,8 +15,8 @@ import { ImpactFlash, MACHINE_EXPLOSION_OPTS, PLAYER_EXPLOSION_OPTS, CARRIER_EXP
 import { DelayedCall } from './DelayedCall.js';
 import { DEBRIS_SPECS } from './debris/index.js';
 import {
-    IMPACT_FLASH_RADIUS, DEATH_FLASH_STAGGER,
-    EXPLOSION_PARTICLE_COUNT,
+    IMPACT_FLASH_RADIUS, IMPACT_FLASH_RADIUS_MG, DEATH_FLASH_STAGGER,
+    EXPLOSION_PARTICLE_COUNT, GRENADE_EXPLOSION_COUNT,
     PLAYER_DEATH_EXPLOSION_COUNT, CARRIER_DEATH_EXPLOSION_COUNT,
     FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
 } from '../utils/Constants.js';
@@ -100,3 +100,92 @@ export function playDestruction(game, entity, kind) {
 
 /** 破片スペックと突き合わせて、遅延がホールドと揃っているかを外から確認できるように。 */
 export { DEBRIS_SPECS };
+
+
+// ============================================
+// 点の爆発（機体の破壊ではないもの）
+// ============================================
+// 着弾・誘爆・地雷など。以前は各所が spawn Explosion をその場の数値で呼んでおり、
+// 閃光の有無も揃っていなかった（ミサイルは敵に当たると光るのに地形では光らない、
+// など）。ここに集約して、どの爆発も「閃光＋粒子」で構成されるようにする。
+//
+// - `flash.count` / `flash.radius` — 閃光の数と大きさ
+// - `flash.spread` — 閃光を散らす範囲（0なら着弾点そのもの）
+// - `blast.count` — 爆発の粒子数
+export const BLAST_PROFILES = {
+    // --- 着弾 ---
+    mgHit: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS_MG, spread: 0 },
+        blast: { count: 4 },
+    },
+    missileHit: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS, spread: 0 },
+        blast: { count: 12 },
+    },
+    missileTerrain: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS, spread: 0 },
+        blast: { count: EXPLOSION_PARTICLE_COUNT },
+    },
+    enemyMissileHit: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS, spread: 0 },
+        blast: { count: 8 },
+    },
+    homingHit: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS, spread: 0 },
+        blast: { count: 12 },
+    },
+    cruiseSpark: {
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS_MG, spread: 0 },
+        blast: { count: 5 },
+    },
+
+    // --- 誘爆・大型 ---
+    grenade: {
+        flash: { count: 3, radius: IMPACT_FLASH_RADIUS * 1.5, spread: 24 },
+        blast: { count: GRENADE_EXPLOSION_COUNT },
+    },
+    cruise: {
+        flash: { count: 3, radius: IMPACT_FLASH_RADIUS * 1.5, spread: 24 },
+        blast: { count: GRENADE_EXPLOSION_COUNT },
+    },
+    landmine: {
+        flash: { count: 2, radius: IMPACT_FLASH_RADIUS * 1.2, spread: 16 },
+        blast: { count: EXPLOSION_PARTICLE_COUNT },
+    },
+
+    // --- 敵基地 ---
+    baseDying: {   // 破壊シーケンス中の連続爆発。粒子数は呼び出し側が渡す
+        flash: { count: 1, radius: IMPACT_FLASH_RADIUS, spread: 12 },
+        blast: { count: EXPLOSION_PARTICLE_COUNT },
+    },
+    baseFinal: {
+        flash: { count: 4, radius: IMPACT_FLASH_RADIUS * 1.6, spread: 28 },
+        blast: { count: 80 },
+    },
+};
+
+/**
+ * 点の爆発を再生する。
+ * @param {object} game
+ * @param {number} x 爆心
+ * @param {number} y
+ * @param {string} kind BLAST_PROFILES のキー
+ * @param {number} [countOverride] 粒子数を上書きする（基地の連続爆発など）
+ */
+export function playBlast(game, x, y, kind, countOverride) {
+    const profile = BLAST_PROFILES[kind];
+    if (!profile) return;
+
+    const { count, radius, spread } = profile.flash;
+    for (let i = 0; i < count; i++) {
+        const ox = spread ? (Math.random() - 0.5) * 2 * spread : 0;
+        const oy = spread ? (Math.random() - 0.5) * 2 * spread : 0;
+        game.particles.push(new ImpactFlash(
+            x + ox, y + oy,
+            radius * (count > 1 ? 0.7 + Math.random() * 0.4 : 1),
+            i === 0 ? 0 : Math.round(i * DEATH_FLASH_STAGGER * (0.6 + Math.random() * 0.8)),
+        ));
+    }
+
+    game.spawnExplosion(x, y, countOverride ?? profile.blast.count);
+}

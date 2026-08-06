@@ -202,8 +202,10 @@ test('基地の破壊完了でフィナーレが particles へ入り、カメラ
   base._finishDestruction();
 
   assert.equal(base.alive, false);
-  assert.equal(game.particles.length, 3, 'フィナーレ3要素が入っていない');
-  assert.ok(game.particles.some((p) => p instanceof ShockwaveRing));
+  // 総数では見ない。最後の大爆発も閃光を撒くようになったため。
+  const finale = game.particles.filter(
+    (p) => p instanceof ShockwaveRing || p instanceof SpeedLines || p instanceof FinaleFlash);
+  assert.equal(finale.length, 3, 'フィナーレ3要素が入っていない');
 
   assert.equal(game.shakeCalls.length, 1, 'カメラが揺れていない');
   assert.equal(game.shakeCalls[0].intensity, FINALE_SHAKE_INTENSITY);
@@ -220,7 +222,10 @@ test('フィナーレは最後の大爆発より後に push される（手前�
 
   new EnemyBase(game, 100, 100)._finishDestruction();
 
-  assert.equal(game.particles[0], marker, '爆発より先にフィナーレが入っている');
+  const markerAt = game.particles.indexOf(marker);
+  const ringAt = game.particles.findIndex((p) => p instanceof ShockwaveRing);
+  assert.ok(markerAt >= 0 && ringAt > markerAt,
+    '爆発より先にフィナーレが入っている');
 });
 
 test('母艦の破壊でフィナーレが出て、爆発の後にカメラが強く揺れる', () => {

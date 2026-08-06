@@ -4,6 +4,7 @@
 
 import { MISSILE_SPEED, MISSILE_LIFETIME, TILE_SIZE, PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
+import { playBlast } from './destruction.js';
 
 export class Missile {
     constructor(game, x, y, angle, isPlayerOwned = true, isRival = false) {
@@ -45,7 +46,7 @@ export class Missile {
 
         if (map.isSolid(tile.r, tile.c)) {
             map.damageBlock(tile.r, tile.c, 1);
-            this.game.spawnExplosion(this.x, this.y, EXPLOSION_PARTICLE_COUNT);
+            playBlast(this.game, this.x, this.y, 'missileTerrain');
             this.exploded = true;
             this.alive = false;
 

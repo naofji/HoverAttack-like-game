@@ -10,6 +10,7 @@ import {
     TILE_SIZE
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
+import { playBlast } from './destruction.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -83,7 +84,7 @@ export class Grenade {
 
         // Map destruction
         const destroyed = map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
-        this.game.spawnExplosion(this.x, this.y, GRENADE_EXPLOSION_COUNT);
+        playBlast(this.game, this.x, this.y, 'grenade');
 
         // Score for map blocks
         if (destroyed.length > 0) {

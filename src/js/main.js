@@ -34,7 +34,7 @@ import { Carrier } from './entities/Carrier.js';
 import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
-import { Particle, TrailParticle, ImpactFlash, createExplosion, createSparks } from './entities/Particle.js';
+import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
 import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
@@ -1261,15 +1261,6 @@ export const Game = {
         const ss = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0');
         const xx = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
         return `${mm}:${ss}.${xx}`;
-    },
-
-    /**
-     * 着弾の瞬間を示す小さな閃光。爆発とは別に重ねる。
-     * createExplosion の中央フラッシュは柔らかく粒子に紛れるため、
-     * 「命中した」ことを一目で伝えるにはこちらが要る。
-     */
-    spawnImpactFlash(x, y, radius) {
-        this.particles.push(new ImpactFlash(x, y, radius));
     },
 
     /** Spawn explosion particles and chain-detonate nearby landmines */

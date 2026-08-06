@@ -26,6 +26,7 @@ import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { EnemyCruiseMissile } from './EnemyCruiseMissile.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { createDestructionFinale } from './DestructionFinale.js';
+import { playBlast } from './destruction.js';
 
 export class EnemyBase {
     constructor(game, x, y) {
@@ -115,7 +116,7 @@ export class EnemyBase {
             const rx = this.x + Math.random() * this.width;
             const ry = this.y + Math.random() * this.height;
             const size = 20 + Math.random() * 30;
-            this.game.spawnExplosion(rx, ry, size);
+            playBlast(this.game, rx, ry, 'baseDying', size);
             audioManager.playExplosion(size > 35);
             if (this.game.camera) this.game.camera.shake(8, 3);
         }
@@ -636,7 +637,7 @@ export class EnemyBase {
         const cy = this.y + this.height / 2;
 
         // Final massive explosion
-        this.game.spawnExplosion(cx, cy, 80);
+        playBlast(this.game, cx, cy, 'baseFinal');
 
         // フィナーレ（閃光→集中線→衝撃波リング）。爆発より後に push することで
         // パーティクルの描画順で手前に出る。

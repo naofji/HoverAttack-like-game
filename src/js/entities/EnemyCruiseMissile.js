@@ -16,6 +16,7 @@ import {
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { playBlast } from './destruction.js';
 
 export class EnemyCruiseMissile {
     constructor(game, x, y, initialAngle, path = null) {
@@ -259,7 +260,7 @@ export class EnemyCruiseMissile {
         map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
 
         // Visual and Audio feedback
-        this.game.spawnExplosion(this.x, this.y, GRENADE_EXPLOSION_COUNT);
+        playBlast(this.game, this.x, this.y, 'cruise');
         audioManager.playExplosion(true);
         if (this.game.camera) this.game.camera.shake(8, 15);
     }

@@ -10,6 +10,7 @@ import {
     LANDMINE_BLAST_RADIUS
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
+import { playBlast } from './destruction.js';
 
 export class Landmine {
     constructor(game, x, y) {
@@ -62,7 +63,7 @@ export class Landmine {
         // Explosion visual
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
-        this.game.spawnExplosion(cx, cy, EXPLOSION_PARTICLE_COUNT);
+        playBlast(this.game, cx, cy, 'landmine');
 
         const applyAoE = (entity) => {
             if (!entity || !entity.alive || entity === this) return;
