@@ -537,6 +537,13 @@ export class ScreenRenderer {
 
     static RANKING_TABLE_WIDTH = 632;
 
+    /**
+     * 常にこの数だけ枠を描き、記録が無い行は空欄で埋める。
+     * 記録が少ないと画面下が大きく空いてしまう（3件のとき下に560px、埋まり10%）。
+     * 当時のハイスコア表が固定枠だったのに倣うと、見た目が安定し余白も一定になる。
+     */
+    static RANKING_SLOTS = 20;
+
     /** Wall of Fame の1週ブロック内の列。ランキング表と同じ理由で座標指定にする。 */
     static FAME_COLUMNS = [
         { key: 'rank', x: 24, align: 'right' },
@@ -581,48 +588,51 @@ export class ScreenRenderer {
         ctx.stroke();
 
         const scores = o.scores || [];
-        if (scores.length === 0) {
-            ctx.textAlign = 'center';
-            ctx.fillStyle = o.subtitleColor;
-            ctx.font = font('sub', true);
-            ctx.fillText('NO RECORDS YET', canvas.width / 2, canvas.height / 2);
-        } else {
-            const startY = headerY + SPACE.lg + SPACE.xs;
-            const bottom = canvas.height - SPACE.xl;
-            // 行数が少ないときは画面を余らせず広く使い、多いときは詰めすぎない。
-            const lineH = Math.max(
-                lineHeight('body'),
-                Math.min(30, Math.floor((bottom - startY) / scores.length)),
-            );
+        const slots = ScreenRenderer.RANKING_SLOTS;
+        const startY = headerY + SPACE.lg + SPACE.xs;
+        const bottom = canvas.height - SPACE.xl;
+        const lineH = Math.floor((bottom - startY) / slots);
+        const emptyShade = lerpColor(o.rowDim, o.bg, 0.45);
 
-            ctx.font = font('body', true);
-            scores.forEach((entry, index) => {
-                const rowY = startY + index * lineH;
-                const highlighted = index === o.highlightIndex
-                    && Math.floor(Date.now() / 200) % 2 === 0;
-                const shade = lerpColor(o.rowBright, o.rowDim, Math.min(index / 19, 1));
+        ctx.font = font('body', true);
+        for (let index = 0; index < slots; index++) {
+            const entry = scores[index];
+            const rowY = startY + index * lineH;
 
-                const values = {
-                    rank: `${index + 1}.`,
-                    score: String(entry.score),
-                    name: String(entry.name || ''),
-                    flag: flagEmoji(entry.country),
-                    mission: String(entry.mission),
-                    time: entry.clearTime ? String(entry.clearTime) : '—',
-                };
-
+            if (!entry) {
+                // 空き枠。順位だけ残して他は罫で埋める。
+                ctx.fillStyle = emptyShade;
                 for (const c of cols) {
-                    const text = values[c.key];
-                    if (!text) continue;
                     ctx.textAlign = c.align;
-                    if (highlighted) {
-                        ctx.fillStyle = ROW_HIGHLIGHT;
-                        ctx.fillText(text, left + c.x, rowY);
-                    } else {
-                        this._metallicText(ctx, text, left + c.x, rowY, shade);
-                    }
+                    ctx.fillText(c.key === 'rank' ? `${index + 1}.` : '·····', left + c.x, rowY);
                 }
-            });
+                continue;
+            }
+
+            const highlighted = index === o.highlightIndex
+                && Math.floor(Date.now() / 200) % 2 === 0;
+            const shade = lerpColor(o.rowBright, o.rowDim, Math.min(index / (slots - 1), 1));
+
+            const values = {
+                rank: `${index + 1}.`,
+                score: String(entry.score),
+                name: String(entry.name || ''),
+                flag: flagEmoji(entry.country),
+                mission: String(entry.mission),
+                time: entry.clearTime ? String(entry.clearTime) : '—',
+            };
+
+            for (const c of cols) {
+                const text = values[c.key];
+                if (!text) continue;
+                ctx.textAlign = c.align;
+                if (highlighted) {
+                    ctx.fillStyle = ROW_HIGHLIGHT;
+                    ctx.fillText(text, left + c.x, rowY);
+                } else {
+                    this._metallicText(ctx, text, left + c.x, rowY, shade);
+                }
+            }
         }
 
         drawScanlines(ctx, canvas.width, canvas.height);
@@ -690,10 +700,14 @@ export class ScreenRenderer {
             const totalW = blockW * 2 + colGap;
             const left = Math.round((canvas.width - totalW) / 2);
 
-            const topY = 40 + SPACE.md + SPACE.lg + SPACE.sm;
+            const areaTop = 40 + SPACE.md + SPACE.lg + SPACE.sm;
             const bottom = canvas.height - SPACE.xl;
-            const blockH = SPACE.md + lineHeight('sub') + lineHeight('body') * 2 + SPACE.md;
-            const rowsPerCol = Math.max(1, Math.floor((bottom - topY) / blockH));
+            const blockH = SPACE.md + lineHeight('body') * 3 + SPACE.md;
+            const rowsPerCol = Math.max(1, Math.floor((bottom - areaTop) / blockH));
+
+            // 週数が少ないときは上に寄せず、縦に中央へ置く（下だけ大きく空くのを防ぐ）
+            const usedRows = Math.min(rowsPerCol, Math.ceil(fame.length / 2));
+            const topY = areaTop + Math.floor(((bottom - areaTop) - usedRows * blockH) / 2);
 
             fame.slice(0, rowsPerCol * 2).forEach((wk, i) => {
                 const colIndex = Math.floor(i / rowsPerCol);   // 先に縦を埋めてから隣の列へ
@@ -707,10 +721,11 @@ export class ScreenRenderer {
                 ctx.fillText(wk.weekId, blockLeft, y);
                 y += SPACE.md;
 
+                // 3行しかないブロックの中で文字サイズを変えると行送りが混ざり
+                // (18px→26px / 16px→23px)、ブロック全体が歪んで見える。
+                // サイズは揃え、1位の強調は明るさ（クロームの階調）だけで示す。
+                ctx.font = font('body', true);
                 wk.entries.forEach((e, rank) => {
-                    // その週の1位だけ一段大きく。殿堂なので優勝者が主役。
-                    const step = rank === 0 ? 'sub' : 'body';
-                    ctx.font = font(step, true);
                     const shade = lerpColor(TIER.fame.rowBright, TIER.fame.rowDim, Math.min(rank / 2, 1));
                     const values = {
                         rank: `${rank + 1}.`,
@@ -724,7 +739,7 @@ export class ScreenRenderer {
                         ctx.textAlign = c.align;
                         this._metallicText(ctx, text, blockLeft + c.x, y, shade);
                     }
-                    y += lineHeight(step);
+                    y += lineHeight('body');
                 });
             });
 
