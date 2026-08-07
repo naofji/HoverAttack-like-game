@@ -7,7 +7,8 @@ import { audioManager } from '../src/js/audio/AudioManager.js';
 // （実際に attacker-return.test.js が不定期に落ちる原因だった）。
 test('音の出せない環境でも play 系が例外を投げない', () => {
   const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(audioManager))
-    .filter((n) => n.startsWith('play') || n.startsWith('stop') || n.startsWith('start'));
+    .filter((n) => n.startsWith('play') || n.startsWith('stop')
+      || n.startsWith('start') || n.startsWith('set'));
   assert.ok(methods.length > 10, `対象メソッドが少なすぎる: ${methods.length}`);
 
   for (const name of methods) {

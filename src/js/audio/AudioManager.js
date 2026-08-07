@@ -1,5 +1,6 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
+import { ENEMY_HOVER_MAX_GAIN } from '../utils/Constants.js';
 
 export class AudioManager {
     constructor() {
@@ -196,6 +197,72 @@ export class AudioManager {
     }
 
     // --- Explosions & Bursts ---
+    /**
+     * 敵のホバー音。共有の1ループを、いちばん近い敵の距離で駆動する。
+     * 敵ごとにオシレーターを持つと数が増えるほど破綻するため。
+     * 自機のホバー音と混ざっても区別できるよう、低めで濁った音にしてある。
+     * @param {number} volume 0〜1。距離から求めた音量（loudestHoverVolume）
+     */
+    setEnemyHover(volume) {
+        if (volume <= 0) {
+            this.stopEnemyHover();
+            return;
+        }
+        if (!this._prepare()) return;
+
+        if (!this.enemyHoverOsc) {
+            this.enemyHoverOsc = this.ctx.createOscillator();
+            this.enemyHoverNoise = this.ctx.createBufferSource();
+            this.enemyHoverGain = this.ctx.createGain();
+
+            this.enemyHoverOsc.type = 'sawtooth';
+            this.enemyHoverOsc.frequency.value = 62;   // 自機のホバーより低い
+
+            this.enemyHoverNoise.buffer = this.noiseBuffer;
+            this.enemyHoverNoise.loop = true;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 420;
+            filter.Q.value = 2.5;
+
+            const noiseGain = this.ctx.createGain();
+            noiseGain.gain.value = 0.5;
+
+            this.enemyHoverGain.gain.value = 0;
+            this.enemyHoverOsc.connect(this.enemyHoverGain);
+            this.enemyHoverNoise.connect(filter);
+            filter.connect(noiseGain);
+            noiseGain.connect(this.enemyHoverGain);
+            this.enemyHoverGain.connect(this.ctx.destination);
+
+            this.enemyHoverOsc.start();
+            this.enemyHoverNoise.start();
+        }
+
+        // 急に鳴り始めると耳につくので、目標値へ滑らかに寄せる
+        this.enemyHoverGain.gain.setTargetAtTime(
+            volume * ENEMY_HOVER_MAX_GAIN, this.ctx.currentTime, 0.08,
+        );
+    }
+
+    /** 敵のホバー音を止める。 */
+    stopEnemyHover() {
+        if (!this.enemyHoverGain) return;
+        this.enemyHoverGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.10);
+        const osc = this.enemyHoverOsc;
+        const noise = this.enemyHoverNoise;
+        this.enemyHoverOsc = null;
+        this.enemyHoverNoise = null;
+        this.enemyHoverGain = null;
+        setTimeout(() => {
+            try {
+                osc.stop(); osc.disconnect();
+                noise.stop(); noise.disconnect();
+            } catch (e) { /* 既に停止 */ }
+        }, 250);
+    }
+
     /**
      * ドッキング成立。金属が噛み合う「ガコッ」＋確認のトーン。
      * このあと startCarrierEngine() でエンジン音のループが始まる。

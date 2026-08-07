@@ -379,6 +379,12 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
+// --- 敵のホバー音 ---
+// 敵ごとにオシレーターを持つと数が増えるほど破綻するので、共有の1ループを
+// 「いちばん近くでホバーしている敵」の距離で駆動する。
+export const ENEMY_HOVER_AUDIBLE_RANGE = 480;  // これより遠いと聞こえない
+export const ENEMY_HOVER_MAX_GAIN = 0.055;     // 最接近時の音量。自機のホバー音より控えめ
+
 // --- 着弾の閃光 ---
 // createExplosion が入れる FlashParticle は柔らかいグラデーションで、粒子に紛れて
 // 「命中した」瞬間が読み取りにくい。輪郭のはっきりした小さな閃光を別に重ねる。

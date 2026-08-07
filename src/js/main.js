@@ -21,7 +21,7 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
-    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
+    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED, ENEMY_HOVER_AUDIBLE_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES
 } from './utils/Constants.js';
@@ -60,6 +60,7 @@ import {
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
+import { loudestHoverVolume } from './utils/audioFalloff.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
@@ -568,6 +569,7 @@ export const Game = {
         this._updateAutoAim();
         this.map.update();
         this._updateEnemies();
+        this._updateEnemyHoverSound();
         this._checkMissionClear();
         this.collisionManager.update();
         this._updateProximityAlert();
@@ -652,6 +654,27 @@ export const Game = {
         this.carrier.update();
         this._updateCarrierEngineSound();
         this._beginDeathHoldIfDestroyed(this.carrier);
+    },
+
+    /**
+     * 敵のホバー音。いちばん近くでホバーしている敵の距離で音量を決める。
+     * 聞き手は自機。ドックしていたり死んでいるときは母艦を聞き手にする。
+     */
+    _updateEnemyHoverSound() {
+        const listener = (this.player && this.player.alive && !this.player.docked)
+            ? this.player
+            : this.carrier;
+        if (!listener) {
+            audioManager.stopEnemyHover();
+            return;
+        }
+        const volume = loudestHoverVolume(
+            this.enemies,
+            listener.x + listener.width / 2,
+            listener.y + listener.height / 2,
+            ENEMY_HOVER_AUDIBLE_RANGE,
+        );
+        audioManager.setEnemyHover(volume);
     },
 
     /**
