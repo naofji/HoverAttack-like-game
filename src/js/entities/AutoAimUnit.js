@@ -1,4 +1,5 @@
 import { TILE_SIZE, GRAVITY, AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION, ITEM_PICKUP_SCORE } from '../utils/Constants.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 const SIZE = TILE_SIZE;
 const CORNER_RADIUS = 4;
@@ -45,6 +46,7 @@ export class AutoAimUnit {
                 player.autoAimTimer = Math.min(player.autoAimTimer + AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION);
                 player.autoAimMaxTimer = AUTO_AIM_MAX_DURATION;
                 this.game.addScore(ITEM_PICKUP_SCORE);
+                audioManager.playPickup();
                 this.alive = false;
             }
         }

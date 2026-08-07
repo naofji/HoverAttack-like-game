@@ -34,6 +34,7 @@ export class Player {
         this.vx = 0;
         this.vy = 0;
         this.onGround = false;
+        this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
         this.facingRight = true;
         this.alive = true;
 
@@ -92,7 +93,18 @@ export class Player {
         this._updateFuelRecovery(input);
         this._updateSpeedCaps();
         this._updateFacing(input);
+
+        // 着地音は「空中→接地」の遷移で1回だけ鳴らす。onGround を立てる箇所は
+        // 地形・母艦の甲板など5つあるので、個別に足すと重複する。
+        // 比べる相手は前フレームの結果。_moveAndCollide は毎フレーム冒頭で
+        // onGround を false に戻すため、その直前の値では毎フレーム着地になる。
+        const impactVy = this.vy;
         this._moveAndCollide();
+        if (!this.wasOnGround && this.onGround) {
+            audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
+        }
+        this.wasOnGround = this.onGround;
+
         this._updateWalkAnimation();
     }
 
@@ -105,6 +117,7 @@ export class Player {
             this.mgReloadTimer--;
             if (this.mgReloadTimer === 0) {
                 this.mgBurstLeft = PLAYER_MG_BURST_SIZE; // reload finished — refill now
+                audioManager.playReloadComplete();
             }
         }
     }
@@ -438,6 +451,7 @@ export class Player {
     die() {
         this.alive = false;
         playDestruction(this.game, this, 'player');
+        audioManager.playPlayerDestroyed();
         this.lives--;
 
         // Release lock-on when dead
@@ -452,6 +466,7 @@ export class Player {
         this.vx = 0;
         this.vy = 0;
         this.onGround = false;
+        this.wasOnGround = false;
         this.hp = PLAYER_MAX_HP;
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;

@@ -21,7 +21,7 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
-    CARRIER_PROXIMITY_ALERT_RANGE,
+    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES
 } from './utils/Constants.js';
@@ -650,7 +650,24 @@ export const Game = {
     _updateCarrier() {
         if (!this.carrier) return;
         this.carrier.update();
+        this._updateCarrierEngineSound();
         this._beginDeathHoldIfDestroyed(this.carrier);
+    },
+
+    /**
+     * 母艦のエンジン音。ドッキング中（＝母艦を操作できる間）だけ鳴らす。
+     * 移動しているほど音が上がる。
+     */
+    _updateCarrierEngineSound() {
+        const player = this.player;
+        const carrier = this.carrier;
+        const running = player && player.docked && player.alive && carrier.alive;
+        if (!running) {
+            audioManager.stopCarrierEngine();
+            return;
+        }
+        const throttle = Math.min(1, Math.abs(carrier.vx) / CARRIER_SPEED);
+        audioManager.startCarrierEngine(throttle);
     },
 
     _updatePlayer() {
@@ -913,6 +930,7 @@ export const Game = {
         // Dock
         if (this.input.isKeyPressed('KeyS') && !player.docked && carrier.canDock(player)) {
             player.docked = true;
+            audioManager.playDock();
             player.vx = 0;
             player.vy = 0;
             player.resupply();
@@ -937,6 +955,7 @@ export const Game = {
                 !this.map.isSolidAtPixel(player.x + player.width - 2, checkY);
             if (headClear) {
                 player.docked = false;
+                audioManager.stopCarrierEngine();
                 player.vy = -3;
                 player.walkFrame = 2;
             }

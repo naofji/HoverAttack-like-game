@@ -16,8 +16,19 @@ export class AudioManager {
         this._alarmLoading = false;
     }
 
+    /**
+     * WebAudio が使えるか。node:test のような DOM の無い環境では使えない。
+     * ゲームロジックのテスト中に敵が射撃するなどして音が鳴ろうとしたとき、
+     * ここで弾かないと例外になる（実際にテストが不定期に落ちる原因だった）。
+     */
+    get available() {
+        return typeof window !== 'undefined'
+            && !!(window.AudioContext || window.webkitAudioContext);
+    }
+
     init() {
         if (this.ctx) return;
+        if (!this.available) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this._createNoiseBuffer();
 
@@ -61,9 +72,16 @@ export class AudioManager {
     }
 
     /** Convenience: ensure context is initialized and running. */
+    /**
+     * 音を鳴らす前の準備。鳴らせない環境なら false を返すので、
+     * 各 play メソッドは先頭で `if (!this._prepare()) return;` とする。
+     * @returns {boolean} 音を鳴らせるか
+     */
     _prepare() {
         this.init();
+        if (!this.ctx) return false;
         this._resume();
+        return true;
     }
 
     /**
@@ -84,7 +102,7 @@ export class AudioManager {
 
     // --- Hover (Engine) Sounds ---
     playHover(pitch = 1.0) {
-        this._prepare();
+        if (!this._prepare()) return;
 
         if (!this.hoverOsc) {
             this.hoverOsc = this.ctx.createOscillator();
@@ -178,8 +196,212 @@ export class AudioManager {
     }
 
     // --- Explosions & Bursts ---
+    /**
+     * ドッキング成立。金属が噛み合う「ガコッ」＋確認のトーン。
+     * このあと startCarrierEngine() でエンジン音のループが始まる。
+     */
+    playDock() {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+
+        // 金属の当たる音（短いノイズを低めのバンドパスで）
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const nf = this.ctx.createBiquadFilter();
+        nf.type = 'bandpass';
+        nf.frequency.value = 420;
+        nf.Q.value = 1.2;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.28, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.start(t); noise.stop(t + 0.14);
+
+        // 確認のトーン（少し遅らせて上がる2音）
+        for (const [delay, freq] of [[0.06, 330], [0.13, 494]]) {
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, t + delay);
+            g.gain.exponentialRampToValueAtTime(0.09, t + delay + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.10);
+            osc.connect(g); g.connect(this.ctx.destination);
+            osc.start(t + delay); osc.stop(t + delay + 0.12);
+        }
+    }
+
+    /**
+     * 母艦のエンジン音。ドッキング中（＝母艦を操作できる間）だけ鳴らす。
+     * 低い唸りのループ。移動中は少し高く・大きくなる。
+     * @param {number} throttle 0=停止 1=移動中
+     */
+    startCarrierEngine(throttle = 0) {
+        if (!this._prepare()) return;
+
+        if (!this.carrierOsc) {
+            this.carrierOsc = this.ctx.createOscillator();
+            this.carrierSub = this.ctx.createOscillator();
+            this.carrierGain = this.ctx.createGain();
+            this.carrierFilter = this.ctx.createBiquadFilter();
+
+            this.carrierOsc.type = 'sawtooth';
+            this.carrierSub.type = 'sine';
+            this.carrierFilter.type = 'lowpass';
+            this.carrierFilter.frequency.value = 180;
+            this.carrierFilter.Q.value = 3;
+
+            this.carrierGain.gain.value = 0;
+            this.carrierOsc.connect(this.carrierFilter);
+            this.carrierSub.connect(this.carrierFilter);
+            this.carrierFilter.connect(this.carrierGain);
+            this.carrierGain.connect(this.ctx.destination);
+
+            this.carrierOsc.start();
+            this.carrierSub.start();
+        }
+
+        // 停止中は低く静かに、移動中は少し上がる
+        const t = this.ctx.currentTime;
+        this.carrierOsc.frequency.setTargetAtTime(46 + throttle * 14, t, 0.12);
+        this.carrierSub.frequency.setTargetAtTime(23 + throttle * 7, t, 0.12);
+        this.carrierFilter.frequency.setTargetAtTime(150 + throttle * 120, t, 0.12);
+        this.carrierGain.gain.setTargetAtTime(0.06 + throttle * 0.05, t, 0.12);
+    }
+
+    /** 母艦のエンジンを止める（アタッチ解除時）。 */
+    stopCarrierEngine() {
+        if (!this.carrierGain) return;
+        this.carrierGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
+        const osc = this.carrierOsc;
+        const sub = this.carrierSub;
+        this.carrierOsc = null;
+        this.carrierSub = null;
+        this.carrierGain = null;
+        setTimeout(() => {
+            try { osc.stop(); osc.disconnect(); sub.stop(); sub.disconnect(); } catch (e) { /* 既に停止 */ }
+        }, 250);
+    }
+
+    /**
+     * 着地音。強い着地（スタンする落下）ほど重く鳴る。
+     * @param {boolean} hard スタンを伴う落下か
+     */
+    playLanding(hard = false) {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+        const vol = hard ? 0.26 : 0.12;
+        const dur = hard ? 0.20 : 0.10;
+
+        // 接地の衝撃（低いノイズ）
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const nf = this.ctx.createBiquadFilter();
+        nf.type = 'lowpass';
+        nf.frequency.setValueAtTime(hard ? 700 : 1100, t);
+        nf.frequency.exponentialRampToValueAtTime(120, t + dur);
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(vol, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.start(t); noise.stop(t + dur);
+
+        // 機体の重みを出す低い一撃
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hard ? 110 : 150, t);
+        osc.frequency.exponentialRampToValueAtTime(45, t + dur);
+        g.gain.setValueAtTime(vol * 0.8, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(g); g.connect(this.ctx.destination);
+        osc.start(t); osc.stop(t + dur);
+    }
+
+    /**
+     * 自機の破壊。汎用の爆発音とは別に、下降する悲鳴のような成分を重ねて
+     * 「やられた」ことが音だけで分かるようにする。
+     */
+    playPlayerDestroyed() {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+
+        // 崩れ落ちる金属音（下降するノコギリ波）
+        const osc = this.ctx.createOscillator();
+        const og = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(420, t);
+        osc.frequency.exponentialRampToValueAtTime(55, t + 0.9);
+        og.gain.setValueAtTime(0.16, t);
+        og.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+        const of = this.ctx.createBiquadFilter();
+        of.type = 'lowpass';
+        of.frequency.setValueAtTime(2400, t);
+        of.frequency.exponentialRampToValueAtTime(300, t + 0.9);
+        osc.connect(of); of.connect(og); og.connect(this.ctx.destination);
+        osc.start(t); osc.stop(t + 0.9);
+
+        // 厚みを出す爆発のノイズ
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const nf = this.ctx.createBiquadFilter();
+        nf.type = 'lowpass';
+        nf.frequency.setValueAtTime(1800, t);
+        nf.frequency.exponentialRampToValueAtTime(160, t + 0.7);
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.3, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.start(t); noise.stop(t + 0.7);
+    }
+
+    /** アイテム取得。短く明るい上昇音。 */
+    playPickup() {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+        for (const [delay, freq] of [[0, 660], [0.05, 880], [0.10, 1320]]) {
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, t + delay);
+            g.gain.exponentialRampToValueAtTime(0.07, t + delay + 0.008);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.08);
+            osc.connect(g); g.connect(this.ctx.destination);
+            osc.start(t + delay); osc.stop(t + delay + 0.09);
+        }
+    }
+
+    /** マシンガンのリロード完了。弾倉が入る小さな金属音。 */
+    playReloadComplete() {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const nf = this.ctx.createBiquadFilter();
+        nf.type = 'bandpass';
+        nf.frequency.value = 2600;
+        nf.Q.value = 4;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.14, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.start(t); noise.stop(t + 0.07);
+
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, t + 0.05);
+        g.gain.setValueAtTime(0.0001, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.06, t + 0.058);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        osc.connect(g); g.connect(this.ctx.destination);
+        osc.start(t + 0.05); osc.stop(t + 0.13);
+    }
+
     playBurst() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -202,7 +424,7 @@ export class AudioManager {
     }
 
     playExplosion(large = false) {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -226,7 +448,7 @@ export class AudioManager {
 
     // --- Weapons ---
     playMissile() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -246,7 +468,7 @@ export class AudioManager {
     }
 
     playEnemyFire() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -266,7 +488,7 @@ export class AudioManager {
     }
 
     playSwitch() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -287,7 +509,7 @@ export class AudioManager {
 
     // --- Laser ---
     playLaserCharge() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -308,7 +530,7 @@ export class AudioManager {
     }
 
     playLaserFire() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const osc = this.ctx.createOscillator();
         const sub = this.ctx.createOscillator();
@@ -340,7 +562,7 @@ export class AudioManager {
     }
 
     playHeavyDamage() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const now = this.ctx.currentTime;
 
@@ -386,7 +608,7 @@ export class AudioManager {
     }
 
     playBaseDestroyed() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const now = this.ctx.currentTime;
         const notes = [
@@ -414,7 +636,7 @@ export class AudioManager {
     }
 
     playSuccess() {
-        this._prepare();
+        if (!this._prepare()) return;
 
         const now = this.ctx.currentTime;
 
@@ -547,7 +769,7 @@ export class AudioManager {
     }
 
     playRankingBGM() {
-        this._prepare();
+        if (!this._prepare()) return;
         this.stopRankingBGM();
 
         if (this.useMP3BGM && this.bgm) {
@@ -639,7 +861,7 @@ export class AudioManager {
     }
 
     playGameOver() {
-        this._prepare();
+        if (!this._prepare()) return;
         if (!this.ctx || this.ctx.state === 'suspended') return;
         const now = this.ctx.currentTime;
 
@@ -746,7 +968,7 @@ export class AudioManager {
     }
 
     playAlarm() {
-        this._prepare();
+        if (!this._prepare()) return;
         if (!this.ctx || this.ctx.state === 'suspended') return;
 
         // MP3がロード完了している場合はそちらを再生する
@@ -787,7 +1009,7 @@ export class AudioManager {
     }
 
     playProximityAlarm() {
-        this._prepare();
+        if (!this._prepare()) return;
         if (!this.ctx || this.ctx.state === 'suspended') return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();

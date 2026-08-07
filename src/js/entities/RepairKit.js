@@ -1,4 +1,5 @@
 import { TILE_SIZE, GRAVITY, ITEM_PICKUP_SCORE } from '../utils/Constants.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 const SIZE = TILE_SIZE;
 const CORNER_RADIUS = 4;
@@ -45,6 +46,7 @@ export class RepairKit {
                 this.y + this.height > player.y) {
                 player.repairKits++;
                 this.game.addScore(ITEM_PICKUP_SCORE);
+                audioManager.playPickup();
                 this.alive = false;
             }
         }
