@@ -457,8 +457,9 @@ export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以�
 export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
 export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
-export const DEBRIS_SPIN_SCALE = 0.08;     // 速さ → 角速度への係数（毎秒約2.8回転）
-export const DEBRIS_SPIN_BASE = 0.06;     // 速さに関わらず加わる回転。止まって見える破片を無くす
+// 回転は爆風のトルクから決める。破片の長辺が爆心方向となす角が45度のとき最大。
+// この値がそのときの角速度（rad/tick）。
+export const DEBRIS_SPIN_TORQUE = 0.38;
 export const DEBRIS_SPEED_JITTER = 0.45;   // 初速に加える乱数の幅
 // 1機あたりの破片数は 32〜81 片（最多は artillery の4脚型）。
 // 上限 800 はおよそ10機ぶんで、地雷の誘爆による同時多数撃破でも足りる。
@@ -496,8 +497,7 @@ export const DEBRIS_SPLIT_RATIO_JITTER = 0.5; // 分割位置の比率 0.5±JITT
 export const DEBRIS_SPLIT_SPREAD = 0.55;   // 分割片がパーツ中心から離れる初速（基準値）
 export const DEBRIS_SPLIT_SPREAD_JITTER = 0.7; // 上の倍率のばらつき幅（1±JITTER/2 倍）
 export const DEBRIS_SPLIT_JITTER = 0.5;    // 分割片ごとに速度へ加える等方な散らし
-export const DEBRIS_SPLIT_SPIN_JITTER = 0.10;  // 分割片ごとに角速度へ加える差
-export const DEBRIS_SPLIT_SPIN_VARY = 0.8; // 親の角速度に掛かる倍率のばらつき幅
+export const DEBRIS_SPLIT_SPIN_JITTER = 0.16;  // トルクが立たない向きの破片が完全に止まって見えないための最低限
 
 // 爆発の広がり。本物のパーツ破片を撒く機体では、爆発が破片を覆い隠さないよう
 // 粒子の初速と中央フラッシュを縮める（粒子数は減らさないので密度は保たれる）。

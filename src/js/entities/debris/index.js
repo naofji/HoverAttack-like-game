@@ -10,12 +10,12 @@
 import { DebrisPart } from '../DebrisPart.js';
 import {
     DEBRIS_LIFETIME, DEBRIS_LIFETIME_JITTER,
-    DEBRIS_SPIN_SCALE, DEBRIS_SPEED_JITTER,
+    DEBRIS_SPIN_TORQUE, DEBRIS_SPEED_JITTER,
     DEBRIS_SPLIT_PIECES, DEBRIS_SPLIT_MIN_SIZE, DEBRIS_SPLIT_RATIO_JITTER,
     DEBRIS_SLAT_CHANCE, DEBRIS_SLAT_SPIN_BOOST, DEBRIS_ISOTROPIC_MIX,
-    DEBRIS_UPWARD_BIAS, DEBRIS_SPEED_VARY, DEBRIS_SPIN_BASE,
+    DEBRIS_UPWARD_BIAS, DEBRIS_SPEED_VARY,
     DEBRIS_SPLIT_SPREAD, DEBRIS_SPLIT_SPREAD_JITTER,
-    DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER, DEBRIS_SPLIT_SPIN_VARY,
+    DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
 import { playerDebris } from './playerParts.js';
@@ -47,6 +47,17 @@ function transformLocal(lx, ly, cx, cy, mirrored, rotation) {
     const cos = Math.cos(rotation);
     const sin = Math.sin(rotation);
     return { x: mdx * cos - dy * sin, y: mdx * sin + dy * cos };
+}
+
+/** 被弾位置が記録されているか。 */
+function hasHitPoint(entity) {
+    return Number.isFinite(entity.lastHitX) && Number.isFinite(entity.lastHitY);
+}
+
+/** ローカル座標を、反転・回転を適用したうえでワールド座標へ移す。 */
+function localToWorld(local, entity, cx, cy, mirrored, rotation) {
+    const t = transformLocal(local.cx, local.cy, cx, cy, mirrored, rotation);
+    return { x: entity.x + cx + t.x, y: entity.y + cy + t.y };
 }
 
 /**
@@ -93,11 +104,16 @@ export function buildDebris(entity, kind) {
     const cx = entity.width / 2;
     const cy = entity.height / 2;
 
-    // 一方で「どこから吹き飛ぶか」はパーツの面積重心。母艦は drawY = y - 8 で
-    // ずらして描くため全パーツが箱の中心より上にあり、箱の中心を爆心にすると
-    // 放射が上向きに偏っていた（実測で上63% / 下37%）。
-    const centroid = partsCentroid(parts, entity);
-    const burst = transformLocal(centroid.cx, centroid.cy, cx, cy, mirrored, rotation);
+    // 「どこから吹き飛ぶか」＝爆心。被弾位置が分かっていればそこを使う。
+    // 実際に当たった場所から散るほうが自然で、破片の長軸が爆心方向と平行に
+    // なりにくいぶん、トルクによる回転も立ちやすい（下の torqueSpinFactor 参照）。
+    //
+    // 分からない場合はパーツの面積重心へ落とす。箱の中心ではない理由は、
+    // 母艦が drawY = y - 8 でずらして描くため全パーツが箱の中心より上にあり、
+    // 箱の中心を使うと放射が上向きに偏るため（実測で上63% / 下37%）。
+    const burstWorld = hasHitPoint(entity)
+        ? { x: entity.lastHitX, y: entity.lastHitY }
+        : localToWorld(partsCentroid(parts, entity), entity, cx, cy, mirrored, rotation);
     const out = [];
     for (const part of parts) {
         // 実際の描画（例: EnemyDrone.draw()）は
@@ -117,8 +133,8 @@ export function buildDebris(entity, kind) {
         // 4. 初速 = 慣性 + 機体中心からの放射 / weight + 散らし
         //    放射方向は上で mirror→rotate 済みの (rx, ry) をそのまま使う。
         const weight = part.weight || 1;
-        const radX = rx - burst.x;
-        const radY = ry - burst.y;
+        const radX = worldX - burstWorld.x;
+        const radY = worldY - burstWorld.y;
         const radialLen = Math.hypot(radX, radY) || 1;
         const power = spec.burst / weight;
 
@@ -143,22 +159,58 @@ export function buildDebris(entity, kind) {
             + dirY * speed
             + (Math.random() - 0.5) * DEBRIS_SPEED_JITTER;
 
-        // 速く飛んだ破片ほど速く回る。加えて、遅い破片も止まって見えないよう
-        // 速さに依らない回転を足す。
-        const spinDir = Math.random() < 0.5 ? -1 : 1;
-        const spin = (Math.hypot(vx, vy) * DEBRIS_SPIN_SCALE + DEBRIS_SPIN_BASE) * spinDir;
-
         // 5. パーツをさらに 2x2 に割る。4片は元パーツの速度をそのまま共有し、
         //    パーツ中心から外向きへわずかに開くだけなので、飛び始めは元の
         //    かたちを保ったまま、飛びながら徐々にばらけて見える。
         pushSubdivided(out, {
             worldX, worldY, w: part.w, h: part.h,
-            color: part.color, angle, vx, vy, spin,
+            color: part.color, angle, vx, vy,
+            burstX: burstWorld.x,
+            burstY: burstWorld.y,
             holdFrames: spec.holdFrames,
             game: entity.game || null,
         });
     }
     return out;
+}
+
+/**
+ * 破片が受けるトルクの向きと強さを返す（-1 〜 +1）。
+ *
+ * 爆風が細長い破片を押すとき、破片の軸が爆心方向に対して傾いていると
+ * 力の作用線が重心を通らずトルクが生じる。その大きさは軸と爆心方向のなす角 θ に
+ * 対して sin(2θ) に比例し、θ=45° で最大、0°（軸が爆心を向く）と 90°（垂直）で
+ * ゼロになる。
+ *
+ * 符号はそのまま「爆心から遠いほうの端点が遠ざかる向き」になる。
+ * 導出: 遠い端点を A とすると A は軸方向 d（d·u > 0、u は爆心から破片への単位ベクトル）
+ * の側にある。ctx.rotate と同じ向きに角速度 ω で回すと A の速度は ω·perp(d) に比例し、
+ * これが u と同じ向きを持つ条件が sign(ω) = sign(d×u)。
+ * |sin(2θ)| = 2|d·u||d×u| なので、2(d×u)(d·u) が大きさと符号を同時に満たす。
+ *
+ * @param {number} mx 破片の中心 - 爆心（x成分）
+ * @param {number} my 同（y成分）
+ * @param {number} ax 破片の長辺の向き（単位ベクトル x）
+ * @param {number} ay 同 y。向きは A/B どちらを指していてもよい（結果は同じ）
+ * @returns {number} sin(2θ) 相当。正負が回転の向き
+ */
+export function torqueSpinFactor(mx, my, ax, ay) {
+    const len = Math.hypot(mx, my);
+    if (len < 1e-9) return 0;          // 爆心と重なっていれば向きが定まらない
+    const ux = mx / len;
+    const uy = my / len;
+
+    // 軸は線分であって矢印ではない。爆心から見て外向きに取り直す
+    let dx = ax;
+    let dy = ay;
+    if (dx * ux + dy * uy < 0) {
+        dx = -dx;
+        dy = -dy;
+    }
+
+    const cos = dx * ux + dy * uy;     // 0以上になった
+    const cross = dx * uy - dy * ux;
+    return 2 * cross * cos;            // = sin(2θ)、符号は遠い端点が遠のく向き
 }
 
 /**
@@ -256,16 +308,29 @@ function pushSubdivided(out, p) {
         const spread = DEBRIS_SPLIT_SPREAD
             * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPREAD_JITTER);
 
+        // 回転は爆風のトルクから決める。破片の長辺が爆心方向に対して傾いている
+        // ほど（45度で最大）強く回り、爆心から遠いほうの端点が遠のく向きになる。
+        const px = p.worldX + rx;
+        const py = p.worldY + ry;
+        const alongX = piece.w >= piece.h;
+        const axisX = alongX ? cos : -sin;      // 長辺の向きをパーツの回転ぶん回す
+        const axisY = alongX ? sin : cos;
+        const torque = torqueSpinFactor(px - p.burstX, py - p.burstY, axisX, axisY);
+
+        // トルクがゼロになる向き（軸が爆心方向と平行／垂直）でも完全に止まって
+        // 見えないよう、わずかなランダム成分を残す。
+        const spin = torque * DEBRIS_SPIN_TORQUE * spinBoost
+            + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER;
+
         out.push(new DebrisPart({
-            x: p.worldX + rx,
-            y: p.worldY + ry,
+            x: px,
+            y: py,
             w: piece.w, h: piece.h,
             color: p.color,
             angle: p.angle,
             vx: p.vx + ux * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
             vy: p.vy + uy * spread + (Math.random() - 0.5) * DEBRIS_SPLIT_JITTER,
-            spin: (p.spin * (1 + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_VARY)
-                + (Math.random() - 0.5) * DEBRIS_SPLIT_SPIN_JITTER) * spinBoost,
+            spin,
             holdFrames: p.holdFrames,
             lifetime: DEBRIS_LIFETIME + Math.floor(Math.random() * DEBRIS_LIFETIME_JITTER),
             game: p.game,

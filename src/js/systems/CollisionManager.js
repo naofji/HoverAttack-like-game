@@ -9,6 +9,7 @@ import { applyKnockback } from '../utils/Knockback.js';
 import { applyRecoil } from '../utils/Recoil.js';
 import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
+import { recordHit } from '../utils/hitPoint.js';
 
 // Damage values
 const DAMAGE_DEFAULT_BULLET = 10;
@@ -89,6 +90,7 @@ export class CollisionManager {
             playBlast(game, bullet.x, bullet.y, 'homingHit');
         }
 
+        recordHit(target, bullet.x, bullet.y);
         target.takeDamage(damage);
         if (!bullet.isBaseLaser) bullet.alive = false;
     }
@@ -166,6 +168,7 @@ export class CollisionManager {
         for (const enemy of game.enemies) {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
+                recordHit(enemy, proj.x, proj.y);
                 enemy.takeDamage(DAMAGE_PLAYER_MISSILE);
                 // 着弾点から見て外向きへ吹き飛ばす。反動プロファイルを持たない
                 // 据え付け物（砲台・基地）には何も起きない。
@@ -184,6 +187,7 @@ export class CollisionManager {
         for (const enemy of game.enemies) {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
+                recordHit(enemy, proj.x, proj.y);
                 if (!enemy.isBase) enemy.takeDamage(DAMAGE_PLAYER_MG);
                 playBlast(game, proj.x, proj.y, 'mgHit');
                 proj.alive = false;
@@ -202,6 +206,7 @@ export class CollisionManager {
 
         if (player && player.alive && !player.docked && player.invincibleTimer <= 0
             && pointInRect(proj.x, proj.y, player)) {
+            recordHit(player, proj.x, proj.y);
             player.takeDamage(DAMAGE_ENEMY_MISSILE * damageMultiplier);
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
@@ -212,6 +217,7 @@ export class CollisionManager {
         }
 
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
+            recordHit(carrier, proj.x, proj.y);
             carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
             playBlast(game, proj.x, proj.y, 'enemyMissileHit');
             proj.alive = false;

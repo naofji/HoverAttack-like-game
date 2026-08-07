@@ -11,6 +11,7 @@ import {
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
+import { recordHit } from '../utils/hitPoint.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -101,6 +102,7 @@ export class Grenade {
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist < GRENADE_DAMAGE_RADIUS) {
+                    recordHit(enemy, this.x, this.y);
                     enemy.takeDamage(GRENADE_DAMAGE);
                 }
             }
@@ -112,6 +114,7 @@ export class Grenade {
                 const dy = (player.y + player.height / 2) - this.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < GRENADE_DAMAGE_RADIUS) {
+                    recordHit(player, this.x, this.y);
                     player.takeDamage(GRENADE_DAMAGE / 2); // Less damage to player
                     applyKnockback(player, dx, GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX);
                 }
@@ -123,6 +126,7 @@ export class Grenade {
                 const dy = (carrier.y + carrier.height / 2) - this.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < GRENADE_DAMAGE_RADIUS) {
+                    recordHit(carrier, this.x, this.y);
                     carrier.takeDamage(GRENADE_DAMAGE / 4);
                 }
             }

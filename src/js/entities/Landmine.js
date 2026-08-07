@@ -11,6 +11,7 @@ import {
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
+import { recordHit } from '../utils/hitPoint.js';
 
 export class Landmine {
     constructor(game, x, y) {
@@ -76,6 +77,7 @@ export class Landmine {
 
             if (dist <= LANDMINE_BLAST_RADIUS) {
                 if (typeof entity.takeDamage === 'function') {
+                    recordHit(entity, cx, cy);
                     entity.takeDamage(LANDMINE_DAMAGE);
                     applyKnockback(entity, dx, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX);
                 } else if (typeof entity.detonate === 'function') {
