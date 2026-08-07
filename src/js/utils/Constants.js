@@ -38,8 +38,8 @@ export const HOVER_THRUST = -0.50;
 export const HOVER_THRUST_MIN = -0.30; // Weak thrust when fuel is low
 export const HOVER_MAX_FUEL = 100;
 export const HOVER_FUEL_CONSUMPTION = 0.4; // per frame while hovering
-export const BURST_FUEL_CONSUMPTION = 30;  // fuel consumed immediately on burst
-export const BURST_MIN_FUEL = 30;          // minimum fuel required to burst (= 1 burst worth)
+export const BURST_FUEL_CONSUMPTION = 20;  // fuel consumed immediately on burst（満タンで5回）
+export const BURST_MIN_FUEL = 20;          // minimum fuel required to burst (= 1 burst worth)
 export const HOVER_FUEL_RECOVERY = 0.5;     // per frame when not hovering
 export const HOVER_FUEL_RECOVERY_BOOST = 0.75; // per frame when pressing S solo
 export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before hover activates after burst
@@ -107,7 +107,7 @@ export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 deg
 export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
 export const CARRIER_SPEED = 0.4;
-export const CARRIER_MAX_HP = 80;
+export const CARRIER_MAX_HP = 120;  // 敵ミサイル12発ぶん。80(8発)では事故死が多かった
 export const CARRIER_INITIAL_LIVES = 1;
 export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert
 
