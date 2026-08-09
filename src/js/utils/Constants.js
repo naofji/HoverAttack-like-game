@@ -379,6 +379,12 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
+// --- 左右の振り分け（ステレオパン） ---
+// 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。
+// ただし完全に片耳へは振らない。ヘッドホンで不自然になるため。
+export const AUDIO_PAN_RANGE = CANVAS_WIDTH / 2;
+export const AUDIO_PAN_MAX = 0.85;
+
 // --- 敵のホバー音 ---
 // 敵ごとにオシレーターを持つと数が増えるほど破綻するので、共有の1ループを
 // 「いちばん近くでホバーしている敵」の距離で駆動する。

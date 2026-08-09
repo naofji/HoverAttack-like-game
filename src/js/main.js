@@ -60,7 +60,7 @@ import {
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
-import { loudestHoverVolume } from './utils/audioFalloff.js';
+import { nearestHoveringEnemy, stereoPan } from './utils/audioFalloff.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
@@ -657,24 +657,41 @@ export const Game = {
     },
 
     /**
-     * 敵のホバー音。いちばん近くでホバーしている敵の距離で音量を決める。
-     * 聞き手は自機。ドックしていたり死んでいるときは母艦を聞き手にする。
+     * 音の聞き手。自機が動いているときは自機、ドック中や死亡中は母艦。
+     * @returns {{x:number,y:number}|null} 中心座標
      */
-    _updateEnemyHoverSound() {
-        const listener = (this.player && this.player.alive && !this.player.docked)
+    _listenerPos() {
+        const src = (this.player && this.player.alive && !this.player.docked)
             ? this.player
             : this.carrier;
+        if (!src) return null;
+        return { x: src.x + src.width / 2, y: src.y + src.height / 2 };
+    },
+
+    /** ワールドX から左右の振り分けを求める。聞き手がいなければ中央。 */
+    _panAt(x) {
+        const listener = this._listenerPos();
+        return listener ? stereoPan(x, listener.x) : 0;
+    },
+
+    /**
+     * 敵のホバー音。いちばん近くでホバーしている敵の距離で音量を決め、
+     * その敵の横位置で左右に振る。画面外から近づいてくる敵に気づける。
+     */
+    _updateEnemyHoverSound() {
+        const listener = this._listenerPos();
         if (!listener) {
             audioManager.stopEnemyHover();
             return;
         }
-        const volume = loudestHoverVolume(
-            this.enemies,
-            listener.x + listener.width / 2,
-            listener.y + listener.height / 2,
-            ENEMY_HOVER_AUDIBLE_RANGE,
+        const nearest = nearestHoveringEnemy(
+            this.enemies, listener.x, listener.y, ENEMY_HOVER_AUDIBLE_RANGE,
         );
-        audioManager.setEnemyHover(volume);
+        if (!nearest) {
+            audioManager.stopEnemyHover();
+            return;
+        }
+        audioManager.setEnemyHover(nearest.volume, stereoPan(nearest.x, listener.x));
     },
 
     /**
@@ -1308,7 +1325,7 @@ export const Game = {
     /** Spawn explosion particles and chain-detonate nearby landmines */
     spawnExplosion(x, y, size, opts) {
         this.particles.push(...createExplosion(x, y, size, opts));
-        audioManager.playExplosion(size > 10);
+        audioManager.playExplosion(size > 10, this._panAt(x));
 
         for (const mine of this.landmines) {
             if (!mine.alive) continue;

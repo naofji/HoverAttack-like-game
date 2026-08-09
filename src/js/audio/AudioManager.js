@@ -198,12 +198,32 @@ export class AudioManager {
 
     // --- Explosions & Bursts ---
     /**
+     * 音の出力先。位置を持つ音は pan を渡すと左右へ振れる。
+     *
+     * 位置を持たない音（UI・自機の操作音）は pan を省略して中央のまま。
+     * StereoPanner が無い環境では素通しして destination を返すので、
+     * 呼び出し側は分岐を書かなくてよい。
+     *
+     * @param {number} [pan] -1（左）〜 +1（右）
+     * @returns {AudioNode} connect() の相手
+     */
+    _out(pan = 0) {
+        if (!pan || typeof this.ctx.createStereoPanner !== 'function') {
+            return this.ctx.destination;
+        }
+        const panner = this.ctx.createStereoPanner();
+        panner.pan.value = Math.max(-1, Math.min(1, pan));
+        panner.connect(this.ctx.destination);
+        return panner;
+    }
+
+    /**
      * 敵のホバー音。共有の1ループを、いちばん近い敵の距離で駆動する。
      * 敵ごとにオシレーターを持つと数が増えるほど破綻するため。
      * 自機のホバー音と混ざっても区別できるよう、低めで濁った音にしてある。
      * @param {number} volume 0〜1。距離から求めた音量（loudestHoverVolume）
      */
-    setEnemyHover(volume) {
+    setEnemyHover(volume, pan = 0) {
         if (volume <= 0) {
             this.stopEnemyHover();
             return;
@@ -229,12 +249,22 @@ export class AudioManager {
             const noiseGain = this.ctx.createGain();
             noiseGain.gain.value = 0.5;
 
+            // 持続音なのでパンナーを持ち続け、毎フレーム値だけ更新する
+            this.enemyHoverPanner = (typeof this.ctx.createStereoPanner === 'function')
+                ? this.ctx.createStereoPanner()
+                : null;
+
             this.enemyHoverGain.gain.value = 0;
             this.enemyHoverOsc.connect(this.enemyHoverGain);
             this.enemyHoverNoise.connect(filter);
             filter.connect(noiseGain);
             noiseGain.connect(this.enemyHoverGain);
-            this.enemyHoverGain.connect(this.ctx.destination);
+            if (this.enemyHoverPanner) {
+                this.enemyHoverGain.connect(this.enemyHoverPanner);
+                this.enemyHoverPanner.connect(this.ctx.destination);
+            } else {
+                this.enemyHoverGain.connect(this.ctx.destination);
+            }
 
             this.enemyHoverOsc.start();
             this.enemyHoverNoise.start();
@@ -244,6 +274,12 @@ export class AudioManager {
         this.enemyHoverGain.gain.setTargetAtTime(
             volume * ENEMY_HOVER_MAX_GAIN, this.ctx.currentTime, 0.08,
         );
+        if (this.enemyHoverPanner) {
+            // 急に左右が飛ぶと不快なので、音量と同じく滑らかに寄せる
+            this.enemyHoverPanner.pan.setTargetAtTime(
+                Math.max(-1, Math.min(1, pan)), this.ctx.currentTime, 0.08,
+            );
+        }
     }
 
     /** 敵のホバー音を止める。 */
@@ -255,6 +291,7 @@ export class AudioManager {
         this.enemyHoverOsc = null;
         this.enemyHoverNoise = null;
         this.enemyHoverGain = null;
+        this.enemyHoverPanner = null;
         setTimeout(() => {
             try {
                 osc.stop(); osc.disconnect();
@@ -490,8 +527,9 @@ export class AudioManager {
         noise.stop(this.ctx.currentTime + 0.4);
     }
 
-    playExplosion(large = false) {
+    playExplosion(large = false, pan = 0) {
         if (!this._prepare()) return;
+        const out = this._out(pan);
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -507,15 +545,16 @@ export class AudioManager {
 
         noise.connect(noiseFilter);
         noiseFilter.connect(noiseEnvelope);
-        noiseEnvelope.connect(this.ctx.destination);
+        noiseEnvelope.connect(out);
 
         noise.start();
         noise.stop(this.ctx.currentTime + (large ? 0.8 : 0.3));
     }
 
     // --- Weapons ---
-    playMissile() {
+    playMissile(pan = 0) {
         if (!this._prepare()) return;
+        const out = this._out(pan);
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -528,14 +567,15 @@ export class AudioManager {
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(out);
 
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
     }
 
-    playEnemyFire() {
+    playEnemyFire(pan = 0) {
         if (!this._prepare()) return;
+        const out = this._out(pan);
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -548,7 +588,7 @@ export class AudioManager {
         gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.05);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(out);
 
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
