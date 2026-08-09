@@ -2,11 +2,12 @@
 // Screen Renderer - Title, Game Over, Mission Clear, MiniMap
 // ============================================
 
-import { TILE_SIZE } from '../utils/Constants.js';
+import { TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES } from '../utils/Constants.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
+import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
@@ -1043,6 +1044,62 @@ export class ScreenRenderer {
             ctx.fillStyle = '#000000';
             ctx.fillRect(-8, -2, 16, 4);
             ctx.fillRect(-2, -8, 4, 16);
+        }
+        ctx.restore();
+    }
+
+    /**
+     * BGM 音量のインジケータ。変更した瞬間だけ画面右下に出る。
+     *
+     * 常時出しているとプレイの邪魔になるので、数秒で消える。目盛りを
+     * 10 個に切ってあるのは「+」「-」1回ぶんが1目盛りだと分かるため。
+     *
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} volume 0〜1
+     * @param {number} framesLeft 残り表示フレーム。0以下なら描かない
+     */
+    drawVolumeIndicator(ctx, volume, framesLeft) {
+        if (framesLeft <= 0) return;
+
+        const SEGMENTS = 10;
+        const pct = volumePercent(volume);
+        const filled = Math.round((pct / 100) * SEGMENTS);
+        const muted = pct === 0;
+
+        // 最後だけ薄れて消える。急に消えると点滅に見える。
+        const alpha = Math.min(1, framesLeft / VOLUME_HUD_FADE_FRAMES);
+
+        const w = 236;
+        const h = 56;
+        const x = CANVAS_WIDTH - w - SPACE.lg;
+        const y = CANVAS_HEIGHT - h - SPACE.lg;
+        const accent = muted ? UI.warn : UI.info;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        drawFrame(ctx, x, y, w, h, accent, { fill: UI.panelFill, glow: 'soft', radius: 8 });
+
+        ctx.textBaseline = 'middle';
+        ctx.font = font('small', true);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = UI.dim;
+        ctx.fillText('BGM', x + SPACE.md, y + SPACE.md + 2);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = accent;
+        glow(ctx, accent, 'soft');
+        ctx.fillText(muted ? 'MUTE' : `${pct}%`, x + w - SPACE.md, y + SPACE.md + 2);
+        ctx.shadowBlur = 0;
+
+        // 目盛り
+        const barX = x + SPACE.md;
+        const barY = y + h - SPACE.md - 8;
+        const barW = w - SPACE.md * 2;
+        const gap = 3;
+        const segW = (barW - gap * (SEGMENTS - 1)) / SEGMENTS;
+        for (let i = 0; i < SEGMENTS; i++) {
+            ctx.fillStyle = (i < filled) ? accent : UI.faint;
+            ctx.fillRect(barX + i * (segW + gap), barY, segW, 8);
         }
         ctx.restore();
     }

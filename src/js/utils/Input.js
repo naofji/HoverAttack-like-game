@@ -25,6 +25,10 @@ export class Input {
         // Typing support for Ranking entry
         this.typedChars = [];
 
+        // このフレームに押された文字（e.key）。配列に依存せず「+」「-」を拾うため。
+        // e.code だと JIS キーボードの「+」が Semicolon になり US 配列と食い違う。
+        this.pressedChars = new Set();
+
         this._setupListeners();
     }
 
@@ -38,6 +42,8 @@ export class Input {
                     this.typedChars.push(e.key);
                 }
             }
+
+            if (!e.repeat) this.pressedChars.add(e.key);
 
             this.keys[e.code] = true;
             if (PREVENT_DEFAULT_KEYS.has(e.code)) {
@@ -91,6 +97,15 @@ export class Input {
         return !!this.keys[code] && !this.prevKeys[code];
     }
 
+    /**
+     * このフレームに押された文字か（配列非依存）。
+     * 同じ意味の複数表記をまとめて渡せる。例: isCharPressed('+', '=')
+     * @param {...string} chars e.key の値
+     */
+    isCharPressed(...chars) {
+        return chars.some((c) => this.pressedChars.has(c));
+    }
+
     /** Left mouse just clicked this frame */
     isLeftClickPressed() {
         return this.mouse.left && !this.prevMouse.left;
@@ -137,6 +152,7 @@ export class Input {
         this.prevKeys = { ...this.keys };
         this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
         this.typedChars = []; // Clear key queue
+        this.pressedChars.clear();
 
         // 右クリック長押しカウント
         if (this.mouse.right) {

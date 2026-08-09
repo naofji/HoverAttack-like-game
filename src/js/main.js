@@ -23,7 +23,8 @@ import {
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED, ENEMY_HOVER_AUDIBLE_RANGE,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
-    STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES
+    STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES,
+    VOLUME_HUD_FRAMES,
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -84,6 +85,7 @@ export const Game = {
     // Core systems
     input: null,
     map: null,
+    volumeHudTimer: 0,      // BGM音量インジケータの残り表示フレーム
     camera: null,
     hud: null,
     crosshair: null,
@@ -210,6 +212,9 @@ export const Game = {
             return;
         }
 
+        this._tickVolumeHud();
+        this._updateVolumeControl();
+
         // Lock-on toggle works in all states
         if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
             this.input.crosshairLocked = !this.input.crosshairLocked;
@@ -221,6 +226,31 @@ export const Game = {
         }
 
         this._updateGameState(deltaTime);
+    },
+
+    /**
+     * 「+」で BGM を上げ、「-」で下げる。どの画面でも効く。
+     *
+     * ランキングの名前入力中だけは無視する。「-」は名前に使える文字なので、
+     * 名前を打っているつもりで BGM が下がると訳が分からなくなる。
+     * 判定に e.key を使うのは、JIS 配列の「+」が e.code だと Semicolon に
+     * なって US 配列と食い違うため。
+     */
+    _updateVolumeControl() {
+        if (this.gameState === 'ranking_entry') return;
+
+        let direction = 0;
+        if (this.input.isCharPressed('+', '=')) direction = +1;
+        else if (this.input.isCharPressed('-', '_')) direction = -1;
+        if (direction === 0) return;
+
+        this.bgmVolume = audioManager.adjustBgmVolume(direction);
+        this.volumeHudTimer = VOLUME_HUD_FRAMES;
+    },
+
+    /** 音量表示の残り時間を数え下げる。 */
+    _tickVolumeHud() {
+        if (this.volumeHudTimer > 0) this.volumeHudTimer--;
     },
 
     // ==========================================
@@ -1613,6 +1643,10 @@ export const Game = {
 
         this.update(deltaTime);
         this.draw();
+        // draw() は画面ごとに早期 return するので、その外側で最後に重ねる
+        this.screenRenderer.drawVolumeIndicator(
+            this.ctx, audioManager.bgmVolume, this.volumeHudTimer,
+        );
 
         this.input.endFrame();
         requestAnimationFrame(this.loop.bind(this));

@@ -2,11 +2,13 @@ import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
 import { ENEMY_HOVER_MAX_GAIN } from '../utils/Constants.js';
 import { stereoPan } from '../utils/audioFalloff.js';
+import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
 
 export class AudioManager {
     constructor() {
         this.ctx = null;
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
+        this.bgmVolume = loadBgmVolume();   // 0〜1。前回の設定を引き継ぐ
         this.hoverOsc = null;
         this.hoverNoise = null;
         this.hoverGain = null;
@@ -40,6 +42,8 @@ export class AudioManager {
         } else {
             this.bgm = new BGMManager(this.ctx);
         }
+        // BGM は init() で初めて作られるので、保存済みの設定をここで流し込む
+        this.bgm.setVolume(this.bgmVolume);
 
         this._loadAlarmSound();
 
@@ -199,6 +203,28 @@ export class AudioManager {
     }
 
     // --- Explosions & Bursts ---
+    /**
+     * BGM の音量を設定して保存する。
+     * AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
+     * init() で BGM を作るときに反映する。
+     * @param {number} v 0〜1
+     */
+    setBgmVolume(v) {
+        this.bgmVolume = clampVolume(v);
+        if (this.bgm) this.bgm.setVolume(this.bgmVolume);
+        saveBgmVolume(this.bgmVolume);
+        return this.bgmVolume;
+    }
+
+    /**
+     * BGM の音量を1段上げ下げする。
+     * @param {number} direction +1 で上げ、-1 で下げ
+     * @returns {number} 変更後の音量
+     */
+    adjustBgmVolume(direction) {
+        return this.setBgmVolume(stepVolume(this.bgmVolume, direction));
+    }
+
     /**
      * 聞き手の横位置（ワールド座標）を更新する。毎フレーム画面中心を渡す。
      *

@@ -385,6 +385,16 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 export const AUDIO_PAN_RANGE = CANVAS_WIDTH / 2;
 export const AUDIO_PAN_MAX = 0.85;
 
+// --- BGM の音量調節 ---
+// 「+」で上げ「-」で下げる。0〜100% を10%刻み（11段）にしてあるので、
+// 端から端まで10回。刻みを細かくすると押す回数が増えて煩わしい。
+export const BGM_VOLUME_STEP = 0.1;
+export const BGM_VOLUME_DEFAULT = 1.0;
+export const BGM_VOLUME_STORAGE_KEY = 'hoverAttack.bgmVolume';
+// 変更した瞬間だけ表示する。常時出しているとプレイの邪魔になる。
+export const VOLUME_HUD_FRAMES = 120;      // 約2秒
+export const VOLUME_HUD_FADE_FRAMES = 30;  // 最後の0.5秒で消える
+
 // --- 敵のホバー音 ---
 // 敵ごとにオシレーターを持つと数が増えるほど破綻するので、共有の1ループを
 // 「いちばん近くでホバーしている敵」の距離で駆動する。

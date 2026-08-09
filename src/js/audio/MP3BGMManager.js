@@ -13,6 +13,26 @@ export class MP3BGMManager {
         this.source       = null;
         this.gainNode     = null;
         this._stopTimerId = null; // Pending fade-out timeout
+        this.fullGain     = 0.5;  // この曲の満音量（ユーザー設定の 100% はこれを指す）
+        this.volume       = 1.0;  // 0〜1 のユーザー設定
+    }
+
+    /** 満音量に対する倍率。fullGain と混同しないよう1箇所で計算する。 */
+    _targetGain() {
+        return this.fullGain * this.volume;
+    }
+
+    /**
+     * ユーザー設定の音量を反映する。再生中なら滑らかに追従させる。
+     * 即座に代入すると値が飛んでプツッと鳴るため。
+     * @param {number} v 0〜1
+     */
+    setVolume(v) {
+        this.volume = Math.max(0, Math.min(1, v));
+        if (this.playing && this.gainNode) {
+            this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
+            this.gainNode.gain.setTargetAtTime(this._targetGain(), this.ctx.currentTime, 0.05);
+        }
     }
 
     // ------------------------------------------
@@ -58,7 +78,7 @@ export class MP3BGMManager {
             this.playing = true;
             this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
             this.gainNode.gain.setValueAtTime(0, this.ctx.currentTime);
-            this.gainNode.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 2);
+            this.gainNode.gain.linearRampToValueAtTime(this._targetGain(), this.ctx.currentTime + 2);
         }).catch(err => {
             console.error('Failed to play MP3 BGM:', err);
             console.log('Make sure the file exists at:', this.url);

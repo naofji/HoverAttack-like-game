@@ -77,8 +77,10 @@ const HIHAT_PATTERNS = [
 
 export class BGMManager {
     constructor(audioCtx) {
-        this.ctx     = audioCtx;
-        this.playing = false;
+        this.ctx      = audioCtx;
+        this.playing  = false;
+        this.fullGain = 0.35;  // この曲の満音量（ユーザー設定の 100% はこれを指す）
+        this.volume   = 1.0;   // 0〜1 のユーザー設定
 
         // Tempo
         this.bpm          = 150;
@@ -189,6 +191,23 @@ export class BGMManager {
     // PLAYBACK CONTROL
     // ==========================================
 
+    /** 満音量に対する倍率。 */
+    _targetGain() {
+        return this.fullGain * this.volume;
+    }
+
+    /**
+     * ユーザー設定の音量を反映する。再生中なら滑らかに追従させる。
+     * @param {number} v 0〜1
+     */
+    setVolume(v) {
+        this.volume = Math.max(0, Math.min(1, v));
+        if (this.playing && this.masterGain) {
+            this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+            this.masterGain.gain.setTargetAtTime(this._targetGain(), this.ctx.currentTime, 0.05);
+        }
+    }
+
     start() {
         if (this.playing) return;
         this._init();
@@ -197,7 +216,7 @@ export class BGMManager {
         this.nextBarTime = this.ctx.currentTime + 0.1;
 
         this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
-        this.masterGain.gain.linearRampToValueAtTime(0.35, this.ctx.currentTime + 1.2);
+        this.masterGain.gain.linearRampToValueAtTime(this._targetGain(), this.ctx.currentTime + 1.2);
 
         this._scheduleLoop();
     }
