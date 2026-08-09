@@ -117,7 +117,7 @@ export class EnemyBase {
             const ry = this.y + Math.random() * this.height;
             const size = 20 + Math.random() * 30;
             playBlast(this.game, rx, ry, 'baseDying', size);
-            audioManager.playExplosion(size > 35);
+            audioManager.playExplosion(size > 35, rx);
             if (this.game.camera) this.game.camera.shake(8, 3);
         }
 
@@ -211,7 +211,7 @@ export class EnemyBase {
 
         const bullet = new EnemyBullet(this.game, centerX, centerY, angle + inaccuracy);
         this.game.enemyBullets.push(bullet);
-        audioManager.playEnemyFire(this.game._panAt ? this.game._panAt(centerX) : 0);
+        audioManager.playEnemyFire(centerX);
     }
 
     _updateBaseMissile() {
@@ -237,7 +237,7 @@ export class EnemyBase {
 
         const missile = new Missile(this.game, centerX, centerY, angle, false); // isPlayerOwned = false
         this.game.enemyBullets.push(missile);
-        audioManager.playEnemyFire(this.game._panAt ? this.game._panAt(centerX) : 0);
+        audioManager.playEnemyFire(centerX);
     }
 
     _updateBaseHoming() {
@@ -268,7 +268,7 @@ export class EnemyBase {
             const missile = new EnemyHomingMissile(this.game, centerX, centerY, baseAngle + offset);
             this.game.enemyBullets.push(missile);
         }
-        audioManager.playEnemyFire(this.game._panAt ? this.game._panAt(centerX) : 0);
+        audioManager.playEnemyFire(centerX);
     }
 
     _findTarget(maxRange = Infinity) {
@@ -372,7 +372,7 @@ export class EnemyBase {
         const missile = new EnemyCruiseMissile(this.game, centerX, centerY, angle, path);
         this.game.enemyBullets.push(missile);
 
-        audioManager.playEnemyFire(this.game._panAt ? this.game._panAt(centerX) : 0);
+        audioManager.playEnemyFire(centerX);
     }
 
     _findCruiseTarget() {

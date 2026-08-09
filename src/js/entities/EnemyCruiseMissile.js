@@ -261,7 +261,7 @@ export class EnemyCruiseMissile {
 
         // Visual and Audio feedback
         playBlast(this.game, this.x, this.y, 'cruise');
-        audioManager.playExplosion(true);
+        audioManager.playExplosion(true, this.x);
         if (this.game.camera) this.game.camera.shake(8, 15);
     }
 

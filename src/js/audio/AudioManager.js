@@ -1,10 +1,12 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
 import { ENEMY_HOVER_MAX_GAIN } from '../utils/Constants.js';
+import { stereoPan } from '../utils/audioFalloff.js';
 
 export class AudioManager {
     constructor() {
         this.ctx = null;
+        this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
         this.hoverOsc = null;
         this.hoverNoise = null;
         this.hoverGain = null;
@@ -198,16 +200,40 @@ export class AudioManager {
 
     // --- Explosions & Bursts ---
     /**
-     * 音の出力先。位置を持つ音は pan を渡すと左右へ振れる。
+     * 聞き手の横位置（ワールド座標）を更新する。毎フレーム画面中心を渡す。
      *
-     * 位置を持たない音（UI・自機の操作音）は pan を省略して中央のまま。
+     * 自機ではなく画面中心を基準にするのは、見えている位置と聞こえる向きを
+     * 一致させるため。カメラはマップ端でクランプされるし、破壊演出中は
+     * 撃破地点に留まるので、自機基準だと画面左の爆発が右から鳴りうる。
+     *
+     * @param {number|null} x 画面中心のワールドX。null で定位を止める
+     */
+    setListenerX(x) {
+        this.listenerX = Number.isFinite(x) ? x : null;
+    }
+
+    /**
+     * 音源のワールドX から左右の振り分けを求める。
+     * 位置を持たない音（UI・自機の操作音）は sourceX 省略で中央のまま。
+     * @param {number} [sourceX]
+     * @returns {number} -1（左）〜 +1（右）
+     */
+    _panFor(sourceX) {
+        if (sourceX == null || this.listenerX == null) return 0;
+        return stereoPan(sourceX, this.listenerX);
+    }
+
+    /**
+     * 音の出力先。音源のワールドX を渡すとその位置から聞こえるようになる。
+     *
      * StereoPanner が無い環境では素通しして destination を返すので、
      * 呼び出し側は分岐を書かなくてよい。
      *
-     * @param {number} [pan] -1（左）〜 +1（右）
+     * @param {number} [sourceX] 音源のワールドX。省略で中央
      * @returns {AudioNode} connect() の相手
      */
-    _out(pan = 0) {
+    _out(sourceX) {
+        const pan = this._panFor(sourceX);
         if (!pan || typeof this.ctx.createStereoPanner !== 'function') {
             return this.ctx.destination;
         }
@@ -221,9 +247,10 @@ export class AudioManager {
      * 敵のホバー音。共有の1ループを、いちばん近い敵の距離で駆動する。
      * 敵ごとにオシレーターを持つと数が増えるほど破綻するため。
      * 自機のホバー音と混ざっても区別できるよう、低めで濁った音にしてある。
-     * @param {number} volume 0〜1。距離から求めた音量（loudestHoverVolume）
+     * @param {number} volume 0〜1。距離から求めた音量（nearestHoveringEnemy）
+     * @param {number} [sourceX] その敵のワールドX。左右の振り分けに使う
      */
-    setEnemyHover(volume, pan = 0) {
+    setEnemyHover(volume, sourceX) {
         if (volume <= 0) {
             this.stopEnemyHover();
             return;
@@ -277,7 +304,7 @@ export class AudioManager {
         if (this.enemyHoverPanner) {
             // 急に左右が飛ぶと不快なので、音量と同じく滑らかに寄せる
             this.enemyHoverPanner.pan.setTargetAtTime(
-                Math.max(-1, Math.min(1, pan)), this.ctx.currentTime, 0.08,
+                this._panFor(sourceX), this.ctx.currentTime, 0.08,
             );
         }
     }
@@ -527,9 +554,9 @@ export class AudioManager {
         noise.stop(this.ctx.currentTime + 0.4);
     }
 
-    playExplosion(large = false, pan = 0) {
+    playExplosion(large = false, sourceX) {
         if (!this._prepare()) return;
-        const out = this._out(pan);
+        const out = this._out(sourceX);
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = this.noiseBuffer;
@@ -552,9 +579,9 @@ export class AudioManager {
     }
 
     // --- Weapons ---
-    playMissile(pan = 0) {
+    playMissile(sourceX) {
         if (!this._prepare()) return;
-        const out = this._out(pan);
+        const out = this._out(sourceX);
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -573,9 +600,9 @@ export class AudioManager {
         osc.stop(this.ctx.currentTime + 0.15);
     }
 
-    playEnemyFire(pan = 0) {
+    playEnemyFire(sourceX) {
         if (!this._prepare()) return;
-        const out = this._out(pan);
+        const out = this._out(sourceX);
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();

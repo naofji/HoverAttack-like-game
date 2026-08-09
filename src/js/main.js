@@ -60,7 +60,7 @@ import {
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
-import { nearestHoveringEnemy, stereoPan } from './utils/audioFalloff.js';
+import { nearestHoveringEnemy } from './utils/audioFalloff.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
@@ -668,12 +668,6 @@ export const Game = {
         return { x: src.x + src.width / 2, y: src.y + src.height / 2 };
     },
 
-    /** ワールドX から左右の振り分けを求める。聞き手がいなければ中央。 */
-    _panAt(x) {
-        const listener = this._listenerPos();
-        return listener ? stereoPan(x, listener.x) : 0;
-    },
-
     /**
      * 敵のホバー音。いちばん近くでホバーしている敵の距離で音量を決め、
      * その敵の横位置で左右に振る。画面外から近づいてくる敵に気づける。
@@ -691,7 +685,7 @@ export const Game = {
             audioManager.stopEnemyHover();
             return;
         }
-        audioManager.setEnemyHover(nearest.volume, stereoPan(nearest.x, listener.x));
+        audioManager.setEnemyHover(nearest.volume, nearest.x);
     },
 
     /**
@@ -726,6 +720,9 @@ export const Game = {
             this.camera.follow(this.carrier);
         }
         this.camera.update();
+        // 見えている位置と聞こえる向きを合わせる。カメラはマップ端で
+        // クランプされるので、自機ではなく画面中心を基準にする。
+        audioManager.setListenerX(this.camera.x + this.canvas.width / 2);
     },
 
     _updateProjectiles() {
@@ -1062,7 +1059,7 @@ export const Game = {
                         this._grenadeHeldAngle, this._grenadeHeldSpeed
                     ));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
-                    audioManager.playExplosion(false);
+                    audioManager.playExplosion(false, px);
                     this.grenadeTrajectory = null;
                     this.grenadeWasHeld = false;
                     this._grenadeHeldAngle = null;
@@ -1086,7 +1083,7 @@ export const Game = {
                     const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
                     this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
-                    audioManager.playExplosion(false);
+                    audioManager.playExplosion(false, px);
                 }
                 // 長押しのリリースはキャンセル（左クリックせずに離した場合）
             }
@@ -1115,7 +1112,7 @@ export const Game = {
         this.projectiles.push(new Missile(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, angle, true));
         player.missiles = Math.max(0, Math.floor(player.missiles) - 1);
         player.missileCooldown = 15;
-        audioManager.playMissile();
+        audioManager.playMissile(px);
 
         if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';
@@ -1325,7 +1322,7 @@ export const Game = {
     /** Spawn explosion particles and chain-detonate nearby landmines */
     spawnExplosion(x, y, size, opts) {
         this.particles.push(...createExplosion(x, y, size, opts));
-        audioManager.playExplosion(size > 10, this._panAt(x));
+        audioManager.playExplosion(size > 10, x);
 
         for (const mine of this.landmines) {
             if (!mine.alive) continue;
