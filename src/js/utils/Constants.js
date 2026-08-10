@@ -381,9 +381,22 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 // --- Enemy missile hit knockback (smaller than a grenade) ---
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。
-// ただし完全に片耳へは振らない。ヘッドホンで不自然になるため。
+// ただし振り切りすぎない。等パワー則で pan=0.85 だと片側の成分が 0.118 まで
+// 落ち、モノラル環境では -2.1dB 目減りして「遠くなった」と感じる。
+// 0.6 なら目減りは -1.0dB で、左右差は依然 10dB あって方向は分かる。
 export const AUDIO_PAN_RANGE = CANVAS_WIDTH / 2;
-export const AUDIO_PAN_MAX = 0.85;
+export const AUDIO_PAN_MAX = 0.6;
+
+// --- 効果音のマスター ---
+// 効果音は29箇所が個別に destination へ繋がっており、全体を上げる場所が
+// 無かった。1本のバスに集約し、そこで持ち上げてからリミッタを通す。
+// 素で 1.0 を超える音（ホバー音は 1.2）があるので、圧縮なしに上げると割れる。
+export const SE_MASTER_GAIN = 1.8;
+export const SE_COMP_THRESHOLD = -20;   // dB。ここから上を抑える
+export const SE_COMP_KNEE = 15;
+export const SE_COMP_RATIO = 4;
+export const SE_COMP_ATTACK = 0.004;    // 秒。爆発の立ち上がりを潰さない速さ
+export const SE_COMP_RELEASE = 0.18;
 
 // --- BGM の音量調節 ---
 // 「+」で上げ「-」で下げる。0〜100% を10%刻み（11段）にしてあるので、

@@ -1,12 +1,17 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
-import { ENEMY_HOVER_MAX_GAIN } from '../utils/Constants.js';
+import {
+    ENEMY_HOVER_MAX_GAIN,
+    SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
+    SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
+} from '../utils/Constants.js';
 import { stereoPan } from '../utils/audioFalloff.js';
 import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
 
 export class AudioManager {
     constructor() {
         this.ctx = null;
+        this.seBus = null;       // 効果音のマスター（BGM は通さない）
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
         this.bgmVolume = loadBgmVolume();   // 0〜1。前回の設定を引き継ぐ
         this.hoverOsc = null;
@@ -35,6 +40,7 @@ export class AudioManager {
         if (this.ctx) return;
         if (!this.available) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this._createSeBus();
         this._createNoiseBuffer();
 
         if (this.useMP3BGM) {
@@ -153,7 +159,7 @@ export class AudioManager {
             this.hoverNoiseFilter.connect(this.noiseGain);
             this.noiseGain.connect(this.hoverGain);
 
-            this.hoverGain.connect(this.ctx.destination);
+            this.hoverGain.connect(this._seDest());
 
             this.hoverGain.gain.setValueAtTime(0, this.ctx.currentTime);
             // Overall master volume remains around 0.06
@@ -203,6 +209,40 @@ export class AudioManager {
     }
 
     // --- Explosions & Bursts ---
+    /**
+     * 効果音のマスターバスを作る。効果音 → ゲイン → リミッタ → 出力。
+     *
+     * 効果音は元々29箇所が個別に destination へ繋がっていて、全体を上げる
+     * 場所が無かった。素で 1.0 を超える音（ホバー音は 1.2）があるため、
+     * 単純に持ち上げると割れる。圧縮を挟んでから持ち上げている。
+     * BGM はこのバスを通さない。BGM の音量調節と独立させるため。
+     */
+    _createSeBus() {
+        this.seBus = this.ctx.createGain();
+        this.seBus.gain.value = SE_MASTER_GAIN;
+
+        if (typeof this.ctx.createDynamicsCompressor === 'function') {
+            const comp = this.ctx.createDynamicsCompressor();
+            comp.threshold.value = SE_COMP_THRESHOLD;
+            comp.knee.value = SE_COMP_KNEE;
+            comp.ratio.value = SE_COMP_RATIO;
+            comp.attack.value = SE_COMP_ATTACK;
+            comp.release.value = SE_COMP_RELEASE;
+            this.seBus.connect(comp);
+            comp.connect(this.ctx.destination);
+        } else {
+            this.seBus.connect(this.ctx.destination);
+        }
+    }
+
+    /**
+     * 効果音の接続先。バスがまだ無ければ素の出力に落ちる。
+     * @returns {AudioNode}
+     */
+    _seDest() {
+        return this.seBus || this.ctx.destination;
+    }
+
     /**
      * BGM の音量を設定して保存する。
      * AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
@@ -261,11 +301,11 @@ export class AudioManager {
     _out(sourceX) {
         const pan = this._panFor(sourceX);
         if (!pan || typeof this.ctx.createStereoPanner !== 'function') {
-            return this.ctx.destination;
+            return this._seDest();
         }
         const panner = this.ctx.createStereoPanner();
         panner.pan.value = Math.max(-1, Math.min(1, pan));
-        panner.connect(this.ctx.destination);
+        panner.connect(this._seDest());
         return panner;
     }
 
@@ -314,9 +354,9 @@ export class AudioManager {
             noiseGain.connect(this.enemyHoverGain);
             if (this.enemyHoverPanner) {
                 this.enemyHoverGain.connect(this.enemyHoverPanner);
-                this.enemyHoverPanner.connect(this.ctx.destination);
+                this.enemyHoverPanner.connect(this._seDest());
             } else {
-                this.enemyHoverGain.connect(this.ctx.destination);
+                this.enemyHoverGain.connect(this._seDest());
             }
 
             this.enemyHoverOsc.start();
@@ -371,7 +411,7 @@ export class AudioManager {
         const ng = this.ctx.createGain();
         ng.gain.setValueAtTime(0.28, t);
         ng.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
-        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
         noise.start(t); noise.stop(t + 0.14);
 
         // 確認のトーン（少し遅らせて上がる2音）
@@ -383,7 +423,7 @@ export class AudioManager {
             g.gain.setValueAtTime(0.0001, t + delay);
             g.gain.exponentialRampToValueAtTime(0.09, t + delay + 0.01);
             g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.10);
-            osc.connect(g); g.connect(this.ctx.destination);
+            osc.connect(g); g.connect(this._seDest());
             osc.start(t + delay); osc.stop(t + delay + 0.12);
         }
     }
@@ -412,7 +452,7 @@ export class AudioManager {
             this.carrierOsc.connect(this.carrierFilter);
             this.carrierSub.connect(this.carrierFilter);
             this.carrierFilter.connect(this.carrierGain);
-            this.carrierGain.connect(this.ctx.destination);
+            this.carrierGain.connect(this._seDest());
 
             this.carrierOsc.start();
             this.carrierSub.start();
@@ -460,7 +500,7 @@ export class AudioManager {
         const ng = this.ctx.createGain();
         ng.gain.setValueAtTime(vol, t);
         ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
         noise.start(t); noise.stop(t + dur);
 
         // 機体の重みを出す低い一撃
@@ -471,7 +511,7 @@ export class AudioManager {
         osc.frequency.exponentialRampToValueAtTime(45, t + dur);
         g.gain.setValueAtTime(vol * 0.8, t);
         g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        osc.connect(g); g.connect(this.ctx.destination);
+        osc.connect(g); g.connect(this._seDest());
         osc.start(t); osc.stop(t + dur);
     }
 
@@ -495,7 +535,7 @@ export class AudioManager {
         of.type = 'lowpass';
         of.frequency.setValueAtTime(2400, t);
         of.frequency.exponentialRampToValueAtTime(300, t + 0.9);
-        osc.connect(of); of.connect(og); og.connect(this.ctx.destination);
+        osc.connect(of); of.connect(og); og.connect(this._seDest());
         osc.start(t); osc.stop(t + 0.9);
 
         // 厚みを出す爆発のノイズ
@@ -508,7 +548,7 @@ export class AudioManager {
         const ng = this.ctx.createGain();
         ng.gain.setValueAtTime(0.3, t);
         ng.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
-        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
         noise.start(t); noise.stop(t + 0.7);
     }
 
@@ -524,7 +564,7 @@ export class AudioManager {
             g.gain.setValueAtTime(0.0001, t + delay);
             g.gain.exponentialRampToValueAtTime(0.07, t + delay + 0.008);
             g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.08);
-            osc.connect(g); g.connect(this.ctx.destination);
+            osc.connect(g); g.connect(this._seDest());
             osc.start(t + delay); osc.stop(t + delay + 0.09);
         }
     }
@@ -543,7 +583,7 @@ export class AudioManager {
         const ng = this.ctx.createGain();
         ng.gain.setValueAtTime(0.14, t);
         ng.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-        noise.connect(nf); nf.connect(ng); ng.connect(this.ctx.destination);
+        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
         noise.start(t); noise.stop(t + 0.07);
 
         const osc = this.ctx.createOscillator();
@@ -553,7 +593,7 @@ export class AudioManager {
         g.gain.setValueAtTime(0.0001, t + 0.05);
         g.gain.exponentialRampToValueAtTime(0.06, t + 0.058);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-        osc.connect(g); g.connect(this.ctx.destination);
+        osc.connect(g); g.connect(this._seDest());
         osc.start(t + 0.05); osc.stop(t + 0.13);
     }
 
@@ -574,7 +614,7 @@ export class AudioManager {
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._seDest());
 
         noise.start();
         noise.stop(this.ctx.currentTime + 0.4);
@@ -593,7 +633,9 @@ export class AudioManager {
         noiseFilter.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + (large ? 0.5 : 0.2));
 
         const noiseEnvelope = this.ctx.createGain();
-        noiseEnvelope.gain.setValueAtTime(large ? 0.3 : 0.15, this.ctx.currentTime);
+        // ローパスを 40Hz まで落とすため聞こえる帯域が薄い。マスターの底上げに
+        // 加えて、爆発だけさらに +3dB 持ち上げる（画面端で埋もれていたため）
+        noiseEnvelope.gain.setValueAtTime(large ? 0.42 : 0.21, this.ctx.currentTime);
         noiseEnvelope.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (large ? 0.8 : 0.3));
 
         noise.connect(noiseFilter);
@@ -661,7 +703,7 @@ export class AudioManager {
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._seDest());
 
         osc.start();
         osc.stop(this.ctx.currentTime + 0.05);
@@ -683,7 +725,7 @@ export class AudioManager {
         gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._seDest());
 
         osc.start();
         osc.stop(this.ctx.currentTime + 1.5);
@@ -710,7 +752,7 @@ export class AudioManager {
         osc.connect(filter);
         sub.connect(filter);
         filter.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._seDest());
 
         gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.6);
@@ -740,7 +782,7 @@ export class AudioManager {
 
         noise.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
-        noiseGain.connect(this.ctx.destination);
+        noiseGain.connect(this._seDest());
 
         // Heavy low thud (the "weight")
         const osc = this.ctx.createOscillator();
@@ -759,7 +801,7 @@ export class AudioManager {
 
         osc.connect(distortion);
         distortion.connect(oscGain);
-        oscGain.connect(this.ctx.destination);
+        oscGain.connect(this._seDest());
 
         noise.start(now);
         osc.start(now);
@@ -788,7 +830,7 @@ export class AudioManager {
             gain.gain.exponentialRampToValueAtTime(0.01, now + note.t + note.d);
 
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
+            gain.connect(this._seDest());
 
             osc.start(now + note.t);
             osc.stop(now + note.t + note.d);
@@ -880,7 +922,7 @@ export class AudioManager {
             }
 
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
+            gain.connect(this._seDest());
 
             osc.start(now + note.t);
             osc.stop(now + note.t + note.d);
@@ -969,7 +1011,7 @@ export class AudioManager {
                 gain.gain.exponentialRampToValueAtTime(0.001, t + tempo - 0.02);
 
                 osc.connect(gain);
-                gain.connect(this.ctx.destination);
+                gain.connect(this._seDest());
                 osc.start(t);
                 osc.stop(t + tempo);
 
@@ -986,7 +1028,7 @@ export class AudioManager {
                 bGain.gain.linearRampToValueAtTime(0, t + tempo);
 
                 bOsc.connect(bGain);
-                bGain.connect(this.ctx.destination);
+                bGain.connect(this._seDest());
                 bOsc.start(t);
                 bOsc.stop(t + tempo);
 
@@ -1049,7 +1091,7 @@ export class AudioManager {
         // Master FX for the fanfare
         const fnMaster = this.ctx.createGain();
         fnMaster.gain.value = volume;
-        fnMaster.connect(this.ctx.destination);
+        fnMaster.connect(this._seDest());
 
         // Lowpass filter for a muffled, distant sad sound
         const filter = this.ctx.createBiquadFilter();
@@ -1140,7 +1182,7 @@ export class AudioManager {
             gain.gain.setValueAtTime(0.2, this.ctx.currentTime); // 適度な音量に調整
 
             source.connect(gain);
-            gain.connect(this.ctx.destination);
+            gain.connect(this._seDest());
             source.start(0);
         } else {
             // ロードされていない場合は旧シンセサイザー音を再生し、裏でロードを再度キック
@@ -1159,7 +1201,7 @@ export class AudioManager {
             gain.gain.linearRampToValueAtTime(0, now + 0.3);
 
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
+            gain.connect(this._seDest());
 
             osc.start(now);
             osc.stop(now + 0.3);
@@ -1185,7 +1227,7 @@ export class AudioManager {
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this._seDest());
 
         osc.start(now);
         osc.stop(now + 0.5);
