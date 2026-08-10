@@ -67,12 +67,13 @@ function fakeCtx() {
 function buildEnemyHover(volume = 1) {
   const ctx = fakeCtx();
   const saved = {
-    ctx: audioManager.ctx, bus: audioManager.seBus, buf: audioManager.noiseBuffer,
+    ctx: audioManager.ctx, fade: audioManager.seFade, master: audioManager.seMaster, buf: audioManager.noiseBuffer,
     noise: audioManager.enemyHoverNoise, lfo: audioManager.enemyHoverLfo,
     gain: audioManager.enemyHoverGain, panner: audioManager.enemyHoverPanner,
   };
   audioManager.ctx = ctx;
-  audioManager.seBus = null;
+  audioManager.seFade = null;
+  audioManager.seMaster = null;
   audioManager.noiseBuffer = { fake: true };
   audioManager.enemyHoverNoise = null;
   audioManager.enemyHoverLfo = null;
@@ -91,7 +92,7 @@ function buildEnemyHover(volume = 1) {
     };
   } finally {
     Object.assign(audioManager, {
-      ctx: saved.ctx, seBus: saved.bus, noiseBuffer: saved.buf,
+      ctx: saved.ctx, seFade: saved.fade, seMaster: saved.master, noiseBuffer: saved.buf,
       enemyHoverNoise: saved.noise, enemyHoverLfo: saved.lfo,
       enemyHoverGain: saved.gain, enemyHoverPanner: saved.panner,
     });

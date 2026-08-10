@@ -488,6 +488,9 @@ export const SE_COMP_KNEE = 15;
 export const SE_COMP_RATIO = 4;
 export const SE_COMP_ATTACK = 0.004;    // 秒。爆発の立ち上がりを潰さない速さ
 export const SE_COMP_RELEASE = 0.18;
+// ゲームオーバーで効果音を引くのにかける時間。ぶつ切りにすると事故に
+// 聞こえるので、短く滑らかに落とす。
+export const SE_FADE_OUT_SECONDS = 0.5;
 
 // --- BGM の音量調節 ---
 // 「+」で上げ「-」で下げる。0〜100% を10%刻み（11段）にしてあるので、

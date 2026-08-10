@@ -139,9 +139,10 @@ const VIEW = {
 /** 指定位置で敵の音を鳴らし、生成されたノードを返す。 */
 function playAt(method, x, y) {
   const ctx = fakeCtx();
-  const saved = { ctx: audioManager.ctx, bus: audioManager.seBus, view: audioManager.listenerView, buf: audioManager.noiseBuffer };
+  const saved = { ctx: audioManager.ctx, fade: audioManager.seFade, master: audioManager.seMaster, view: audioManager.listenerView, buf: audioManager.noiseBuffer };
   audioManager.ctx = ctx;
-  audioManager.seBus = null;
+  audioManager.seFade = null;
+  audioManager.seMaster = null;
   audioManager.noiseBuffer = { fake: true };
   audioManager._createSeBus();
   audioManager.setListenerView(VIEW);
@@ -150,7 +151,8 @@ function playAt(method, x, y) {
     return ctx.created;
   } finally {
     audioManager.ctx = saved.ctx;
-    audioManager.seBus = saved.bus;
+    audioManager.seFade = saved.fade;
+    audioManager.seMaster = saved.master;
     audioManager.noiseBuffer = saved.buf;
     audioManager.listenerView = saved.view;
     audioManager.setListenerX(saved.view ? saved.view.cx : null);

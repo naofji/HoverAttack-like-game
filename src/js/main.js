@@ -214,6 +214,9 @@ export const Game = {
 
         this._tickVolumeHud();
         this._updateVolumeControl();
+        // ゲームオーバーで引いた効果音を戻す。'playing' に入る経路が
+        // 8箇所あるので、個別に呼ばずここでまとめて面倒を見る。
+        if (this.gameState === 'playing') audioManager.resumeSe();
 
         // Lock-on toggle works in all states
         if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
@@ -1417,6 +1420,9 @@ export const Game = {
         this.gameState = 'gameover';
         this.stateTimer = 0;
         audioManager.stopBGM();
+        // 戦闘の音を引いてから曲を鳴らす。ホバー音やエンジン音が残っていると
+        // 終わった感じにならない。曲はフェード段を通らないので消えない。
+        audioManager.fadeOutSe();
         audioManager.playGameOver();
     },
 

@@ -301,9 +301,9 @@ test('遠すぎるドローンの音は組み立てない', () => {
     };
   }
 
-  const saved = { ctx: audioManager.ctx, bus: audioManager.seBus, view: audioManager.listenerView };
+  const saved = { ctx: audioManager.ctx, fade: audioManager.seFade, view: audioManager.listenerView };
   audioManager.ctx = ctx;
-  audioManager.seBus = { name: 'bus' };
+  audioManager.seFade = { name: 'fade' };
   audioManager.setListenerView(view);
   try {
     audioManager.playDroneMove(
@@ -311,7 +311,7 @@ test('遠すぎるドローンの音は組み立てない', () => {
     assert.deepEqual(created, [], '聞こえない距離なのに音を組み立てている');
   } finally {
     audioManager.ctx = saved.ctx;
-    audioManager.seBus = saved.bus;
+    audioManager.seFade = saved.fade;
     audioManager.listenerView = saved.view;
     audioManager.setListenerX(saved.view ? saved.view.cx : null);
   }

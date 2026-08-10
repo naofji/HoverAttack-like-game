@@ -14,7 +14,7 @@ import {
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
-    SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
+    SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE, SE_FADE_OUT_SECONDS,
 } from '../utils/Constants.js';
 import { stereoPan, positionalVolume } from '../utils/audioFalloff.js';
 import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
@@ -22,7 +22,9 @@ import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/
 export class AudioManager {
     constructor() {
         this.ctx = null;
-        this.seBus = null;       // 効果音のマスター（BGM は通さない）
+        this.seFaded = false;    // 効果音を引いた状態か
+        this.seFade = null;      // 効果音だけを引くための段（ゲームオーバー用）
+        this.seMaster = null;    // 効果音の底上げ（BGM は通さない）
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
         this.listenerView = null;// いま映っている矩形（位置による音量の基準）
         this.bgmVolume = loadBgmVolume();   // 0〜1。前回の設定を引き継ぐ
@@ -230,8 +232,16 @@ export class AudioManager {
      * BGM はこのバスを通さない。BGM の音量調節と独立させるため。
      */
     _createSeBus() {
-        this.seBus = this.ctx.createGain();
-        this.seBus.gain.value = SE_MASTER_GAIN;
+        // 効果音 → フェード段 → 底上げ → リミッタ → 出力
+        //
+        // フェード段を分けているのは、ゲームオーバーで効果音だけを引くため。
+        // 底上げとリミッタより手前に置くことで、そこを通らない音（ゲーム
+        // オーバーの曲）は音量も掛かり方も変わらないまま残る。
+        this.seMaster = this.ctx.createGain();
+        this.seMaster.gain.value = SE_MASTER_GAIN;
+        this.seFade = this.ctx.createGain();
+        this.seFade.gain.value = 1;
+        this.seFade.connect(this.seMaster);
 
         if (typeof this.ctx.createDynamicsCompressor === 'function') {
             const comp = this.ctx.createDynamicsCompressor();
@@ -240,10 +250,10 @@ export class AudioManager {
             comp.ratio.value = SE_COMP_RATIO;
             comp.attack.value = SE_COMP_ATTACK;
             comp.release.value = SE_COMP_RELEASE;
-            this.seBus.connect(comp);
+            this.seMaster.connect(comp);
             comp.connect(this.ctx.destination);
         } else {
-            this.seBus.connect(this.ctx.destination);
+            this.seMaster.connect(this.ctx.destination);
         }
     }
 
@@ -252,7 +262,53 @@ export class AudioManager {
      * @returns {AudioNode}
      */
     _seDest() {
-        return this.seBus || this.ctx.destination;
+        return this.seFade || this.ctx.destination;
+    }
+
+    /**
+     * 状態を告げる曲（ゲームオーバーなど）の接続先。
+     * 効果音のフェードより後ろに繋ぐので、効果音を引いても残る。
+     * @returns {AudioNode}
+     */
+    _stingDest() {
+        return this.seMaster || this.ctx.destination;
+    }
+
+    /**
+     * 効果音を滑らかに引いて止める。ゲームオーバーで使う。
+     *
+     * 持続音（自機のホバー・敵のホバー・母艦のエンジン）は音源ごと止める。
+     * 音量を戻したときに鳴り出さないようにするため。
+     * 状態を告げる曲と BGM はこの段を通らないので影響を受けない。
+     *
+     * @param {number} [seconds]
+     */
+    fadeOutSe(seconds = SE_FADE_OUT_SECONDS) {
+        this.seFaded = true;
+        this.stopHover();
+        this.stopEnemyHover();
+        this.stopCarrierEngine();
+        if (!this.ctx || !this.seFade) return;
+
+        const t = this.ctx.currentTime;
+        this.seFade.gain.cancelScheduledValues(t);
+        this.seFade.gain.setValueAtTime(this.seFade.gain.value, t);
+        this.seFade.gain.linearRampToValueAtTime(0, t + seconds);
+    }
+
+    /**
+     * 引いた効果音を戻す。何度呼んでもよいので、プレイ中は毎フレーム
+     * 呼んで構わない。どの経路からミッションに入っても無音のまま
+     * 取り残されないようにするため。
+     */
+    resumeSe() {
+        if (!this.seFaded) return;
+        this.seFaded = false;
+        if (!this.ctx || !this.seFade) return;
+
+        const t = this.ctx.currentTime;
+        this.seFade.gain.cancelScheduledValues(t);
+        this.seFade.gain.setValueAtTime(1, t);
     }
 
     /**
@@ -1285,7 +1341,7 @@ export class AudioManager {
         // Master FX for the fanfare
         const fnMaster = this.ctx.createGain();
         fnMaster.gain.value = volume;
-        fnMaster.connect(this._seDest());
+        fnMaster.connect(this._stingDest());
 
         // Lowpass filter for a muffled, distant sad sound
         const filter = this.ctx.createBiquadFilter();
