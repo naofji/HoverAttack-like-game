@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { audioManager } from '../src/js/audio/AudioManager.js';
+import { biquad, whiteNoise, aWeightedRms, aWeight, db } from './helpers/dsp.js';
 import {
   PLAYER_HOVER_MAX_FREQ,
   ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
   ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
   ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN,
-  ENEMY_HOVER_MAX_GAIN,
+  ENEMY_HOVER_MAX_GAIN, ENEMY_HOVER_MAKEUP,
 } from '../src/js/utils/Constants.js';
 
 /** 自機のホバー音のノイズ共鳴のピーク（playHover が freq*2 を使う）。 */
@@ -187,11 +188,57 @@ test('高域と低域は同じノイズ源を分岐して使う（音源を二�
 
 test('音量とパンは従来どおり効く', () => {
   const b = buildEnemyHover(0.5);
-  assert.equal(b.gain.gain.value, 0.5 * ENEMY_HOVER_MAX_GAIN);
+  assert.equal(b.gain.gain.value, 0.5 * ENEMY_HOVER_MAX_GAIN * ENEMY_HOVER_MAKEUP);
   assert.equal(b.of('panner').length, 1, 'パンナーが無い');
 });
 
 test('音量0で止める', () => {
   const b = buildEnemyHover(0);
   assert.equal(b.of('bufferSource').length, 0, '無音なのに鳴らしている');
+});
+
+// --- 聞こえる大きさ -------------------------------------------------------------
+//
+// 音作りを変えたときに音量の再調整を忘れると、テストは全部通るのに音が
+// 聞こえなくなる。実際にやらかしたので、聴感レベルそのものを固定する。
+
+/** 敵のホバー音を実際に合成して、A特性の実効値を返す。 */
+function enemyHoverLevel() {
+  const noise = whiteNoise(1 << 15);
+  const air = biquad('bandpass', ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q);
+  const body = biquad('lowpass', ENEMY_HOVER_BODY_FREQ, 1);
+  const level = aWeightedRms((i) => air(noise[i]) + body(noise[i]) * ENEMY_HOVER_BODY_GAIN);
+  return level * ENEMY_HOVER_MAX_GAIN * ENEMY_HOVER_MAKEUP;
+}
+
+/** 自機のホバー音（最大RPM時）の A特性の実効値。比較の基準にする。 */
+function playerHoverLevel() {
+  const noise = whiteNoise(1 << 15);
+  const bp = biquad('bandpass', PLAYER_HOVER_MAX_FREQ * 2, 5);
+  return aWeightedRms((i) => bp(noise[i]) * 1.2) * 0.1;   // noiseGain 1.2 → hoverGain 0.1
+}
+
+test('画面内の敵のホバー音は自機のホバー音と同じくらいの大きさで聞こえる', () => {
+  const enemy = enemyHoverLevel();
+  const player = playerHoverLevel();
+  const diff = db(enemy / player);
+  assert.ok(diff > -6,
+    `敵のホバー音が小さすぎて聞き取れない: 自機比 ${diff.toFixed(1)}dB`);
+  assert.ok(diff < 6,
+    `敵のホバー音が大きすぎて自機の音を覆う: 自機比 ${diff.toFixed(1)}dB`);
+});
+
+test('単純な実効値ではなく聴感で測っている', () => {
+  // 62Hz と 760Hz では A特性の重みが 25dB 以上違う。ここを取り違えると
+  // 「実効値は同じなのに全く聞こえない」音を作ってしまう。
+  assert.ok(db(aWeight(760) / aWeight(62)) > 20,
+    '低音と高音の聴感差を測れていない');
+});
+
+test('補正倍率を外すと聞こえなくなる（この補正が効いていることの確認）', () => {
+  const withMakeup = enemyHoverLevel();
+  const withoutMakeup = withMakeup / ENEMY_HOVER_MAKEUP;
+  const loss = db(withoutMakeup / playerHoverLevel());
+  assert.ok(loss < -6,
+    `補正なしでも十分な音量になっており、補正の意味が説明できない: ${loss.toFixed(1)}dB`);
 });

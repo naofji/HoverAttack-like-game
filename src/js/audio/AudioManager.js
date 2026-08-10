@@ -4,7 +4,7 @@ import {
     ENEMY_HOVER_MAX_GAIN, PLAYER_HOVER_MAX_FREQ,
     ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
     ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
-    ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN,
+    ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
 } from '../utils/Constants.js';
@@ -379,7 +379,7 @@ export class AudioManager {
 
         // 急に鳴り始めると耳につくので、目標値へ滑らかに寄せる
         this.enemyHoverGain.gain.setTargetAtTime(
-            volume * ENEMY_HOVER_MAX_GAIN, this.ctx.currentTime, 0.08,
+            volume * ENEMY_HOVER_MAX_GAIN * ENEMY_HOVER_MAKEUP, this.ctx.currentTime, 0.08,
         );
         if (this.enemyHoverPanner) {
             // 急に左右が飛ぶと不快なので、音量と同じく滑らかに寄せる

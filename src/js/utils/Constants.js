@@ -401,6 +401,12 @@ export const ENEMY_HOVER_WOBBLE_DEPTH = 130; // 揺れの幅（Hz）
 // 高域だけだと軽いので、低い唸りを薄く足して機体の重さを出す
 export const ENEMY_HOVER_BODY_FREQ = 200;
 export const ENEMY_HOVER_BODY_GAIN = 0.35;
+// 主体をノコギリ波からバンドパスノイズに変えた時点で、聞こえる大きさが
+// 8.9dB(A) 落ちて事実上無音になった。狭い帯域を通すと白色ノイズの
+// エネルギーの大半が捨てられるため。その補正。
+// 倍率は「旧音と同じ聴感」を狙って A特性の実測から決めた（2.79倍）。
+// tests/hover-timbre.test.js が自機のホバー音との差を監視している。
+export const ENEMY_HOVER_MAKEUP = 2.8;
 
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。
