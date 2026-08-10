@@ -7,7 +7,8 @@ import {
     ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
     ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
     DRONE_MOVE_FREQ_FROM, DRONE_MOVE_FREQ_TO, DRONE_MOVE_DURATION,
-    DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_DETUNE,
+    DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
+    DRONE_MOVE_DETUNE,
     DRONE_MOVE_GAIN, DRONE_MOVE_SUB_GAIN,
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
@@ -500,8 +501,9 @@ export class AudioManager {
      * ないため止める必要も無い。
      *
      * 音程をわずかにずらした3本のノコギリ波を重ね、共鳴の強いローパスを
-     * 音程より速く下降させる。3本のずれがうねりと厚みを生み、フィルタが
-     * 先に落ちることで「プー」から「ーン」への変化になる。
+     * 音程より速く下降させる。3本のずれがうねりと厚みを生む。
+     * 終端でフィルタを基音より上に残すことで、籠もった「ウ」ではなく
+     * 開いた「オ」の母音になる（プーーンではなくポーーン）。
      *
      * @param {number} x 音源のワールドX
      * @param {number} y 音源のワールドY
@@ -520,7 +522,8 @@ export class AudioManager {
         filter.type = 'lowpass';
         filter.Q.value = DRONE_MOVE_FILTER_Q;
         filter.frequency.setValueAtTime(DRONE_MOVE_FREQ_FROM * DRONE_MOVE_FILTER_MULT, t);
-        filter.frequency.exponentialRampToValueAtTime(DRONE_MOVE_FREQ_TO * 0.8, end);
+        filter.frequency.exponentialRampToValueAtTime(
+            DRONE_MOVE_FREQ_TO * DRONE_MOVE_FILTER_END_MULT, end);
 
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, t);

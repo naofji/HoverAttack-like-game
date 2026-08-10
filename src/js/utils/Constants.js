@@ -433,18 +433,28 @@ export const ENEMY_LANDING_THUMP_SOFT = 95;
 //
 // 音の作り: 少しずつ音程をずらした3本のノコギリ波を同時に鳴らし
 // （うねりと厚みが出る＝あの独特の「ホロウ」な質感）、共鳴の強い
-// ローパスを音程より一段速く下降させる。フィルタが先に落ちることで
-// 「プー」から「ーン」への母音の変化が生まれる。
-export const DRONE_MOVE_FREQ_FROM = 1100;   // 開始の音程
-export const DRONE_MOVE_FREQ_TO = 260;      // 終わりの音程
+// ローパスを音程より一段速く下降させる。
+//
+// 母音は「ポ」寄り。「プ」と「ポ」を分けるのは終端のフィルタ位置で、
+// 基音より下まで閉じると倍音が消えて籠もった「ウ」になり、基音より上に
+// 残すと第2倍音が生き残って開いた「オ」になる。END_MULT がその境目。
+// 共鳴も緩めてある。Q が高いほど細く詰まった「ウ」に寄るため。
+export const DRONE_MOVE_FREQ_FROM = 950;    // 開始の音程
+export const DRONE_MOVE_FREQ_TO = 250;      // 終わりの音程
 export const DRONE_MOVE_DURATION = 0.8;     // 秒
-export const DRONE_MOVE_FILTER_Q = 9;       // 共鳴の強さ。うなりの芯を作る
-export const DRONE_MOVE_FILTER_MULT = 2.2;  // フィルタは音程の何倍の高さから始めるか
+export const DRONE_MOVE_FILTER_Q = 6.5;     // 共鳴の強さ。うなりの芯を作る
+export const DRONE_MOVE_FILTER_MULT = 1.8;  // フィルタは音程の何倍の高さから始めるか
+export const DRONE_MOVE_FILTER_END_MULT = 1.6;  // 終端。1を超えると「オ」寄りになる
 export const DRONE_MOVE_DETUNE = [-11, 0, 13];  // セント。3本のずれ
-export const DRONE_MOVE_GAIN = 0.075;
-export const DRONE_MOVE_SUB_GAIN = 0.5;     // 1オクターブ下のサイン波（重さ）
+// 共鳴を緩めたぶん音圧が 3.8dB 落ちるので、その補正込みの値
+export const DRONE_MOVE_GAIN = 0.115;
+export const DRONE_MOVE_SUB_GAIN = 0.65;    // 1オクターブ下のサイン波（丸みと重さ）
 // 連続で突進したときに音が重ならないよう、1体あたりの最短間隔を設ける
 export const DRONE_MOVE_COOLDOWN = 40;      // フレーム
+// 大きく動くときだけ鳴らす。少し動いただけで鳴ると耳につく。
+// 突進距離の実測は中央値 117px（8〜243px）で、150px なら長い突進の
+// 3割ほどに絞られる。
+export const DRONE_MOVE_MIN_DISTANCE = 150; // px
 
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。

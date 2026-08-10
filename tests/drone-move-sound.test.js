@@ -7,7 +7,8 @@ import { aWeightedRms, db, SAMPLE_RATE } from './helpers/dsp.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
   DRONE_MOVE_FREQ_FROM, DRONE_MOVE_FREQ_TO, DRONE_MOVE_DURATION,
-  DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_DETUNE,
+  DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
+  DRONE_MOVE_DETUNE, DRONE_MOVE_MIN_DISTANCE,
   DRONE_MOVE_GAIN, DRONE_MOVE_SUB_GAIN, DRONE_MOVE_COOLDOWN,
   ENEMY_HOVER_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
@@ -52,58 +53,90 @@ test('狙う相手がいなければ巡回しているだけで鳴らない', ()
     '巡回中に鳴っている');
 });
 
-test('突進を始めると鳴る', () => {
+/** 十分に離れた相手。突進距離が閾値を超える。 */
+function farTarget() {
+  return { x: 1600, y: 20 * TILE_SIZE - 24, width: 16, height: 24, alive: true, docked: false };
+}
+
+/** 行き先を明示して突進させる（距離を確実に制御する）。 */
+function dashTo(drone, dx, dy = 0) {
+  drone.state = 'dash';
+  drone.stateTimer = 40;
+  drone.dashTargetX = drone.x + dx;
+  drone.dashTargetY = drone.y + dy;
+  drone._playMoveSound();
+}
+
+test('大きく動くときは鳴る', () => {
   const game = world();
-  const target = {
-    x: 600, y: 20 * TILE_SIZE - 24, width: 16, height: 24,
-    alive: true, docked: false,
-  };
   const drone = new EnemyDrone(game, 300, 100);
   game.enemies.push(drone);
-
-  assert.equal(countMoves(() => drone._startDash(target)), 1, '突進で鳴っていない');
+  assert.equal(countMoves(() => dashTo(drone, DRONE_MOVE_MIN_DISTANCE + 50)), 1,
+    '大きな突進で鳴っていない');
 });
 
-test('特攻を始めても鳴る', () => {
+test('少ししか動かないときは鳴らない', () => {
+  // 位置を微調整する程度の突進でも鳴ると耳につく
   const game = world();
   const drone = new EnemyDrone(game, 300, 100);
   game.enemies.push(drone);
-  assert.equal(countMoves(() => drone._startKamikaze({ x: 400, y: 100, width: 16, height: 24 })), 1);
+  assert.equal(countMoves(() => dashTo(drone, DRONE_MOVE_MIN_DISTANCE - 50)), 0,
+    '小さな突進で鳴った');
+});
+
+test('距離は縦横まとめて見る（真上への突進も鳴る）', () => {
+  const game = world();
+  const drone = new EnemyDrone(game, 300, 400);
+  game.enemies.push(drone);
+  assert.equal(countMoves(() => dashTo(drone, 0, -(DRONE_MOVE_MIN_DISTANCE + 50))), 1,
+    '縦の移動が距離に数えられていない');
+});
+
+test('遠くの相手へ突進すれば鳴る', () => {
+  const game = world();
+  const drone = new EnemyDrone(game, 300, 100);
+  game.enemies.push(drone);
+  assert.equal(countMoves(() => drone._startDash(farTarget())), 1, '突進で鳴っていない');
+});
+
+test('遠くの相手へ特攻しても鳴る', () => {
+  const game = world();
+  const drone = new EnemyDrone(game, 300, 100);
+  game.enemies.push(drone);
+  const count = countMoves(() => drone._startKamikaze(farTarget()));
+  assert.equal(count, 1, '特攻で鳴っていない');
 });
 
 test('立て続けに状態が変わっても音が重ならない', () => {
   const game = world();
-  const target = { x: 600, y: 100, width: 16, height: 24, alive: true, docked: false };
   const drone = new EnemyDrone(game, 300, 100);
   game.enemies.push(drone);
 
   const count = countMoves(() => {
-    for (let i = 0; i < 5; i++) drone._startDash(target);
+    for (let i = 0; i < 5; i++) dashTo(drone, DRONE_MOVE_MIN_DISTANCE + 50);
   });
   assert.equal(count, 1, `間隔を空けずに ${count} 回鳴った`);
 });
 
 test('間隔が空けばまた鳴る', () => {
   const game = world();
-  const target = { x: 600, y: 100, width: 16, height: 24, alive: true, docked: false };
   const drone = new EnemyDrone(game, 300, 100);
   game.enemies.push(drone);
 
   const count = countMoves(() => {
-    drone._startDash(target);
-    for (let i = 0; i < DRONE_MOVE_COOLDOWN; i++) drone.update();
-    drone.moveSoundTimer = 0;      // クールダウン明けを保証
-    drone._startDash(target);
+    dashTo(drone, DRONE_MOVE_MIN_DISTANCE + 50);
+    drone.moveSoundTimer = 0;      // クールダウン明け
+    dashTo(drone, DRONE_MOVE_MIN_DISTANCE + 50);
   });
   assert.equal(count, 2, '2回目が鳴らない');
 });
 
 // --- 音の形 -------------------------------------------------------------------
 
-test('高い方から低い方へ落ちる（プーーン）', () => {
+test('高い方から低い方へ落ちる（ポーーン）', () => {
   assert.ok(DRONE_MOVE_FREQ_FROM > DRONE_MOVE_FREQ_TO, '下降していない');
   const octaves = Math.log2(DRONE_MOVE_FREQ_FROM / DRONE_MOVE_FREQ_TO);
-  assert.ok(octaves >= 1.5, `下降の幅が狭く「プーーン」に聞こえない: ${octaves.toFixed(2)}オクターブ`);
+  assert.ok(octaves >= 1.5, `下降の幅が狭く「ポーーン」に聞こえない: ${octaves.toFixed(2)}オクターブ`);
 });
 
 test('一瞬で終わらず、長すぎもしない', () => {
@@ -111,12 +144,28 @@ test('一瞬で終わらず、長すぎもしない', () => {
   assert.ok(DRONE_MOVE_DURATION <= 1.2, `長すぎて次の動きに被る: ${DRONE_MOVE_DURATION}秒`);
 });
 
-test('共鳴フィルタは音程より高いところから、音程より下まで落ちる', () => {
-  // 先にフィルタが落ちることで「プー」から「ーン」への変化が生まれる
+test('共鳴フィルタは音程より速く落ちる（母音が変化する）', () => {
   assert.ok(DRONE_MOVE_FILTER_MULT > 1, 'フィルタが音程より下から始まっている');
-  const filterEnd = DRONE_MOVE_FREQ_TO * 0.8;
-  assert.ok(filterEnd < DRONE_MOVE_FREQ_TO, 'フィルタが最後まで音程より上にある');
+  assert.ok(DRONE_MOVE_FILTER_MULT > DRONE_MOVE_FILTER_END_MULT,
+    'フィルタが音程と同じ割合でしか下がらず、母音が変化しない');
   assert.ok(DRONE_MOVE_FILTER_Q > 4, `共鳴が弱くうなりの芯が出ない: Q=${DRONE_MOVE_FILTER_Q}`);
+});
+
+test('終端で基音より上にフィルタを残す（「ウ」ではなく「オ」）', () => {
+  // ここが「プーーン」と「ポーーン」を分ける。基音より下まで閉じると
+  // 倍音が消えて籠もった「ウ」になる。
+  assert.ok(DRONE_MOVE_FILTER_END_MULT > 1,
+    `終端で基音より下まで閉じており「ウ」に籠もる: ${DRONE_MOVE_FILTER_END_MULT}`);
+  // ただし開きすぎると下降感が薄れる
+  assert.ok(DRONE_MOVE_FILTER_END_MULT < 3,
+    `開きすぎて下降が感じられない: ${DRONE_MOVE_FILTER_END_MULT}`);
+});
+
+test('後半に第2倍音が残っている（開いた母音であることの実測）', () => {
+  // 包絡を外した波形で、後半の倍音重心を測る。1に近いほど基音だけ＝籠もり
+  const centroid = harmonicCentroid(0.6);
+  assert.ok(centroid > 1.6,
+    `倍音が乏しく「ウ」に籠もっている: 重心 ${centroid.toFixed(2)}倍音`);
 });
 
 test('音程をずらした複数の声を重ねる（うねりと厚み）', () => {
@@ -130,13 +179,13 @@ test('音程をずらした複数の声を重ねる（うねりと厚み）', ()
 // --- 実際の波形 ---------------------------------------------------------------
 
 /** playDroneMove が作る波形を再現する。 */
-function droneWave(n = 1 << 15) {
+function droneWave(n = 1 << 15, withEnvelope = true) {
   const phases = DRONE_MOVE_DETUNE.map(() => 0);
   let subPhase = 0;
   const st = { x1: 0, x2: 0, y1: 0, y2: 0 };
   const buf = new Float64Array(n);
   const filterFrom = DRONE_MOVE_FREQ_FROM * DRONE_MOVE_FILTER_MULT;
-  const filterTo = DRONE_MOVE_FREQ_TO * 0.8;
+  const filterTo = DRONE_MOVE_FREQ_TO * DRONE_MOVE_FILTER_END_MULT;
 
   for (let i = 0; i < n; i++) {
     const t = i / SAMPLE_RATE;
@@ -161,10 +210,33 @@ function droneWave(n = 1 << 15) {
             - (a1 / a0) * st.y1 - (a2 / a0) * st.y2;
     st.x2 = st.x1; st.x1 = src; st.y2 = st.y1; st.y1 = y;
 
-    const env = t < 0.03 ? t / 0.03 : Math.pow(0.0001, (t - 0.03) / (DRONE_MOVE_DURATION - 0.03));
+    const env = withEnvelope
+      ? (t < 0.03 ? t / 0.03 : Math.pow(0.0001, (t - 0.03) / (DRONE_MOVE_DURATION - 0.03)))
+      : 1;
     buf[i] = y * DRONE_MOVE_GAIN * env;
   }
   return buf;
+}
+
+/**
+ * 包絡を外した波形の、指定位置（0〜1）での倍音重心。
+ * 「何倍音あたりに重さがあるか」で母音の開き具合を測る。
+ */
+function harmonicCentroid(k) {
+  const raw = droneWave(1 << 15, false);
+  const f = DRONE_MOVE_FREQ_FROM * Math.pow(DRONE_MOVE_FREQ_TO / DRONE_MOVE_FREQ_FROM, k);
+  const start = Math.floor(k * DRONE_MOVE_DURATION * SAMPLE_RATE);
+  const len = 1 << 12;
+  let num = 0, den = 0;
+  for (let h = 1; h <= 14; h++) {
+    const w = 2 * Math.PI * (f * h) / SAMPLE_RATE;
+    const cw = 2 * Math.cos(w);
+    let s1 = 0, s2 = 0;
+    for (let i = 0; i < len; i++) { const s0 = raw[start + i] + cw * s1 - s2; s2 = s1; s1 = s0; }
+    const mag = Math.sqrt(Math.abs(s1 * s1 + s2 * s2 - cw * s1 * s2));
+    num += mag * h; den += mag;
+  }
+  return num / den;
 }
 
 test('歪まない（3声＋サブを重ねても振幅が振り切れない）', () => {

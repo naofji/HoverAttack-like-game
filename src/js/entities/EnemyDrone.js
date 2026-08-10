@@ -17,7 +17,7 @@ import {
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
     EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES,
-    DRONE_MOVE_COOLDOWN
+    DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -102,12 +102,12 @@ export class EnemyDrone {
 
     /** Dash straight to the defence anchor (boosted speed via dashingToAnchor). */
     _startDashToAnchor() {
-        this._playMoveSound();
         this.state = 'dash';
         this.stateTimer = 30 + Math.random() * 30;
         this.dashTargetX = this.emergencyAnchorX - this.width / 2;
         this.dashTargetY = this.emergencyAnchorY - this.height / 2;
         this.dashingToAnchor = true;
+        this._playMoveSound();
     }
 
     update() {
@@ -277,7 +277,6 @@ export class EnemyDrone {
             this.state = 'patrol';
             return;
         }
-        this._playMoveSound();
         this.state = 'dash';
         this.stateTimer = 30 + Math.random() * 30; // Dash for 0.5s - 1s
 
@@ -289,15 +288,26 @@ export class EnemyDrone {
 
         this.dashTargetX = desiredX;
         this.dashTargetY = desiredY;
+        this._playMoveSound();
     }
 
     /**
-     * 動き出しの「プーーン」。停止・ホバリング中は鳴らさないので、
-     * 呼ぶのは突進を始める瞬間だけ。
-     * 立て続けに状態が切り替わっても音が重ならないよう間隔を空ける。
+     * 動き出しの「ポーーン」。ホバリング中は鳴らさないので、呼ぶのは
+     * 突進を始める瞬間だけ。
+     *
+     * さらに、大きく動くときに限る。少し位置を直す程度の突進でも鳴ると
+     * 耳につくため。行き先が決まってから呼ぶこと。
+     * 立て続けに状態が切り替わっても音が重ならないよう間隔も空ける。
+     *
+     * @param {number} [dx] 移動量。省略時は dashTarget までの距離を使う
+     * @param {number} [dy]
      */
-    _playMoveSound() {
+    _playMoveSound(dx, dy) {
         if (this.moveSoundTimer > 0) return;
+        const mx = (dx !== undefined) ? dx : this.dashTargetX - this.x;
+        const my = (dy !== undefined) ? dy : this.dashTargetY - this.y;
+        if (Math.hypot(mx, my) < DRONE_MOVE_MIN_DISTANCE) return;
+
         this.moveSoundTimer = DRONE_MOVE_COOLDOWN;
         audioManager.playDroneMove(this.x + this.width / 2, this.y + this.height / 2);
     }
@@ -341,10 +351,15 @@ export class EnemyDrone {
     }
 
     _startKamikaze(target) {
-        this._playMoveSound();
         this.state = 'kamikaze';
         this.kamikazeTarget = target;
         this.fireTimer = ENEMY_DRONE_FIRE_INTERVAL;
+        if (target) {
+            this._playMoveSound(
+                target.x + target.width / 2 - (this.x + this.width / 2),
+                target.y + target.height / 2 - (this.y + this.height / 2),
+            );
+        }
     }
 
     _updateKamikazeState() {
