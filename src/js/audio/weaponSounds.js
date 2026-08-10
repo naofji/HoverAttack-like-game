@@ -11,7 +11,9 @@
  *         hold を与えると、その間は満音量を保ってから減衰する（尾を引く）
  *   tone  音程のある成分。銃口の芯、推進のうなり
  *         hiss と同じく hold を取れる。余韻（「ーン」）を作るのに使う
- *   puffs 短い破裂の連なり。ホーミングの「ボボッ」
+ *   puffs 短い破裂の連なり。低く柔らかい。ホーミングの頭の「プ」
+ *   clicks 硬く短い打撃の連なり。共鳴を鋭くし、整数倍でない成分を重ねて
+ *         金属らしさを出す。リロードの「ガチャリ」
  */
 
 /**
@@ -23,6 +25,10 @@
  * @property {{count:number,gap:number,freq:number,dur:number,gain:number,bright?:number}} [puffs]
  *   gap 秒おきに count 回、freq を頂点とする破裂を置く。
  *   bright はローパスの開始位置（freq の何倍か）。大きいほど破裂が硬く鳴る
+ * @property {{count:number,gap:number|number[],freq:number,dur:number,gain:number,
+ *   step?:number,Q?:number,metal?:number}} [clicks]
+ *   金属の打撃。gap は配列で1回ごとに変えられる（等間隔だと機械的すぎる）。
+ *   step は打撃ごとの音程の倍率、metal は重ねる非整数倍の比
  */
 
 /** @type {Record<string, WeaponProfile>} */
@@ -77,6 +83,19 @@ export const WEAPON_SOUNDS = {
         hiss: { from: 380, to: 1400, dur: 0.60, gain: 0.15 },
         tone: { type: 'sawtooth', from: 70, to: 26, dur: 0.55, gain: 0.10 },
         puffs: { count: 2, gap: 0.09, freq: 150, dur: 0.12, gain: 0.10 },
+    },
+
+    // --- リロード「ガチャリ」---
+    // 弾倉が入って遊底が閉じる、という機構の音。打撃を3つ、間隔を不揃いに
+    // 置いて「ガチャ」＋「リ」にする。等間隔だと拍に聞こえて機械的すぎる。
+    // 後ろほど弱く高くすることで、噛み合って収まる感じが出る。
+    reload: {
+        clicks: {
+            count: 3, gap: [0.045, 0.085], freq: 1700, step: 1.28,
+            // 鋭い共鳴はノイズのエネルギーの大半を捨てるので、他の音と同じ
+            // 感覚の 0.115 では -16dB まで落ちる。実測から決めた補正込みの値
+            dur: 0.055, gain: 0.279, Q: 7, metal: 2.76,
+        },
     },
 
     // --- グレネード ---
@@ -175,6 +194,42 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
             og.connect(out);
             osc.start(t);
             osc.stop(t + dur);
+        }
+    }
+
+    if (profile.clicks) {
+        const {
+            count, gap, freq, dur, gain, step = 1, Q = 7, metal = 2.76,
+        } = profile.clicks;
+
+        let t = t0;
+        for (let i = 0; i < count; i++) {
+            // 後ろの打撃ほど弱く、少し高く。機構が噛み合っていく感じになる
+            const fade = 1 - i * 0.18;
+            const f = freq * Math.pow(step, i);
+
+            // 芯の共鳴と、整数倍でない共鳴。後者が金属らしさを作る
+            for (const [center, q, levelScale] of [[f, Q, 1], [f * metal, Q * 1.5, 0.45]]) {
+                const noise = ctx.createBufferSource();
+                noise.buffer = noiseBuffer;
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = center;
+                filter.Q.value = q;
+
+                const g = ctx.createGain();
+                g.gain.setValueAtTime(gain * levelScale * level * fade, t);
+                g.gain.exponentialRampToValueAtTime(FLOOR, t + dur);
+
+                noise.connect(filter);
+                filter.connect(g);
+                g.connect(out);
+                noise.start(t);
+                noise.stop(t + dur);
+            }
+
+            t += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
         }
     }
 }

@@ -29,7 +29,7 @@ test('新しい効果音が揃っている', () => {
     'playLanding',         // 着地
     'playPlayerDestroyed', // 自機の破壊
     'playPickup',          // アイテム取得
-    'playReloadComplete',  // マシンガンのリロード完了
+    'playWeapon',          // 武器の発射・リロード（種類は表で引く）
   ]) {
     assert.equal(typeof audioManager[name], 'function', `${name} が無い`);
   }

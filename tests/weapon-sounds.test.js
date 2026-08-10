@@ -24,7 +24,7 @@ test('武器ごとに別の音が定義されている', () => {
 
 test('どの音も少なくとも1つの部品を持つ', () => {
   for (const [kind, p] of Object.entries(WEAPON_SOUNDS)) {
-    assert.ok(p.hiss || p.tone || p.puffs, `${kind}: 中身が空`);
+    assert.ok(p.hiss || p.tone || p.puffs || p.clicks, `${kind}: 中身が空`);
   }
 });
 
@@ -331,4 +331,56 @@ for (const kind of ['playerMissile', 'enemyMissile']) {
 test('ミサイルは自機の方が高い帯域で鳴る', () => {
   assert.ok(WEAPON_SOUNDS.enemyMissile.hiss.from < WEAPON_SOUNDS.playerMissile.hiss.from);
   assert.ok(WEAPON_SOUNDS.enemyMissile.puffs.freq < WEAPON_SOUNDS.playerMissile.puffs.freq);
+});
+
+// --- リロード「ガチャリ」---------------------------------------------------------
+
+test('リロードは金属の打撃で出来ている', () => {
+  const p = WEAPON_SOUNDS.reload;
+  assert.ok(p.clicks, '打撃が無い');
+  assert.ok(!p.hiss && !p.tone, '噴射音や音程成分が混ざると機構の音に聞こえない');
+  // 整数倍でない共鳴が金属らしさを作る。1.0 だと倍音が整って鐘や笛に寄る
+  const metal = p.clicks.metal ?? 2.76;
+  assert.ok(Math.abs(metal - Math.round(metal)) > 0.2,
+    `共鳴の比が整数に近く、金属に聞こえない: ${metal}`);
+  assert.ok((p.clicks.Q ?? 7) >= 5, `共鳴が緩く、硬さが出ない: Q=${p.clicks.Q}`);
+});
+
+test('「ガチャ」と「リ」に分かれる（等間隔にしない）', () => {
+  const { count, gap } = WEAPON_SOUNDS.reload.clicks;
+  assert.equal(count, 3, `打撃が3つでない: ${count}`);
+  assert.ok(Array.isArray(gap), '間隔が等間隔で、拍に聞こえて機械的すぎる');
+  assert.ok(gap[1] > gap[0] * 1.4,
+    `「ガチャ」と「リ」の切れ目が足りない: ${gap.join(' / ')}秒`);
+});
+
+test('打撃は後ろほど弱く高くなる（噛み合って収まる）', () => {
+  const p = WEAPON_SOUNDS.reload;
+  assert.ok((p.clicks.step ?? 1) > 1, `音程が上がっていない: ${p.clicks.step}`);
+
+  const buf = renderWeaponProfile(p);
+  const { count, gap, dur } = p.clicks;
+  const peaks = [];
+  let t = 0;
+  for (let i = 0; i < count; i++) {
+    const from = Math.floor(t * SAMPLE_RATE);
+    const to = Math.min(buf.length, Math.floor((t + dur) * SAMPLE_RATE));
+    let peak = 0;
+    for (let j = from; j < to; j++) peak = Math.max(peak, Math.abs(buf[j]));
+    peaks.push(peak);
+    t += gap[i] ?? gap[gap.length - 1];
+  }
+  assert.ok(peaks[0] > peaks[2],
+    `最後の打撃が最初より弱くない: ${peaks.map((v) => v.toFixed(3)).join(' / ')}`);
+});
+
+test('リロードは一瞬で終わる（動作を待たされる感じにしない）', () => {
+  assert.ok(profileDuration(WEAPON_SOUNDS.reload) < 0.3,
+    `長すぎる: ${profileDuration(WEAPON_SOUNDS.reload).toFixed(2)}秒`);
+});
+
+test('自機のリロードは定位させない（自分の銃なので中央）', () => {
+  const player = readFileSync(new URL('../src/js/entities/Player.js', import.meta.url), 'utf8');
+  assert.ok(player.includes("playWeapon('reload')"), 'リロード音が呼ばれていない');
+  assert.ok(!player.includes("playWeapon('reload',"), '座標を渡していて左右に振れる');
 });

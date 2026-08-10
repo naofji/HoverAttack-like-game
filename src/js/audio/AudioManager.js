@@ -365,6 +365,9 @@ export class AudioManager {
      * @returns {number} 0〜1
      */
     _positionalGain(x, y) {
+        // 位置を持たない音（自機のリロードなど）は減衰させない。
+        // 座標が無いまま計算に入れると NaN になり、黙って無音になる。
+        if (x == null || y == null) return 1;
         if (!this.listenerView) return 1;
         return positionalVolume(x, y, this.listenerView);
     }
@@ -843,33 +846,6 @@ export class AudioManager {
         }
     }
 
-    /** マシンガンのリロード完了。弾倉が入る小さな金属音。 */
-    playReloadComplete() {
-        if (!this._prepare()) return;
-        const t = this.ctx.currentTime;
-
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-        const nf = this.ctx.createBiquadFilter();
-        nf.type = 'bandpass';
-        nf.frequency.value = 2600;
-        nf.Q.value = 4;
-        const ng = this.ctx.createGain();
-        ng.gain.setValueAtTime(0.14, t);
-        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
-        noise.start(t); noise.stop(t + 0.07);
-
-        const osc = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(880, t + 0.05);
-        g.gain.setValueAtTime(0.0001, t + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.06, t + 0.058);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-        osc.connect(g); g.connect(this._seDest());
-        osc.start(t + 0.05); osc.stop(t + 0.13);
-    }
 
     playBurst() {
         if (!this._prepare()) return;

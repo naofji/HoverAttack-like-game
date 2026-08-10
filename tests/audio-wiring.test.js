@@ -91,17 +91,18 @@ test('穏やかな落下では着地音が hard にならない', () => {
 });
 
 test('マシンガンのリロード完了で音が鳴る', () => {
-    const spy = spyAudio(['playReloadComplete']);
+    const spy = spyAudio(['playWeapon']);
+    const reloads = () => spy.calls.filter((c) => c.args[0] === 'reload').length;
     try {
         const p = new Player(makeGame(), 100, 100);
         p.docked = false;
         p.mgReloadTimer = 2;
         p.update();
-        assert.equal(spy.count('playReloadComplete'), 0, '完了前に鳴っている');
+        assert.equal(reloads(), 0, '完了前に鳴っている');
         p.update();
-        assert.equal(spy.count('playReloadComplete'), 1, '完了時に鳴らない');
+        assert.equal(reloads(), 1, '完了時に鳴らない');
         p.update();
-        assert.equal(spy.count('playReloadComplete'), 1, '完了後も鳴り続けている');
+        assert.equal(reloads(), 1, '完了後も鳴り続けている');
     } finally { spy.restore(); }
 });
 

@@ -124,7 +124,8 @@ export class Player {
             this.mgReloadTimer--;
             if (this.mgReloadTimer === 0) {
                 this.mgBurstLeft = PLAYER_MG_BURST_SIZE; // reload finished — refill now
-                audioManager.playReloadComplete();
+                // 自機の銃なので定位させない（座標を渡さないと中央で鳴る）
+                audioManager.playWeapon('reload');
             }
         }
     }

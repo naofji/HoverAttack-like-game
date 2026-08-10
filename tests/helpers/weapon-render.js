@@ -8,6 +8,22 @@ import { whiteNoise, SAMPLE_RATE } from './dsp.js';
 
 const FLOOR = 0.0008;   // renderWeaponSound と同じ
 
+/** 固定のバンドパス（WebAudio の BiquadFilterNode と同じ係数）。 */
+function bandpass(f0, Q) {
+    const w0 = 2 * Math.PI * f0 / SAMPLE_RATE;
+    const cw = Math.cos(w0);
+    const al = Math.sin(w0) / (2 * Q);
+    const b0 = al, b1 = 0, b2 = -al;
+    const a0 = 1 + al, a1 = -2 * cw, a2 = 1 - al;
+    const st = { x1: 0, x2: 0, y1: 0, y2: 0 };
+    return (x) => {
+        const y = (b0 / a0) * x + (b1 / a0) * st.x1 + (b2 / a0) * st.x2
+                - (a1 / a0) * st.y1 - (a2 / a0) * st.y2;
+        st.x2 = st.x1; st.x1 = x; st.y2 = st.y1; st.y1 = y;
+        return y;
+    };
+}
+
 /** 掃引するローパス（WebAudio の BiquadFilterNode と同じ係数）。 */
 function sweepingLowpass() {
     const st = { x1: 0, x2: 0, y1: 0, y2: 0 };
@@ -34,10 +50,20 @@ function wave(type, phase) {
 
 /** そのプロファイルが鳴り終わるまでの秒数。 */
 export function profileDuration(profile) {
+    let clicks = 0;
+    if (profile.clicks) {
+        const { count, gap, dur } = profile.clicks;
+        let t = 0;
+        for (let i = 0; i < count - 1; i++) {
+            t += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
+        }
+        clicks = t + dur;
+    }
     return Math.max(
         profile.hiss ? profile.hiss.dur : 0,
         profile.tone ? profile.tone.dur : 0,
         profile.puffs ? profile.puffs.gap * (profile.puffs.count - 1) + profile.puffs.dur : 0,
+        clicks,
     );
 }
 
@@ -97,6 +123,29 @@ export function renderWeaponProfile(profile) {
                 buf[off + i] += Math.sin(2 * Math.PI * phase)
                     * g * 0.7 * Math.pow(FLOOR / (g * 0.7), k);
             }
+        }
+    }
+
+    if (profile.clicks) {
+        const {
+            count, gap, freq, dur: d, gain, step = 1, Q = 7, metal = 2.76,
+        } = profile.clicks;
+        let start = 0;
+        for (let i = 0; i < count; i++) {
+            const fade = 1 - i * 0.18;
+            const f = freq * Math.pow(step, i);
+            const off = Math.floor(start * SAMPLE_RATE);
+            const len = Math.floor(d * SAMPLE_RATE);
+            for (const [center, q, levelScale] of [[f, Q, 1], [f * metal, Q * 1.5, 0.45]]) {
+                const noise = whiteNoise(n, 23 + i);
+                const bp = bandpass(center, q);
+                const g0 = gain * levelScale * fade;
+                for (let j = 0; j < len && off + j < n; j++) {
+                    const k = (j / SAMPLE_RATE) / d;
+                    buf[off + j] += bp(noise[j]) * g0 * Math.pow(FLOOR / g0, k);
+                }
+            }
+            start += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
         }
     }
 

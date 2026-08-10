@@ -61,6 +61,7 @@ const NOTES = {
     homing: 'ホーミングミサイル「プシュー」',
     cruise: '巡航ミサイル（最も長く太い）',
     grenade: 'グレネードの投擲',
+    reload: 'リロード「ガチャリ」',
 };
 
 mkdirSync(OUT_DIR, { recursive: true });
