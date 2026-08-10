@@ -391,23 +391,25 @@ export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIP
 export const PLAYER_HOVER_MAX_FREQ = 600;
 
 // 敵は同じ音作りだが、自機と混ざっても区別できるよう性格を変えてある。
-// (1) 中心を 760Hz に下げる（自機の 1200Hz より低く、耳では別物に聞こえる）
+// (1) 中心を 600Hz に下げる（自機の 1200Hz のちょうど半分。耳では別物）
 // (2) Q を緩めて痩せさせる（自機は 5。細く鋭いほど「自分の機体」らしい）
-// (3) 中心周波数をゆっくり揺らす。この「ふらつき」が最も分かりやすい差で、
-//     自機の音は揺れないため、鳴っているのが敵だと即座に分かる。
-export const ENEMY_HOVER_NOISE_FREQ = 760;
+// (3) 中心周波数をゆっくり揺らす。自機の音は揺れないため、この「ふらつき」
+//     だけで鳴っているのが敵だと分かる。ただし目立たせすぎない。
+//     速さも幅も控えめにして、音色の癖として感じる程度に留める。
+export const ENEMY_HOVER_NOISE_FREQ = 600;
 export const ENEMY_HOVER_NOISE_Q = 3.5;
-export const ENEMY_HOVER_WOBBLE_HZ = 5.5;    // 揺れの速さ
-export const ENEMY_HOVER_WOBBLE_DEPTH = 130; // 揺れの幅（Hz）
+export const ENEMY_HOVER_WOBBLE_HZ = 4.5;   // 揺れの速さ
+export const ENEMY_HOVER_WOBBLE_DEPTH = 70; // 揺れの幅（Hz）。中心の約12%
 // 高域だけだと軽いので、低い唸りを薄く足して機体の重さを出す
 export const ENEMY_HOVER_BODY_FREQ = 200;
 export const ENEMY_HOVER_BODY_GAIN = 0.35;
 // 主体をノコギリ波からバンドパスノイズに変えた時点で、聞こえる大きさが
 // 8.9dB(A) 落ちて事実上無音になった。狭い帯域を通すと白色ノイズの
 // エネルギーの大半が捨てられるため。その補正。
-// 倍率は「旧音と同じ聴感」を狙って A特性の実測から決めた（2.79倍）。
+// 倍率は A特性の実測から決めている。中心を 760Hz から 600Hz へ下げた際に
+// 聴感が 1.9dB 落ちたぶんも、ここで戻してある（2.8 → 3.5）。
 // tests/hover-timbre.test.js が自機のホバー音との差を監視している。
-export const ENEMY_HOVER_MAKEUP = 2.8;
+export const ENEMY_HOVER_MAKEUP = 3.5;
 
 // --- 敵アタッカーのジャンプ・着地音 ---
 // 自機と同じ作り（ジャンプは掃引するノイズ、着地はノイズ＋低い一撃）だが、
@@ -416,8 +418,13 @@ export const ENEMY_HOVER_MAKEUP = 2.8;
 export const ENEMY_BURST_FREQ_FROM = 700;
 export const ENEMY_BURST_FREQ_TO = 1800;
 export const ENEMY_BURST_GAIN = 0.1;
-export const ENEMY_LANDING_THUMP_HARD = 85;
-export const ENEMY_LANDING_THUMP_SOFT = 120;
+// 着地音は一撃だけでなくノイズの帯域も下げる。一撃だけ下げても、上に載る
+// ノイズが自機と同じままだと「低くなった」と感じにくい。
+// 自機: ノイズ 700/1100Hz、一撃 110/150Hz
+export const ENEMY_LANDING_NOISE_HARD = 500;
+export const ENEMY_LANDING_NOISE_SOFT = 800;
+export const ENEMY_LANDING_THUMP_HARD = 70;
+export const ENEMY_LANDING_THUMP_SOFT = 95;
 
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。

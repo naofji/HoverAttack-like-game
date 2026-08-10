@@ -6,6 +6,7 @@ import { biquad, whiteNoise, aWeightedRms, db, SAMPLE_RATE } from './helpers/dsp
 import {
   TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
   ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
+  ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
   ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
   LANDING_MIN_AIRBORNE_FRAMES, ENEMY_HOVER_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
@@ -205,19 +206,53 @@ test('敵のジャンプ音は自機のジャンプ音と同じくらいの大�
   assert.ok(diff < 3, `敵のジャンプ音が自機より目立つ: 自機比 ${diff.toFixed(1)}dB`);
 });
 
-test('敵の着地音の一撃は自機より低いが、聞こえなくなるほどではない', () => {
-  const aw = (f) => {
-    const f2 = f * f;
-    return 1.2589 * (12194 ** 2 * f2 * f2)
-      / ((f2 + 20.6 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2)) * (f2 + 12194 ** 2));
-  };
-  for (const [name, playerF, enemyF] of [
-    ['hard', 110, ENEMY_LANDING_THUMP_HARD],
-    ['soft', 150, ENEMY_LANDING_THUMP_SOFT],
+/**
+ * 着地音を丸ごと合成して A特性の実効値を返す。
+ * 一撃の周波数だけを比べても実際の聞こえ方は分からない。上に載るノイズの
+ * 帯域が支配的なこともあるため、両方を含めて測る。
+ */
+function landingLevel({ hard, noiseFrom, thump }) {
+  const n = 1 << 15;
+  const dur = hard ? 0.20 : 0.10;
+  const vol = hard ? 0.26 : 0.12;
+  const noise = whiteNoise(n, 11);
+  const st = { x1: 0, x2: 0, y1: 0, y2: 0 };
+  let phase = 0;
+  return aWeightedRms((i) => {
+    const t = i / SAMPLE_RATE;
+    if (t > dur) return 0;
+    const k = t / dur;
+
+    const f = noiseFrom * Math.pow(120 / noiseFrom, k);
+    const w0 = 2 * Math.PI * f / SAMPLE_RATE;
+    const cw = Math.cos(w0), al = Math.sin(w0) / 2;
+    const b0 = (1 - cw) / 2, b1 = 1 - cw, b2 = b0;
+    const a0 = 1 + al, a1 = -2 * cw, a2 = 1 - al;
+    const x = noise[i];
+    const y = (b0 / a0) * x + (b1 / a0) * st.x1 + (b2 / a0) * st.x2
+            - (a1 / a0) * st.y1 - (a2 / a0) * st.y2;
+    st.x2 = st.x1; st.x1 = x; st.y2 = st.y1; st.y1 = y;
+
+    const tf = thump * Math.pow(40 / thump, k);
+    phase += tf / SAMPLE_RATE;
+    const decay = Math.pow(0.001 / vol, k);
+    return y * vol * decay + Math.sin(2 * Math.PI * phase) * vol * 0.8 * decay;
+  }, n);
+}
+
+test('敵の着地音は自機より低いが、聞こえなくなるほどではない', () => {
+  for (const [name, hard, playerNoise, playerThump, enemyNoise, enemyThump] of [
+    ['hard', true, 700, 110, ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_THUMP_HARD],
+    ['soft', false, 1100, 150, ENEMY_LANDING_NOISE_SOFT, ENEMY_LANDING_THUMP_SOFT],
   ]) {
-    assert.ok(enemyF < playerF, `${name}: 自機より低くない`);
-    const diff = db(aw(enemyF) / aw(playerF));
-    assert.ok(diff > -6, `${name}: 低すぎて聞こえない: ${diff.toFixed(1)}dB`);
+    assert.ok(enemyThump < playerThump, `${name}: 一撃が自機より低くない`);
+    assert.ok(enemyNoise < playerNoise, `${name}: ノイズが自機より低くない`);
+
+    const player = landingLevel({ hard, noiseFrom: playerNoise, thump: playerThump });
+    const enemy = landingLevel({ hard, noiseFrom: enemyNoise, thump: enemyThump });
+    const diff = db(enemy / player);
+    assert.ok(diff > -6, `${name}: 低すぎて聞こえない: 自機比 ${diff.toFixed(1)}dB`);
+    assert.ok(diff < 0, `${name}: 自機より控えめになっていない: 自機比 ${diff.toFixed(1)}dB`);
   }
 });
 

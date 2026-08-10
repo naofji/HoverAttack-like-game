@@ -6,6 +6,7 @@ import {
     ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
     ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
     ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
+    ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
@@ -468,7 +469,8 @@ export class AudioManager {
         noise.buffer = this.noiseBuffer;
         const nf = this.ctx.createBiquadFilter();
         nf.type = 'lowpass';
-        nf.frequency.setValueAtTime(hard ? 700 : 1100, t);
+        nf.frequency.setValueAtTime(
+            hard ? ENEMY_LANDING_NOISE_HARD : ENEMY_LANDING_NOISE_SOFT, t);
         nf.frequency.exponentialRampToValueAtTime(120, t + dur);
         const ng = this.ctx.createGain();
         ng.gain.setValueAtTime(vol, t);
