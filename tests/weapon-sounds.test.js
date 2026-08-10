@@ -51,27 +51,40 @@ test('巡航ミサイルは最も長い（射出そのものが事件）', () =>
   }
 });
 
-// --- ホーミングの「シュボボッ」---------------------------------------------------
+// --- ホーミングの「プシュッ！」---------------------------------------------------
 
-test('ホーミングは「シュ」のあとに「ボボッ」が連なる', () => {
+test('ホーミングは高い帯域のノイズが主役（プシュッ）', () => {
   const p = WEAPON_SOUNDS.homing;
   assert.ok(p.hiss, '「シュ」にあたる部分が無い');
-  assert.ok(p.puffs, '「ボボッ」にあたる部分が無い');
-  assert.ok(p.puffs.count >= 2, `連なりに聞こえない: ${p.puffs.count}回`);
-
-  // 「シュ」は高く短く、「ボボッ」は低い
-  assert.ok(p.hiss.from > p.puffs.freq * 3, '「シュ」が「ボ」と同じ高さで分離しない');
-  assert.ok(p.hiss.dur < 0.25, `「シュ」が長すぎる: ${p.hiss.dur}秒`);
+  // 圧を抜く感じは高い帯域から出る。低いと「ボッ」に寄る
+  assert.ok(p.hiss.from >= 3500, `高さが足りず鋭く聞こえない: ${p.hiss.from}Hz`);
+  assert.ok(p.hiss.to >= 1000, `末尾が籠もって「ッ」が立たない: ${p.hiss.to}Hz`);
+  // 他のどの武器よりも高いところから始まる
+  for (const [kind, o] of Object.entries(WEAPON_SOUNDS)) {
+    if (kind === 'homing' || !o.hiss) continue;
+    assert.ok(p.hiss.from > o.hiss.from, `${kind} より低いところから始まっている`);
+  }
 });
 
-test('「ボボッ」の間隔は連なりに聞こえる範囲', () => {
-  const { gap, count } = WEAPON_SOUNDS.homing.puffs;
+test('「ッ」が立つ短さで切れる', () => {
+  const p = WEAPON_SOUNDS.homing;
+  assert.ok(profileDuration(p) <= 0.15,
+    `長すぎて「シューッ」に伸びる: ${profileDuration(p).toFixed(2)}秒`);
+});
+
+test('低い破裂は脇役に留める（厚いと「シュボボッ」に寄る）', () => {
+  const p = WEAPON_SOUNDS.homing;
+  assert.ok(p.puffs, '射出機構の気配が無い');
+  assert.ok(p.puffs.gain < p.hiss.gain,
+    `破裂がノイズより大きく、主役が入れ替わっている: ${p.puffs.gain} vs ${p.hiss.gain}`);
+  assert.ok(p.hiss.from > p.puffs.freq * 3, '破裂とノイズが同じ高さで分離しない');
+  const { gap, count } = p.puffs;
   assert.ok(gap >= 0.03, `速すぎて1つの音に潰れる: ${gap}秒`);
   assert.ok(gap <= 0.12, `遅すぎて別々の音に聞こえる: ${gap}秒`);
   assert.ok(gap * (count - 1) < 0.3, '連なり全体が長すぎる');
 });
 
-test('「ボボッ」は後ろほど弱くなる（押し出される向きが出る）', () => {
+test('破裂は後ろほど弱くなる（押し出される向きが出る）', () => {
   // renderWeaponSound の fade がその役目。波形の各破裂のピークで確かめる
   const buf = renderWeaponProfile(WEAPON_SOUNDS.homing);
   const { count, gap, dur } = WEAPON_SOUNDS.homing.puffs;
