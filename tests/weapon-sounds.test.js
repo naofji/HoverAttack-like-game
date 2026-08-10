@@ -275,3 +275,60 @@ test('renderWeaponSound は部品が無くても落ちない', () => {
   assert.doesNotThrow(() => renderWeaponSound(ctx, {}, {}, null, 1, 0));
   assert.deepEqual(ctx.created, []);
 });
+
+// --- ミサイルの迫力 -------------------------------------------------------------
+//
+// 「ボゥン」と鈍かったのは、包絡が頭から減衰するのに明るさが後から来ていて、
+// 暗いところだけ鳴って終わっていたため。同じ形に戻らないよう固定する。
+
+/** 波形の指定区間の明るさ（ゼロ交差率）と実効値。 */
+function brightnessAt(buf, from, to) {
+  const a = Math.floor(from * SAMPLE_RATE);
+  const b = Math.min(buf.length, Math.floor(to * SAMPLE_RATE));
+  let crossings = 0;
+  let energy = 0;
+  for (let i = a + 1; i < b; i++) {
+    if ((buf[i - 1] < 0) !== (buf[i] < 0)) crossings++;
+    energy += buf[i] * buf[i];
+  }
+  return {
+    hz: crossings / ((b - a) / SAMPLE_RATE) / 2,
+    rms: Math.sqrt(energy / (b - a)),
+  };
+}
+
+for (const kind of ['playerMissile', 'enemyMissile']) {
+  test(`${kind}: 明るいところから始まる（頭が暗いと「ボゥン」になる）`, () => {
+    const p = WEAPON_SOUNDS[kind];
+    assert.ok(p.hiss.from > p.hiss.to,
+      '暗いところから開く掃引に戻っている。包絡が頭から減衰するので聞こえない');
+    assert.ok(p.hiss.from >= 2000, `頭が暗い: ${p.hiss.from}Hz`);
+
+    const buf = renderWeaponProfile(p);
+    const head = brightnessAt(buf, 0, 0.05);
+    assert.ok(head.hz > 700, `発音直後が低い成分ばかり: ${Math.round(head.hz)}Hz`);
+  });
+
+  test(`${kind}: 噴射が尾を引く（一瞬で終わらない）`, () => {
+    const p = WEAPON_SOUNDS[kind];
+    assert.ok(p.hiss.hold > 0.05,
+      `満音量を保つ時間が無く、頭で消える: ${p.hiss.hold ?? 0}秒`);
+
+    const buf = renderWeaponProfile(p);
+    const head = brightnessAt(buf, 0, 0.05);
+    const mid = brightnessAt(buf, 0.10, 0.20);
+    assert.ok(mid.rms > head.rms * 0.15,
+      `0.1〜0.2秒で消えている: 頭 ${head.rms.toFixed(4)} → 中盤 ${mid.rms.toFixed(4)}`);
+  });
+
+  test(`${kind}: 点火の一撃がある`, () => {
+    const p = WEAPON_SOUNDS[kind];
+    assert.ok(p.puffs, '頭の一撃が無く、噴射だけで立ち上がりが鈍い');
+    assert.ok(p.puffs.dur <= 0.06, `一撃が長い: ${p.puffs.dur}秒`);
+  });
+}
+
+test('ミサイルは自機の方が高い帯域で鳴る', () => {
+  assert.ok(WEAPON_SOUNDS.enemyMissile.hiss.from < WEAPON_SOUNDS.playerMissile.hiss.from);
+  assert.ok(WEAPON_SOUNDS.enemyMissile.puffs.freq < WEAPON_SOUNDS.playerMissile.puffs.freq);
+});

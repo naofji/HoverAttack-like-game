@@ -40,14 +40,23 @@ export const WEAPON_SOUNDS = {
     },
 
     // --- ミサイル ---
-    // 点火して加速する感じ。ローパスを開く向きに掃引すると前へ出る。
+    // 点火の一撃 → 噴射が尾を引く、という順で組み立てる。
+    //
+    // 以前はローパスを 700→2600Hz と開く向きに掃引していたが、包絡が頭から
+    // 減衰するため「暗いところだけ鳴って終わる」音になっていた（実測で
+    // 発音直後の重心 350Hz、明るくなる 1900Hz 付近では既に無音）。これが
+    // 「ボゥン」と鈍く聞こえる正体だった。
+    // 明るいところから始めて hold で保つと、噴射が前に出て迫力が出る。
     playerMissile: {
-        hiss: { from: 700, to: 2600, dur: 0.34, gain: 0.13 },
-        tone: { type: 'sawtooth', from: 120, to: 40, dur: 0.30, gain: 0.06 },
+        hiss: { from: 3200, to: 1000, dur: 0.50, hold: 0.14, gain: 0.049 },
+        tone: { type: 'sawtooth', from: 200, to: 60, dur: 0.20, gain: 0.040 },
+        puffs: { count: 1, gap: 0.04, freq: 500, dur: 0.04, gain: 0.089, bright: 8 },
     },
+    // 同じ組み立てで帯域を一段下げる。撃たれている側だと分かるように。
     enemyMissile: {
-        hiss: { from: 550, to: 1800, dur: 0.34, gain: 0.12 },
-        tone: { type: 'sawtooth', from: 92, to: 32, dur: 0.30, gain: 0.055 },
+        hiss: { from: 2400, to: 800, dur: 0.50, hold: 0.14, gain: 0.049 },
+        tone: { type: 'sawtooth', from: 150, to: 45, dur: 0.20, gain: 0.040 },
+        puffs: { count: 1, gap: 0.04, freq: 400, dur: 0.04, gain: 0.089, bright: 7 },
     },
 
     // --- ホーミングミサイル「プシュー」---
