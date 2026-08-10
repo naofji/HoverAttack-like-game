@@ -58,7 +58,7 @@ const NOTES = {
     enemyMg: '敵のマシンガン（自機より低く鈍い）',
     playerMissile: '自機のミサイル',
     enemyMissile: '敵のミサイル',
-    homing: 'ホーミングミサイル「プシュッ！」',
+    homing: 'ホーミングミサイル「プシュー」',
     cruise: '巡航ミサイル（最も長く太い）',
     grenade: 'グレネードの投擲',
 };

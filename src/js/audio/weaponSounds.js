@@ -8,14 +8,16 @@
  *
  * 部品は3つで、どれも省略できる。
  *   hiss  掃引するローパスノイズ。発砲の空気、噴射のシュー音
+ *         hold を与えると、その間は満音量を保ってから減衰する（尾を引く）
  *   tone  音程のある成分。銃口の芯、推進のうなり
  *   puffs 短い破裂の連なり。ホーミングの「ボボッ」
  */
 
 /**
  * @typedef {object} WeaponProfile
- * @property {{from:number,to:number,dur:number,gain:number}} [hiss]
- *   ノイズを通すローパスを from から to へ掃引する
+ * @property {{from:number,to:number,dur:number,gain:number,hold?:number}} [hiss]
+ *   ノイズを通すローパスを from から to へ掃引する。
+ *   hold（秒）を与えると、その間は減衰させずに保つ
  * @property {{type:string,from:number,to:number,dur:number,gain:number}} [tone]
  * @property {{count:number,gap:number,freq:number,dur:number,gain:number}} [puffs]
  *   gap 秒おきに count 回、freq を頂点とする破裂を置く
@@ -46,13 +48,15 @@ export const WEAPON_SOUNDS = {
         tone: { type: 'sawtooth', from: 92, to: 32, dur: 0.30, gain: 0.055 },
     },
 
-    // --- ホーミングミサイル「プシュッ！」---
-    // 圧を抜いて射出する感じ。高い帯域のノイズを短く鳴らし、末尾を
-    // 素早く切って「ッ」を作る。低い破裂は主役ではなく、射出機構の
-    // 気配として2つだけ薄く添える。ここを厚くすると「シュボボッ」に寄る。
+    // --- ホーミングミサイル「プシュー」---
+    // 頭の「プ」と、尾を引く「シュー」の2つで出来ている。
+    //   プ   = 短くて強い一撃。puffs を1発だけ、ノイズより大きく置く。
+    //          ここが弱いと「シュー」だけの気の抜けた音になる。
+    //   シュー = 高い帯域のノイズ。hold で満音量を保ってから減衰させる。
+    //          保たずに減衰させると頭で消えて「シュッ」と切れてしまう。
     homing: {
-        hiss: { from: 4800, to: 1500, dur: 0.10, gain: 0.070 },
-        puffs: { count: 2, gap: 0.042, freq: 430, dur: 0.05, gain: 0.05 },
+        hiss: { from: 5200, to: 1300, dur: 0.42, hold: 0.20, gain: 0.041 },
+        puffs: { count: 1, gap: 0.04, freq: 360, dur: 0.035, gain: 0.050 },
     },
 
     // --- 巡航ミサイル ---
@@ -86,7 +90,7 @@ const FLOOR = 0.0008;
  */
 export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
     if (profile.hiss) {
-        const { from, to, dur, gain } = profile.hiss;
+        const { from, to, dur, gain, hold = 0 } = profile.hiss;
         const noise = ctx.createBufferSource();
         noise.buffer = noiseBuffer;
 
@@ -97,6 +101,8 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
 
         const g = ctx.createGain();
         g.gain.setValueAtTime(gain * level, t0);
+        // hold の間は保ってから落とす。すぐ落とすと頭だけの音になる
+        if (hold > 0) g.gain.setValueAtTime(gain * level, t0 + hold);
         g.gain.exponentialRampToValueAtTime(FLOOR, t0 + dur);
 
         noise.connect(filter);

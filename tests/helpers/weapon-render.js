@@ -53,15 +53,16 @@ export function renderWeaponProfile(profile) {
     const buf = new Float64Array(n);
 
     if (profile.hiss) {
-        const { from, to, dur: d, gain } = profile.hiss;
+        const { from, to, dur: d, gain, hold = 0 } = profile.hiss;
         const noise = whiteNoise(n, 13);
         const lp = sweepingLowpass();
         for (let i = 0; i < n; i++) {
             const t = i / SAMPLE_RATE;
             if (t > d) break;
             const k = t / d;
-            buf[i] += lp(noise[i], from * Math.pow(to / from, k))
-                * gain * Math.pow(FLOOR / gain, k);
+            // hold の間は満音量を保ってから落とす
+            const decay = t <= hold ? 1 : Math.pow(FLOOR / gain, (t - hold) / (d - hold));
+            buf[i] += lp(noise[i], from * Math.pow(to / from, k)) * gain * decay;
         }
     }
 

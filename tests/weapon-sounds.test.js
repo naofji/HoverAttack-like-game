@@ -66,38 +66,46 @@ test('ホーミングは高い帯域のノイズが主役（プシュッ）', ()
   }
 });
 
-test('「ッ」が立つ短さで切れる', () => {
+test('頭に強い一撃がある（プ）', () => {
   const p = WEAPON_SOUNDS.homing;
-  assert.ok(profileDuration(p) <= 0.15,
-    `長すぎて「シューッ」に伸びる: ${profileDuration(p).toFixed(2)}秒`);
+  assert.ok(p.puffs, '頭の一撃が無い');
+  assert.ok(p.puffs.dur <= 0.05, `一撃が長く「ボ」に伸びる: ${p.puffs.dur}秒`);
+  assert.ok(p.puffs.gain > p.hiss.gain,
+    `一撃がノイズより弱く「プ」が立たない: ${p.puffs.gain} vs ${p.hiss.gain}`);
+  assert.ok(p.hiss.from > p.puffs.freq * 3, '一撃とノイズが同じ高さで分離しない');
 });
 
-test('低い破裂は脇役に留める（厚いと「シュボボッ」に寄る）', () => {
-  const p = WEAPON_SOUNDS.homing;
-  assert.ok(p.puffs, '射出機構の気配が無い');
-  assert.ok(p.puffs.gain < p.hiss.gain,
-    `破裂がノイズより大きく、主役が入れ替わっている: ${p.puffs.gain} vs ${p.hiss.gain}`);
-  assert.ok(p.hiss.from > p.puffs.freq * 3, '破裂とノイズが同じ高さで分離しない');
-  const { gap, count } = p.puffs;
-  assert.ok(gap >= 0.03, `速すぎて1つの音に潰れる: ${gap}秒`);
-  assert.ok(gap <= 0.12, `遅すぎて別々の音に聞こえる: ${gap}秒`);
-  assert.ok(gap * (count - 1) < 0.3, '連なり全体が長すぎる');
-});
-
-test('破裂は後ろほど弱くなる（押し出される向きが出る）', () => {
-  // renderWeaponSound の fade がその役目。波形の各破裂のピークで確かめる
+test('頭が立ちつつ、突出しすぎない', () => {
+  // 弱いと気の抜けた「シュー」、強すぎると尾が聞こえない「ボッ」になる
   const buf = renderWeaponProfile(WEAPON_SOUNDS.homing);
-  const { count, gap, dur } = WEAPON_SOUNDS.homing.puffs;
-  const peaks = [];
-  for (let i = 0; i < count; i++) {
-    const from = Math.floor(i * gap * SAMPLE_RATE);
-    const to = Math.min(buf.length, Math.floor((i * gap + dur) * SAMPLE_RATE));
-    let peak = 0;
-    for (let j = from; j < to; j++) peak = Math.max(peak, Math.abs(buf[j]));
-    peaks.push(peak);
+  const dur = profileDuration(WEAPON_SOUNDS.homing);
+  let head = 0;
+  let tail = 0;
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const t = i / SAMPLE_RATE;
+    if (t < 0.04) head = Math.max(head, Math.abs(buf[i]));
+    else if (t < dur) { tail += buf[i] * buf[i]; n++; }
   }
-  assert.ok(peaks[peaks.length - 1] < peaks[0],
-    `最後の破裂が最初より弱くない: ${peaks.map((v) => v.toFixed(3)).join(' / ')}`);
+  const ratio = head / Math.sqrt(tail / n);
+  assert.ok(ratio > 3, `頭が立っていない: ${ratio.toFixed(1)}倍`);
+  assert.ok(ratio < 12, `頭が突出して尾が聞こえない: ${ratio.toFixed(1)}倍`);
+});
+
+test('尾を引く（プシュッではなくプシュー）', () => {
+  const p = WEAPON_SOUNDS.homing;
+  assert.ok(p.hiss.hold > 0.1,
+    `満音量を保つ時間が短く、頭で消えて「シュッ」に切れる: ${p.hiss.hold ?? 0}秒`);
+
+  // ピークの -30dB を上回る間を「聞こえている」とみなす
+  const buf = renderWeaponProfile(p);
+  let peak = 0;
+  for (const v of buf) peak = Math.max(peak, Math.abs(v));
+  let audible = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (Math.abs(buf[i]) > peak * 0.032) audible = i / SAMPLE_RATE;
+  }
+  assert.ok(audible > 0.25, `尾が短く「シュー」に伸びない: ${audible.toFixed(2)}秒`);
 });
 
 // --- 音量 ---------------------------------------------------------------------
