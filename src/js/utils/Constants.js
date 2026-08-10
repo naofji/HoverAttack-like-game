@@ -31,11 +31,12 @@ export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
 export const PLAYER_MAX_FALLING_SPEED = 7.0;  // Terminal velocity for falling
 export const PLAYER_STUN_FALL_SPEED = 6.0;    // Falling speed that triggers landing stun
-// 着地音を鳴らすのに必要な滞空フレーム数。接地判定は地形の端や動く母艦の甲板の
+// 着地音を鳴らすのに必要な滞空フレーム数。自機と敵アタッカーで共通。
+// 接地判定は地形の端や動く母艦の甲板の
 // 上で途切れるので、遷移をそのまま数えると立っているだけで鳴る（動く甲板の上で
 // 3秒間に24回鳴っていた）。実測ではその途切れは必ず1フレームだったので、4なら
 // 4倍の余裕がある。一方 4フレームは自由落下で約2px なので、本来の着地は残る。
-export const PLAYER_LANDING_MIN_AIRBORNE = 4;
+export const LANDING_MIN_AIRBORNE_FRAMES = 4;
 export const PLAYER_STUN_DURATION = 20;       // Duration of stun in frames (60 = 1 sec)
 export const PLAYER_MAX_HOVER_SPEED = -4.0;   // Maximum upward speed during hover
 export const PLAYER_BURST_FORCE = -5.8;
@@ -407,6 +408,16 @@ export const ENEMY_HOVER_BODY_GAIN = 0.35;
 // 倍率は「旧音と同じ聴感」を狙って A特性の実測から決めた（2.79倍）。
 // tests/hover-timbre.test.js が自機のホバー音との差を監視している。
 export const ENEMY_HOVER_MAKEUP = 2.8;
+
+// --- 敵アタッカーのジャンプ・着地音 ---
+// 自機と同じ作り（ジャンプは掃引するノイズ、着地はノイズ＋低い一撃）だが、
+// ホバー音と同じ理由で一段低くしてある。自機の音と混ざっても区別できるように。
+// 自機: ジャンプ 1000→3000Hz / 着地の一撃 110〜150Hz
+export const ENEMY_BURST_FREQ_FROM = 700;
+export const ENEMY_BURST_FREQ_TO = 1800;
+export const ENEMY_BURST_GAIN = 0.1;
+export const ENEMY_LANDING_THUMP_HARD = 85;
+export const ENEMY_LANDING_THUMP_SOFT = 120;
 
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。

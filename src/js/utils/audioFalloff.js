@@ -27,7 +27,8 @@ export function offscreenDistance(sx, sy, view) {
 }
 
 /**
- * 敵のホバー音の音量。「画面内なら満音量、画面外なら半分」という割り切り。
+ * 位置を持つ音の音量。「画面内なら満音量、画面外なら半分」という割り切り。
+ * 敵のホバー音・ジャンプ音・着地音で共通に使う。
  *
  * 以前は距離の2乗で減衰させていたが、可聴範囲(480px)が画面の半分(512px)より
  * 狭く、画面に映っている敵が既にほぼ無音だった（中心から256pxで22%）。
@@ -44,7 +45,7 @@ export function offscreenDistance(sx, sy, view) {
  * @param {{cx:number, cy:number, halfW:number, halfH:number}} view
  * @returns {number} 0〜1
  */
-export function hoverVolume(sx, sy, view) {
+export function positionalVolume(sx, sy, view) {
     const out = offscreenDistance(sx, sy, view);
     if (out === 0) return 1;
     const fade = 1 - out / ENEMY_HOVER_OFFSCREEN_FADE;
@@ -69,7 +70,7 @@ export function nearestHoveringEnemy(enemies, view) {
         if (!e || !e.alive || !e.hovering) continue;
         const x = e.x + (e.width || 0) / 2;
         const y = e.y + (e.height || 0) / 2;
-        const volume = hoverVolume(x, y, view);
+        const volume = positionalVolume(x, y, view);
         if (volume <= 0) continue;
         if (!best || volume > best.volume) best = { x, y, volume };
     }

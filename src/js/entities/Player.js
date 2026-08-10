@@ -6,7 +6,7 @@ import {
     TILE_SIZE,
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
-    PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, PLAYER_LANDING_MIN_AIRBORNE, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
+    PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -106,7 +106,7 @@ export class Player {
         const impactVy = this.vy;
         this._moveAndCollide();
         const landed = !this.wasOnGround && this.onGround;
-        if (landed && this.airborneFrames >= PLAYER_LANDING_MIN_AIRBORNE) {
+        if (landed && this.airborneFrames >= LANDING_MIN_AIRBORNE_FRAMES) {
             audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
         }
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;

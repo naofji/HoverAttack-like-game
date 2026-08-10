@@ -5,10 +5,12 @@ import {
     ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
     ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
     ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
+    ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
+    ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
 } from '../utils/Constants.js';
-import { stereoPan } from '../utils/audioFalloff.js';
+import { stereoPan, positionalVolume } from '../utils/audioFalloff.js';
 import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
 
 export class AudioManager {
@@ -16,6 +18,7 @@ export class AudioManager {
         this.ctx = null;
         this.seBus = null;       // 効果音のマスター（BGM は通さない）
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
+        this.listenerView = null;// いま映っている矩形（位置による音量の基準）
         this.bgmVolume = loadBgmVolume();   // 0〜1。前回の設定を引き継ぐ
         this.hoverOsc = null;
         this.hoverNoise = null;
@@ -282,6 +285,28 @@ export class AudioManager {
     }
 
     /**
+     * いま映っている範囲を渡す。左右の振り分けと、位置による音量の両方に使う。
+     * 毎フレーム呼ぶ。null を渡すと定位も減衰も止まる（メニュー中など）。
+     * @param {{cx:number, cy:number, halfW:number, halfH:number}|null} view
+     */
+    setListenerView(view) {
+        this.listenerView = (view && Number.isFinite(view.cx)) ? view : null;
+        this.setListenerX(view ? view.cx : null);
+    }
+
+    /**
+     * 音源の位置から音量の倍率を求める。画面内なら 1、外なら小さくなる。
+     * 画面が分からないうちは減衰させない（聞こえないより聞こえる方がまし）。
+     * @param {number} x ワールドX
+     * @param {number} y ワールドY
+     * @returns {number} 0〜1
+     */
+    _positionalGain(x, y) {
+        if (!this.listenerView) return 1;
+        return positionalVolume(x, y, this.listenerView);
+    }
+
+    /**
      * 音源のワールドX から左右の振り分けを求める。
      * 位置を持たない音（UI・自機の操作音）は sourceX 省略で中央のまま。
      * @param {number} [sourceX]
@@ -387,6 +412,80 @@ export class AudioManager {
                 this._panFor(sourceX), this.ctx.currentTime, 0.08,
             );
         }
+    }
+
+    /**
+     * 敵アタッカーのジャンプ音。自機の playBurst と同じ「掃引するノイズ」だが、
+     * 帯域を一段低くして自機の音と区別できるようにしてある。
+     * 距離で音量が下がり、横位置で左右に振れる。
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     */
+    playEnemyBurst(x, y) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(ENEMY_BURST_FREQ_FROM, t);
+        filter.frequency.exponentialRampToValueAtTime(ENEMY_BURST_FREQ_TO, t + 0.3);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(ENEMY_BURST_GAIN * level, t);
+        gain.gain.exponentialRampToValueAtTime(ENEMY_BURST_GAIN * 0.6 * level, t + 0.4);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this._out(x));
+
+        noise.start(t);
+        noise.stop(t + 0.4);
+    }
+
+    /**
+     * 敵アタッカーの着地音。自機の playLanding と同じ「ノイズ＋低い一撃」だが、
+     * 一撃をさらに低くしてある。距離で音量が下がり、横位置で左右に振れる。
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     * @param {boolean} [hard] 強い落下か
+     */
+    playEnemyLanding(x, y, hard = false) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        const out = this._out(x);
+        const vol = (hard ? 0.26 : 0.12) * level;
+        const dur = hard ? 0.20 : 0.10;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const nf = this.ctx.createBiquadFilter();
+        nf.type = 'lowpass';
+        nf.frequency.setValueAtTime(hard ? 700 : 1100, t);
+        nf.frequency.exponentialRampToValueAtTime(120, t + dur);
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(vol, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        noise.connect(nf); nf.connect(ng); ng.connect(out);
+        noise.start(t); noise.stop(t + dur);
+
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(
+            hard ? ENEMY_LANDING_THUMP_HARD : ENEMY_LANDING_THUMP_SOFT, t);
+        osc.frequency.exponentialRampToValueAtTime(40, t + dur);
+        g.gain.setValueAtTime(vol * 0.8, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(g); g.connect(out);
+        osc.start(t); osc.stop(t + dur);
     }
 
     /** 敵のホバー音を止める。 */

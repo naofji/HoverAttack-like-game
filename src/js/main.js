@@ -745,7 +745,7 @@ export const Game = {
         this.camera.update();
         // 見えている位置と聞こえる向きを合わせる。カメラはマップ端で
         // クランプされるので、自機ではなく画面中心を基準にする。
-        audioManager.setListenerX(this.camera.x + this.canvas.width / 2);
+        audioManager.setListenerView(this._viewRect());
     },
 
     _updateProjectiles() {

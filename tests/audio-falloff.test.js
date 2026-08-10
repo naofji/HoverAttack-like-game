@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  offscreenDistance, hoverVolume, nearestHoveringEnemy, stereoPan,
+  offscreenDistance, positionalVolume, nearestHoveringEnemy, stereoPan,
 } from '../src/js/utils/audioFalloff.js';
 import {
   AUDIO_PAN_RANGE, AUDIO_PAN_MAX, CANVAS_WIDTH, CANVAS_HEIGHT,
@@ -39,17 +39,17 @@ test('画面に映っている敵は一律で満音量', () => {
   // これが今回の主眼。以前は距離の2乗で減衰させていたため、可聴範囲(480px)が
   // 画面の半分(512px)より狭く、映っている敵が既にほぼ無音だった。
   for (const dx of [0, 128, 256, 384, 511]) {
-    assert.equal(hoverVolume(VIEW.cx + dx, VIEW.cy, VIEW), 1,
+    assert.equal(positionalVolume(VIEW.cx + dx, VIEW.cy, VIEW), 1,
       `画面内 ${dx}px で減衰している`);
   }
   for (const dy of [0, 200, 383]) {
-    assert.equal(hoverVolume(VIEW.cx, VIEW.cy + dy, VIEW), 1,
+    assert.equal(positionalVolume(VIEW.cx, VIEW.cy + dy, VIEW), 1,
       `画面内（縦 ${dy}px）で減衰している`);
   }
 });
 
 test('画面を出た瞬間に半分になる', () => {
-  const justOut = hoverVolume(VIEW.cx + VIEW.halfW + 1, VIEW.cy, VIEW);
+  const justOut = positionalVolume(VIEW.cx + VIEW.halfW + 1, VIEW.cy, VIEW);
   assert.ok(justOut < ENEMY_HOVER_OFFSCREEN_GAIN
     && justOut > ENEMY_HOVER_OFFSCREEN_GAIN * 0.99,
     `半分になっていない: ${justOut}`);
@@ -58,24 +58,24 @@ test('画面を出た瞬間に半分になる', () => {
 test('画面外はさらに離れるほど小さくなり、1画面ぶんで無音', () => {
   let prev = Infinity;
   for (let out = 0; out <= ENEMY_HOVER_OFFSCREEN_FADE; out += 64) {
-    const v = hoverVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
+    const v = positionalVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
     assert.ok(v <= prev, `${out}px で大きくなった: ${prev} -> ${v}`);
     prev = v;
   }
-  assert.equal(hoverVolume(VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE, VIEW.cy, VIEW), 0);
+  assert.equal(positionalVolume(VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE, VIEW.cy, VIEW), 0);
 });
 
 test('遠くの敵は完全に無音になる', () => {
   // ここを 0 にしないと、マップのどこかに敵がいる限り低い唸りが鳴り続ける
-  assert.equal(hoverVolume(VIEW.cx + 99999, VIEW.cy, VIEW), 0);
-  assert.equal(hoverVolume(VIEW.cx, VIEW.cy - 99999, VIEW), 0);
+  assert.equal(positionalVolume(VIEW.cx + 99999, VIEW.cy, VIEW), 0);
+  assert.equal(positionalVolume(VIEW.cx, VIEW.cy - 99999, VIEW), 0);
 });
 
 test('左右対称', () => {
   for (const out of [50, 200, 400]) {
     assert.equal(
-      hoverVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW),
-      hoverVolume(VIEW.cx - VIEW.halfW - out, VIEW.cy, VIEW),
+      positionalVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW),
+      positionalVolume(VIEW.cx - VIEW.halfW - out, VIEW.cy, VIEW),
       `${out}px で非対称`,
     );
   }

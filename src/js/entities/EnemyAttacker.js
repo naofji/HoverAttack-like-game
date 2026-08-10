@@ -5,7 +5,7 @@
 import {
     TILE_SIZE, GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT,
-    PLAYER_MAX_FALLING_SPEED,
+    PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES,
     HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION, HOVER_FUEL_RECOVERY,
     MISSILE_SPEED, ATTACKER_RETURN_TRIGGER_Y, ATTACKER_RETURN_TRIGGER_X,
     ATTACKER_RETURN_DONE, ATTACKER_CLIMB_MIN_FUEL, ATTACKER_CLIMB_MAX_RISE,
@@ -26,6 +26,7 @@ import { MissileKit } from './MissileKit.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -129,6 +130,8 @@ export class EnemyAttacker {
         this.recoilTimer = 0;
         this.alive = true;
         this.onGround = false;
+        this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
+        this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
 
         // Config-driven stats
         this.config = config;
@@ -273,7 +276,20 @@ export class EnemyAttacker {
 
         if (this.jumpCooldown > 0) this.jumpCooldown--;
 
+        // 着地音は自機と同じ扱い。接地判定は地形の端などで1フレーム単位で
+        // 途切れるので、遷移だけでなく実際に浮いていた時間も条件にする。
+        const impactVy = this.vy;
         this._moveAndCollide();
+        if (!this.wasOnGround && this.onGround
+            && this.airborneFrames >= LANDING_MIN_AIRBORNE_FRAMES) {
+            audioManager.playEnemyLanding(
+                this.x + this.width / 2, this.y + this.height / 2,
+                impactVy > PLAYER_STUN_FALL_SPEED,
+            );
+        }
+        this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
+        this.wasOnGround = this.onGround;
+
         this._updateFacing(target);
         this._updateWalkAnimation();
         this._handleShooting();
@@ -700,6 +716,7 @@ export class EnemyAttacker {
         this.vy = this.jumpForce;
         this.onGround = false;
         this.jumpCooldown = 60; // ~1 second cooldown
+        audioManager.playEnemyBurst(this.x + this.width / 2, this.y + this.height / 2);
     }
 
     _findPathToTarget(target) {
