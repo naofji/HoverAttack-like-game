@@ -376,14 +376,16 @@ function clickPeaks(profile) {
   return peaks;
 }
 
-test('打撃の音程は「低 → 高 → 中」', () => {
-  // 単調に上げると軽い機構、単調に下げるとただの減速に聞こえる。山を作る
+test('打撃の音程は「低 → 中 → 超低」', () => {
+  // 単調に上げると軽い機構、単調に下げるとただの減速に聞こえる。
+  // 一度上げてから底へ落とす形で、重い部品が落ち着く感じを作る
   const { freq } = WEAPON_SOUNDS.reload.clicks;
   assert.ok(Array.isArray(freq), '打撃ごとに音程を指定していない');
   assert.equal(freq.length, 3);
-  assert.ok(freq[0] < freq[1], `1発目が2発目より低くない: ${freq.join(' / ')}Hz`);
-  assert.ok(freq[2] < freq[1], `3発目が2発目より低くない: ${freq.join(' / ')}Hz`);
-  assert.ok(freq[2] > freq[0], `3発目が1発目より高くない（中が無い）: ${freq.join(' / ')}Hz`);
+  assert.ok(freq[0] < freq[1], `2発目が上がっていない: ${freq.join(' / ')}Hz`);
+  assert.ok(freq[2] < freq[0], `3発目が最も低くない: ${freq.join(' / ')}Hz`);
+  assert.ok(freq[2] < freq[0] * 0.7,
+    `3発目が「超低」と言えるほど低くない: ${freq.join(' / ')}Hz`);
 });
 
 test('低い打撃が痩せない（帯域幅の差を補正している）', () => {
@@ -393,9 +395,8 @@ test('低い打撃が痩せない（帯域幅の差を補正している）', ()
   const max = Math.max(...peaks);
   assert.ok(peaks[0] / max > 0.5,
     `1発目（低）が痩せている: ${(peaks[0] / max * 100).toFixed(0)}%`);
-  assert.ok(peaks[2] / max > 0.4,
-    `3発目（中）が痩せている: ${(peaks[2] / max * 100).toFixed(0)}%`);
-  assert.equal(peaks.indexOf(max), 1, '2発目（高）が最も強くない');
+  assert.ok(peaks[2] / max > 0.6,
+    `3発目（超低）が痩せている: ${(peaks[2] / max * 100).toFixed(0)}%`);
 });
 
 test('リロードは一瞬で終わる（動作を待たされる感じにしない）', () => {
