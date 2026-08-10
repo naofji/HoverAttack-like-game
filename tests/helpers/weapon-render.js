@@ -128,11 +128,11 @@ export function renderWeaponProfile(profile) {
 
     if (profile.clicks) {
         const {
-            count, gap, freq, dur: d, gain, step = 1, Q = 7, metal = 2.76,
+            count, gap, freq, dur: d, gain, step = 1, Q = 7, metal = 2.76, fade: fadeStep = 0.18,
         } = profile.clicks;
         let start = 0;
         for (let i = 0; i < count; i++) {
-            const fade = 1 - i * 0.18;
+            const fade = 1 - i * fadeStep;
             const f = freq * Math.pow(step, i);
             const off = Math.floor(start * SAMPLE_RATE);
             const len = Math.floor(d * SAMPLE_RATE);

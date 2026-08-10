@@ -26,9 +26,11 @@
  *   gap 秒おきに count 回、freq を頂点とする破裂を置く。
  *   bright はローパスの開始位置（freq の何倍か）。大きいほど破裂が硬く鳴る
  * @property {{count:number,gap:number|number[],freq:number,dur:number,gain:number,
- *   step?:number,Q?:number,metal?:number}} [clicks]
+ *   step?:number,Q?:number,metal?:number,fade?:number}} [clicks]
  *   金属の打撃。gap は配列で1回ごとに変えられる（等間隔だと機械的すぎる）。
- *   step は打撃ごとの音程の倍率、metal は重ねる非整数倍の比
+ *   step は打撃ごとの音程の倍率、metal は重ねる非整数倍の比。
+ *   fade は打撃ごとに音量を落とす割合。負の値を与えると逆に持ち上がる
+ *   （音程を下げると通る帯域が狭まって痩せるので、その補正に使う）
  */
 
 /** @type {Record<string, WeaponProfile>} */
@@ -88,13 +90,17 @@ export const WEAPON_SOUNDS = {
     // --- リロード「ガチャリ」---
     // 弾倉が入って遊底が閉じる、という機構の音。打撃を3つ、間隔を不揃いに
     // 置いて「ガチャ」＋「リ」にする。等間隔だと拍に聞こえて機械的すぎる。
-    // 後ろほど弱く高くすることで、噛み合って収まる感じが出る。
+    //
+    // 打撃ごとに音程を下げる（1000 → 720 → 518Hz）。上げていくと軽い機構に
+    // 聞こえる。下げて重い部品が収まる形にした。
+    // ただし低いほどバンドパスを通る帯域が狭まって痩せるので、fade を負に
+    // して持ち上げ、最後の低い一撃が先頭の 70% の強さで残るようにしてある。
     reload: {
         clicks: {
-            count: 3, gap: [0.045, 0.085], freq: 1700, step: 1.28,
+            count: 3, gap: [0.045, 0.085], freq: 1000, step: 0.72,
             // 鋭い共鳴はノイズのエネルギーの大半を捨てるので、他の音と同じ
             // 感覚の 0.115 では -16dB まで落ちる。実測から決めた補正込みの値
-            dur: 0.055, gain: 0.279, Q: 7, metal: 2.76,
+            dur: 0.055, gain: 0.398, Q: 7, metal: 2.76, fade: -0.12,
         },
     },
 
@@ -199,13 +205,12 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
 
     if (profile.clicks) {
         const {
-            count, gap, freq, dur, gain, step = 1, Q = 7, metal = 2.76,
+            count, gap, freq, dur, gain, step = 1, Q = 7, metal = 2.76, fade: fadeStep = 0.18,
         } = profile.clicks;
 
         let t = t0;
         for (let i = 0; i < count; i++) {
-            // 後ろの打撃ほど弱く、少し高く。機構が噛み合っていく感じになる
-            const fade = 1 - i * 0.18;
+            const fade = 1 - i * fadeStep;
             const f = freq * Math.pow(step, i);
 
             // 芯の共鳴と、整数倍でない共鳴。後者が金属らしさを作る

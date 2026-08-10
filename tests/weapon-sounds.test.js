@@ -354,12 +354,10 @@ test('「ガチャ」と「リ」に分かれる（等間隔にしない）', ()
     `「ガチャ」と「リ」の切れ目が足りない: ${gap.join(' / ')}秒`);
 });
 
-test('打撃は後ろほど弱く高くなる（噛み合って収まる）', () => {
-  const p = WEAPON_SOUNDS.reload;
-  assert.ok((p.clicks.step ?? 1) > 1, `音程が上がっていない: ${p.clicks.step}`);
-
-  const buf = renderWeaponProfile(p);
-  const { count, gap, dur } = p.clicks;
+/** 打撃ごとのピークを順に取り出す。 */
+function clickPeaks(profile) {
+  const buf = renderWeaponProfile(profile);
+  const { count, gap, dur } = profile.clicks;
   const peaks = [];
   let t = 0;
   for (let i = 0; i < count; i++) {
@@ -368,10 +366,28 @@ test('打撃は後ろほど弱く高くなる（噛み合って収まる）', ()
     let peak = 0;
     for (let j = from; j < to; j++) peak = Math.max(peak, Math.abs(buf[j]));
     peaks.push(peak);
-    t += gap[i] ?? gap[gap.length - 1];
+    t += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
   }
-  assert.ok(peaks[0] > peaks[2],
-    `最後の打撃が最初より弱くない: ${peaks.map((v) => v.toFixed(3)).join(' / ')}`);
+  return peaks;
+}
+
+test('打撃は後ろほど低くなる（重い部品が収まる）', () => {
+  const p = WEAPON_SOUNDS.reload;
+  assert.ok((p.clicks.step ?? 1) < 1,
+    `音程が下がっていない。上げると軽い機構に聞こえる: ${p.clicks.step}`);
+  const last = p.clicks.freq * (p.clicks.step ** (p.clicks.count - 1));
+  assert.ok(last < 700, `最後の打撃が低くない: ${Math.round(last)}Hz`);
+});
+
+test('最後の低い一撃が痩せない', () => {
+  // 低いほどバンドパスを通る帯域が狭まってエネルギーが減る。
+  // fade を負にして持ち上げていないと、末尾が消え入って締まらない。
+  const peaks = clickPeaks(WEAPON_SOUNDS.reload);
+  const ratio = peaks[peaks.length - 1] / peaks[0];
+  assert.ok(ratio > 0.5,
+    `最後の打撃が弱く、低音で終わる感じにならない: ${(ratio * 100).toFixed(0)}%`);
+  assert.ok(ratio <= 1,
+    `最後の打撃が最初より強く、頭が立たない: ${(ratio * 100).toFixed(0)}%`);
 });
 
 test('リロードは一瞬で終わる（動作を待たされる感じにしない）', () => {
