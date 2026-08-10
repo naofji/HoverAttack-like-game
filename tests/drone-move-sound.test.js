@@ -144,21 +144,29 @@ test('一瞬で終わらず、長すぎもしない', () => {
   assert.ok(DRONE_MOVE_DURATION <= 1.2, `長すぎて次の動きに被る: ${DRONE_MOVE_DURATION}秒`);
 });
 
-test('共鳴フィルタは音程より速く落ちる（母音が変化する）', () => {
-  assert.ok(DRONE_MOVE_FILTER_MULT > 1, 'フィルタが音程より下から始まっている');
-  assert.ok(DRONE_MOVE_FILTER_MULT > DRONE_MOVE_FILTER_END_MULT,
-    'フィルタが音程と同じ割合でしか下がらず、母音が変化しない');
+test('フィルタは最初から最後まで基音より上に居る（「ウ」ではなく「オ」）', () => {
+  // ここが「プーーン」と「ポーーン」を分ける。基音より下まで閉じると
+  // 倍音が消えて籠もった「ウ」になる。
+  for (const [name, mult] of [
+    ['開始', DRONE_MOVE_FILTER_MULT], ['終端', DRONE_MOVE_FILTER_END_MULT],
+  ]) {
+    assert.ok(mult > 1, `${name}で基音より下まで閉じており「ウ」に籠もる: ${mult}`);
+    assert.ok(mult < 3, `${name}で開きすぎて芯が無くなる: ${mult}`);
+  }
   assert.ok(DRONE_MOVE_FILTER_Q > 4, `共鳴が弱くうなりの芯が出ない: Q=${DRONE_MOVE_FILTER_Q}`);
 });
 
-test('終端で基音より上にフィルタを残す（「ウ」ではなく「オ」）', () => {
-  // ここが「プーーン」と「ポーーン」を分ける。基音より下まで閉じると
-  // 倍音が消えて籠もった「ウ」になる。
-  assert.ok(DRONE_MOVE_FILTER_END_MULT > 1,
-    `終端で基音より下まで閉じており「ウ」に籠もる: ${DRONE_MOVE_FILTER_END_MULT}`);
-  // ただし開きすぎると下降感が薄れる
-  assert.ok(DRONE_MOVE_FILTER_END_MULT < 3,
-    `開きすぎて下降が感じられない: ${DRONE_MOVE_FILTER_END_MULT}`);
+test('音色は最初から最後まで変わらない（変化するのは音程だけ）', () => {
+  // フィルタが音程と同じ比率で下がる設定なので、母音は動かない。
+  // 「ポーーン」の印象は音程が落ちること自体から出ている。
+  // ここが崩れると途中で母音が変わり、別の擬音に聞こえてしまう。
+  assert.equal(DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
+    'フィルタが音程と別の速さで動いており、途中で母音が変わる');
+
+  const early = harmonicCentroid(0.2);
+  const late = harmonicCentroid(0.6);
+  assert.ok(Math.abs(late - early) / early < 0.2,
+    `倍音の重心が動いている: ${early.toFixed(2)} → ${late.toFixed(2)}倍音`);
 });
 
 test('後半に第2倍音が残っている（開いた母音であることの実測）', () => {

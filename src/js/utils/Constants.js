@@ -435,20 +435,24 @@ export const ENEMY_LANDING_THUMP_SOFT = 95;
 // （うねりと厚みが出る＝あの独特の「ホロウ」な質感）、共鳴の強い
 // ローパスを音程より一段速く下降させる。
 //
-// 母音は「ポ」寄り。「プ」と「ポ」を分けるのは終端のフィルタ位置で、
-// 基音より下まで閉じると倍音が消えて籠もった「ウ」になり、基音より上に
-// 残すと第2倍音が生き残って開いた「オ」になる。END_MULT がその境目。
-// 共鳴も緩めてある。Q が高いほど細く詰まった「ウ」に寄るため。
-export const DRONE_MOVE_FREQ_FROM = 950;    // 開始の音程
-export const DRONE_MOVE_FREQ_TO = 250;      // 終わりの音程
-export const DRONE_MOVE_DURATION = 0.8;     // 秒
+// 母音は「ポ」。フィルタを常に基音の 1.8倍に置くことで第2倍音が生き残り、
+// 開いた「オ」になる。基音より下まで閉じると倍音が消えて籠もった「ウ」に
+// なってしまう。共鳴を Q=6.5 に留めているのも同じ理由で、Q が高いほど
+// 細く詰まった音に寄る。
+//
+// フィルタは音程と同じ比率で下がるので、音色は最初から最後まで変わらない。
+// 「ポーーン」の印象は音程が 2オクターブ落ちること自体から出ている。
+// 候補を書き出して聴き比べたうえで選んだ設定（tools/render-drone-sound.mjs）。
+export const DRONE_MOVE_FREQ_FROM = 620;    // 開始の音程
+export const DRONE_MOVE_FREQ_TO = 160;      // 終わりの音程
+export const DRONE_MOVE_DURATION = 0.9;     // 秒
 export const DRONE_MOVE_FILTER_Q = 6.5;     // 共鳴の強さ。うなりの芯を作る
 export const DRONE_MOVE_FILTER_MULT = 1.8;  // フィルタは音程の何倍の高さから始めるか
-export const DRONE_MOVE_FILTER_END_MULT = 1.6;  // 終端。1を超えると「オ」寄りになる
+export const DRONE_MOVE_FILTER_END_MULT = 1.8;  // 終端。1を超えると「オ」寄りになる
 export const DRONE_MOVE_DETUNE = [-11, 0, 13];  // セント。3本のずれ
-// 共鳴を緩めたぶん音圧が 3.8dB 落ちるので、その補正込みの値
-export const DRONE_MOVE_GAIN = 0.115;
-export const DRONE_MOVE_SUB_GAIN = 0.65;    // 1オクターブ下のサイン波（丸みと重さ）
+// 音程を下げたぶんの聴感差を戻した値
+export const DRONE_MOVE_GAIN = 0.098;
+export const DRONE_MOVE_SUB_GAIN = 0.8;     // 1オクターブ下のサイン波（丸みと重さ）
 // 連続で突進したときに音が重ならないよう、1体あたりの最短間隔を設ける
 export const DRONE_MOVE_COOLDOWN = 40;      // フレーム
 // 大きく動くときだけ鳴らす。少し動いただけで鳴ると耳につく。

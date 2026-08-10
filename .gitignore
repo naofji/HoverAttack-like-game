@@ -14,3 +14,6 @@ Thumbs.db
 # Node dependencies (if any)
 node_modules/
 leaderboard_public/
+
+# 音の候補を聴き比べるための書き出し（tools/render-drone-sound.mjs）
+audio-preview/
