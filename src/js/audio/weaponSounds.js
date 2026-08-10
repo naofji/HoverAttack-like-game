@@ -19,8 +19,9 @@
  *   ノイズを通すローパスを from から to へ掃引する。
  *   hold（秒）を与えると、その間は減衰させずに保つ
  * @property {{type:string,from:number,to:number,dur:number,gain:number}} [tone]
- * @property {{count:number,gap:number,freq:number,dur:number,gain:number}} [puffs]
- *   gap 秒おきに count 回、freq を頂点とする破裂を置く
+ * @property {{count:number,gap:number,freq:number,dur:number,gain:number,bright?:number}} [puffs]
+ *   gap 秒おきに count 回、freq を頂点とする破裂を置く。
+ *   bright はローパスの開始位置（freq の何倍か）。大きいほど破裂が硬く鳴る
  */
 
 /** @type {Record<string, WeaponProfile>} */
@@ -50,13 +51,14 @@ export const WEAPON_SOUNDS = {
 
     // --- ホーミングミサイル「プシュー」---
     // 頭の「プ」と、尾を引く「シュー」の2つで出来ている。
-    //   プ   = 短くて強い一撃。puffs を1発だけ、ノイズより大きく置く。
-    //          ここが弱いと「シュー」だけの気の抜けた音になる。
+    //   プ   = 短くて強い一撃。puffs を1発だけ、ノイズの倍以上の大きさで
+    //          置く。bright を上げて硬く鳴らすと、大きさを足すより
+    //          「プ」らしく立つ（同じ音量でも頭が前に出る）。
     //   シュー = 高い帯域のノイズ。hold で満音量を保ってから減衰させる。
     //          保たずに減衰させると頭で消えて「シュッ」と切れてしまう。
     homing: {
-        hiss: { from: 5200, to: 1300, dur: 0.42, hold: 0.20, gain: 0.041 },
-        puffs: { count: 1, gap: 0.04, freq: 360, dur: 0.035, gain: 0.050 },
+        hiss: { from: 5200, to: 1300, dur: 0.42, hold: 0.20, gain: 0.040 },
+        puffs: { count: 1, gap: 0.04, freq: 360, dur: 0.035, gain: 0.092, bright: 6 },
     },
 
     // --- 巡航ミサイル ---
@@ -130,7 +132,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
     }
 
     if (profile.puffs) {
-        const { count, gap, freq, dur, gain } = profile.puffs;
+        const { count, gap, freq, dur, gain, bright = 3 } = profile.puffs;
         for (let i = 0; i < count; i++) {
             const t = t0 + i * gap;
             // 後ろの破裂ほど僅かに小さく低くして、連なりに方向を持たせる
@@ -140,7 +142,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
             noise.buffer = noiseBuffer;
             const filter = ctx.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(freq * 3 * fade, t);
+            filter.frequency.setValueAtTime(freq * bright * fade, t);
             filter.frequency.exponentialRampToValueAtTime(freq * 0.8, t + dur);
             const ng = ctx.createGain();
             ng.gain.setValueAtTime(gain * level * fade, t);

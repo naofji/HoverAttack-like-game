@@ -70,8 +70,9 @@ test('頭に強い一撃がある（プ）', () => {
   const p = WEAPON_SOUNDS.homing;
   assert.ok(p.puffs, '頭の一撃が無い');
   assert.ok(p.puffs.dur <= 0.05, `一撃が長く「ボ」に伸びる: ${p.puffs.dur}秒`);
-  assert.ok(p.puffs.gain > p.hiss.gain,
-    `一撃がノイズより弱く「プ」が立たない: ${p.puffs.gain} vs ${p.hiss.gain}`);
+  assert.ok(p.puffs.gain > p.hiss.gain * 2,
+    `一撃がノイズに対して弱く「プ」が立たない: ${p.puffs.gain} vs ${p.hiss.gain}`);
+  assert.ok((p.puffs.bright ?? 3) > 3, '一撃が鈍く「ブ」に寄る（bright を上げる）');
   assert.ok(p.hiss.from > p.puffs.freq * 3, '一撃とノイズが同じ高さで分離しない');
 });
 
@@ -87,9 +88,10 @@ test('頭が立ちつつ、突出しすぎない', () => {
     if (t < 0.04) head = Math.max(head, Math.abs(buf[i]));
     else if (t < dur) { tail += buf[i] * buf[i]; n++; }
   }
+  // 下限は2度「プが弱い」と言われて引き上げた値。上限は尾が残る範囲
   const ratio = head / Math.sqrt(tail / n);
-  assert.ok(ratio > 3, `頭が立っていない: ${ratio.toFixed(1)}倍`);
-  assert.ok(ratio < 12, `頭が突出して尾が聞こえない: ${ratio.toFixed(1)}倍`);
+  assert.ok(ratio > 9, `頭が立っていない: ${ratio.toFixed(1)}倍`);
+  assert.ok(ratio < 18, `頭が突出して尾が聞こえない: ${ratio.toFixed(1)}倍`);
 });
 
 test('尾を引く（プシュッではなくプシュー）', () => {

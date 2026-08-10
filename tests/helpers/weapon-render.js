@@ -79,7 +79,7 @@ export function renderWeaponProfile(profile) {
     }
 
     if (profile.puffs) {
-        const { count, gap, freq, dur: d, gain } = profile.puffs;
+        const { count, gap, freq, dur: d, gain, bright = 3 } = profile.puffs;
         for (let j = 0; j < count; j++) {
             const off = Math.floor(j * gap * SAMPLE_RATE);
             const fade = 1 - j * 0.12;
@@ -90,7 +90,7 @@ export function renderWeaponProfile(profile) {
             for (let i = 0; i < len && off + i < n; i++) {
                 const k = (i / SAMPLE_RATE) / d;
                 const g = gain * fade;
-                buf[off + i] += lp(noise[i], freq * 3 * fade * Math.pow(0.8 / (3 * fade), k))
+                buf[off + i] += lp(noise[i], freq * bright * fade * Math.pow(0.8 / (bright * fade), k))
                     * g * Math.pow(FLOOR / g, k);
                 phase = (phase + freq * fade * Math.pow(0.45, k) / SAMPLE_RATE) % 1;
                 buf[off + i] += Math.sin(2 * Math.PI * phase)
