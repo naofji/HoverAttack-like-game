@@ -839,13 +839,16 @@ export class EnemyAttacker {
             }
             const missile = new EnemyHomingMissile(this.game, muzzleX, muzzleY, angle);
             this.game.enemyBullets.push(missile);
+            audioManager.playWeapon('homing', muzzleX, muzzleY);
         } else if (this.config.usesGrenades && Math.random() < this.config.grenadeChance) {
             const grenade = new Grenade(this.game, muzzleX, muzzleY, angle);
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
+            audioManager.playWeapon('grenade', muzzleX, muzzleY);
         } else {
             const missile = new Missile(this.game, muzzleX, muzzleY, angle, false, this.config.name === 'rival');
             this.game.projectiles.push(missile);
+            audioManager.playWeapon('enemyMissile', muzzleX, muzzleY);
         }
     }
 

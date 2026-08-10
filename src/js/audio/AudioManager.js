@@ -17,6 +17,7 @@ import {
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE, SE_FADE_OUT_SECONDS,
 } from '../utils/Constants.js';
 import { stereoPan, positionalVolume } from '../utils/audioFalloff.js';
+import { WEAPON_SOUNDS, renderWeaponSound } from './weaponSounds.js';
 import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
 
 export class AudioManager {
@@ -625,6 +626,29 @@ export class AudioManager {
         for (const v of voices) { v.start(t); v.stop(end); }
     }
 
+    /**
+     * 武器の発射音。種類は weaponSounds.js の表で決まる。
+     *
+     * 以前は弾もミサイルも同じ音だったので、武器ごとに関数を足すのではなく
+     * 表を引く形にしてある。音を増やすときは表に1行足すだけでよい。
+     *
+     * @param {keyof typeof WEAPON_SOUNDS} kind
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     */
+    playWeapon(kind, x, y) {
+        const profile = WEAPON_SOUNDS[kind];
+        if (!profile) return;
+        if (!this._prepare()) return;
+
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        renderWeaponSound(
+            this.ctx, this._out(x), profile, this.noiseBuffer, level, this.ctx.currentTime,
+        );
+    }
+
     /** 敵のホバー音を止める。 */
     stopEnemyHover() {
         if (!this.enemyHoverGain) return;
@@ -897,47 +921,7 @@ export class AudioManager {
     }
 
     // --- Weapons ---
-    playMissile(sourceX) {
-        if (!this._prepare()) return;
-        const out = this._out(sourceX);
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
-
-        gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
-
-        osc.connect(gain);
-        gain.connect(out);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.15);
-    }
-
-    playEnemyFire(sourceX) {
-        if (!this._prepare()) return;
-        const out = this._out(sourceX);
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.05);
-
-        gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.05);
-
-        osc.connect(gain);
-        gain.connect(out);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.05);
-    }
 
     playSwitch() {
         if (!this._prepare()) return;

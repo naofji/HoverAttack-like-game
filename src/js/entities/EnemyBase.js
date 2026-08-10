@@ -211,7 +211,7 @@ export class EnemyBase {
 
         const bullet = new EnemyBullet(this.game, centerX, centerY, angle + inaccuracy);
         this.game.enemyBullets.push(bullet);
-        audioManager.playEnemyFire(centerX);
+        // 発射音は EnemyBullet のコンストラクタが鳴らす。ここで足すと二重になる
     }
 
     _updateBaseMissile() {
@@ -237,7 +237,7 @@ export class EnemyBase {
 
         const missile = new Missile(this.game, centerX, centerY, angle, false); // isPlayerOwned = false
         this.game.enemyBullets.push(missile);
-        audioManager.playEnemyFire(centerX);
+        audioManager.playWeapon('enemyMissile', centerX, centerY);
     }
 
     _updateBaseHoming() {
@@ -268,7 +268,7 @@ export class EnemyBase {
             const missile = new EnemyHomingMissile(this.game, centerX, centerY, baseAngle + offset);
             this.game.enemyBullets.push(missile);
         }
-        audioManager.playEnemyFire(centerX);
+        audioManager.playWeapon('homing', centerX, centerY);
     }
 
     _findTarget(maxRange = Infinity) {
@@ -372,7 +372,7 @@ export class EnemyBase {
         const missile = new EnemyCruiseMissile(this.game, centerX, centerY, angle, path);
         this.game.enemyBullets.push(missile);
 
-        audioManager.playEnemyFire(centerX);
+        audioManager.playWeapon('cruise', centerX, centerY);
     }
 
     _findCruiseTarget() {

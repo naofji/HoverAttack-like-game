@@ -22,7 +22,7 @@ export class PlayerBullet {
         this.isPlayerOwned = true;
 
         // Play turret-like firing sound (as requested)
-        audioManager.playEnemyFire(this.x); 
+        audioManager.playWeapon('playerMg', this.x, this.y); 
     }
 
     update() {

@@ -1,0 +1,160 @@
+/**
+ * 武器の発射音。
+ *
+ * 以前は弾もミサイルも巡航ミサイルも、自機のマシンガンまでが同じ
+ * playEnemyFire を鳴らしていた。武器ごとに関数を増やすと似た合成コードが
+ * 並ぶので、爆発を playBlast にまとめたのと同じ形にしてある。
+ * 音の違いは WEAPON_SOUNDS の表だけに現れ、合成の手順は1つ。
+ *
+ * 部品は3つで、どれも省略できる。
+ *   hiss  掃引するローパスノイズ。発砲の空気、噴射のシュー音
+ *   tone  音程のある成分。銃口の芯、推進のうなり
+ *   puffs 短い破裂の連なり。ホーミングの「ボボッ」
+ */
+
+/**
+ * @typedef {object} WeaponProfile
+ * @property {{from:number,to:number,dur:number,gain:number}} [hiss]
+ *   ノイズを通すローパスを from から to へ掃引する
+ * @property {{type:string,from:number,to:number,dur:number,gain:number}} [tone]
+ * @property {{count:number,gap:number,freq:number,dur:number,gain:number}} [puffs]
+ *   gap 秒おきに count 回、freq を頂点とする破裂を置く
+ */
+
+/** @type {Record<string, WeaponProfile>} */
+export const WEAPON_SOUNDS = {
+    // --- マシンガン ---
+    // 連射するので短く軽く。長いと重なって濁る。
+    playerMg: {
+        hiss: { from: 3000, to: 800, dur: 0.06, gain: 0.079 },
+        tone: { type: 'square', from: 220, to: 90, dur: 0.04, gain: 0.04 },
+    },
+    // 自機より鈍く低い。撃たれている側だと分かるように。
+    enemyMg: {
+        hiss: { from: 1900, to: 500, dur: 0.07, gain: 0.09 },
+        tone: { type: 'square', from: 170, to: 70, dur: 0.05, gain: 0.045 },
+    },
+
+    // --- ミサイル ---
+    // 点火して加速する感じ。ローパスを開く向きに掃引すると前へ出る。
+    playerMissile: {
+        hiss: { from: 700, to: 2600, dur: 0.34, gain: 0.13 },
+        tone: { type: 'sawtooth', from: 120, to: 40, dur: 0.30, gain: 0.06 },
+    },
+    enemyMissile: {
+        hiss: { from: 550, to: 1800, dur: 0.34, gain: 0.12 },
+        tone: { type: 'sawtooth', from: 92, to: 32, dur: 0.30, gain: 0.055 },
+    },
+
+    // --- ホーミングミサイル「シュボボッ」---
+    // 「シュ」= 短い高めのノイズ、「ボボッ」= 低い破裂を3つ連ねる。
+    // 発射機から次々と押し出される感じを、間隔の短い連なりで作る。
+    homing: {
+        hiss: { from: 2200, to: 700, dur: 0.13, gain: 0.11 },
+        puffs: { count: 3, gap: 0.055, freq: 240, dur: 0.07, gain: 0.12 },
+    },
+
+    // --- 巡航ミサイル ---
+    // 太く長い。射出そのものが事件なので他より目立ってよい。
+    cruise: {
+        hiss: { from: 380, to: 1400, dur: 0.60, gain: 0.15 },
+        tone: { type: 'sawtooth', from: 70, to: 26, dur: 0.55, gain: 0.10 },
+        puffs: { count: 2, gap: 0.09, freq: 150, dur: 0.12, gain: 0.10 },
+    },
+
+    // --- グレネード ---
+    // 撃つのではなく放り出すので、抜けの良い短い一撃。
+    grenade: {
+        hiss: { from: 1200, to: 300, dur: 0.10, gain: 0.08 },
+        tone: { type: 'triangle', from: 300, to: 110, dur: 0.09, gain: 0.06 },
+    },
+};
+
+/** 減衰の下限。exponentialRamp は 0 を受け付けない。 */
+const FLOOR = 0.0008;
+
+/**
+ * プロファイルどおりに音を組み立てて鳴らす。
+ *
+ * @param {BaseAudioContext} ctx
+ * @param {AudioNode} out 接続先（パンナーや効果音バス）
+ * @param {WeaponProfile} profile
+ * @param {AudioBuffer} noiseBuffer 共有のホワイトノイズ
+ * @param {number} level 0〜1。距離で決まる音量
+ * @param {number} t0 開始時刻
+ */
+export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
+    if (profile.hiss) {
+        const { from, to, dur, gain } = profile.hiss;
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(from, t0);
+        filter.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(gain * level, t0);
+        g.gain.exponentialRampToValueAtTime(FLOOR, t0 + dur);
+
+        noise.connect(filter);
+        filter.connect(g);
+        g.connect(out);
+        noise.start(t0);
+        noise.stop(t0 + dur);
+    }
+
+    if (profile.tone) {
+        const { type, from, to, dur, gain } = profile.tone;
+        const osc = ctx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(from, t0);
+        osc.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(gain * level, t0);
+        g.gain.exponentialRampToValueAtTime(FLOOR, t0 + dur);
+
+        osc.connect(g);
+        g.connect(out);
+        osc.start(t0);
+        osc.stop(t0 + dur);
+    }
+
+    if (profile.puffs) {
+        const { count, gap, freq, dur, gain } = profile.puffs;
+        for (let i = 0; i < count; i++) {
+            const t = t0 + i * gap;
+            // 後ろの破裂ほど僅かに小さく低くして、連なりに方向を持たせる
+            const fade = 1 - i * 0.12;
+
+            const noise = ctx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(freq * 3 * fade, t);
+            filter.frequency.exponentialRampToValueAtTime(freq * 0.8, t + dur);
+            const ng = ctx.createGain();
+            ng.gain.setValueAtTime(gain * level * fade, t);
+            ng.gain.exponentialRampToValueAtTime(FLOOR, t + dur);
+            noise.connect(filter);
+            filter.connect(ng);
+            ng.connect(out);
+            noise.start(t);
+            noise.stop(t + dur);
+
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq * fade, t);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.45, t + dur);
+            const og = ctx.createGain();
+            og.gain.setValueAtTime(gain * level * 0.7 * fade, t);
+            og.gain.exponentialRampToValueAtTime(FLOOR, t + dur);
+            osc.connect(og);
+            og.connect(out);
+            osc.start(t);
+            osc.stop(t + dur);
+        }
+    }
+}

@@ -340,6 +340,7 @@ export class EnemyDrone {
         if (Math.random() < ENEMY_DRONE_GRENADE_CHANCE) {
             // Drop grenade
             const grenade = new Grenade(this.game, cx, cy, Math.PI / 2);
+            audioManager.playWeapon('grenade', cx, cy);
             grenade.isPlayerOwned = false;
             this.game.projectiles.push(grenade);
         } else {

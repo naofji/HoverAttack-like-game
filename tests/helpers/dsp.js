@@ -96,16 +96,23 @@ export function aWeight(f) {
  * A特性をかけた実効値。単純な RMS では低音を過大評価する。
  * 62Hz と 760Hz の音を比べるとその差は 10dB 近くになる。
  *
+ * 窓の選び方に注意。既定の Hann は先頭と末尾がほぼ 0 なので、**発音直後に
+ * 終わる短い音は窓に消される**。0.68秒の窓に 0.06秒の音を置くと 50dB 以上
+ * 過小に出る。持続音どうしを比べるときは Hann、短い音を比べるときは
+ * その音の長さに合わせた窓で `window: 'none'` を使うこと。
+ *
  * @param {(i:number)=>number} gen サンプルを返す関数
  * @param {number} [n] 長さ（2の冪）
+ * @param {{window?: 'hann'|'none'}} [opts]
  * @returns {number}
  */
-export function aWeightedRms(gen, n = 1 << 15) {
+export function aWeightedRms(gen, n = 1 << 15, opts = {}) {
+    const useHann = (opts.window ?? 'hann') === 'hann';
     const re = new Float64Array(n);
     const im = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-        const hann = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / n);
-        re[i] = gen(i) * hann;
+        const w = useHann ? (0.5 - 0.5 * Math.cos(2 * Math.PI * i / n)) : 1;
+        re[i] = gen(i) * w;
     }
     fft(re, im);
     let power = 0;
@@ -119,4 +126,20 @@ export function aWeightedRms(gen, n = 1 << 15) {
 /** 比をデシベルで。 */
 export function db(ratio) {
     return 20 * Math.log10(ratio);
+}
+
+/**
+ * 短い音（発砲・着弾など）の聞こえる大きさ。
+ *
+ * その音の長さに合わせた窓を矩形で使う。Hann だと先頭が削られて
+ * 短い音ほど不当に小さく出るため。長さの違う音どうしを比べられる。
+ *
+ * @param {(i:number)=>number} gen サンプルを返す関数
+ * @param {number} seconds 音の長さ
+ * @returns {number}
+ */
+export function transientLevel(gen, seconds) {
+    let n = 1;
+    while (n < seconds * SAMPLE_RATE) n <<= 1;
+    return aWeightedRms(gen, n, { window: 'none' });
 }

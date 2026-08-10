@@ -1090,7 +1090,7 @@ export const Game = {
                         this._grenadeHeldAngle, this._grenadeHeldSpeed
                     ));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
-                    audioManager.playExplosion(false, px);
+                    audioManager.playWeapon('grenade', px, py);
                     this.grenadeTrajectory = null;
                     this.grenadeWasHeld = false;
                     this._grenadeHeldAngle = null;
@@ -1114,7 +1114,7 @@ export const Game = {
                     const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
                     this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
-                    audioManager.playExplosion(false, px);
+                    audioManager.playWeapon('grenade', px, py);
                 }
                 // 長押しのリリースはキャンセル（左クリックせずに離した場合）
             }
@@ -1143,7 +1143,7 @@ export const Game = {
         this.projectiles.push(new Missile(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, angle, true));
         player.missiles = Math.max(0, Math.floor(player.missiles) - 1);
         player.missileCooldown = 15;
-        audioManager.playMissile(px);
+        audioManager.playWeapon('playerMissile', px, py);
 
         if (Math.floor(player.missiles) <= 0) {
             player.currentWeapon = 'mg';

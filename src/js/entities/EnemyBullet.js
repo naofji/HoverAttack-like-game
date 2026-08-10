@@ -21,7 +21,7 @@ export class EnemyBullet {
         this.lifetime = ENEMY_BULLET_LIFETIME;
 
         // Play firing sound
-        audioManager.playEnemyFire(this.x);
+        audioManager.playWeapon('enemyMg', this.x, this.y);
     }
 
     update() {
