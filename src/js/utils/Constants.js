@@ -426,6 +426,26 @@ export const ENEMY_LANDING_NOISE_SOFT = 800;
 export const ENEMY_LANDING_THUMP_HARD = 70;
 export const ENEMY_LANDING_THUMP_SOFT = 95;
 
+// --- ドローンの移動音 ---
+// 停止・ホバリング中は無音で、突進を始めた瞬間だけ「プーーン」と鳴る。
+// 高い方から低い方へ滑り落ちる下降のうなりで、AKIRA のフライング
+// プラットフォームの登場音が下敷き。
+//
+// 音の作り: 少しずつ音程をずらした3本のノコギリ波を同時に鳴らし
+// （うねりと厚みが出る＝あの独特の「ホロウ」な質感）、共鳴の強い
+// ローパスを音程より一段速く下降させる。フィルタが先に落ちることで
+// 「プー」から「ーン」への母音の変化が生まれる。
+export const DRONE_MOVE_FREQ_FROM = 1100;   // 開始の音程
+export const DRONE_MOVE_FREQ_TO = 260;      // 終わりの音程
+export const DRONE_MOVE_DURATION = 0.8;     // 秒
+export const DRONE_MOVE_FILTER_Q = 9;       // 共鳴の強さ。うなりの芯を作る
+export const DRONE_MOVE_FILTER_MULT = 2.2;  // フィルタは音程の何倍の高さから始めるか
+export const DRONE_MOVE_DETUNE = [-11, 0, 13];  // セント。3本のずれ
+export const DRONE_MOVE_GAIN = 0.075;
+export const DRONE_MOVE_SUB_GAIN = 0.5;     // 1オクターブ下のサイン波（重さ）
+// 連続で突進したときに音が重ならないよう、1体あたりの最短間隔を設ける
+export const DRONE_MOVE_COOLDOWN = 40;      // フレーム
+
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。
 // ただし振り切りすぎない。等パワー則で pan=0.85 だと片側の成分が 0.118 まで

@@ -16,12 +16,14 @@ import {
     ENEMY_BULLET_SPEED,
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
     EMERGENCY_DEFENSE_SIGHT_RANGE,
-    ENEMY_RECOIL_PROFILES
+    ENEMY_RECOIL_PROFILES,
+    DRONE_MOVE_COOLDOWN
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 import { tickRecoil } from '../utils/Recoil.js';
+import { audioManager } from '../audio/AudioManager.js';
 import { playDestruction } from './destruction.js';
 
 export class EnemyDrone {
@@ -33,6 +35,7 @@ export class EnemyDrone {
         this.height = ENEMY_DRONE_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        this.moveSoundTimer = 0;   // 移動音の連続を防ぐ残り時間
         this.recoilProfile = ENEMY_RECOIL_PROFILES.drone;
         this.recoilTimer = 0;
         this.hp = ENEMY_DRONE_HP;
@@ -99,6 +102,7 @@ export class EnemyDrone {
 
     /** Dash straight to the defence anchor (boosted speed via dashingToAnchor). */
     _startDashToAnchor() {
+        this._playMoveSound();
         this.state = 'dash';
         this.stateTimer = 30 + Math.random() * 30;
         this.dashTargetX = this.emergencyAnchorX - this.width / 2;
@@ -110,6 +114,7 @@ export class EnemyDrone {
         if (!this.alive) return;
 
         this.blinkTimer++;
+        if (this.moveSoundTimer > 0) this.moveSoundTimer--;
 
         // Spin propellers fast
         this.propellerAngle += (this.state === 'dash' || this.state === 'patrol') ? 1.0 : 0.4;
@@ -272,6 +277,7 @@ export class EnemyDrone {
             this.state = 'patrol';
             return;
         }
+        this._playMoveSound();
         this.state = 'dash';
         this.stateTimer = 30 + Math.random() * 30; // Dash for 0.5s - 1s
 
@@ -283,6 +289,17 @@ export class EnemyDrone {
 
         this.dashTargetX = desiredX;
         this.dashTargetY = desiredY;
+    }
+
+    /**
+     * 動き出しの「プーーン」。停止・ホバリング中は鳴らさないので、
+     * 呼ぶのは突進を始める瞬間だけ。
+     * 立て続けに状態が切り替わっても音が重ならないよう間隔を空ける。
+     */
+    _playMoveSound() {
+        if (this.moveSoundTimer > 0) return;
+        this.moveSoundTimer = DRONE_MOVE_COOLDOWN;
+        audioManager.playDroneMove(this.x + this.width / 2, this.y + this.height / 2);
     }
 
     _startHover() {
@@ -324,6 +341,7 @@ export class EnemyDrone {
     }
 
     _startKamikaze(target) {
+        this._playMoveSound();
         this.state = 'kamikaze';
         this.kamikazeTarget = target;
         this.fireTimer = ENEMY_DRONE_FIRE_INTERVAL;

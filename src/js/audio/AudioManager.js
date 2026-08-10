@@ -6,6 +6,9 @@ import {
     ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
     ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
     ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
+    DRONE_MOVE_FREQ_FROM, DRONE_MOVE_FREQ_TO, DRONE_MOVE_DURATION,
+    DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_DETUNE,
+    DRONE_MOVE_GAIN, DRONE_MOVE_SUB_GAIN,
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
@@ -488,6 +491,68 @@ export class AudioManager {
         g.gain.exponentialRampToValueAtTime(0.001, t + dur);
         osc.connect(g); g.connect(out);
         osc.start(t); osc.stop(t + dur);
+    }
+
+    /**
+     * ドローンが動き出したときの「プーーン」。高い方から低い方へ滑り落ちる。
+     *
+     * ホバリング中は鳴らさない。呼ぶのは突進を始めた瞬間だけで、持続音では
+     * ないため止める必要も無い。
+     *
+     * 音程をわずかにずらした3本のノコギリ波を重ね、共鳴の強いローパスを
+     * 音程より速く下降させる。3本のずれがうねりと厚みを生み、フィルタが
+     * 先に落ちることで「プー」から「ーン」への変化になる。
+     *
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     */
+    playDroneMove(x, y) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        const end = t + DRONE_MOVE_DURATION;
+        const out = this._out(x);
+
+        // 共鳴の強いローパス。音程より高いところから、音程より速く落ちる
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.Q.value = DRONE_MOVE_FILTER_Q;
+        filter.frequency.setValueAtTime(DRONE_MOVE_FREQ_FROM * DRONE_MOVE_FILTER_MULT, t);
+        filter.frequency.exponentialRampToValueAtTime(DRONE_MOVE_FREQ_TO * 0.8, end);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(DRONE_MOVE_GAIN * level, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+        filter.connect(gain);
+        gain.connect(out);
+
+        const voices = [];
+        for (const cents of DRONE_MOVE_DETUNE) {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.detune.value = cents;
+            osc.frequency.setValueAtTime(DRONE_MOVE_FREQ_FROM, t);
+            osc.frequency.exponentialRampToValueAtTime(DRONE_MOVE_FREQ_TO, end);
+            osc.connect(filter);
+            voices.push(osc);
+        }
+
+        // 1オクターブ下のサイン波。芯の細さを補って機体の重さを出す
+        const sub = this.ctx.createOscillator();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(DRONE_MOVE_FREQ_FROM / 2, t);
+        sub.frequency.exponentialRampToValueAtTime(DRONE_MOVE_FREQ_TO / 2, end);
+        const subGain = this.ctx.createGain();
+        subGain.gain.value = DRONE_MOVE_SUB_GAIN;
+        sub.connect(subGain);
+        subGain.connect(filter);
+        voices.push(sub);
+
+        for (const v of voices) { v.start(t); v.stop(end); }
     }
 
     /** 敵のホバー音を止める。 */
