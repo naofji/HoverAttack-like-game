@@ -354,40 +354,48 @@ test('「ガチャ」と「リ」に分かれる（等間隔にしない）', ()
     `「ガチャ」と「リ」の切れ目が足りない: ${gap.join(' / ')}秒`);
 });
 
-/** 打撃ごとのピークを順に取り出す。 */
+/**
+ * 打撃ごとのピーク。窓は次の打撃までで切る。
+ * 打撃の長さより間隔が短いことがあり、そのまま長さぶん見ると隣の頭を拾う。
+ */
 function clickPeaks(profile) {
   const buf = renderWeaponProfile(profile);
   const { count, gap, dur } = profile.clicks;
+  const at = (v, i) => (Array.isArray(v) ? (v[i] ?? v[v.length - 1]) : v);
   const peaks = [];
   let t = 0;
   for (let i = 0; i < count; i++) {
+    const span = i < count - 1 ? Math.min(dur, at(gap, i)) : dur;
     const from = Math.floor(t * SAMPLE_RATE);
-    const to = Math.min(buf.length, Math.floor((t + dur) * SAMPLE_RATE));
+    const to = Math.min(buf.length, Math.floor((t + span) * SAMPLE_RATE));
     let peak = 0;
     for (let j = from; j < to; j++) peak = Math.max(peak, Math.abs(buf[j]));
     peaks.push(peak);
-    t += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
+    t += at(gap, i);
   }
   return peaks;
 }
 
-test('打撃は後ろほど低くなる（重い部品が収まる）', () => {
-  const p = WEAPON_SOUNDS.reload;
-  assert.ok((p.clicks.step ?? 1) < 1,
-    `音程が下がっていない。上げると軽い機構に聞こえる: ${p.clicks.step}`);
-  const last = p.clicks.freq * (p.clicks.step ** (p.clicks.count - 1));
-  assert.ok(last < 700, `最後の打撃が低くない: ${Math.round(last)}Hz`);
+test('打撃の音程は「低 → 高 → 中」', () => {
+  // 単調に上げると軽い機構、単調に下げるとただの減速に聞こえる。山を作る
+  const { freq } = WEAPON_SOUNDS.reload.clicks;
+  assert.ok(Array.isArray(freq), '打撃ごとに音程を指定していない');
+  assert.equal(freq.length, 3);
+  assert.ok(freq[0] < freq[1], `1発目が2発目より低くない: ${freq.join(' / ')}Hz`);
+  assert.ok(freq[2] < freq[1], `3発目が2発目より低くない: ${freq.join(' / ')}Hz`);
+  assert.ok(freq[2] > freq[0], `3発目が1発目より高くない（中が無い）: ${freq.join(' / ')}Hz`);
 });
 
-test('最後の低い一撃が痩せない', () => {
-  // 低いほどバンドパスを通る帯域が狭まってエネルギーが減る。
-  // fade を負にして持ち上げていないと、末尾が消え入って締まらない。
+test('低い打撃が痩せない（帯域幅の差を補正している）', () => {
+  // バンドパスを通る帯域は中心周波数に比例するので、同じゲインだと
+  // 低い打撃ほど弱くなる。打撃ごとにゲインを与えて補正していないと崩れる
   const peaks = clickPeaks(WEAPON_SOUNDS.reload);
-  const ratio = peaks[peaks.length - 1] / peaks[0];
-  assert.ok(ratio > 0.5,
-    `最後の打撃が弱く、低音で終わる感じにならない: ${(ratio * 100).toFixed(0)}%`);
-  assert.ok(ratio <= 1,
-    `最後の打撃が最初より強く、頭が立たない: ${(ratio * 100).toFixed(0)}%`);
+  const max = Math.max(...peaks);
+  assert.ok(peaks[0] / max > 0.5,
+    `1発目（低）が痩せている: ${(peaks[0] / max * 100).toFixed(0)}%`);
+  assert.ok(peaks[2] / max > 0.4,
+    `3発目（中）が痩せている: ${(peaks[2] / max * 100).toFixed(0)}%`);
+  assert.equal(peaks.indexOf(max), 1, '2発目（高）が最も強くない');
 });
 
 test('リロードは一瞬で終わる（動作を待たされる感じにしない）', () => {

@@ -130,22 +130,25 @@ export function renderWeaponProfile(profile) {
         const {
             count, gap, freq, dur: d, gain, step = 1, Q = 7, metal = 2.76, fade: fadeStep = 0.18,
         } = profile.clicks;
+        const at = (v, i) => (Array.isArray(v) ? (v[i] ?? v[v.length - 1]) : v);
         let start = 0;
         for (let i = 0; i < count; i++) {
-            const fade = 1 - i * fadeStep;
-            const f = freq * Math.pow(step, i);
+            const fade = Array.isArray(gain) ? 1 : 1 - i * fadeStep;
+            const f = Array.isArray(freq) ? at(freq, i) : freq * Math.pow(step, i);
+            const gi = at(gain, i);
+            if (!(gi > 0)) { start += at(gap, i); continue; }
             const off = Math.floor(start * SAMPLE_RATE);
             const len = Math.floor(d * SAMPLE_RATE);
             for (const [center, q, levelScale] of [[f, Q, 1], [f * metal, Q * 1.5, 0.45]]) {
                 const noise = whiteNoise(n, 23 + i);
                 const bp = bandpass(center, q);
-                const g0 = gain * levelScale * fade;
+                const g0 = gi * levelScale * fade;
                 for (let j = 0; j < len && off + j < n; j++) {
                     const k = (j / SAMPLE_RATE) / d;
                     buf[off + j] += bp(noise[j]) * g0 * Math.pow(FLOOR / g0, k);
                 }
             }
-            start += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
+            start += at(gap, i);
         }
     }
 

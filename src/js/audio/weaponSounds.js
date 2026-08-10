@@ -25,12 +25,15 @@
  * @property {{count:number,gap:number,freq:number,dur:number,gain:number,bright?:number}} [puffs]
  *   gap 秒おきに count 回、freq を頂点とする破裂を置く。
  *   bright はローパスの開始位置（freq の何倍か）。大きいほど破裂が硬く鳴る
- * @property {{count:number,gap:number|number[],freq:number,dur:number,gain:number,
- *   step?:number,Q?:number,metal?:number,fade?:number}} [clicks]
- *   金属の打撃。gap は配列で1回ごとに変えられる（等間隔だと機械的すぎる）。
- *   step は打撃ごとの音程の倍率、metal は重ねる非整数倍の比。
- *   fade は打撃ごとに音量を落とす割合。負の値を与えると逆に持ち上がる
- *   （音程を下げると通る帯域が狭まって痩せるので、その補正に使う）
+ * @property {{count:number, gap:number|number[], freq:number|number[],
+ *   dur:number, gain:number|number[], step?:number, Q?:number,
+ *   metal?:number, fade?:number}} [clicks]
+ *   金属の打撃。gap / freq / gain は配列で1打撃ごとに変えられる。
+ *   等間隔・単調変化だと機械の動きに聞こえないので、不揃いにするのが要点。
+ *   freq が数値のときだけ step（打撃ごとの音程の倍率）が効き、
+ *   gain が数値のときだけ fade（打撃ごとに音量を落とす割合）が効く。
+ *   fade は負の値で逆に持ち上がる（低い音程は通る帯域が狭く痩せるため）。
+ *   metal は重ねる非整数倍の比
  */
 
 /** @type {Record<string, WeaponProfile>} */
@@ -91,16 +94,20 @@ export const WEAPON_SOUNDS = {
     // 弾倉が入って遊底が閉じる、という機構の音。打撃を3つ、間隔を不揃いに
     // 置いて「ガチャ」＋「リ」にする。等間隔だと拍に聞こえて機械的すぎる。
     //
-    // 打撃ごとに音程を下げる（1000 → 720 → 518Hz）。上げていくと軽い機構に
-    // 聞こえる。下げて重い部品が収まる形にした。
-    // ただし低いほどバンドパスを通る帯域が狭まって痩せるので、fade を負に
-    // して持ち上げ、最後の低い一撃が先頭の 70% の強さで残るようにしてある。
+    // 音程は「低 → 高 → 中」。重い部品が落ちて（低）、噛み合い（高）、
+    // 収まる（中）という流れ。単調に上げると軽い機構、単調に下げると
+    // ただの減速に聞こえるので、山を作るのが要点。
+    //
+    // ゲインは打撃ごとに指定する。バンドパスを通る帯域は中心周波数に比例して
+    // 広がるため、同じゲインだと低い打撃ほど痩せる。実測した効率で割って、
+    // 聞こえる強さが 0.75 / 1.00 / 0.61 になるよう逆算した値。
     reload: {
         clicks: {
-            count: 3, gap: [0.045, 0.085], freq: 1000, step: 0.72,
-            // 鋭い共鳴はノイズのエネルギーの大半を捨てるので、他の音と同じ
-            // 感覚の 0.115 では -16dB まで落ちる。実測から決めた補正込みの値
-            dur: 0.055, gain: 0.398, Q: 7, metal: 2.76, fade: -0.12,
+            count: 3,
+            gap: [0.045, 0.085],
+            freq: [520, 1600, 900],
+            gain: [0.883, 0.385, 0.369],
+            dur: 0.055, Q: 7, metal: 2.76,
         },
     },
 
@@ -208,10 +215,16 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
             count, gap, freq, dur, gain, step = 1, Q = 7, metal = 2.76, fade: fadeStep = 0.18,
         } = profile.clicks;
 
+        /** 配列なら i 番目、足りなければ最後の値。数値ならそのまま。 */
+        const at = (v, i) => (Array.isArray(v) ? (v[i] ?? v[v.length - 1]) : v);
+
         let t = t0;
         for (let i = 0; i < count; i++) {
-            const fade = 1 - i * fadeStep;
-            const f = freq * Math.pow(step, i);
+            const fade = Array.isArray(gain) ? 1 : 1 - i * fadeStep;
+            const f = Array.isArray(freq) ? at(freq, i) : freq * Math.pow(step, i);
+            const g0 = at(gain, i);
+            // 0 以下だと exponentialRamp が発散して出力全体が NaN になる
+            if (!(g0 > 0)) { t += at(gap, i); continue; }
 
             // 芯の共鳴と、整数倍でない共鳴。後者が金属らしさを作る
             for (const [center, q, levelScale] of [[f, Q, 1], [f * metal, Q * 1.5, 0.45]]) {
@@ -224,7 +237,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
                 filter.Q.value = q;
 
                 const g = ctx.createGain();
-                g.gain.setValueAtTime(gain * levelScale * level * fade, t);
+                g.gain.setValueAtTime(g0 * levelScale * level * fade, t);
                 g.gain.exponentialRampToValueAtTime(FLOOR, t + dur);
 
                 noise.connect(filter);
@@ -234,7 +247,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
                 noise.stop(t + dur);
             }
 
-            t += Array.isArray(gap) ? (gap[i] ?? gap[gap.length - 1]) : gap;
+            t += at(gap, i);
         }
     }
 }
