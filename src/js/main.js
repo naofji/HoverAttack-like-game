@@ -21,7 +21,7 @@ import {
     HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
-    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED, ENEMY_HOVER_AUDIBLE_RANGE,
+    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
@@ -687,30 +687,23 @@ export const Game = {
     },
 
     /**
-     * 音の聞き手。自機が動いているときは自機、ドック中や死亡中は母艦。
-     * @returns {{x:number,y:number}|null} 中心座標
+     * いま映っている範囲。音量の判定に使う。
+     * 左右の振り分けと同じくカメラ基準にして、見えているものと聞こえるものを
+     * 一致させる。
+     * @returns {{cx:number, cy:number, halfW:number, halfH:number}}
      */
-    _listenerPos() {
-        const src = (this.player && this.player.alive && !this.player.docked)
-            ? this.player
-            : this.carrier;
-        if (!src) return null;
-        return { x: src.x + src.width / 2, y: src.y + src.height / 2 };
+    _viewRect() {
+        const halfW = this.canvas.width / 2;
+        const halfH = this.canvas.height / 2;
+        return { cx: this.camera.x + halfW, cy: this.camera.y + halfH, halfW, halfH };
     },
 
     /**
-     * 敵のホバー音。いちばん近くでホバーしている敵の距離で音量を決め、
-     * その敵の横位置で左右に振る。画面外から近づいてくる敵に気づける。
+     * 敵のホバー音。画面に映っている敵は満音量、画面外は半分で、
+     * 1画面ぶん離れると聞こえなくなる。左右はその敵の横位置で振る。
      */
     _updateEnemyHoverSound() {
-        const listener = this._listenerPos();
-        if (!listener) {
-            audioManager.stopEnemyHover();
-            return;
-        }
-        const nearest = nearestHoveringEnemy(
-            this.enemies, listener.x, listener.y, ENEMY_HOVER_AUDIBLE_RANGE,
-        );
+        const nearest = nearestHoveringEnemy(this.enemies, this._viewRect());
         if (!nearest) {
             audioManager.stopEnemyHover();
             return;

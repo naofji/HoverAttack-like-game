@@ -1,82 +1,134 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { distanceVolume, loudestHoverVolume, nearestHoveringEnemy, stereoPan } from '../src/js/utils/audioFalloff.js';
 import {
-  ENEMY_HOVER_AUDIBLE_RANGE, AUDIO_PAN_RANGE, AUDIO_PAN_MAX, CANVAS_WIDTH,
+  offscreenDistance, hoverVolume, nearestHoveringEnemy, stereoPan,
+} from '../src/js/utils/audioFalloff.js';
+import {
+  AUDIO_PAN_RANGE, AUDIO_PAN_MAX, CANVAS_WIDTH, CANVAS_HEIGHT,
+  ENEMY_HOVER_OFFSCREEN_GAIN, ENEMY_HOVER_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
 
-const R = ENEMY_HOVER_AUDIBLE_RANGE;
+/** 画面がワールド原点あたりを映している状態。 */
+const VIEW = {
+  cx: 2000, cy: 1000,
+  halfW: CANVAS_WIDTH / 2, halfH: CANVAS_HEIGHT / 2,
+};
 
-test('距離0で最大、可聴範囲の外で無音', () => {
-  assert.equal(distanceVolume(0, R), 1);
-  assert.equal(distanceVolume(R, R), 0);
-  assert.equal(distanceVolume(R * 2, R), 0);
+// --- 画面からのはみ出し -------------------------------------------------------
+
+test('画面の中にいれば 0', () => {
+  assert.equal(offscreenDistance(VIEW.cx, VIEW.cy, VIEW), 0);
+  assert.equal(offscreenDistance(VIEW.cx + VIEW.halfW, VIEW.cy, VIEW), 0, '右端が外扱い');
+  assert.equal(offscreenDistance(VIEW.cx, VIEW.cy - VIEW.halfH, VIEW), 0, '上端が外扱い');
 });
 
-test('距離が伸びるほど単調に小さくなる', () => {
-  let prev = Infinity;
-  for (let d = 0; d <= R; d += R / 20) {
-    const v = distanceVolume(d, R);
-    assert.ok(v <= prev, `${d}px で大きくなった: ${prev} -> ${v}`);
-    prev = v;
+test('外に出たぶんだけ増える（縦横それぞれ）', () => {
+  assert.equal(offscreenDistance(VIEW.cx + VIEW.halfW + 100, VIEW.cy, VIEW), 100);
+  assert.equal(offscreenDistance(VIEW.cx - VIEW.halfW - 40, VIEW.cy, VIEW), 40);
+  assert.equal(offscreenDistance(VIEW.cx, VIEW.cy + VIEW.halfH + 70, VIEW), 70);
+});
+
+test('斜めは大きい方を採る（平方根を取らない）', () => {
+  const d = offscreenDistance(VIEW.cx + VIEW.halfW + 30, VIEW.cy + VIEW.halfH + 90, VIEW);
+  assert.equal(d, 90);
+});
+
+// --- ホバー音の音量 -----------------------------------------------------------
+
+test('画面に映っている敵は一律で満音量', () => {
+  // これが今回の主眼。以前は距離の2乗で減衰させていたため、可聴範囲(480px)が
+  // 画面の半分(512px)より狭く、映っている敵が既にほぼ無音だった。
+  for (const dx of [0, 128, 256, 384, 511]) {
+    assert.equal(hoverVolume(VIEW.cx + dx, VIEW.cy, VIEW), 1,
+      `画面内 ${dx}px で減衰している`);
+  }
+  for (const dy of [0, 200, 383]) {
+    assert.equal(hoverVolume(VIEW.cx, VIEW.cy + dy, VIEW), 1,
+      `画面内（縦 ${dy}px）で減衰している`);
   }
 });
 
-test('近いほど急に大きくなる（線形ではない）', () => {
-  // 線形なら中間距離でちょうど 0.5 になる。実際の音の減衰は近距離ほど効くので、
-  // 中間では 0.5 より小さくなってほしい
-  assert.ok(distanceVolume(R / 2, R) < 0.5,
-    `中間距離で線形と同じ: ${distanceVolume(R / 2, R)}`);
+test('画面を出た瞬間に半分になる', () => {
+  const justOut = hoverVolume(VIEW.cx + VIEW.halfW + 1, VIEW.cy, VIEW);
+  assert.ok(justOut < ENEMY_HOVER_OFFSCREEN_GAIN
+    && justOut > ENEMY_HOVER_OFFSCREEN_GAIN * 0.99,
+    `半分になっていない: ${justOut}`);
 });
 
-test('負の距離でも壊れない', () => {
-  assert.equal(distanceVolume(-10, R), 1);
+test('画面外はさらに離れるほど小さくなり、1画面ぶんで無音', () => {
+  let prev = Infinity;
+  for (let out = 0; out <= ENEMY_HOVER_OFFSCREEN_FADE; out += 64) {
+    const v = hoverVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
+    assert.ok(v <= prev, `${out}px で大きくなった: ${prev} -> ${v}`);
+    prev = v;
+  }
+  assert.equal(hoverVolume(VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE, VIEW.cy, VIEW), 0);
 });
 
-// --- 複数の敵から1つの音量を決める ---
-
-const hovering = (x, y) => ({ x, y, width: 16, height: 24, alive: true, hovering: true });
-
-test('ホバーしている敵がいなければ無音', () => {
-  const enemies = [{ ...hovering(0, 0), hovering: false }];
-  assert.equal(loudestHoverVolume(enemies, 0, 0, R), 0);
+test('遠くの敵は完全に無音になる', () => {
+  // ここを 0 にしないと、マップのどこかに敵がいる限り低い唸りが鳴り続ける
+  assert.equal(hoverVolume(VIEW.cx + 99999, VIEW.cy, VIEW), 0);
+  assert.equal(hoverVolume(VIEW.cx, VIEW.cy - 99999, VIEW), 0);
 });
 
-test('死んだ敵は数えない', () => {
-  const enemies = [{ ...hovering(0, 0), alive: false }];
-  assert.equal(loudestHoverVolume(enemies, 0, 0, R), 0);
+test('左右対称', () => {
+  for (const out of [50, 200, 400]) {
+    assert.equal(
+      hoverVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW),
+      hoverVolume(VIEW.cx - VIEW.halfW - out, VIEW.cy, VIEW),
+      `${out}px で非対称`,
+    );
+  }
 });
 
-test('いちばん近い敵の音量になる（合計ではない）', () => {
-  const near = hovering(50, 0);
-  const far = hovering(R - 10, 0);
-  const both = loudestHoverVolume([far, near], 8, 12, R);
-  const onlyNear = loudestHoverVolume([near], 8, 12, R);
-  assert.ok(Math.abs(both - onlyNear) < 1e-9,
-    `合計されている: 2体 ${both} / 近い1体 ${onlyNear}`);
+// --- いちばん大きく聞こえる敵の選別 -------------------------------------------
+
+/** 画面中心から dx,dy だけずれた位置にホバーする敵。 */
+function hoverer(dx, dy = 0) {
+  return {
+    x: VIEW.cx + dx - 8, y: VIEW.cy + dy - 12,
+    width: 16, height: 24, alive: true, hovering: true,
+  };
+}
+
+test('ホバー中の敵がいなければ null（音を止められる）', () => {
+  const view = VIEW;
+  assert.equal(nearestHoveringEnemy([], view), null);
+  assert.equal(nearestHoveringEnemy(null, view), null);
+  assert.equal(nearestHoveringEnemy([{ ...hoverer(0), hovering: false }], view), null);
+  assert.equal(nearestHoveringEnemy([{ ...hoverer(0), alive: false }], view), null);
 });
 
-test('敵が増えても音量が1を超えない', () => {
-  const many = Array.from({ length: 20 }, (_, i) => hovering(i * 2, 0));
-  assert.ok(loudestHoverVolume(many, 0, 0, R) <= 1);
+test('遠すぎる敵しかいなければ null', () => {
+  assert.equal(nearestHoveringEnemy([hoverer(99999)], VIEW), null);
 });
 
-test('遠ざかると小さくなる', () => {
-  const near = loudestHoverVolume([hovering(100, 0)], 0, 0, R);
-  const far = loudestHoverVolume([hovering(400, 0)], 0, 0, R);
-  assert.ok(far < near, `遠いほうが大きい: 近 ${near} / 遠 ${far}`);
+test('いちばん大きく聞こえる1体を返す（合計しないので青天井にならない）', () => {
+  const offscreen = VIEW.halfW + 200;
+  const best = nearestHoveringEnemy([hoverer(offscreen), hoverer(100)], VIEW);
+  assert.equal(best.volume, 1, '画面内の敵より画面外を選んでいる');
+  assert.ok(Math.abs(best.x - (VIEW.cx + 100)) < 1e-6);
+
+  // 敵を増やしても音量は1体ぶんのまま
+  const crowd = nearestHoveringEnemy(
+    [hoverer(0), hoverer(50), hoverer(100), hoverer(150)], VIEW,
+  );
+  assert.equal(crowd.volume, 1, `音量が1体ぶんを超えた: ${crowd.volume}`);
 });
 
-test('敵の中心で距離を測る（左上ではない）', () => {
-  // 幅16・高さ24 の敵。中心は (x+8, y+12)
-  const e = hovering(100, 100);
-  const atCenter = loudestHoverVolume([e], 108, 112, R);
-  assert.equal(atCenter, 1, '中心にいるのに最大音量でない');
+test('画面内に誰もいなければ、いちばん近い画面外の敵を拾う', () => {
+  const near = VIEW.halfW + 100;
+  const far = VIEW.halfW + 400;
+  const best = nearestHoveringEnemy([hoverer(far), hoverer(near)], VIEW);
+  assert.ok(Math.abs(best.x - (VIEW.cx + near)) < 1e-6, '遠い方を選んでいる');
+  assert.ok(best.volume < ENEMY_HOVER_OFFSCREEN_GAIN);
 });
 
-test('敵の配列が無くても壊れない', () => {
-  assert.equal(loudestHoverVolume(null, 0, 0, R), 0);
-  assert.equal(loudestHoverVolume([], 0, 0, R), 0);
+test('選ばれた敵の位置で左右に振れる', () => {
+  const right = nearestHoveringEnemy([hoverer(300)], VIEW);
+  const left = nearestHoveringEnemy([hoverer(-300)], VIEW);
+  assert.ok(stereoPan(right.x, VIEW.cx) > 0, '右の敵が右から聞こえない');
+  assert.ok(stereoPan(left.x, VIEW.cx) < 0, '左の敵が左から聞こえない');
 });
 
 // --- 左右の振り分け -----------------------------------------------------------
@@ -99,65 +151,31 @@ test('離れるほど端に寄る（単調）', () => {
   }
 });
 
-test('左右に振り切っても片耳だけにはしない', () => {
-  // 完全に片方へ振るとヘッドホンで不自然になる
+test('振り切っても片側の成分を残す', () => {
+  // 等パワー則では pan が 1 に近づくほど片側が痩せ、モノラル環境で目減りする。
+  // pan=0.85 だと -2.1dB 落ちて「遠くなった」と感じたため上限を下げてある。
   assert.equal(stereoPan(99999, 0), AUDIO_PAN_MAX);
   assert.equal(stereoPan(-99999, 0), -AUDIO_PAN_MAX);
-  assert.ok(AUDIO_PAN_MAX < 1, `振り切っている: ${AUDIO_PAN_MAX}`);
+  assert.ok(AUDIO_PAN_MAX <= 0.7, `振り切りすぎ: ${AUDIO_PAN_MAX}`);
 });
 
-test('画面端の音源はほぼ振り切る（画面内の位置が伝わる）', () => {
-  // 可聴範囲と揃っていないと、聞こえているのに中央から鳴る音が出る
+test('画面端の音源は左右がはっきり分かれる', () => {
   const atEdge = Math.abs(stereoPan(CANVAS_WIDTH / 2, 0));
-  assert.ok(atEdge > AUDIO_PAN_MAX * 0.8,
-    `画面端でも中央寄り: ${atEdge.toFixed(2)}`);
+  assert.ok(atEdge > AUDIO_PAN_MAX * 0.8, `画面端でも中央寄り: ${atEdge.toFixed(2)}`);
+  // 等パワー則での左右差が 6dB 以上あれば方向は聞き分けられる
+  const x = (atEdge + 1) / 2;
+  const diff = 20 * Math.log10(Math.sin(x * Math.PI / 2) / Math.cos(x * Math.PI / 2));
+  assert.ok(diff >= 6, `左右差が小さく方向が分からない: ${diff.toFixed(1)}dB`);
 });
 
-test('左右対称', () => {
+test('左右対称（パン）', () => {
   for (const dx of [50, 200, 400, 800]) {
     assert.ok(Math.abs(stereoPan(dx, 0) + stereoPan(-dx, 0)) < 1e-9, `${dx}px で非対称`);
   }
 });
 
-// --- いちばん近い敵の選別 -----------------------------------------------------
-
-function hoverer(x, y = 0) {
-  return { x, y, width: 16, height: 24, alive: true, hovering: true };
-}
-
-test('ホバー中の敵がいなければ null（音を止められる）', () => {
-  assert.equal(nearestHoveringEnemy([], 0, 0, R), null);
-  assert.equal(nearestHoveringEnemy([{ ...hoverer(0), hovering: false }], 0, 0, R), null);
-  assert.equal(nearestHoveringEnemy([{ ...hoverer(0), alive: false }], 0, 0, R), null);
-});
-
-test('可聴範囲の外しかいなければ null', () => {
-  assert.equal(nearestHoveringEnemy([hoverer(R * 2)], 0, 0, R), null);
-});
-
-test('いちばん近い1体を返す（合計しないので敵が増えても青天井にならない）', () => {
-  const near = nearestHoveringEnemy([hoverer(300), hoverer(100), hoverer(200)], 0, 12, R);
-  assert.ok(Math.abs(near.x - 108) < 1e-6, `いちばん近い敵を選んでいない: ${near.x}`);
-
-  // 敵を増やしても音量は最も近い1体ぶんのまま
-  const crowd = nearestHoveringEnemy(
-    [hoverer(100), hoverer(110), hoverer(120), hoverer(130)], 0, 12, R,
-  );
-  assert.ok(crowd.volume <= 1, `音量が1を超えた: ${crowd.volume}`);
-  assert.ok(Math.abs(crowd.volume - near.volume) < 1e-6, '敵の数で音量が変わっている');
-});
-
-test('loudestHoverVolume は従来どおり音量だけを返す', () => {
-  const enemies = [hoverer(100), hoverer(300)];
-  const near = nearestHoveringEnemy(enemies, 0, 12, R);
-  assert.equal(loudestHoverVolume(enemies, 0, 12, R), near.volume);
-  assert.equal(loudestHoverVolume([], 0, 12, R), 0);
-});
-
-test('選ばれた敵の位置で左右に振れる（右の敵は右から聞こえる）', () => {
-  const listenerX = 500;
-  const right = nearestHoveringEnemy([hoverer(600)], listenerX, 12, R);
-  const left = nearestHoveringEnemy([hoverer(400)], listenerX, 12, R);
-  assert.ok(stereoPan(right.x, listenerX) > 0, '右の敵が右から聞こえない');
-  assert.ok(stereoPan(left.x, listenerX) < 0, '左の敵が左から聞こえない');
+test('画面の縦横は音の判定と食い違わない', () => {
+  assert.equal(VIEW.halfW, CANVAS_WIDTH / 2);
+  assert.equal(VIEW.halfH, CANVAS_HEIGHT / 2);
+  assert.equal(AUDIO_PAN_RANGE, CANVAS_WIDTH / 2, 'パンの範囲が画面幅とずれている');
 });
