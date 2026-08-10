@@ -384,6 +384,24 @@ export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマ�
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
+// --- ホバー音の音作り ---
+// 自機・敵とも「共鳴させたノイズ」が主体。回転翼の風切り音に近い。
+// 自機は RPM に追従して最大 PLAYER_HOVER_MAX_FREQ*2 = 1200Hz まで上がる。
+export const PLAYER_HOVER_MAX_FREQ = 600;
+
+// 敵は同じ音作りだが、自機と混ざっても区別できるよう性格を変えてある。
+// (1) 中心を 760Hz に下げる（自機の 1200Hz より低く、耳では別物に聞こえる）
+// (2) Q を緩めて痩せさせる（自機は 5。細く鋭いほど「自分の機体」らしい）
+// (3) 中心周波数をゆっくり揺らす。この「ふらつき」が最も分かりやすい差で、
+//     自機の音は揺れないため、鳴っているのが敵だと即座に分かる。
+export const ENEMY_HOVER_NOISE_FREQ = 760;
+export const ENEMY_HOVER_NOISE_Q = 3.5;
+export const ENEMY_HOVER_WOBBLE_HZ = 5.5;    // 揺れの速さ
+export const ENEMY_HOVER_WOBBLE_DEPTH = 130; // 揺れの幅（Hz）
+// 高域だけだと軽いので、低い唸りを薄く足して機体の重さを出す
+export const ENEMY_HOVER_BODY_FREQ = 200;
+export const ENEMY_HOVER_BODY_GAIN = 0.35;
+
 // --- 左右の振り分け（ステレオパン） ---
 // 画面端の音源がほぼ振り切るよう、可聴範囲は画面の半分に合わせる。
 // ただし振り切りすぎない。等パワー則で pan=0.85 だと片側の成分が 0.118 まで

@@ -1,7 +1,10 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
 import {
-    ENEMY_HOVER_MAX_GAIN,
+    ENEMY_HOVER_MAX_GAIN, PLAYER_HOVER_MAX_FREQ,
+    ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
+    ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
+    ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE,
 } from '../utils/Constants.js';
@@ -175,7 +178,7 @@ export class AudioManager {
 
         // Modulate pitch based on RPM
         const minFreq = 10;
-        const maxFreq = 600;
+        const maxFreq = PLAYER_HOVER_MAX_FREQ;
         const freq = minFreq + (maxFreq - minFreq) * this.hoverRPM;
 
         // Apply frequency to both the oscillator and the noise filter
@@ -323,35 +326,46 @@ export class AudioManager {
         }
         if (!this._prepare()) return;
 
-        if (!this.enemyHoverOsc) {
-            this.enemyHoverOsc = this.ctx.createOscillator();
+        if (!this.enemyHoverNoise) {
             this.enemyHoverNoise = this.ctx.createBufferSource();
-            this.enemyHoverGain = this.ctx.createGain();
-
-            this.enemyHoverOsc.type = 'sawtooth';
-            this.enemyHoverOsc.frequency.value = 62;   // 自機のホバーより低い
-
             this.enemyHoverNoise.buffer = this.noiseBuffer;
             this.enemyHoverNoise.loop = true;
+            this.enemyHoverGain = this.ctx.createGain();
+            this.enemyHoverGain.gain.value = 0;
 
-            const filter = this.ctx.createBiquadFilter();
-            filter.type = 'bandpass';
-            filter.frequency.value = 420;
-            filter.Q.value = 2.5;
+            // 主体は共鳴させたノイズ。自機と同じ音作りだが中心を下げてある
+            const air = this.ctx.createBiquadFilter();
+            air.type = 'bandpass';
+            air.frequency.value = ENEMY_HOVER_NOISE_FREQ;
+            air.Q.value = ENEMY_HOVER_NOISE_Q;
 
-            const noiseGain = this.ctx.createGain();
-            noiseGain.gain.value = 0.5;
+            // 中心周波数をゆっくり揺らす。自機の音は揺れないので、
+            // この「ふらつき」だけで鳴っているのが敵だと分かる
+            this.enemyHoverLfo = this.ctx.createOscillator();
+            this.enemyHoverLfo.type = 'sine';
+            this.enemyHoverLfo.frequency.value = ENEMY_HOVER_WOBBLE_HZ;
+            const wobble = this.ctx.createGain();
+            wobble.gain.value = ENEMY_HOVER_WOBBLE_DEPTH;
+            this.enemyHoverLfo.connect(wobble);
+            wobble.connect(air.frequency);
+
+            // 高域だけだと軽いので、同じノイズを低く濾して機体の重さを足す
+            const body = this.ctx.createBiquadFilter();
+            body.type = 'lowpass';
+            body.frequency.value = ENEMY_HOVER_BODY_FREQ;
+            const bodyGain = this.ctx.createGain();
+            bodyGain.gain.value = ENEMY_HOVER_BODY_GAIN;
 
             // 持続音なのでパンナーを持ち続け、毎フレーム値だけ更新する
             this.enemyHoverPanner = (typeof this.ctx.createStereoPanner === 'function')
                 ? this.ctx.createStereoPanner()
                 : null;
 
-            this.enemyHoverGain.gain.value = 0;
-            this.enemyHoverOsc.connect(this.enemyHoverGain);
-            this.enemyHoverNoise.connect(filter);
-            filter.connect(noiseGain);
-            noiseGain.connect(this.enemyHoverGain);
+            this.enemyHoverNoise.connect(air);
+            air.connect(this.enemyHoverGain);
+            this.enemyHoverNoise.connect(body);
+            body.connect(bodyGain);
+            bodyGain.connect(this.enemyHoverGain);
             if (this.enemyHoverPanner) {
                 this.enemyHoverGain.connect(this.enemyHoverPanner);
                 this.enemyHoverPanner.connect(this._seDest());
@@ -359,8 +373,8 @@ export class AudioManager {
                 this.enemyHoverGain.connect(this._seDest());
             }
 
-            this.enemyHoverOsc.start();
             this.enemyHoverNoise.start();
+            this.enemyHoverLfo.start();
         }
 
         // 急に鳴り始めると耳につくので、目標値へ滑らかに寄せる
@@ -379,16 +393,16 @@ export class AudioManager {
     stopEnemyHover() {
         if (!this.enemyHoverGain) return;
         this.enemyHoverGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.10);
-        const osc = this.enemyHoverOsc;
         const noise = this.enemyHoverNoise;
-        this.enemyHoverOsc = null;
+        const lfo = this.enemyHoverLfo;
         this.enemyHoverNoise = null;
+        this.enemyHoverLfo = null;
         this.enemyHoverGain = null;
         this.enemyHoverPanner = null;
         setTimeout(() => {
             try {
-                osc.stop(); osc.disconnect();
                 noise.stop(); noise.disconnect();
+                if (lfo) { lfo.stop(); lfo.disconnect(); }
             } catch (e) { /* 既に停止 */ }
         }, 250);
     }
