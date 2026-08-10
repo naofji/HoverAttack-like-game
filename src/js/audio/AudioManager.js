@@ -5,6 +5,7 @@ import {
     ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
     ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
     ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN, ENEMY_HOVER_MAKEUP,
+    ENEMY_HOVER_ATTACK, ENEMY_HOVER_RELEASE,
     ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
     DRONE_MOVE_FREQ_FROM, DRONE_MOVE_FREQ_TO, DRONE_MOVE_DURATION,
     DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
@@ -350,8 +351,14 @@ export class AudioManager {
      * @param {number} [sourceX] その敵のワールドX。左右の振り分けに使う
      */
     setEnemyHover(volume, sourceX) {
+        // 無音になっても音源は壊さない。敵の噴射は細切れなので、その都度
+        // 作り直すと毎回ゼロから立ち上がることになり、音が痩せる。
+        // 実測で平均音量が 1〜5dB 変わる。本当に止めるのは stopEnemyHover。
         if (volume <= 0) {
-            this.stopEnemyHover();
+            if (this.enemyHoverGain) {
+                this.enemyHoverGain.gain.setTargetAtTime(
+                    0, this.ctx.currentTime, ENEMY_HOVER_RELEASE);
+            }
             return;
         }
         if (!this._prepare()) return;
@@ -407,9 +414,13 @@ export class AudioManager {
             this.enemyHoverLfo.start();
         }
 
-        // 急に鳴り始めると耳につくので、目標値へ滑らかに寄せる
+        // 立ち上がりは速く、減衰は遅く。噴射が細切れでも音が途切れない。
+        // 対称にすると噴射の切れ目ごとにしぼんで「鳴っていない」印象になる。
+        const target = volume * ENEMY_HOVER_MAX_GAIN * ENEMY_HOVER_MAKEUP;
+        const rising = target > this.enemyHoverGain.gain.value;
         this.enemyHoverGain.gain.setTargetAtTime(
-            volume * ENEMY_HOVER_MAX_GAIN * ENEMY_HOVER_MAKEUP, this.ctx.currentTime, 0.08,
+            target, this.ctx.currentTime,
+            rising ? ENEMY_HOVER_ATTACK : ENEMY_HOVER_RELEASE,
         );
         if (this.enemyHoverPanner) {
             // 急に左右が飛ぶと不快なので、音量と同じく滑らかに寄せる

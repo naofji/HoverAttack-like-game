@@ -314,6 +314,9 @@ export const Game = {
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
+        // 敵のホバー音は音源を残したまま鳴らし続ける作りなので、
+        // ミッションを離れるここで本当に止める
+        audioManager.stopEnemyHover();
         if (state === 'local_ranking_display') {
             this.localRankIndex = -1;
             this.globalRankIndex = -1;
@@ -704,8 +707,10 @@ export const Game = {
      */
     _updateEnemyHoverSound() {
         const nearest = nearestHoveringEnemy(this.enemies, this._viewRect());
+        // 聞こえる敵が居なくなっても止めるのではなく 0 を渡す。音源を残した
+        // まま滑らかに引くため。本当に止めるのはミッションを抜けるとき。
         if (!nearest) {
-            audioManager.stopEnemyHover();
+            audioManager.setEnemyHover(0);
             return;
         }
         audioManager.setEnemyHover(nearest.volume, nearest.x);

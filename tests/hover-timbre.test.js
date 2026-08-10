@@ -8,6 +8,7 @@ import {
   ENEMY_HOVER_WOBBLE_HZ, ENEMY_HOVER_WOBBLE_DEPTH,
   ENEMY_HOVER_BODY_FREQ, ENEMY_HOVER_BODY_GAIN,
   ENEMY_HOVER_MAX_GAIN, ENEMY_HOVER_MAKEUP,
+  ENEMY_HOVER_ATTACK, ENEMY_HOVER_RELEASE,
 } from '../src/js/utils/Constants.js';
 
 /** 自機のホバー音のノイズ共鳴のピーク（playHover が freq*2 を使う）。 */
@@ -241,4 +242,68 @@ test('補正倍率を外すと聞こえなくなる（この補正が効いて�
   const loss = db(withoutMakeup / playerHoverLevel());
   assert.ok(loss < -6,
     `補正なしでも十分な音量になっており、補正の意味が説明できない: ${loss.toFixed(1)}dB`);
+});
+
+// --- 鳴っている時間 -------------------------------------------------------------
+//
+// 「音が弱い」の原因は音量ではなく持続時間だった。敵の hovering フラグは
+// 推進を噴いた瞬間だけ立つので、細切れの噴射でも音が痩せないことを見る。
+
+/** setTargetAtTime を1フレーム刻みで再現し、平均音量を返す。 */
+function averageGain(pattern, { attack, release, teardown }) {
+  let g = 0;
+  let sum = 0;
+  const dt = 1 / 60;
+  for (const on of pattern) {
+    if (!on && teardown) { g = 0; sum += g; continue; }
+    const tau = on ? attack : release;
+    g += (on - g) * (1 - Math.exp(-dt / tau));
+    sum += g;
+  }
+  return sum / pattern.length;
+}
+
+/** 7フレーム噴いて18フレーム休む、を繰り返す噴射（standard の実測に近い）。 */
+function burstyPattern(onFrames = 7, offFrames = 18, total = 1800) {
+  const out = [];
+  while (out.length < total) {
+    for (let i = 0; i < onFrames; i++) out.push(1);
+    for (let i = 0; i < offFrames; i++) out.push(0);
+  }
+  return out.slice(0, total);
+}
+
+test('立ち上がりは減衰より速い（細切れの噴射でも音が立つ）', () => {
+  assert.ok(ENEMY_HOVER_ATTACK < ENEMY_HOVER_RELEASE,
+    `対称な包絡では噴射の切れ目ごとにしぼむ: ${ENEMY_HOVER_ATTACK} / ${ENEMY_HOVER_RELEASE}`);
+  // 立ち上がりが遅いと短い噴射で満音量に届かない
+  const reach = 1 - Math.exp(-(7 / 60) / ENEMY_HOVER_ATTACK);
+  assert.ok(reach > 0.9, `7フレームの噴射で ${(reach * 100).toFixed(0)}% にしか届かない`);
+});
+
+test('減衰は長すぎない（敵が去っても鳴り続けない）', () => {
+  // 5τ でほぼ消える
+  assert.ok(ENEMY_HOVER_RELEASE * 5 < 2.5,
+    `消えるまで ${(ENEMY_HOVER_RELEASE * 5).toFixed(1)}秒かかる`);
+});
+
+test('細切れの噴射でも平均して半分程度の音量を保つ', () => {
+  const pattern = burstyPattern();
+  const now = averageGain(pattern, {
+    attack: ENEMY_HOVER_ATTACK, release: ENEMY_HOVER_RELEASE, teardown: false,
+  });
+  assert.ok(now > 0.3, `平均 ${(now * 100).toFixed(0)}% では鳴っていないように聞こえる`);
+
+  // 以前の作り（対称0.08秒＋途切れで音源を破棄）より明確に良いこと
+  const before = averageGain(pattern, { attack: 0.08, release: 0.08, teardown: true });
+  const gain = 20 * Math.log10(now / before);
+  assert.ok(gain > 6, `以前の作りとの差が小さい: +${gain.toFixed(1)}dB`);
+});
+
+test('音源を破棄しないこと自体が効いている', () => {
+  const pattern = burstyPattern();
+  const kept = averageGain(pattern, { attack: 0.08, release: 0.08, teardown: false });
+  const torn = averageGain(pattern, { attack: 0.08, release: 0.08, teardown: true });
+  assert.ok(kept > torn,
+    '途切れるたびに音源を作り直しても平均音量が変わらない（前提が崩れている）');
 });
