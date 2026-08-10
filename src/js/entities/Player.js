@@ -6,7 +6,7 @@ import {
     TILE_SIZE,
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
-    PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
+    PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, PLAYER_LANDING_MIN_AIRBORNE, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -35,6 +35,7 @@ export class Player {
         this.vy = 0;
         this.onGround = false;
         this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
+        this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
         this.facingRight = true;
         this.alive = true;
 
@@ -98,11 +99,17 @@ export class Player {
         // 地形・母艦の甲板など5つあるので、個別に足すと重複する。
         // 比べる相手は前フレームの結果。_moveAndCollide は毎フレーム冒頭で
         // onGround を false に戻すため、その直前の値では毎フレーム着地になる。
+        //
+        // ただし遷移だけでは足りない。接地判定は地形の端や動く母艦の甲板の上で
+        // 1フレーム単位で途切れ、その都度「着地」になってしまう（動く甲板の上で
+        // 3秒間に24回鳴っていた）。実際に宙に浮いていた時間を条件に加える。
         const impactVy = this.vy;
         this._moveAndCollide();
-        if (!this.wasOnGround && this.onGround) {
+        const landed = !this.wasOnGround && this.onGround;
+        if (landed && this.airborneFrames >= PLAYER_LANDING_MIN_AIRBORNE) {
             audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
         }
+        this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
 
         this._updateWalkAnimation();
@@ -467,6 +474,7 @@ export class Player {
         this.vy = 0;
         this.onGround = false;
         this.wasOnGround = false;
+        this.airborneFrames = 0;
         this.hp = PLAYER_MAX_HP;
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
