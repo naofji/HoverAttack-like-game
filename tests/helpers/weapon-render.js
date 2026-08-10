@@ -67,14 +67,15 @@ export function renderWeaponProfile(profile) {
     }
 
     if (profile.tone) {
-        const { type, from, to, dur: d, gain } = profile.tone;
+        const { type, from, to, dur: d, gain, hold = 0 } = profile.tone;
         let phase = 0;
         for (let i = 0; i < n; i++) {
             const t = i / SAMPLE_RATE;
             if (t > d) break;
             const k = t / d;
             phase = (phase + from * Math.pow(to / from, k) / SAMPLE_RATE) % 1;
-            buf[i] += wave(type, phase) * gain * Math.pow(FLOOR / gain, k);
+            const decay = t <= hold ? 1 : Math.pow(FLOOR / gain, (t - hold) / (d - hold));
+            buf[i] += wave(type, phase) * gain * decay;
         }
     }
 

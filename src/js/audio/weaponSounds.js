@@ -10,6 +10,7 @@
  *   hiss  掃引するローパスノイズ。発砲の空気、噴射のシュー音
  *         hold を与えると、その間は満音量を保ってから減衰する（尾を引く）
  *   tone  音程のある成分。銃口の芯、推進のうなり
+ *         hiss と同じく hold を取れる。余韻（「ーン」）を作るのに使う
  *   puffs 短い破裂の連なり。ホーミングの「ボボッ」
  */
 
@@ -18,7 +19,7 @@
  * @property {{from:number,to:number,dur:number,gain:number,hold?:number}} [hiss]
  *   ノイズを通すローパスを from から to へ掃引する。
  *   hold（秒）を与えると、その間は減衰させずに保つ
- * @property {{type:string,from:number,to:number,dur:number,gain:number}} [tone]
+ * @property {{type:string,from:number,to:number,dur:number,gain:number,hold?:number}} [tone]
  * @property {{count:number,gap:number,freq:number,dur:number,gain:number,bright?:number}} [puffs]
  *   gap 秒おきに count 回、freq を頂点とする破裂を置く。
  *   bright はローパスの開始位置（freq の何倍か）。大きいほど破裂が硬く鳴る
@@ -115,7 +116,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
     }
 
     if (profile.tone) {
-        const { type, from, to, dur, gain } = profile.tone;
+        const { type, from, to, dur, gain, hold = 0 } = profile.tone;
         const osc = ctx.createOscillator();
         osc.type = type;
         osc.frequency.setValueAtTime(from, t0);
@@ -123,6 +124,7 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
 
         const g = ctx.createGain();
         g.gain.setValueAtTime(gain * level, t0);
+        if (hold > 0) g.gain.setValueAtTime(gain * level, t0 + hold);
         g.gain.exponentialRampToValueAtTime(FLOOR, t0 + dur);
 
         osc.connect(g);
