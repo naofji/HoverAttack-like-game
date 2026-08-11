@@ -71,12 +71,12 @@ export const SMOKE_PUFF_RISE_RATIO = 0.05;    // 寿命のこの割合で 0→1 
 export const SMOKE_PUFF_DECAY_EXPONENT = 1.3; // (1-u)^この指数 で薄れる。1.0 だと後半までしぶとく、2.0 だと隠れる時間が足りない
 export const SMOKE_PUFF_RADIUS_START = 16;    // px: 出たてで機体（16x24）を覆う大きさ
 export const SMOKE_PUFF_RADIUS_END = 34;      // px: 拡散後は1枚で機体の倍
-export const SMOKE_PUFF_ALPHA_MAX = 0.38;     // 上限なしで素直に重ねるので1枚は薄く。重なり3枚で 0.63 = しきい値超え
+export const SMOKE_PUFF_ALPHA_MAX = 0.50;     // 実装時に確定。0.38 では隠蔽の持続が足りなかった（設計文書の「拡散はパフ自身の成長より遅くする」を参照）
 export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
 export const SMOKE_SPREAD_RADIUS = 8;         // px: 撒く位置のばらつき。広げると発煙直後に濃くならない（下の注を読むこと）
-export const SMOKE_DRIFT_SPEED = 0.10;        // px/frame: 外向きの初速。半径の伸び（0.075/frame）と釣り合わせてある
+export const SMOKE_DRIFT_SPEED = 0.05;        // px/frame: 外向きの初速。パフ自身の成長（0.075/frame）より遅くすること。速いと重なりが崩れて隠蔽が短く不安定になる
 export const SMOKE_RISE_SPEED = 0.08;         // px/frame: ゆっくり上昇
 export const SMOKE_SPRITE_SIZE = 64;          // px: 焼き付けるスプライトの一辺
 ```
@@ -88,7 +88,7 @@ export const SMOKE_SPRITE_SIZE = 64;          // px: 焼き付けるスプライ
 稼ぐ**。物理的にもそちらが正しい（煙は機体から噴き出して広がる）。
 
 濃度の見積り: 重なり n 枚の濃さは `1 - (1 - a)^n`。発煙直後（envelope ≈ 0.8、
-中心付近の falloff ≈ 0.9）なら a ≈ 0.38 × 0.8 × 0.9 = 0.27 で、3枚重なれば 0.61 と
+中心付近の falloff ≈ 0.9）なら a ≈ 0.50 × 0.8 × 0.9 = 0.36 で、3枚重なれば 0.74 と
 しきい値 0.6 を越える。14枚を半径8pxに撒けば中心付近は常に3枚以上が重なる。
 
 - [ ] **Step 2: 失敗するテストを書く**
@@ -112,7 +112,7 @@ test('falloff は中心で1、半径で0', () => {
 });
 
 test('falloff は半ばまで濃さを保ち、端で急に落ちる', () => {
-  // 指数2.5: 距離半分でまだ0.17、8割で0.009。中心が濃く縁が急、が数値で担保される
+  // 指数2.5: 距離半分でまだ0.17、8割で0.018。中心が濃く縁が急、が数値で担保される
   assert.ok(falloff(15, 30) > 0.15, `半径の半分で薄すぎる: ${falloff(15, 30)}`);
   assert.ok(falloff(24, 30) < 0.02, `半径の8割で濃すぎる: ${falloff(24, 30)}`);
   // 単調減少
@@ -951,7 +951,9 @@ export class SmokeScreen {
             }
             ctx.restore();
         }
-        ctx.globalAlpha = 1;
+        // ループの外で globalAlpha を 1 に戻さない。save/restore がパフごとに
+        // 元の値へ戻すので不要なうえ、末尾で 1 を代入すると alpha を記録する
+        // テストが常に最大値 1 を拾って意味を失う
     }
 }
 ```
