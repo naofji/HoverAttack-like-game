@@ -1024,6 +1024,7 @@ export const Game = {
             if (headClear) {
                 player.docked = false;
                 audioManager.stopCarrierEngine();
+                audioManager.stopRepairHum();
                 player.vy = -3;
                 player.walkFrame = 2;
             }

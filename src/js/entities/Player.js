@@ -498,6 +498,8 @@ export class Player {
         this._resetMGState();
 
         audioManager.stopHover();
+        audioManager.stopRepairHum();
+        this._dockAllFull = this._isFullyStocked();
         this.currentWeapon = 'missile';
     }
 
@@ -516,18 +518,44 @@ export class Player {
         // Rates are defined per real-time frame; sim frames tick gameSpeed× slower
         // in NORMAL mode, so scale up to keep resupply seconds equal across modes.
         const scale = 1 / (this.game.gameSpeed || 1);
+
+        // 回復・装填はそれぞれ音を持つ。補給が進んでいることを耳で追えるように、
+        // 「1発入った」瞬間と「満ちた」瞬間をここで拾う
         if (this.hp < PLAYER_MAX_HP) {
             this.hp = Math.min(PLAYER_MAX_HP, this.hp + DOCK_HP_RATE * scale);
+            if (this.hp < PLAYER_MAX_HP) {
+                audioManager.startRepairHum(this.hp / PLAYER_MAX_HP);
+            } else {
+                audioManager.stopRepairHum();
+            }
         }
         if (this.missiles < MISSILE_INITIAL_COUNT) {
+            const before = Math.floor(this.missiles);
             this.missiles = Math.min(MISSILE_INITIAL_COUNT, this.missiles + DOCK_MISSILE_RATE * scale);
+            if (Math.floor(this.missiles) > before) audioManager.playWeapon('ammoMissile');
         }
         if (this.grenades < GRENADE_INITIAL_COUNT) {
+            const before = Math.floor(this.grenades);
             this.grenades = Math.min(GRENADE_INITIAL_COUNT, this.grenades + DOCK_GRENADE_RATE * scale);
+            if (Math.floor(this.grenades) > before) audioManager.playWeapon('ammoGrenade');
         }
         if (this.hoverFuel < HOVER_MAX_FUEL) {
             this.hoverFuel = Math.min(HOVER_MAX_FUEL, this.hoverFuel + DOCK_FUEL_RATE * scale);
         }
+
+        // 全部満ちた瞬間に一度だけ。満タンで居続けても、ドックした時点で既に
+        // 満タンでも鳴らさない（_dockAllFull はドック成立時に現状で初期化される）
+        const full = this._isFullyStocked();
+        if (full && !this._dockAllFull) audioManager.playWeapon('readyVoice');
+        this._dockAllFull = full;
+    }
+
+    /** 補給するものが何も残っていないか。 */
+    _isFullyStocked() {
+        return this.hp >= PLAYER_MAX_HP
+            && this.missiles >= MISSILE_INITIAL_COUNT
+            && this.grenades >= GRENADE_INITIAL_COUNT
+            && this.hoverFuel >= HOVER_MAX_FUEL;
     }
 
     /** Resupply all resources (when docking). */
@@ -535,6 +563,8 @@ export class Player {
         // Weapon state is reset immediately on dock; actual HP/ammo/fuel
         // are restored gradually each frame via _updateDockedResupply().
         this._resetMGState();
+        // 満タンでドックしたときに「レディ」を鳴らさないよう、今の状態で初期化する
+        this._dockAllFull = this._isFullyStocked();
     }
 
     /** Reset machine-gun burst/reload counters to factory defaults. */
