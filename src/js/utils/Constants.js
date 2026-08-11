@@ -129,7 +129,7 @@ export const DOCK_FUEL_RATE = 100 / 240; // ~0.417 fuel/frame → full in 4s
 
 // 回復ハム：ドッキング中に HP が満ちるまで鳴り続ける。進むほど音程が上がるので、
 // あと何秒で満ちるかが耳で分かる。母艦のエンジン（46〜60Hz）と被らない中域に置く。
-export const REPAIR_HUM_FREQ_FROM = 300;    // HP 空
+export const REPAIR_HUM_FREQ_FROM = 240;    // HP 空
 export const REPAIR_HUM_FREQ_TO = 460;      // 満タン直前
 export const REPAIR_HUM_GAIN = 0.05;        // 鳴り続けるので単発の効果音より控えめ
 export const REPAIR_HUM_WOBBLE_HZ = 7;      // 装置が働いている感じを出す揺れ
