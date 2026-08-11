@@ -12,6 +12,7 @@ import {
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
 import { playBlast } from './destruction.js';
+import { avoidObstacle } from '../utils/obstacleAvoidance.js';
 
 export class EnemyHomingMissile {
     constructor(game, x, y, initialAngle) {
@@ -141,42 +142,18 @@ export class EnemyHomingMissile {
     }
 
     _avoidObstacles() {
-        // Cast a ray forward to check for upcoming tiles
-        const map = this.game.map;
-        // Longer lookahead when cruising to avoid hitting blocks
-        const lookAheadDist = this.homingActive ? 25 : 45;
-        
-        const checkX = this.x + Math.cos(this.angle) * lookAheadDist;
-        const checkY = this.y + Math.sin(this.angle) * lookAheadDist;
-        
-        if (map.isSolidAtPixel(checkX, checkY)) {
-            // If there's an obstacle straight ahead, check left and right to see which is clearer
-            const leftAngle = this.angle - Math.PI / 4;
-            const rightAngle = this.angle + Math.PI / 4;
-            
-            const leftX = this.x + Math.cos(leftAngle) * lookAheadDist;
-            const leftY = this.y + Math.sin(leftAngle) * lookAheadDist;
-            
-            const rightX = this.x + Math.cos(rightAngle) * lookAheadDist;
-            const rightY = this.y + Math.sin(rightAngle) * lookAheadDist;
-            
-            const leftSolid = map.isSolidAtPixel(leftX, leftY);
-            const rightSolid = map.isSolidAtPixel(rightX, rightY);
-            
-            if (leftSolid && !rightSolid) {
-                this.driftAngle = 0.15; // Drift right
-                // During cruise, permanently adjust angle to steer away
-                if (!this.homingActive) this.angle += 0.05;
-            } else if (!leftSolid && rightSolid) {
-                this.driftAngle = -0.15; // Drift left
-                if (!this.homingActive) this.angle -= 0.05;
-            } else {
-                // If both or neither, just sharply turn one way (pseudo-random based on position)
-                const turn = (Math.floor(this.x) % 2 === 0) ? 0.2 : -0.2;
-                this.driftAngle = turn;
-                if (!this.homingActive) this.angle += turn * 0.5;
-            }
-        }
+        const { driftAngle, turn } = avoidObstacle({
+            x: this.x, y: this.y, angle: this.angle, map: this.game.map,
+            // 巡航中は遠くまで見る（終末誘導に入ったら目標を優先して見通しを詰める）
+            lookAhead: this.homingActive ? 25 : 45,
+            sideDrift: 0.15, sideTurn: 0.05,
+            deadEndDrift: 0.2,
+        });
+        if (driftAngle === 0 && turn === 0) return;
+
+        this.driftAngle = driftAngle;
+        // 終末誘導に入ったら進路は目標が決める。傾けるだけにする
+        if (!this.homingActive) this.angle += turn;
     }
 
     draw(ctx) {

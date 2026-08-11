@@ -15,6 +15,7 @@ import {
 import { TrailParticle } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playBlast } from './destruction.js';
+import { avoidObstacle } from '../utils/obstacleAvoidance.js';
 
 export class EnemyCruiseMissile {
     constructor(game, x, y, initialAngle, path = null) {
@@ -213,40 +214,18 @@ export class EnemyCruiseMissile {
     }
 
     _avoidObstacles() {
-        const map = this.game.map;
-        // Shorter lookahead when following a path to avoid overreacting to corners
-        const lookAheadDist = this.homingActive ? 40 : (this.path ? 50 : 80);
+        const { driftAngle, turn } = avoidObstacle({
+            x: this.x, y: this.y, angle: this.angle, map: this.game.map,
+            // 経路を辿っている間は見通しを詰める（角に過剰反応させない）
+            lookAhead: this.homingActive ? 40 : (this.path ? 50 : 80),
+            sideDrift: 0.12, sideTurn: 0.03,
+            deadEndDrift: 0.1,
+        });
+        if (driftAngle === 0 && turn === 0) return;
 
-        const checkX = this.x + Math.cos(this.angle) * lookAheadDist;
-        const checkY = this.y + Math.sin(this.angle) * lookAheadDist;
-
-        if (map.isSolidAtPixel(checkX, checkY)) {
-            const leftAngle = this.angle - Math.PI / 4;
-            const rightAngle = this.angle + Math.PI / 4;
-
-            const leftX = this.x + Math.cos(leftAngle) * lookAheadDist;
-            const leftY = this.y + Math.sin(leftAngle) * lookAheadDist;
-
-            const rightX = this.x + Math.cos(rightAngle) * lookAheadDist;
-            const rightY = this.y + Math.sin(rightAngle) * lookAheadDist;
-
-            const leftSolid = map.isSolidAtPixel(leftX, leftY);
-            const rightSolid = map.isSolidAtPixel(rightX, rightY);
-
-            if (leftSolid && !rightSolid) {
-                this.driftAngle = 0.12; // Stronger nudge for safety
-                // Only change permanent angle if we don't have a path to follow
-                if (!this.homingActive && !this.path) this.angle += 0.03;
-            } else if (!leftSolid && rightSolid) {
-                this.driftAngle = -0.12;
-                if (!this.homingActive && !this.path) this.angle -= 0.03;
-            } else {
-                // Dead end or narrow passage: jitter slightly to find a gap
-                const turn = (Math.floor(this.x) % 2 === 0) ? 0.1 : -0.1;
-                this.driftAngle = turn;
-                if (!this.homingActive && !this.path) this.angle += turn * 0.5;
-            }
-        }
+        this.driftAngle = driftAngle;
+        // 終末誘導中と経路追従中は進路を変えない（経路から外れてしまう）
+        if (!this.homingActive && !this.path) this.angle += turn;
     }
 
     _explode() {
