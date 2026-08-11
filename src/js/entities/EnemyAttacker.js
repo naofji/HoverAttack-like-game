@@ -524,11 +524,14 @@ export class EnemyAttacker {
                 // ここが「自機に見つかった瞬間」。遮蔽を探し直す前に煙を張り、
                 // 移動そのものを隠す。新しい状態を足さずに済むのは、この後の
                 // coverGoalX へ歩く経路がそのまま「煙に隠れての移動」になるため。
-                // inCover をチェックしているのは連発防止ではない（それはクール
-                // ダウンの役目）。露出している間はまだ煙の中にいるはずなので、
-                // 「隠れていた→露出した」に切り替わった回だけ撒く。初期値の
-                // inCover は false なので、最初のチェックでも発煙する。
-                if (!this.inCover) this._popSmoke();
+                //
+                // ガードなしで毎回呼ぶ。this.inCover はこの時点ではまだ「前回の」
+                // 判定値なので、「隠れていた→露出した」の遷移を検出しようとすると
+                // 1回（ATTACKER_COVER_CHECK_INTERVAL ぶん）遅れてしまい、しかも
+                // 「露出しっぱなし」のケースの方が毎回発煙してしまう（意図と逆）。
+                // 連発防止は smokeCooldown（480 tick）が担うので、ここでは
+                // 「露出と判定した回」に単純に撒けばよい。
+                this._popSmoke();
                 this.inCover = false;
                 this.coverGoalX = this._findCoverX(targetX, targetY);
             }
@@ -550,7 +553,6 @@ export class EnemyAttacker {
     _popSmoke() {
         if (!this.config.usesSmoke) return;
         if (this.smokeCooldown > 0) return;
-        if (!this.game.spawnSmokeScreen) return;   // テスト用の簡易 game でも落ちないように
 
         this.game.spawnSmokeScreen(this.x + this.width / 2, this.y + this.height / 2);
         this.smokeCooldown = SMOKE_COOLDOWN;

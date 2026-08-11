@@ -39,6 +39,8 @@ export function makeGame(map) {
     spawnSparks() {},
     spawnExplosion() {},
     addScore() {},
+    // _popSmoke() が無条件で呼ぶので、テスト用の簡易 game にも必須（修正4で防御を外した）
+    spawnSmokeScreen() {},
   };
 }
 

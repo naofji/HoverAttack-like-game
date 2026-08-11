@@ -13,10 +13,18 @@
 //
 // なめらかなグラデーションを選んだので回転は原理的に見えない。瘤を
 // 非対称に置くことで回っていると分かるようにしてある。
+//
+// 注意: gradientStops() の停止点は falloff() と一致する（瘤1個ぶんは判定と同じ
+// 濃さ）が、_bake() は瘤を3つ source-over で重ねて焼くため、合成後の実効 alpha は
+// 中間半径で falloff の2〜3倍濃くなる（レビュー時の実測値。d/r=0.3 で実効 0.933 対
+// falloff 0.410 など）。ズレの向きは「描画のほうが濃い」＝判定（falloff を直接読む）
+// は保守側。縁のあたりでは見た目にはまだ煙が残って見えていても、coverage は
+// しきい値を先に割り込んで既にロックできてしまう場合がある。逆向き（透明なのに
+// 隠れている）ではないので実害は薄いと判断し、見た目は変えていない。
 
 import { SMOKE_SPRITE_SIZE } from '../utils/Constants.js';
 import { falloff } from '../utils/concealment.js';
-import { lerpColor } from '../utils/color.js';
+import { lerpColor, withAlpha } from '../utils/color.js';
 
 /**
  * 瘤の並び。座標と半径はスプライトの半径に対する比。
@@ -60,11 +68,10 @@ export function gradientStops(coreColor, midColor, edgeColor) {
         const color = offset < 0.5
             ? lerpColor(coreColor, midColor, offset * 2)
             : lerpColor(midColor, edgeColor, (offset - 0.5) * 2);
-        const s = color.replace('#', '');
-        const r = parseInt(s.slice(0, 2), 16);
-        const g = parseInt(s.slice(2, 4), 16);
-        const b = parseInt(s.slice(4, 6), 16);
-        stops.push([offset, `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`]);
+        // hex→rgba の組み立ては utils/color.js の withAlpha に既にある（CLAUDE.md の
+        // 「まず既存の共通機構を見る」）。手書きの parseInt 3行より短く、対で使う
+        // lerpColor と同じ場所から来るので保守も1箇所で済む。
+        stops.push([offset, withAlpha(color, alpha)]);
     }
     return stops;
 }
