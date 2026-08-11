@@ -14,7 +14,8 @@ import {
     RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
     ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT, EMERGENCY_DEFENSE_SIGHT_RANGE,
-    ENEMY_RECOIL_PROFILES
+    ENEMY_RECOIL_PROFILES,
+    SMOKE_COOLDOWN,
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, hasLineOfSight } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -174,6 +175,7 @@ export class EnemyAttacker {
         this.coverCheckTimer = 0;
         this.coverGoalX = null;
         this.inCover = false;
+        this.smokeCooldown = 0;   // 発煙のクールダウン（SMOKE_COOLDOWN から減っていく）
 
         // Animation & State
         this.walkFrame = 2;
@@ -292,6 +294,7 @@ export class EnemyAttacker {
 
         this._updateFacing(target);
         this._updateWalkAnimation();
+        if (this.smokeCooldown > 0) this.smokeCooldown--;
         this._handleShooting();
     }
 
@@ -518,6 +521,14 @@ export class EnemyAttacker {
                 this.inCover = true;
                 this.coverGoalX = null;
             } else {
+                // ここが「自機に見つかった瞬間」。遮蔽を探し直す前に煙を張り、
+                // 移動そのものを隠す。新しい状態を足さずに済むのは、この後の
+                // coverGoalX へ歩く経路がそのまま「煙に隠れての移動」になるため。
+                // inCover をチェックしているのは連発防止ではない（それはクール
+                // ダウンの役目）。露出している間はまだ煙の中にいるはずなので、
+                // 「隠れていた→露出した」に切り替わった回だけ撒く。初期値の
+                // inCover は false なので、最初のチェックでも発煙する。
+                if (!this.inCover) this._popSmoke();
                 this.inCover = false;
                 this.coverGoalX = this._findCoverX(targetX, targetY);
             }
@@ -533,6 +544,16 @@ export class EnemyAttacker {
             }
         }
         // No cover found: leave skirmish pacing untouched
+    }
+
+    /** 煙幕を張る。usesSmoke を持つ型（artillery）だけ。 */
+    _popSmoke() {
+        if (!this.config.usesSmoke) return;
+        if (this.smokeCooldown > 0) return;
+        if (!this.game.spawnSmokeScreen) return;   // テスト用の簡易 game でも落ちないように
+
+        this.game.spawnSmokeScreen(this.x + this.width / 2, this.y + this.height / 2);
+        this.smokeCooldown = SMOKE_COOLDOWN;
     }
 
     /** Scan +/-ATTACKER_COVER_SCAN_TILES for the nearest LOS-breaking spot with ground and range. */

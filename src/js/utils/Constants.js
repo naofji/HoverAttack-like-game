@@ -299,6 +299,7 @@ export const ENEMY_ATTACKER_TYPES = {
         climbThrust: 0.5,
         climbStyle: 'jump',
         seeksCover: true,
+        usesSmoke: true,      // 見つかったら煙幕を張って居場所を隠す
         bodyColor: '#DDAA00', // Yellow-Orange
         headColor: '#BB8800',
         visorColor: '#FF0000', // Red eye
