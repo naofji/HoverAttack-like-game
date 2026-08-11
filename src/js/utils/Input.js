@@ -2,6 +2,8 @@
 // Input Manager
 // ============================================
 
+import { canvasPointer } from './pointer.js';
+
 // Keys that should prevent default browser behavior (scrolling, etc.)
 const PREVENT_DEFAULT_KEYS = new Set([
     'Space', 'ShiftLeft', 'ShiftRight', 'Tab', 'Escape',
@@ -55,15 +57,21 @@ export class Input {
             this.keys[e.code] = false;
         });
 
-        this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const newX = e.clientX - rect.left;
-            const newY = e.clientY - rect.top;
-            
-            if (this.mouse.x !== newX || this.mouse.y !== newY) {
-                this.mouse.x = newX;
-                this.mouse.y = newY;
-                
+        // リスナを canvas ではなく window に付けている。canvas に付けていた頃は
+        // カーソルが canvas の外に出た瞬間にイベントが止まって撃てなくなり、
+        // さらに canvas 内で押して外で離すと mouseup を取り逃がして
+        // mouse.left が true のまま残っていた（押しっぱなし判定になる）。
+        window.addEventListener('mousemove', (e) => {
+            const { x, y } = canvasPointer(
+                this.canvas.getBoundingClientRect(),
+                this.canvas.width, this.canvas.height,
+                e.clientX, e.clientY
+            );
+
+            if (this.mouse.x !== x || this.mouse.y !== y) {
+                this.mouse.x = x;
+                this.mouse.y = y;
+
                 if (this.crosshairLocked) {
                     this.crosshairLocked = false;
                     console.log('Crosshair Unlocked (Mouse Moved)');
@@ -71,18 +79,19 @@ export class Input {
             }
         });
 
-        this.canvas.addEventListener('mousedown', (e) => {
+        window.addEventListener('mousedown', (e) => {
             if (e.button === 0) this.mouse.left = true;
             if (e.button === 2) this.mouse.right = true;
         });
 
-        this.canvas.addEventListener('mouseup', (e) => {
+        window.addEventListener('mouseup', (e) => {
             if (e.button === 0) this.mouse.left = false;
             if (e.button === 2) this.mouse.right = false;
         });
 
         // Prevent context menu for right-click grenade
-        this.canvas.addEventListener('contextmenu', (e) => {
+        // 黒帯の上で右クリックしてもメニューが出ないよう、これも window に付ける
+        window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
     }
