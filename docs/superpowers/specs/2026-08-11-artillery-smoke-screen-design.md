@@ -29,29 +29,62 @@ artillery 型の敵アタッカーに、**自機に発見された瞬間に煙�
 ## 煙のモデル
 
 `game.smokeScreens` に `SmokeScreen`（`src/js/entities/SmokeScreen.js`）を1つ積む。
-1つの雲が14個のパフを持ち、雲が寿命を終えたら配列から外す。
+1つの雲が14個のパフを持ち、**パフが全部消えたら雲も死ぬ**（雲は独自の寿命を持たない。
+撒きをずらすので、雲の時計とパフの時計を別に持つと必ずどちらかが先に切れて、
+まだ濃いのに消える／消えたのに判定が残るのどちらかが起きる）。
 
-パフは**経過時間ひとつ**から半径・alpha・色の3つが出る。出たては小さく濃く白っぽく、
-古くなるにつれ大きく薄く紫がかった灰になる。
+パフは**自分の経過時間ひとつ**から半径・alpha・色の3つが出る。出たては小さく濃く白っぽく、
+古くなるにつれ大きく薄く紫がかった灰になり、最後は完全に透明になって消える。
 
 | 項目 | 値 | 根拠 |
 |---|---|---|
 | パフ数 | 14 | 半径34px × 14枚で画面幅の1/4ほどを覆う。枚数で濃さを作るので1枚は薄い |
-| 半径 | 10px → 34px | 初期は機体（16×24px）より小さく、拡散後は1枚で機体を覆う |
+| 半径 | 10px → 34px（自分の寿命を通じて単調に拡大） | 初期は機体（16×24px）より小さく、拡散後は1枚で機体を覆う |
 | パフ最大 alpha | 0.30 | 上限なしで素直に重ねるため、1枚は薄く。重なりで濃度が積み上がる |
-| 寿命 | 240 tick（4秒） | normal モード 0.8x では実時間5秒。末尾90 tick で薄れる |
+| パフの寿命 | 240 tick（4秒） | normal モード 0.8x では実時間5秒 |
+| 雲の全長 | 252 tick（撒き12 ＋ パフ240） | 最後に撒かれたパフが死ぬまで |
 | 発煙の撒き方 | 12 tick に分散 | 一斉に生むと全パフの年齢が揃い、雲が一様に膨らんで一様に薄れる（時間変化が見えない）。ずらすと機体の近くに白い生まれたてが残り、外側に紫灰の古いのが漂う層ができて湧き上がって見える |
 | 漂い | 外向きの微小な初速 ＋ ゆっくり上昇 | |
 | 回転 | ±0.6°/frame | 4秒で約1/4回転。速いと渦に見えて煙から離れる |
 
+### パフの消え方 — 薄れて、確実に 0 になる
+
+パフの alpha は、自分の正規化年齢 `u = age / SMOKE_PUFF_LIFETIME`（0 → 1）に対して:
+
+```
+envelope(u) = min(1, u / 0.05) * (1 - u)^1.3
+puffAlpha   = SMOKE_PUFF_ALPHA_MAX * envelope(u)
+```
+
+- `u = 1` で厳密に 0 になる。**残留しないし、消える瞬間にぷつりと切れることもない**
+  （寿命切れで `alive = false` にするだけの実装だと、まだ見える濃さのまま消えてしまう）
+- 立ち上がりの `min(1, u / 0.05)` は最初の12 tick で 0 → 1。生まれた瞬間に濃いパフが
+  出現するのを避ける。撒きの分散と合わせて「湧き上がる」動きになる
+- 指数 1.3 は減衰をわずかに前倒しにする形。1.0（直線）だと後半までしぶとく見え、
+  2.0 だと発煙直後に急に薄くなって隠れる時間が足りない
+
+半径は同じ `u` で 10 → 34px へ単調に拡大し、色段も同じ `u` で白 → 淡い紫 → 紫灰へ進む。
+つまり**拡散・希薄化・冷却が1つの時計から出る**ので、位相がずれることがない。
+
+隠蔽判定も同じ alpha を読むので（後述）、**煙が見えなくなる時刻と隠れなくなる時刻は
+必ず一致する。** ただし隠蔽はしきい値越えなので、目視で薄く見えている状態では
+既にロックできるようになっている（重なり3枚ぶんで 0.6 を越える計算）。
+これは意図した順序で、「薄くなってきたから狙える」が自機側から読める。
+
 ### フォールオフ — 中心を濃く保ち、端で急に落とす
 
 ```
-puffAlphaAt(d, r) = A * (1 - d/r)^2.5      (d >= r のとき 0、A = 0.30)
+falloff(d, r)        = (1 - d/r)^2.5                    (d >= r のとき 0)
+puffAlphaAt(d, r, u) = SMOKE_PUFF_ALPHA_MAX * envelope(u) * falloff(d, r)
 ```
 
 指数 2.5 は「半径の半ばまではほぼ濃度を保ち、そこから外で一気に 0 へ落ちる」形。
 ゲーム的にも都合が良く、境界がはっきりするぶん自機側が「どこから先が見えないか」を読める。
+
+**空間の因子と時間の因子を分けているのは、焼き付けと噛み合わせるため。**
+`falloff(d, r)` は形なのでスプライトに焼き込み、`SMOKE_PUFF_ALPHA_MAX * envelope(u)` は
+`drawImage` 時の `globalAlpha` として毎フレーム渡す。canvas の合成が
+両者の積を取るので、上式がそのまま画面に出る。
 
 ### 色
 
@@ -87,7 +120,7 @@ puffAlphaAt(d, r) = A * (1 - d/r)^2.5      (d >= r のとき 0、A = 0.30)
 `src/js/utils/concealment.js` の純粋関数:
 
 ```
-coverageAt(x, y, screens) = 1 - Π(1 - puffAlphaAt(dᵢ, rᵢ))
+coverageAt(x, y, screens) = 1 - Π(1 - puffAlphaAt(dᵢ, rᵢ, uᵢ))
 ```
 
 これは `source-over` の合成式（透過率の積、Beer-Lambert）そのものなので、
@@ -101,9 +134,11 @@ GPU と同じ計算を node でテストできる。
 
 ### 守るべき対: フォールオフは1つの関数から
 
-**焼き付けるグラデーションの停止点と、隠蔽判定の式は同じ `puffAlphaAt()` から生成する。**
-片方だけ変えると「濃く見えるのに隠れない」「薄いのに隠れる」がすぐ発生する。
-`renderWeaponSound` と `renderWeaponProfile` を対で扱う既存のルール（CLAUDE.md）と同じ扱い。
+**焼き付けるグラデーションの停止点は `falloff()` から生成し、描画時の `globalAlpha` と
+隠蔽判定はどちらも `puffAlphaAt()`（= `falloff` × `envelope`）を呼ぶ。**
+どこか1箇所だけ数式を書き直すと「濃く見えるのに隠れない」「薄いのに隠れる」「消えたのに
+判定が残る」がすぐ発生する。`renderWeaponSound` と `renderWeaponProfile` を対で扱う
+既存のルール（CLAUDE.md）と同じ扱いにする。
 
 ## Auto Aim への接続
 
@@ -135,8 +170,9 @@ CLAUDE.md の規律どおり、A特性で音量を実測して既存音（grenad
 SMOKE_COOLDOWN            = 480   // tick。発煙の間隔（8秒）
 SMOKE_PUFF_COUNT          = 14
 SMOKE_EMIT_SPAN           = 12    // tick。撒き終わるまで
-SMOKE_LIFETIME            = 240   // tick
-SMOKE_FADE_TICKS          = 90    // 末尾の薄れ
+SMOKE_PUFF_LIFETIME       = 240   // tick。パフ1個の寿命。雲はパフが全部消えたら死ぬ
+SMOKE_PUFF_RISE_RATIO     = 0.05  // 立ち上がりに使う寿命の割合（最初の12 tick で 0→1）
+SMOKE_PUFF_DECAY_EXPONENT = 1.3   // (1-u)^この指数 で薄れる。u=1 で厳密に 0
 SMOKE_PUFF_RADIUS_START   = 10
 SMOKE_PUFF_RADIUS_END     = 34
 SMOKE_PUFF_ALPHA_MAX      = 0.30
@@ -151,9 +187,9 @@ SMOKE_SPRITE_TINTS        = 3
 
 | ファイル | 確かめること |
 |---|---|
-| `tests/smoke-concealment.test.js` | `puffAlphaAt` の形（中心で最大 / r で 0 / 指数2.5 の急峻さ）、`coverageAt` が重なりで増える、薄れてしきい値を割る |
-| `tests/smoke-screen.test.js` | 寿命で消える、半径が拡散する、年齢で alpha と色段が動く、撒きが12 tick に分散する、fake-ctx で `drawImage` の呼び出し数と alpha |
-| `tests/smoke-sprite.test.js` | 起動時に12枚焼かれる、グラデーション停止点が `puffAlphaAt` と一致する（対の担保） |
+| `tests/smoke-concealment.test.js` | `falloff` の形（中心で最大 / r で 0 / 指数2.5 の急峻さ）、`envelope` が単調に薄れて **u=1 で厳密に 0**、`coverageAt` が重なりで増える、薄れてしきい値を割る |
+| `tests/smoke-screen.test.js` | パフが寿命で消え**雲もパフ全滅で死ぬ**、半径が拡散する、年齢で alpha と色段が動く、撒きが12 tick に分散する（同 tick に全パフが生まれない）、fake-ctx で `drawImage` の呼び出し数と alpha |
+| `tests/smoke-sprite.test.js` | 起動時に12枚焼かれる、グラデーション停止点が `falloff` と一致する（対の担保） |
 | `tests/smoke-autoaim.test.js` | 煙中の敵はロックされない、ロック中に隠れたら外れる、煙の外の敵はロックできる |
 | `tests/smoke-trigger.test.js` | artillery が LoS 露出で発煙、クールダウン中は不発、他の型は不発、`AudioManager` の発煙音が呼ばれる |
 | `tests/weapon-sounds.test.js`（既存に追加） | `smoke` の A特性レベルが既存音との相対 dB 範囲に収まる |
@@ -169,7 +205,7 @@ SMOKE_SPRITE_TINTS        = 3
 | 煙が濃すぎる / 薄すぎる | `SMOKE_PUFF_ALPHA_MAX`、`SMOKE_PUFF_COUNT` |
 | 境界がぼやける / 硬すぎる | `SMOKE_FALLOFF_EXPONENT` |
 | 隠れる範囲が広すぎる / 狭すぎる | `SMOKE_PUFF_RADIUS_END`、`SMOKE_CONCEAL_THRESHOLD` |
-| 煙が長く残りすぎる | `SMOKE_LIFETIME`、`SMOKE_FADE_TICKS` |
+| 煙が長く残りすぎる | `SMOKE_PUFF_LIFETIME`、`SMOKE_PUFF_DECAY_EXPONENT`（上げると早く薄れる） |
 | 発煙が頻繁すぎる | `SMOKE_COOLDOWN` |
 | 湧き上がって見えない | `SMOKE_EMIT_SPAN` |
 | 紫が強すぎる / 弱すぎる | スプライトの色段（`SmokeScreen.js` の色表） |
