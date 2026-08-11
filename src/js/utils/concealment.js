@@ -83,3 +83,16 @@ export function coverageAt(x, y, screens) {
 export function isConcealed(x, y, screens) {
     return coverageAt(x, y, screens) > SMOKE_CONCEAL_THRESHOLD;
 }
+
+/**
+ * 敵が煙で隠れているか。判定点は中心。
+ * 中心だけを見るのは、端が少し出ているだけでロックできてしまうと
+ * 「隠れている」という見た目と食い違うため。
+ * @param {{x:number,y:number,width?:number,height?:number}} enemy
+ * @param {Array} screens
+ */
+export function isEnemyConcealed(enemy, screens) {
+    const cx = enemy.x + (enemy.width || 0) / 2;
+    const cy = enemy.y + (enemy.height || 0) / 2;
+    return isConcealed(cx, cy, screens);
+}

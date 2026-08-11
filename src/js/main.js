@@ -63,6 +63,7 @@ import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
 import { nearestHoveringEnemy } from './utils/audioFalloff.js';
+import { isEnemyConcealed } from './utils/concealment.js';
 import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
@@ -858,6 +859,13 @@ export const Game = {
 
         // ロック中の敵が生存していればそのまま追跡
         if (this.autoAimLockedEnemy && this.autoAimLockedEnemy.alive) {
+            // 煙に隠れたらロックを落とす。見えていないのに追尾し続けると、
+            // 煙を張られた意味が無くなる
+            if (isEnemyConcealed(this.autoAimLockedEnemy, this.smokeScreens)) {
+                this.autoAimLockedEnemy = null;
+                this.aimLead.reset();
+                return;
+            }
             this._lockOnEnemy(this.autoAimLockedEnemy);
             return;
         }
@@ -868,6 +876,7 @@ export const Game = {
         let bestDist = AUTO_AIM_SNAP_RADIUS;
         for (const enemy of this.enemies) {
             if (!enemy.alive) continue;
+            if (isEnemyConcealed(enemy, this.smokeScreens)) continue;  // 煙の中は見えない
             const ex = enemy.x + (enemy.width || 0) / 2;
             const ey = enemy.y + (enemy.height || 0) / 2;
             const d = Math.hypot(ex - mouseWorld.x, ey - mouseWorld.y);
