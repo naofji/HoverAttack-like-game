@@ -39,8 +39,9 @@ artillery 型の敵アタッカーに、**自機に発見された瞬間に煙�
 | 項目 | 値 | 根拠 |
 |---|---|---|
 | パフ数 | 14 | 半径34px × 14枚で画面幅の1/4ほどを覆う。枚数で濃さを作るので1枚は薄い |
-| 半径 | 10px → 34px（自分の寿命を通じて単調に拡大） | 初期は機体（16×24px）より小さく、拡散後は1枚で機体を覆う |
-| パフ最大 alpha | 0.30 | 上限なしで素直に重ねるため、1枚は薄く。重なりで濃度が積み上がる |
+| 半径 | 16px → 34px（自分の寿命を通じて単調に拡大） | 出たてで機体（16×24px）を覆い、拡散後はその倍 |
+| パフ最大 alpha | 0.38 | 上限なしで素直に重ねるため、1枚は薄く。重なり3枚で 0.63 としきい値を越える |
+| 撒く位置のばらつき | 半径8px（噴出口の近くに固める） | フォールオフが急なので、広く撒くと発煙直後の一点で重なりが足りず、いちばん隠れてほしい瞬間にしきい値を越えない。広がりは漂いで稼ぐ（物理的にもそちらが正しい） |
 | パフの寿命 | 240 tick（4秒） | normal モード 0.8x では実時間5秒 |
 | 雲の全長 | 252 tick（撒き12 ＋ パフ240） | 最後に撒かれたパフが死ぬまで |
 | 発煙の撒き方 | 12 tick に分散 | 一斉に生むと全パフの年齢が揃い、雲が一様に膨らんで一様に薄れる（時間変化が見えない）。ずらすと機体の近くに白い生まれたてが残り、外側に紫灰の古いのが漂う層ができて湧き上がって見える |
@@ -154,8 +155,11 @@ GPU と同じ計算を node でテストできる。
 `src/js/audio/weaponSounds.js` の `WEAPON_SOUNDS` に `smoke` を1行足す。
 hiss ベースの短い噴出音。位置つきで再生（`AudioManager.setListenerView` の定位に乗る）。
 
-CLAUDE.md の規律どおり、A特性で音量を実測して既存音（grenade など）との相対 dB を
-テストで縛る。`renderWeaponProfile()` 側（`tests/helpers/weapon-render.js`）も同時に足す。
+CLAUDE.md の規律どおり、A特性で音量を実測して既存音との相対 dB をテストで縛る
+（`tests/weapon-sounds.test.js` は `WEAPON_SOUNDS` を総当たりするので、表に足した時点で
+自動的に効く）。部品は既存の `hiss` と `puffs` だけを使うので
+`tests/helpers/weapon-render.js` に手を入れる必要はない。**新しい部品を足すなら
+`renderWeaponSound()` と `renderWeaponProfile()` を対で直すこと。**
 
 ## 描画とライフサイクル
 
@@ -173,12 +177,16 @@ SMOKE_EMIT_SPAN           = 12    // tick。撒き終わるまで
 SMOKE_PUFF_LIFETIME       = 240   // tick。パフ1個の寿命。雲はパフが全部消えたら死ぬ
 SMOKE_PUFF_RISE_RATIO     = 0.05  // 立ち上がりに使う寿命の割合（最初の12 tick で 0→1）
 SMOKE_PUFF_DECAY_EXPONENT = 1.3   // (1-u)^この指数 で薄れる。u=1 で厳密に 0
-SMOKE_PUFF_RADIUS_START   = 10
+SMOKE_PUFF_RADIUS_START   = 16
 SMOKE_PUFF_RADIUS_END     = 34
-SMOKE_PUFF_ALPHA_MAX      = 0.30
+SMOKE_PUFF_ALPHA_MAX      = 0.38
 SMOKE_FALLOFF_EXPONENT    = 2.5
 SMOKE_CONCEAL_THRESHOLD   = 0.6
 SMOKE_ROTATION_SPEED      = 0.6   // 度/frame。符号はパフごとにばらす
+SMOKE_SPREAD_RADIUS       = 8     // 撒く位置のばらつき
+SMOKE_DRIFT_SPEED         = 0.10  // 外向きの初速。半径の伸びと釣り合わせる
+SMOKE_RISE_SPEED          = 0.08  // ゆっくり上昇
+SMOKE_SPRITE_SIZE         = 64    // 焼き付けるスプライトの一辺
 SMOKE_SPRITE_SHAPES       = 4
 SMOKE_SPRITE_TINTS        = 3
 ```
@@ -208,6 +216,7 @@ SMOKE_SPRITE_TINTS        = 3
 | 煙が長く残りすぎる | `SMOKE_PUFF_LIFETIME`、`SMOKE_PUFF_DECAY_EXPONENT`（上げると早く薄れる） |
 | 発煙が頻繁すぎる | `SMOKE_COOLDOWN` |
 | 湧き上がって見えない | `SMOKE_EMIT_SPAN` |
+| 発煙直後なのに隠れない | `SMOKE_SPREAD_RADIUS` を下げる（広く撒くと一点での重なりが足りない） |
 | 紫が強すぎる / 弱すぎる | スプライトの色段（`SmokeScreen.js` の色表） |
 
 ## やらないこと
