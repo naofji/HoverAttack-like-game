@@ -1207,211 +1207,205 @@ export class EnemyAttacker {
      * 半周期ずらして動かす（常に2本以上が接地する）。
      */
     _drawArtilleryLegs(ctx, crouchOffset = 0) {
-        const style = this._legStyle();
-        const hipY = 16 - crouchOffset;
-
-        if (crouchOffset > 0) {
-            this._drawSpiderCrouch(ctx, hipY, style);
-        } else if (!this.onGround) {
-            this._drawSpiderAir(ctx, hipY, style);
-        } else {
-            this._drawSpiderWalk(ctx, hipY, style);
-        }
+        this._drawJointsWithPaint(ctx, crouchOffset, (isNear, style) => this._spiderPaint(isNear, style));
     }
 
     /** 脚1本ぶんの塗り設定（手前脚は bodyColor、奥脚は headColor）。 */
-    _spiderPaint(leg, style) {
+    _spiderPaint(isNear, style) {
         return {
-            legColor: leg.isNear ? this.config.bodyColor : this.config.headColor,
-            footColor: leg.isNear ? this.config.headColor : this.config.bodyColor,
+            legColor: isNear ? this.config.bodyColor : this.config.headColor,
+            footColor: isNear ? this.config.headColor : this.config.bodyColor,
             lineWidth: style.lineWidth,
             footW: style.footW,
             footH: style.footH,
             shinWidth: style.shinWidth,
-            thighColor: leg.isNear ? style.thighNear : style.thighFar,
+            thighColor: isNear ? style.thighNear : style.thighFar,
         };
     }
 
-    /** 接地時: 対角トロット。group 0 は walkFrame、group 1 は半周期ずれ。 */
-    _drawSpiderWalk(ctx, hipY, style) {
-        for (const leg of SPIDER_LEGS) {
-            const phase = leg.group === 0
-                ? this.walkFrame
-                : (this.walkFrame + 2) % 4;
+    // ------------------------------------------
+    // 脚の関節座標
+    //
+    // 描画（_drawLegs / _drawArtilleryLegs）と破片生成（_collectLegPoses）は
+    // どちらも同じ関節座標を必要とする。以前は両者が同じ式をそれぞれ書いて
+    // いて、片方だけ触ると「破片だけ別のポーズで飛び散る」という形で壊れた。
+    // 座標を決めるのはここだけにして、描画は色を、破片は太さを足すだけにする。
+    // ------------------------------------------
+
+    /**
+     * いまのポーズの関節座標を、描く順（奥脚→手前脚）で返す。
+     * @param {number} hipY 股関節の縦位置。draw() は crouchOffset ぶん
+     *   平行移動した後なので 16 - crouchOffset を、破片生成は絶対位置の 16 を渡す
+     * @param {object} style _legStyle() の型別スタイル
+     * @param {boolean} isCrouching しゃがみ姿勢か。描画側は draw() が決めた
+     *   crouchOffset から、破片生成側は状態そのものから渡す。実機では
+     *   crouchOffset = isCrouching ? 4 : 0 なので両者は必ず一致するが、
+     *   判定の出どころは呼び出し側に残しておく（描画だけを単体で呼べる）
+     * @returns {Array<{isNear:boolean, hipX:number, hipY:number,
+     *   kneeX:number, kneeY:number, footX:number, footY:number,
+     *   footRotation?:number}>}
+     */
+    _legJoints(hipY, style, isCrouching) {
+        const spider = this.config.name === 'artillery';
+
+        if (isCrouching) {
+            return spider ? this._spiderCrouchJoints(hipY, style)
+                          : this._bipedCrouchJoints(hipY, style);
+        }
+        if (!this.onGround) {
+            return spider ? this._spiderAirJoints(hipY, style)
+                          : this._bipedAirJoints(hipY, style);
+        }
+        return spider ? this._spiderWalkJoints(hipY, style)
+                      : this._bipedWalkJoints(hipY, style);
+    }
+
+    /** 4脚・接地時: 対角トロット。group 0 は walkFrame、group 1 は半周期ずれ。 */
+    _spiderWalkJoints(hipY, style) {
+        return SPIDER_LEGS.map((leg) => {
+            const phase = leg.group === 0 ? this.walkFrame : (this.walkFrame + 2) % 4;
             const sweep = SPIDER_SWEEP[phase];
             const lift = SPIDER_LIFT[phase];
-
-            const footX = leg.hipX + leg.reach + sweep;
-            const footY = hipY + SPIDER_FOOT_DROP - lift;
-
-            this._drawJointedLeg(ctx, {
+            return {
+                isNear: leg.isNear,
                 hipX: leg.hipX, hipY,
                 kneeX: leg.hipX + (leg.reach + sweep) * 0.5,
                 kneeY: hipY - SPIDER_KNEE_RISE,
-                footX, footY,
-                ...this._spiderPaint(leg, style),
-            });
-        }
+                footX: leg.hipX + leg.reach + sweep,
+                footY: hipY + SPIDER_FOOT_DROP - lift,
+            };
+        });
     }
 
-    /** 空中: 脚を丸めつつ、横速度に応じて股関節中心に振れる。 */
-    _drawSpiderAir(ctx, hipY, style) {
-        const swing = this._hoverSwing();
+    /** 4脚・空中: 脚を丸めつつ、横速度に応じて股関節中心に振れる。 */
+    _spiderAirJoints(hipY, style) {
+        const angle = this._hoverSwing() * style.maxSwing;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
 
-        for (const leg of SPIDER_LEGS) {
+        return SPIDER_LEGS.map((leg) => {
             // グループごとに縮み量を変えて非対称にする（クモが落下時に脚を縮める挙動）
             const curl = leg.group === 0 ? 0.6 : 0.8;
-            const angle = swing * style.maxSwing;
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
             const rot = (dx, dy) => ({
                 x: leg.hipX + (dx * cos - dy * sin),
                 y: hipY + (dx * sin + dy * cos),
             });
-
             const knee = rot(leg.reach * 0.5 * curl, -SPIDER_KNEE_RISE * curl);
             const foot = rot(leg.reach * curl, SPIDER_FOOT_DROP * curl);
-
-            this._drawJointedLeg(ctx, {
+            return {
+                isNear: leg.isNear,
                 hipX: leg.hipX, hipY,
                 kneeX: knee.x, kneeY: knee.y,
                 footX: foot.x, footY: foot.y,
                 footRotation: angle / 1.5,
-                ...this._spiderPaint(leg, style),
-            });
-        }
+            };
+        });
     }
 
-    /** しゃがみ（狙撃姿勢）: 膝を大きく跳ね上げ、足を広く張って車高を下げる。 */
-    _drawSpiderCrouch(ctx, hipY, style) {
+    /** 4脚・しゃがみ（狙撃姿勢）: 膝を大きく跳ね上げ、足を広く張って車高を下げる。 */
+    _spiderCrouchJoints(hipY, style) {
         const spread = style.crouchSpread;
-
-        for (const leg of SPIDER_LEGS) {
+        return SPIDER_LEGS.map((leg) => {
             const dir = leg.reach >= 0 ? 1 : -1;
-            this._drawJointedLeg(ctx, {
+            return {
+                isNear: leg.isNear,
                 hipX: leg.hipX, hipY,
                 kneeX: leg.hipX + dir * spread * 0.5,
                 kneeY: hipY - SPIDER_KNEE_RISE - 2,
                 footX: leg.hipX + leg.reach + dir * spread,
                 footY: hipY + SPIDER_FOOT_DROP,
-                ...this._spiderPaint(leg, style),
+            };
+        });
+    }
+
+    /** 2足・接地時: 4フレームの歩行サイクル。奥脚を先に返す（手前脚が上に重なる）。 */
+    _bipedWalkJoints(hipY, style) {
+        const frame = WALK_FRAME_POSES[this.walkFrame] || WALK_FRAME_POSES[2];
+        const s = style.strideScale;
+
+        return [[false, frame.far], [true, frame.near]].map(([isNear, poseIndex]) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            const p = LEG_POSES[poseIndex];
+            return {
+                isNear, hipX, hipY,
+                kneeX: hipX + p.kdx * s, kneeY: hipY + p.kdy,
+                footX: hipX + p.fdx * s, footY: hipY + p.fdy,
+            };
+        });
+    }
+
+    /** 2足・空中: 横速度に比例して股関節を中心に脚が振れる。 */
+    _bipedAirJoints(hipY, style) {
+        const swing = this._hoverSwing();
+        // 奥脚は位相をずらし、左右がぴったり揃わないようにする
+        const swings = [[false, swing * 0.8 - style.phaseOffset], [true, swing]];
+
+        return swings.map(([isNear, amount]) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            const base = isNear ? AIR_BASE_POSE.near : AIR_BASE_POSE.far;
+            const angle = amount * style.maxSwing;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const rot = (dx, dy) => ({
+                x: hipX + (dx * cos - dy * sin),
+                y: hipY + (dx * sin + dy * cos),
             });
-        }
+            const knee = rot(base.kdx, base.kdy);
+            const foot = rot(base.fdx, base.fdy);
+            return {
+                isNear, hipX, hipY,
+                kneeX: knee.x, kneeY: knee.y,
+                footX: foot.x, footY: foot.y,
+                footRotation: angle / 1.5,
+            };
+        });
+    }
+
+    /** 2足・しゃがみ（バースト射撃時）: 膝を外に折って車高を下げる。 */
+    _bipedCrouchJoints(hipY, style) {
+        const spread = style.crouchSpread;
+        return [[false, -1], [true, 1]].map(([isNear, dir]) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            return {
+                isNear, hipX, hipY,
+                kneeX: hipX + dir * (spread + 2), kneeY: hipY + 4,
+                footX: hipX + dir * spread, footY: hipY + 6,
+            };
+        });
     }
 
     /**
      * 死亡時の脚の関節座標を集める（描画はしない）。
      * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
+     * 座標そのものは _legJoints() が決める（描画と同じ値）。
      * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
      */
     _collectLegPoses() {
         const style = this._legStyle();
         const isCrouching = this.crouching || this.burstCount > 0;
-        const hipY = 16;   // draw() の平行移動込みで見た絶対位置に合わせる
-        const out = [];
-        const push = (isNear, hipX, kneeX, kneeY, footX, footY) => {
-            out.push({
-                isNear, hipX, hipY, kneeX, kneeY, footX, footY,
-                lineWidth: style.lineWidth,
-            });
-        };
-
-        if (this.config.name === 'artillery') {
-            // 4脚クモ型。_drawSpiderWalk / _drawSpiderAir / _drawSpiderCrouch と
-            // 同じ分岐・同じ式で関節座標を求める（描画とズレると破片だけ別ポーズになる）。
-            if (isCrouching) {
-                const spread = style.crouchSpread;
-                for (const leg of SPIDER_LEGS) {
-                    const dir = leg.reach >= 0 ? 1 : -1;
-                    push(
-                        leg.isNear, leg.hipX,
-                        leg.hipX + dir * spread * 0.5, hipY - SPIDER_KNEE_RISE - 2,
-                        leg.hipX + leg.reach + dir * spread, hipY + SPIDER_FOOT_DROP,
-                    );
-                }
-                return out;
-            }
-
-            if (!this.onGround) {
-                const swing = this._hoverSwing();
-                const angle = swing * style.maxSwing;
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-                for (const leg of SPIDER_LEGS) {
-                    const curl = leg.group === 0 ? 0.6 : 0.8;
-                    const rot = (dx, dy) => ({
-                        x: leg.hipX + (dx * cos - dy * sin),
-                        y: hipY + (dx * sin + dy * cos),
-                    });
-                    const knee = rot(leg.reach * 0.5 * curl, -SPIDER_KNEE_RISE * curl);
-                    const foot = rot(leg.reach * curl, SPIDER_FOOT_DROP * curl);
-                    push(leg.isNear, leg.hipX, knee.x, knee.y, foot.x, foot.y);
-                }
-                return out;
-            }
-
-            for (const leg of SPIDER_LEGS) {
-                const phase = leg.group === 0 ? this.walkFrame : (this.walkFrame + 2) % 4;
-                const sweep = SPIDER_SWEEP[phase];
-                const lift = SPIDER_LIFT[phase];
-                push(
-                    leg.isNear, leg.hipX,
-                    leg.hipX + (leg.reach + sweep) * 0.5, hipY - SPIDER_KNEE_RISE,
-                    leg.hipX + leg.reach + sweep, hipY + SPIDER_FOOT_DROP - lift,
-                );
-            }
-            return out;
-        }
-
-        if (isCrouching) {
-            const spread = style.crouchSpread;
-            for (const [isNear, dir] of [[false, -1], [true, 1]]) {
-                const hipX = isNear ? style.hipNear : style.hipFar;
-                push(isNear, hipX, hipX + dir * (spread + 2), hipY + 4, hipX + dir * spread, hipY + 6);
-            }
-            return out;
-        }
-
-        if (!this.onGround) {
-            const swing = this._hoverSwing();
-            for (const [isNear, amount] of [[false, swing * 0.8 - style.phaseOffset], [true, swing]]) {
-                const hipX = isNear ? style.hipNear : style.hipFar;
-                const base = isNear ? AIR_BASE_POSE.near : AIR_BASE_POSE.far;
-                const angle = amount * style.maxSwing;
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-                const rot = (dx, dy) => ({ x: hipX + (dx * cos - dy * sin), y: hipY + (dx * sin + dy * cos) });
-                const knee = rot(base.kdx, base.kdy);
-                const foot = rot(base.fdx, base.fdy);
-                push(isNear, hipX, knee.x, knee.y, foot.x, foot.y);
-            }
-            return out;
-        }
-
-        const frame = WALK_FRAME_POSES[this.walkFrame] || WALK_FRAME_POSES[2];
-        for (const [isNear, poseIndex] of [[false, frame.far], [true, frame.near]]) {
-            const hipX = isNear ? style.hipNear : style.hipFar;
-            const p = LEG_POSES[poseIndex];
-            const s = style.strideScale;
-            push(isNear, hipX, hipX + p.kdx * s, hipY + p.kdy, hipX + p.fdx * s, hipY + p.fdy);
-        }
-        return out;
+        // hipY は draw() の平行移動込みで見た絶対位置に合わせる
+        return this._legJoints(16, style, isCrouching).map((j) => ({
+            isNear: j.isNear,
+            hipX: j.hipX, hipY: j.hipY,
+            kneeX: j.kneeX, kneeY: j.kneeY,
+            footX: j.footX, footY: j.footY,
+            lineWidth: style.lineWidth,
+        }));
     }
 
-    /** 2足型（standard / rival / heavy）の脚。しゃがみ／空中／歩行を振り分ける。 */
-    _drawLegs(ctx, crouchOffset = 0) {
+    /** 関節座標に色を乗せて実際に描く。2足型・4脚型で塗り分けだけが違う。 */
+    _drawJointsWithPaint(ctx, crouchOffset, paintFor) {
         const style = this._legStyle();
         // draw() が既に crouchOffset ぶん下へ平行移動しているので、
         // 股関節を同じだけ上げると足の接地位置が変わらない。
-        const hipY = 16 - crouchOffset;
-
-        if (crouchOffset > 0) {
-            this._drawCrouchLegs(ctx, hipY, style);
-        } else if (!this.onGround) {
-            this._drawAirLegs(ctx, hipY, style);
-        } else {
-            this._drawWalkLegs(ctx, hipY, style);
+        for (const j of this._legJoints(16 - crouchOffset, style, crouchOffset > 0)) {
+            this._drawJointedLeg(ctx, { ...j, ...paintFor(j.isNear, style) });
         }
+    }
+
+    /** 2足型（standard / rival / heavy）の脚。 */
+    _drawLegs(ctx, crouchOffset = 0) {
+        this._drawJointsWithPaint(ctx, crouchOffset, (isNear, style) => this._legPaint(isNear, style));
     }
 
     /** 脚1本ぶんの共通オプションを組み立てる。 */
@@ -1424,74 +1418,6 @@ export class EnemyAttacker {
             footH: style.footH,
             thighPlate: style.thighPlate,
         };
-    }
-
-    /** 接地時: 4フレームの2足歩行サイクル。 */
-    _drawWalkLegs(ctx, hipY, style) {
-        const frame = WALK_FRAME_POSES[this.walkFrame] || WALK_FRAME_POSES[2];
-
-        const drawOne = (isNear, poseIndex) => {
-            const hipX = isNear ? style.hipNear : style.hipFar;
-            const p = LEG_POSES[poseIndex];
-            const s = style.strideScale;
-            this._drawJointedLeg(ctx, {
-                hipX, hipY,
-                kneeX: hipX + p.kdx * s, kneeY: hipY + p.kdy,
-                footX: hipX + p.fdx * s, footY: hipY + p.fdy,
-                ...this._legPaint(isNear, style),
-            });
-        };
-
-        drawOne(false, frame.far);  // 奥脚を先に（手前脚が上に重なる）
-        drawOne(true, frame.near);
-    }
-
-    /** 空中: 横速度に比例して股関節を中心に脚が振れる。 */
-    _drawAirLegs(ctx, hipY, style) {
-        const swing = this._hoverSwing();
-
-        const drawOne = (isNear, swingAmount) => {
-            const hipX = isNear ? style.hipNear : style.hipFar;
-            const base = isNear ? AIR_BASE_POSE.near : AIR_BASE_POSE.far;
-            const angle = swingAmount * style.maxSwing;
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
-            const rot = (dx, dy) => ({
-                x: hipX + (dx * cos - dy * sin),
-                y: hipY + (dx * sin + dy * cos),
-            });
-            const knee = rot(base.kdx, base.kdy);
-            const foot = rot(base.fdx, base.fdy);
-            this._drawJointedLeg(ctx, {
-                hipX, hipY,
-                kneeX: knee.x, kneeY: knee.y,
-                footX: foot.x, footY: foot.y,
-                footRotation: angle / 1.5,
-                ...this._legPaint(isNear, style),
-            });
-        };
-
-        // 奥脚は位相をずらし、左右がぴったり揃わないようにする
-        drawOne(false, swing * 0.8 - style.phaseOffset);
-        drawOne(true, swing);
-    }
-
-    /** しゃがみ（バースト射撃時）: 膝を外に折って車高を下げる。 */
-    _drawCrouchLegs(ctx, hipY, style) {
-        const spread = style.crouchSpread;
-
-        const drawOne = (isNear, dir) => {
-            const hipX = isNear ? style.hipNear : style.hipFar;
-            this._drawJointedLeg(ctx, {
-                hipX, hipY,
-                kneeX: hipX + dir * (spread + 2), kneeY: hipY + 4,
-                footX: hipX + dir * spread, footY: hipY + 6,
-                ...this._legPaint(isNear, style),
-            });
-        };
-
-        drawOne(false, -1);
-        drawOne(true, 1);
     }
 
     /** 型別の脚スタイルを引く。未知の型は standard にフォールバック。 */

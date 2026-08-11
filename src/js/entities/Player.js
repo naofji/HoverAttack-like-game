@@ -24,6 +24,26 @@ import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
 
+/**
+ * 歩行4フレーム → 手前脚/奥脚のポーズ番号（_legPose の walkPose に渡す）。
+ * フレーム2は直立・停止時。以前は描画と破片生成が同じ表をそれぞれ持っていた。
+ */
+const WALK_POSES = [
+    { near: 0, far: 1 },
+    { near: 2, far: 3 },
+    { near: 2, far: 2 }, // Standing straight/idle pose
+    { near: 3, far: 2 },
+];
+
+/**
+ * しゃがみ（およびドッキング中）の固定ポーズ。膝を外に折った形。
+ * 歩行やホバーと違って計算で求まらないので、関節座標を直接持つ。
+ */
+const CROUCH_LEG_JOINTS = [
+    { isNear: false, hipX: 7, hipY: 16, kx: 2, ky: 20, fx: 6, fy: 22 },
+    { isNear: true, hipX: 10, hipY: 16, kx: 15, ky: 20, fx: 11, fy: 22 },
+];
+
 export class Player {
     constructor(game, x, y) {
         this.game = game;
@@ -648,34 +668,33 @@ export class Player {
     }
 
     _drawLegs(ctx, isCrouched) {
+        const joints = this._legJoints(isCrouched);
         if (isCrouched) {
-            this._drawCrouchedLegs(ctx);
-        } else if (!this.onGround) {
-            this._drawHoverLegs(ctx);
+            this._drawCrouchedLegs(ctx, joints);
         } else {
-            this._drawWalkLegs(ctx);
+            // 奥脚を先に描く（手前脚が上に重なる）
+            for (const j of joints) this._drawSingleLeg(ctx, j);
         }
     }
 
-    _drawCrouchedLegs(ctx) {
+    /**
+     * しゃがみの脚。関節は _legJoints() と同じ座標を使うが、
+     * 見た目は通常の脚と別物にしてある。両脚とも同じ明るさで描き（しゃがむと
+     * 奥行きが潰れるため）、足は振り子で回らない固定の板を左右に並べる。
+     */
+    _drawCrouchedLegs(ctx, joints) {
         ctx.strokeStyle = '#DDDDDD';
         ctx.lineWidth = 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Left leg (bent outward)
-        ctx.beginPath();
-        ctx.moveTo(7, 16);
-        ctx.lineTo(2, 20);
-        ctx.lineTo(6, 22);
-        ctx.stroke();
-
-        // Right leg (bent outward)
-        ctx.beginPath();
-        ctx.moveTo(10, 16);
-        ctx.lineTo(15, 20);
-        ctx.lineTo(11, 22);
-        ctx.stroke();
+        for (const j of joints) {
+            ctx.beginPath();
+            ctx.moveTo(j.hipX, j.hipY);
+            ctx.lineTo(j.kx, j.ky);
+            ctx.lineTo(j.fx, j.fy);
+            ctx.stroke();
+        }
 
         // Feet
         ctx.fillStyle = '#888888';
@@ -727,48 +746,64 @@ export class Player {
      * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
      * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
      */
-    _collectLegPoses() {
-        const out = [];
-        const push = (isNear, pose) => {
-            out.push({
-                isNear,
-                hipX: pose.hipX, hipY: pose.hipY,
-                kneeX: pose.kx, kneeY: pose.ky,
-                footX: pose.fx, footY: pose.fy,
-                lineWidth: 3,
-            });
-        };
+    /**
+     * ホバー中の両脚の振り子量。奥脚は位相をずらして左右が揃わないようにする。
+     * @returns {Array<[boolean, number]>} [手前脚か, 振り子量 -1..+1]
+     */
+    _hoverSwings() {
+        let localVx = this.facingRight ? this.vx : -this.vx;
+        localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
+        const swing = localVx / PLAYER_MAX_SPEED;
+        return [[false, swing * 0.8 - 0.2], [true, swing]];
+    }
 
-        if (this.crouching || this.docked) {
-            // _drawCrouchedLegs の固定ポーズ（座標はそちらのポリラインと同一）
-            push(false, { hipX: 7, hipY: 16, kx: 2, ky: 20, fx: 6, fy: 22 });
-            push(true, { hipX: 10, hipY: 16, kx: 15, ky: 20, fx: 11, fy: 22 });
-            return out;
+    /**
+     * いまのポーズの両脚の関節座標を、描く順（奥脚→手前脚）で返す。
+     * 描画（_drawLegs）と破片生成（_collectLegPoses）の唯一の供給元。
+     *
+     * @param {boolean} isCrouched しゃがみ姿勢か。draw() の判定をそのまま渡す
+     * @returns {Array<{isNear:boolean, hipX:number, hipY:number, kx:number,
+     *   ky:number, fx:number, fy:number, walkPose:number|null,
+     *   hoverSwing:number|null}>}
+     */
+    _legJoints(isCrouched) {
+        if (isCrouched) {
+            return CROUCH_LEG_JOINTS.map((j) => ({ ...j, walkPose: null, hoverSwing: null }));
         }
 
         if (!this.onGround) {
-            let localVx = this.facingRight ? this.vx : -this.vx;
-            localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
-            const hoverSwing = localVx / PLAYER_MAX_SPEED;
-            push(false, this._legPose(false, null, hoverSwing * 0.8 - 0.2));
-            push(true, this._legPose(true, null, hoverSwing));
-            return out;
+            return this._hoverSwings().map(([isNear, hoverSwing]) => ({
+                isNear, walkPose: null, hoverSwing,
+                ...this._legPose(isNear, null, hoverSwing),
+            }));
         }
 
-        const WALK_POSES = [
-            { near: 0, far: 1 },
-            { near: 2, far: 3 },
-            { near: 2, far: 2 },
-            { near: 3, far: 2 },
-        ];
-        const pose = WALK_POSES[this.walkFrame] || WALK_POSES[2];
-        push(false, this._legPose(false, pose.far, null));
-        push(true, this._legPose(true, pose.near, null));
-        return out;
+        const frame = WALK_POSES[this.walkFrame] || WALK_POSES[2];
+        return [[false, frame.far], [true, frame.near]].map(([isNear, walkPose]) => ({
+            isNear, walkPose, hoverSwing: null,
+            ...this._legPose(isNear, walkPose, null),
+        }));
     }
 
-    _drawSingleLeg(ctx, isNear, walkPose, hoverSwing) {
-        const { hipX, hipY, kx, ky, fx, fy } = this._legPose(isNear, walkPose, hoverSwing);
+    /**
+     * 死亡時の両脚の関節座標を集める（描画はしない）。
+     * 破片生成が「今どんなポーズだったか」を知るための唯一の入口。
+     * 座標そのものは _legJoints() が決める（描画と同じ値）。
+     * @returns {Array<{isNear:boolean,hipX:number,hipY:number,kneeX:number,kneeY:number,footX:number,footY:number,lineWidth:number}>}
+     */
+    _collectLegPoses() {
+        return this._legJoints(this.crouching || this.docked).map((j) => ({
+            isNear: j.isNear,
+            hipX: j.hipX, hipY: j.hipY,
+            kneeX: j.kx, kneeY: j.ky,
+            footX: j.fx, footY: j.fy,
+            lineWidth: 3,
+        }));
+    }
+
+    /** 脚1本を描く。関節座標は _legJoints() が決めたものをそのまま使う。 */
+    _drawSingleLeg(ctx, joint) {
+        const { isNear, hipX, hipY, kx, ky, fx, fy, hoverSwing } = joint;
 
         // Leg stroke
         ctx.strokeStyle = isNear ? '#DDDDDD' : '#AAAAAA';
@@ -790,28 +825,6 @@ export class Player {
         }
         ctx.fillRect(-2, 0, 5, 2);
         ctx.restore();
-    }
-
-    _drawHoverLegs(ctx) {
-        let localVx = this.facingRight ? this.vx : -this.vx;
-        localVx = Math.max(-PLAYER_MAX_SPEED, Math.min(PLAYER_MAX_SPEED, localVx));
-        const hoverSwing = localVx / PLAYER_MAX_SPEED;
-
-        this._drawSingleLeg(ctx, false, null, hoverSwing * 0.8 - 0.2);
-        this._drawSingleLeg(ctx, true, null, hoverSwing);
-    }
-
-    _drawWalkLegs(ctx) {
-        // Walk cycle: 4 frames mapping near/far leg poses
-        const WALK_POSES = [
-            { near: 0, far: 1 },
-            { near: 2, far: 3 },
-            { near: 2, far: 2 }, // Standing straight/idle pose
-            { near: 3, far: 2 },
-        ];
-        const pose = WALK_POSES[this.walkFrame];
-        this._drawSingleLeg(ctx, false, pose.far, null);
-        this._drawSingleLeg(ctx, true, pose.near, null);
     }
 
     /**
