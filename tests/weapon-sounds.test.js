@@ -517,10 +517,10 @@ test('装填音はリロードと同じ機構の音に聞こえる', () => {
 test('装填音は2種の聞こえる大きさが揃い、リロードより控えめ', () => {
   // 低い打撃はバンドパスを通る帯域が狭くて痩せるので、同じ gain だと揃わない。
   // 毎秒6回鳴るため、1回だけのリロードより明確に小さくないと煩い
-  const level = (kind) => transientLevel(
-    (i) => renderWeaponProfile(WEAPON_SOUNDS[kind])[i] ?? 0,
-    profileDuration(WEAPON_SOUNDS[kind]),
-  );
+  const level = (kind) => {
+    const buf = renderWeaponProfile(WEAPON_SOUNDS[kind]);
+    return transientLevel((i) => buf[i] ?? 0, profileDuration(WEAPON_SOUNDS[kind]));
+  };
   const m = level('ammoMissile');
   const g = level('ammoGrenade');
   const reload = level('reload');

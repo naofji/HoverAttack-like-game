@@ -133,7 +133,7 @@ export const REPAIR_HUM_FREQ_FROM = 300;    // HP 空
 export const REPAIR_HUM_FREQ_TO = 460;      // 満タン直前
 export const REPAIR_HUM_GAIN = 0.05;        // 鳴り続けるので単発の効果音より控えめ
 export const REPAIR_HUM_WOBBLE_HZ = 7;      // 装置が働いている感じを出す揺れ
-export const REPAIR_HUM_WOBBLE_DEPTH = 0.012;
+export const REPAIR_HUM_WOBBLE_DEPTH = 0.012; // REPAIR_HUM_GAIN 未満を保つこと。上回ると揺れが実効ゲインを負に振り切り位相反転する
 
 // --- Camera ---
 export const CAMERA_LERP = 0.08;

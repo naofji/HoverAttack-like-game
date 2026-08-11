@@ -533,6 +533,9 @@ export class Player {
                 audioManager.stopRepairHum();
             }
         }
+        // Math.floor(x) > before は1フレームにつき最大1回しか鳴らせない。
+        // 装填レートが 1発/フレーム 未満である前提（現状は最大でも約0.13発/フレーム）が崩れると、
+        // 1フレームで2発以上進んだ分のクリックを取りこぼす
         if (this.missiles < MISSILE_INITIAL_COUNT) {
             const before = Math.floor(this.missiles);
             this.missiles = Math.min(MISSILE_INITIAL_COUNT, this.missiles + DOCK_MISSILE_RATE * scale);
