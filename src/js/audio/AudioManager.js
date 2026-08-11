@@ -454,6 +454,97 @@ export class AudioManager {
         return panner;
     }
 
+    // ------------------------------------------
+    // 単発音の組み立て
+    //
+    // 手続き合成の単発音は、どれも「音源 → (色付け) → ゲインの減衰 → 出力」
+    // という同じ配線でできている。この骨組みが十数箇所に写されていて、
+    // ノードの作成・接続・start/stop の書き忘れが起きやすかった。
+    //
+    // WEAPON_SOUNDS の表に載せなかったのは、表の部品が「必ず FLOOR まで
+    // 指数減衰する」前提で作られているのに対し、ここの音は減衰の終端値が
+    // 0.0001〜0.09 とばらばらで、掃引時間と包絡時間が違うもの、発振器を
+    // フィルタや歪みに通すものがあるため。表に寄せると音が変わる。
+    // 骨組みだけを共有し、音を決める数値は各メソッドに残す。
+    // ------------------------------------------
+
+    /**
+     * ノイズの一撃。ローパスを掃引しながら減衰させる。
+     *
+     * @param {object} o
+     * @param {number} o.t 開始時刻
+     * @param {number} o.gain 開始ゲイン
+     * @param {number} o.dur 包絡の長さ（この時刻に end へ達し、音源も止まる）
+     * @param {number} [o.end] 減衰の終端。0 は指定できない（指数ランプのため）
+     * @param {number} o.from ローパスの開始周波数
+     * @param {number} [o.to] 終了周波数。省略すると掃引しない
+     * @param {number} [o.sweepDur] 掃引の長さ。省略すると dur と同じ
+     * @param {AudioNode} o.dest 接続先
+     * @returns {AudioBufferSourceNode}
+     */
+    _noiseBurst({ t, gain, dur, end = 0.001, from, to, sweepDur = dur, dest }) {
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(from, t);
+        if (to !== undefined) {
+            filter.frequency.exponentialRampToValueAtTime(to, t + sweepDur);
+        }
+
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(gain, t);
+        g.gain.exponentialRampToValueAtTime(end, t + dur);
+
+        noise.connect(filter);
+        filter.connect(g);
+        g.connect(dest);
+        noise.start(t);
+        noise.stop(t + dur);
+        return noise;
+    }
+
+    /**
+     * 音程のある一撃。周波数を滑らせながら減衰させる。
+     *
+     * @param {object} o
+     * @param {number} o.t 開始時刻
+     * @param {string} o.type 波形
+     * @param {number} o.from 開始周波数
+     * @param {number} [o.to] 終了周波数。省略すると音程を動かさない
+     * @param {number} [o.freqDur] 音程が動く長さ。省略すると dur と同じ
+     * @param {number} o.gain 開始ゲイン
+     * @param {number} o.dur 包絡の長さ
+     * @param {number} [o.end] 減衰の終端
+     * @param {AudioNode} [o.through] 発振器とゲインの間に挟むノード（フィルタや歪み）
+     * @param {AudioNode} o.dest 接続先
+     * @returns {OscillatorNode}
+     */
+    _toneBurst({ t, type, from, to, freqDur, gain, dur, end = 0.001, through, dest }) {
+        const osc = this.ctx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(from, t);
+        if (to !== undefined) {
+            osc.frequency.exponentialRampToValueAtTime(to, t + (freqDur ?? dur));
+        }
+
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(gain, t);
+        g.gain.exponentialRampToValueAtTime(end, t + dur);
+
+        if (through) {
+            osc.connect(through);
+            through.connect(g);
+        } else {
+            osc.connect(g);
+        }
+        g.connect(dest);
+        osc.start(t);
+        osc.stop(t + dur);
+        return osc;
+    }
+
     /**
      * 敵のホバー音。共有の1ループを、いちばん近い敵の距離で駆動する。
      * 敵ごとにオシレーターを持つと数が増えるほど破綻するため。
@@ -553,25 +644,13 @@ export class AudioManager {
         const level = this._positionalGain(x, y);
         if (level <= 0) return;
 
-        const t = this.ctx.currentTime;
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(ENEMY_BURST_FREQ_FROM, t);
-        filter.frequency.exponentialRampToValueAtTime(ENEMY_BURST_FREQ_TO, t + 0.3);
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(ENEMY_BURST_GAIN * level, t);
-        gain.gain.exponentialRampToValueAtTime(ENEMY_BURST_GAIN * 0.6 * level, t + 0.4);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this._out(x));
-
-        noise.start(t);
-        noise.stop(t + 0.4);
+        // 自機の playBurst と同じ作り。減衰しきらず 0.6 倍で残す
+        this._noiseBurst({
+            t: this.ctx.currentTime, dest: this._out(x),
+            gain: ENEMY_BURST_GAIN * level,
+            dur: 0.4, end: ENEMY_BURST_GAIN * 0.6 * level,
+            from: ENEMY_BURST_FREQ_FROM, to: ENEMY_BURST_FREQ_TO, sweepDur: 0.3,
+        });
     }
 
     /**
@@ -591,29 +670,16 @@ export class AudioManager {
         const vol = (hard ? 0.26 : 0.12) * level;
         const dur = hard ? 0.20 : 0.10;
 
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-        const nf = this.ctx.createBiquadFilter();
-        nf.type = 'lowpass';
-        nf.frequency.setValueAtTime(
-            hard ? ENEMY_LANDING_NOISE_HARD : ENEMY_LANDING_NOISE_SOFT, t);
-        nf.frequency.exponentialRampToValueAtTime(120, t + dur);
-        const ng = this.ctx.createGain();
-        ng.gain.setValueAtTime(vol, t);
-        ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        noise.connect(nf); nf.connect(ng); ng.connect(out);
-        noise.start(t); noise.stop(t + dur);
+        this._noiseBurst({
+            t, dest: out, dur, gain: vol,
+            from: hard ? ENEMY_LANDING_NOISE_HARD : ENEMY_LANDING_NOISE_SOFT, to: 120,
+        });
 
-        const osc = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(
-            hard ? ENEMY_LANDING_THUMP_HARD : ENEMY_LANDING_THUMP_SOFT, t);
-        osc.frequency.exponentialRampToValueAtTime(40, t + dur);
-        g.gain.setValueAtTime(vol * 0.8, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        osc.connect(g); g.connect(out);
-        osc.start(t); osc.stop(t + dur);
+        // 一撃は自機(45Hz)よりさらに低い40Hzまで落として、重量差を出す
+        this._toneBurst({
+            t, dest: out, dur, type: 'sine', gain: vol * 0.8,
+            from: hard ? ENEMY_LANDING_THUMP_HARD : ENEMY_LANDING_THUMP_SOFT, to: 40,
+        });
     }
 
     /**
@@ -844,32 +910,21 @@ export class AudioManager {
     playLanding(hard = false) {
         if (!this._prepare()) return;
         const t = this.ctx.currentTime;
+        const dest = this._seDest();
         const vol = hard ? 0.26 : 0.12;
         const dur = hard ? 0.20 : 0.10;
 
         // 接地の衝撃（低いノイズ）
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-        const nf = this.ctx.createBiquadFilter();
-        nf.type = 'lowpass';
-        nf.frequency.setValueAtTime(hard ? 700 : 1100, t);
-        nf.frequency.exponentialRampToValueAtTime(120, t + dur);
-        const ng = this.ctx.createGain();
-        ng.gain.setValueAtTime(vol, t);
-        ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
-        noise.start(t); noise.stop(t + dur);
+        this._noiseBurst({
+            t, dest, dur, gain: vol,
+            from: hard ? 700 : 1100, to: 120,
+        });
 
         // 機体の重みを出す低い一撃
-        const osc = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(hard ? 110 : 150, t);
-        osc.frequency.exponentialRampToValueAtTime(45, t + dur);
-        g.gain.setValueAtTime(vol * 0.8, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-        osc.connect(g); g.connect(this._seDest());
-        osc.start(t); osc.stop(t + dur);
+        this._toneBurst({
+            t, dest, dur, type: 'sine', gain: vol * 0.8,
+            from: hard ? 110 : 150, to: 45,
+        });
     }
 
     /**
@@ -879,34 +934,23 @@ export class AudioManager {
     playPlayerDestroyed() {
         if (!this._prepare()) return;
         const t = this.ctx.currentTime;
+        const dest = this._seDest();
 
-        // 崩れ落ちる金属音（下降するノコギリ波）
-        const osc = this.ctx.createOscillator();
-        const og = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(420, t);
-        osc.frequency.exponentialRampToValueAtTime(55, t + 0.9);
-        og.gain.setValueAtTime(0.16, t);
-        og.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
-        const of = this.ctx.createBiquadFilter();
-        of.type = 'lowpass';
-        of.frequency.setValueAtTime(2400, t);
-        of.frequency.exponentialRampToValueAtTime(300, t + 0.9);
-        osc.connect(of); of.connect(og); og.connect(this._seDest());
-        osc.start(t); osc.stop(t + 0.9);
+        // 崩れ落ちる金属音（下降するノコギリ波）。
+        // ノコギリ波をそのまま出すと耳に刺さるので、ローパスも一緒に閉じる
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.setValueAtTime(2400, t);
+        lowpass.frequency.exponentialRampToValueAtTime(300, t + 0.9);
+        this._toneBurst({
+            t, dest, dur: 0.9, type: 'sawtooth', gain: 0.16,
+            from: 420, to: 55, through: lowpass,
+        });
 
         // 厚みを出す爆発のノイズ
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-        const nf = this.ctx.createBiquadFilter();
-        nf.type = 'lowpass';
-        nf.frequency.setValueAtTime(1800, t);
-        nf.frequency.exponentialRampToValueAtTime(160, t + 0.7);
-        const ng = this.ctx.createGain();
-        ng.gain.setValueAtTime(0.3, t);
-        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
-        noise.connect(nf); nf.connect(ng); ng.connect(this._seDest());
-        noise.start(t); noise.stop(t + 0.7);
+        this._noiseBurst({
+            t, dest, dur: 0.7, gain: 0.3, from: 1800, to: 160,
+        });
     }
 
     /** アイテム取得。短く明るい上昇音。 */
@@ -927,76 +971,44 @@ export class AudioManager {
     }
 
 
+    /** バースト移動の噴射。上へ開く掃引で、押し出される感じを出す。 */
     playBurst() {
         if (!this._prepare()) return;
 
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1000, this.ctx.currentTime);
-        filter.frequency.exponentialRampToValueAtTime(3000, this.ctx.currentTime + 0.3);
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.06, this.ctx.currentTime + 0.4);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this._seDest());
-
-        noise.start();
-        noise.stop(this.ctx.currentTime + 0.4);
+        // 減衰しきらず 0.06 で残す（噴射が続いている最中に途切れないように）
+        this._noiseBurst({
+            t: this.ctx.currentTime, dest: this._seDest(),
+            gain: 0.1, dur: 0.4, end: 0.06,
+            from: 1000, to: 3000, sweepDur: 0.3,
+        });
     }
 
     playExplosion(large = false, sourceX) {
         if (!this._prepare()) return;
-        const out = this._out(sourceX);
 
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-
-        const noiseFilter = this.ctx.createBiquadFilter();
-        noiseFilter.type = 'lowpass';
-        noiseFilter.frequency.setValueAtTime(large ? 1000 : 600, this.ctx.currentTime);
-        noiseFilter.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + (large ? 0.5 : 0.2));
-
-        const noiseEnvelope = this.ctx.createGain();
         // ローパスを 40Hz まで落とすため聞こえる帯域が薄い。マスターの底上げに
-        // 加えて、爆発だけさらに +3dB 持ち上げる（画面端で埋もれていたため）
-        noiseEnvelope.gain.setValueAtTime(large ? 0.42 : 0.21, this.ctx.currentTime);
-        noiseEnvelope.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (large ? 0.8 : 0.3));
-
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseEnvelope);
-        noiseEnvelope.connect(out);
-
-        noise.start();
-        noise.stop(this.ctx.currentTime + (large ? 0.8 : 0.3));
+        // 加えて、爆発だけさらに +3dB 持ち上げる（画面端で埋もれていたため）。
+        // 掃引のほうが包絡より短い＝暗くなりきってから尾を引く
+        this._noiseBurst({
+            t: this.ctx.currentTime, dest: this._out(sourceX),
+            gain: large ? 0.42 : 0.21,
+            dur: large ? 0.8 : 0.3, end: 0.01,
+            from: large ? 1000 : 600, to: 40, sweepDur: large ? 0.5 : 0.2,
+        });
     }
 
     // --- Weapons ---
 
 
+    /** 武器の切り替え。短く落ちる電子音1つ。 */
     playSwitch() {
         if (!this._prepare()) return;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.05);
-
-        gain.gain.setValueAtTime(0.03, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
-
-        osc.connect(gain);
-        gain.connect(this._seDest());
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.05);
+        this._toneBurst({
+            t: this.ctx.currentTime, dest: this._seDest(),
+            type: 'square', from: 1200, to: 400,
+            gain: 0.03, dur: 0.05,
+        });
     }
 
     // --- Laser ---
@@ -1057,46 +1069,22 @@ export class AudioManager {
         if (!this._prepare()) return;
 
         const now = this.ctx.currentTime;
+        const dest = this._seDest();
 
-        // Sharp noise attack (the "crack/snap")
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
-        const noiseFilter = this.ctx.createBiquadFilter();
-        noiseFilter.type = 'lowpass';
-        noiseFilter.frequency.setValueAtTime(2000, now);
-        noiseFilter.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        // 頭の「バキッ」。掃引を包絡より短く切って、鋭さだけを立てる
+        this._noiseBurst({
+            t: now, dest, gain: 0.3, dur: 0.15, end: 0.01,
+            from: 2000, to: 100, sweepDur: 0.1,
+        });
 
-        const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.3, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(this._seDest());
-
-        // Heavy low thud (the "weight")
-        const osc = this.ctx.createOscillator();
-        const oscGain = this.ctx.createGain();
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
-
-        oscGain.gain.setValueAtTime(0.2, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-
-        // Add some distortion/crunch
+        // 重さを出す低い一撃。歪ませて軋みを足す
         const distortion = this.ctx.createWaveShaper();
         distortion.curve = this._makeDistortionCurve(100);
-
-        osc.connect(distortion);
-        distortion.connect(oscGain);
-        oscGain.connect(this._seDest());
-
-        noise.start(now);
-        osc.start(now);
-        noise.stop(now + 0.15);
-        osc.stop(now + 0.4);
+        this._toneBurst({
+            t: now, dest, type: 'sawtooth', gain: 0.2,
+            from: 100, to: 30, freqDur: 0.3, dur: 0.4,
+            through: distortion,
+        });
     }
 
     playBaseDestroyed() {
@@ -1109,21 +1097,13 @@ export class AudioManager {
             { f: 783.99, t: 0.24, d: 0.3 }  // G5
         ];
 
-        notes.forEach(note => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(note.f, now + note.t);
-
-            gain.gain.setValueAtTime(0.08, now + note.t);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + note.t + note.d);
-
-            osc.connect(gain);
-            gain.connect(this._seDest());
-
-            osc.start(now + note.t);
-            osc.stop(now + note.t + note.d);
+        const dest = this._seDest();
+        // 音程は動かさない（to を渡さない）。和音を順に置くだけのファンファーレ
+        notes.forEach((note) => {
+            this._toneBurst({
+                t: now + note.t, dest, type: 'triangle',
+                from: note.f, gain: 0.08, dur: note.d, end: 0.01,
+            });
         });
     }
 

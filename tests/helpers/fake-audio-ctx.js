@@ -52,6 +52,7 @@ export function fakeAudioCtx() {
       });
     },
     createStereoPanner() { return ctx._node('panner', { pan: ctx._param(0) }); },
+    createWaveShaper() { return ctx._node('shaper', { curve: null, oversample: 'none' }); },
     createDynamicsCompressor() {
       return ctx._node('compressor', {
         threshold: ctx._param(0), knee: ctx._param(0), ratio: ctx._param(1),
