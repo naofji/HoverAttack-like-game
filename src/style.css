@@ -9,12 +9,14 @@ body {
     height: 100vh;
     font-family: 'Space Mono', 'Courier New', Courier, monospace;
     overflow: hidden;
+    /* 4:3 でない画面に出る黒帯の上でも矢印を見せない。
+       canvas だけに cursor:none を掛けていた頃は帯の上で矢印が復活していた */
+    cursor: none;
 }
 
 #game-container {
     position: relative;
-    box-shadow: 0 0 30px rgba(0, 100, 200, 0.3);
-    border: 3px solid #333;
+    /* 画面いっぱいに広げるので、枠と外側の光は邪魔になるだけなので落とした */
 }
 
 canvas {
@@ -22,5 +24,13 @@ canvas {
     background-color: #000;
     image-rendering: pixelated;
     cursor: none;
-    /* Hide cursor, replaced by crosshair */
+
+    /* 内部解像度 1024x768 は据え置きのまま、表示だけ 4:3 を保って最大化する。
+       133.334vh = 100vh * 4/3、75vw = 100vw * 3/4。
+       幅と高さの両方に min() を掛けると、横長の画面では高さが、
+       縦長の画面では幅が制約になり、どちらでも比率が崩れない。
+       内部解像度を変えなければ CANVAS_WIDTH に紐づく索敵距離・音のパン・
+       UI レイアウトが無変更で済み、ゲームバランスが動かない。 */
+    width: min(100vw, 133.334vh);
+    height: min(75vw, 100vh);
 }
