@@ -15,6 +15,8 @@ import {
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE, SE_FADE_OUT_SECONDS,
+    REPAIR_HUM_FREQ_FROM, REPAIR_HUM_FREQ_TO, REPAIR_HUM_GAIN,
+    REPAIR_HUM_WOBBLE_HZ, REPAIR_HUM_WOBBLE_DEPTH,
 } from '../utils/Constants.js';
 import { stereoPan, positionalVolume } from '../utils/audioFalloff.js';
 import { WEAPON_SOUNDS, renderWeaponSound } from './weaponSounds.js';
@@ -324,7 +326,7 @@ export class AudioManager {
     /**
      * 効果音を滑らかに引いて止める。ゲームオーバーで使う。
      *
-     * 持続音（自機のホバー・敵のホバー・母艦のエンジン）は音源ごと止める。
+     * 持続音（自機のホバー・敵のホバー・母艦のエンジン・補給のハム）は音源ごと止める。
      * 音量を戻したときに鳴り出さないようにするため。
      * 状態を告げる曲と BGM はこの段を通らないので影響を受けない。
      *
@@ -335,6 +337,7 @@ export class AudioManager {
         this.stopHover();
         this.stopEnemyHover();
         this.stopCarrierEngine();
+        this.stopRepairHum();
         if (!this.ctx || !this.seFade) return;
 
         const t = this.ctx.currentTime;
@@ -790,6 +793,46 @@ export class AudioManager {
     /** 母艦のエンジンを止める（アタッチ解除時）。 */
     stopCarrierEngine() {
         this._stopLoopSound('carrier');
+    }
+
+    /**
+     * ドッキング中の HP 回復。満ちるまで鳴り続け、進むほど音程が上がる。
+     * 毎フレーム呼んでよい。満タンになったら stopRepairHum() を呼ぶこと。
+     * @param {number} progress 0=空 1=満タン
+     */
+    startRepairHum(progress = 0) {
+        const p = Math.max(0, Math.min(1, progress));
+        this._loopSound('repair', {
+            build: () => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                // 揺れ。一定だと電子音になり、装置が働いている感じが出ない
+                const lfo = this.ctx.createOscillator();
+                const lfoGain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                lfo.type = 'sine';
+                lfo.frequency.value = REPAIR_HUM_WOBBLE_HZ;
+                lfoGain.gain.value = REPAIR_HUM_WOBBLE_DEPTH;
+                gain.gain.value = 0;
+
+                osc.connect(gain);
+                lfo.connect(lfoGain);
+                lfoGain.connect(gain.gain);
+                gain.connect(this._seDest());
+                return { gain, osc, lfo, sources: [osc, lfo] };
+            },
+            tune: (n, t) => {
+                const freq = REPAIR_HUM_FREQ_FROM + p * (REPAIR_HUM_FREQ_TO - REPAIR_HUM_FREQ_FROM);
+                n.osc.frequency.setTargetAtTime(freq, t, 0.15);
+                n.gain.gain.setTargetAtTime(REPAIR_HUM_GAIN, t, 0.15);
+            },
+        });
+    }
+
+    /** 回復ハムを止める（満タン、または補給の途中で離脱したとき）。 */
+    stopRepairHum() {
+        this._stopLoopSound('repair');
     }
 
     /**
