@@ -16,7 +16,8 @@
 
 import {
     SMOKE_FALLOFF_EXPONENT, SMOKE_PUFF_ALPHA_MAX, SMOKE_PUFF_LIFETIME,
-    SMOKE_PUFF_RISE_RATIO, SMOKE_PUFF_DECAY_EXPONENT, SMOKE_CONCEAL_THRESHOLD,
+    SMOKE_PUFF_RISE_RATIO, SMOKE_PUFF_HOLD_RATIO, SMOKE_PUFF_DECAY_EXPONENT,
+    SMOKE_CONCEAL_THRESHOLD,
 } from './Constants.js';
 
 /**
@@ -35,19 +36,34 @@ export function falloff(d, r) {
 }
 
 /**
- * 時間の包絡。u = 0 と u = 1 で厳密に 0 になる。
+ * 時間の包絡。台形（立ち上がり → 停滞 → 消滅）で、u = 0 と u = 1 で厳密に 0 になる。
  *
- * 立ち上がり（最初の5%）を入れているのは、生まれた瞬間に濃いパフが出現するのを
- * 避けるため。撒きの分散と合わせて「湧き上がる」動きになる。
- * 減衰の指数 1.3 は 1.0（直線）だと後半までしぶとく見え、2.0 だと発煙直後に
- * 急に薄くなって隠れる時間が足りなかったので、その間を取った値。
+ *   1 |    ______________________
+ *     |   /                      \
+ *   0 |__/________________________\__
+ *      0  ↑                    ↑    1
+ *      RISE_RATIO         HOLD_RATIO
+ *
+ * **直線的に薄れ続ける形（以前の `(1-u)^1.3`）ではなく、停滞させてから
+ * 最後に落とす。** 前者だと煙が出た直後から弱まり続けて「張った」感じが出ず、
+ * いつ消えたのかも曖昧になる。濃さを保ってから短い時間で引く方が、
+ * 煙幕としても「効いている間」と「切れた」がはっきりする。
+ *
+ * - 立ち上がり（最初の1%＝12 tick）は、生まれた瞬間に濃いパフが出現するのを
+ *   避けるため。撒きの分散と合わせて「湧き上がる」動きになる。寿命を延ばしても
+ *   ここは短いままにする（長いと発煙してから隠れるまで待たされる）
+ * - 消滅は残り10%（120 tick = 2秒）で。指数 1.6 は 1.0（直線）だと最後まで
+ *   一定速度で消えて素っ気ないため、落ち始めを緩く・終わりを速くしてある
  * @param {number} u 正規化年齢（age / SMOKE_PUFF_LIFETIME）
  * @returns {number} 0〜1
  */
 export function envelope(u) {
     if (u <= 0 || u >= 1) return 0;
     const rise = Math.min(1, u / SMOKE_PUFF_RISE_RATIO);
-    return rise * Math.pow(1 - u, SMOKE_PUFF_DECAY_EXPONENT);
+    if (u <= SMOKE_PUFF_HOLD_RATIO) return rise;
+    // 停滞の終わりで 1、寿命の終わりで 0。境目で連続なので段差が出ない
+    const fade = (1 - u) / (1 - SMOKE_PUFF_HOLD_RATIO);
+    return rise * Math.pow(fade, SMOKE_PUFF_DECAY_EXPONENT);
 }
 
 /**

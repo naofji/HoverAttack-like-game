@@ -67,12 +67,13 @@ export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least
 // --- Artillery smoke screen ---
 // 発見された artillery が張る煙幕。設計は
 // docs/superpowers/specs/2026-08-11-artillery-smoke-screen-design.md
-export const SMOKE_COOLDOWN = 480;            // tick: 発煙の間隔（8秒）。煙の寿命4秒の倍で「半分は見えている」
+export const SMOKE_COOLDOWN = 2160;           // tick: 発煙の間隔。煙の寿命の倍にして「半分は見えている」を保つ。20秒停滞する煙をこれより短い間隔で撒けると、画面がほぼ常時煙る
 export const SMOKE_PUFF_COUNT = 14;           // 半径34px × 14枚で画面幅の1/4ほど。枚数で濃さを作るので1枚は薄い
 export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。一斉に生むと全パフの年齢が揃って湧き上がって見えない
-export const SMOKE_PUFF_LIFETIME = 240;       // tick: パフ1個の寿命（4秒）。雲はパフが全部消えたら死ぬ
-export const SMOKE_PUFF_RISE_RATIO = 0.05;    // 寿命のこの割合で 0→1 に立ち上がる（最初の12 tick）
-export const SMOKE_PUFF_DECAY_EXPONENT = 1.3; // (1-u)^この指数 で薄れる。1.0 だと後半までしぶとく、2.0 だと隠れる時間が足りない
+export const SMOKE_PUFF_LIFETIME = 1080;      // tick: パフ1個の寿命。うち961 tick が濃さを保つ停滞で、normal モード(0.8x)の実時間で 20.0秒（newtype 1.0x では16秒）。実測の隠蔽持続は 20.5〜21.3秒（消滅にかかる間も途中までは隠れているぶん、停滞より少し長い）。雲はパフが全部消えたら死ぬ
+export const SMOKE_PUFF_RISE_RATIO = 0.01;    // 寿命のこの割合で 0→1 に立ち上がる（11 tick）。寿命を延ばしても立ち上がりは短いままにする（長いと発煙してから隠れるまで待たされる）
+export const SMOKE_PUFF_HOLD_RATIO = 0.90;    // この割合まで濃さを保ち、残りで消える。停滞と消滅の境目
+export const SMOKE_PUFF_DECAY_EXPONENT = 1.6; // 消滅は寿命の残り10%(108 tick = 実時間2.3秒)で。指数>1 なので落ち始めは緩く、最後に加速して「スッ」と消える
 export const SMOKE_PUFF_RADIUS_START = 30;    // px: 出たてで機体（16x24）をゆうに覆う。実機で 16px は「アタッカーを隠し切れない」と判断された
 export const SMOKE_PUFF_RADIUS_END = 78;      // px: 拡散後は1枚で機体の3倍以上。雲の広がりは主にこの成長が作る
 export const SMOKE_PUFF_ALPHA_MAX = 0.50;     // 上限なしで素直に重ねるので1枚は薄く。0.38 では隠蔽が続くのが実測で中央値48 tick しか無く（要求は60超）、パフが自分の成長（16→34px）より速く外へ散る（0.10px/frame × 240 = 24px）ぶん発煙点が早く痩せるため上げた
@@ -80,8 +81,8 @@ export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急�
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
 export const SMOKE_SPREAD_RADIUS = 16;        // px: 撒く位置のばらつき。パフ半径(30px)の半分までに留める。これを超えると発煙直後の一点で重なりが足りず、いちばん隠れてほしい瞬間にしきい値を越えない
-export const SMOKE_DRIFT_SPEED = 0.14;        // px/frame: 外向きの初速。**パフ自身の成長（(78-30)/240 = 0.20px/frame）より遅く保つこと。** 追い越すと発煙点の重なりが寿命の半ばで崩れ、隠蔽が短くなるうえ撒き位置の乱数で毎回ばらつく（実測で中央値48 tick・振れ幅45〜80）
-export const SMOKE_RISE_SPEED = 0.12;         // px/frame: ゆっくり上昇
+export const SMOKE_DRIFT_SPEED = 0.025;       // px/frame: 外向きの初速。**パフ自身の成長（(78-30)/1080 = 0.044px/frame）より遅く保つこと。** 追い越すと、薄くなる前に雲がばらけて隠れなくなる（20秒停滞させる今はとくに効く）
+export const SMOKE_RISE_SPEED = 0.02;         // px/frame: ゆっくり上昇
 export const SMOKE_SPRITE_SIZE = 128;         // px: 焼き付けるスプライトの一辺。パフ最大直径(156px)に対してこれ未満だと拡大でぼける。焼くのは一度だけなので大きくしても実行時コストは変わらない
 
 // --- Rival alignment avoidance ---

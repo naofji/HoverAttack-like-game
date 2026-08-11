@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { falloff, envelope, puffAlphaAt, coverageAt, isConcealed } from '../src/js/utils/concealment.js';
 import {
   SMOKE_PUFF_ALPHA_MAX, SMOKE_PUFF_LIFETIME, SMOKE_CONCEAL_THRESHOLD,
+  SMOKE_PUFF_HOLD_RATIO,
 } from '../src/js/utils/Constants.js';
 
 // --- 空間の減衰 ---------------------------------------------------------------
@@ -37,17 +38,47 @@ test('envelope は生まれた瞬間ではなく立ち上がってから濃く�
   assert.ok(envelope(0.05) > 0.9, `立ち上がり切っていない: ${envelope(0.05)}`);
 });
 
-test('envelope は立ち上がり後は単調に薄れる', () => {
+test('envelope は立ち上がり後は一度も濃くならない（単調非増加）', () => {
   let prev = Infinity;
-  for (let u = 0.05; u <= 1.0001; u += 0.05) {
+  for (let u = 0.02; u <= 1.0001; u += 0.02) {
     const e = envelope(u);
     assert.ok(e <= prev + 1e-9, `u=${u.toFixed(2)} で濃くなっている`);
     prev = e;
   }
 });
 
+test('envelope は停滞のあいだ濃さを保つ（直線的に薄れ続けない）', () => {
+  // 出た直後から弱まり続けると「煙幕を張った」感じが出ず、いつ切れたのかも
+  // 曖昧になる。停滞中は満濃度のままであることを縛る
+  for (const u of [0.1, 0.3, 0.5, 0.7, SMOKE_PUFF_HOLD_RATIO]) {
+    assert.equal(envelope(u), 1, `u=${u} で濃さが落ちている`);
+  }
+  // 停滞は寿命の大半を占める（短いと「長い間濃いまま」にならない）
+  assert.ok(SMOKE_PUFF_HOLD_RATIO > 0.75, `停滞が短い: ${SMOKE_PUFF_HOLD_RATIO}`);
+});
+
+test('停滞の終わりで段差が出ない（境目で連続）', () => {
+  const eps = 1e-4;
+  const before = envelope(SMOKE_PUFF_HOLD_RATIO - eps);
+  const after = envelope(SMOKE_PUFF_HOLD_RATIO + eps);
+  assert.ok(Math.abs(before - after) < 0.01,
+    `境目で飛んでいる: ${before} → ${after}`);
+});
+
+test('停滞が明けたら短い時間で消える（スッと引く）', () => {
+  // 消滅にかける長さは寿命の残りぶんだけ。停滞から消滅までが長いと
+  // 「だらだら薄れる」に戻ってしまう
+  const fadeSpan = (1 - SMOKE_PUFF_HOLD_RATIO) * SMOKE_PUFF_LIFETIME;
+  assert.ok(fadeSpan <= 180, `消えるのに時間をかけすぎ: ${fadeSpan} tick`);
+  // 消滅の折り返しでは既に半分以下（後半ほど速い）
+  const mid = SMOKE_PUFF_HOLD_RATIO + (1 - SMOKE_PUFF_HOLD_RATIO) / 2;
+  assert.ok(envelope(mid) < 0.5, `消え始めが遅い: ${envelope(mid)}`);
+});
+
 test('envelope は消える直前でも十分薄い（ぷつりと切れない）', () => {
-  assert.ok(envelope(0.95) < 0.1, `消える寸前が濃い: ${envelope(0.95)}`);
+  // 寿命の終わり際。0 に着地する直前に濃いまま残っていると、消える瞬間が
+  // 不連続に見える。停滞の終わりからここまでで大半を落としきっていること
+  assert.ok(envelope(0.99) < 0.05, `消える寸前が濃い: ${envelope(0.99)}`);
 });
 
 // --- パフ1枚の alpha ----------------------------------------------------------
