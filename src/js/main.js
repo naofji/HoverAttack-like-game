@@ -36,6 +36,7 @@ import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
 import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
+import { SmokeScreen } from './entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
@@ -103,6 +104,7 @@ export const Game = {
     carrier: null,
     projectiles: [],
     particles: [],
+    smokeScreens: [],          // artillery が張った煙幕。視界と Auto Aim を遮る
     landmines: [],
     enemies: [],
     enemyBullets: [],
@@ -598,6 +600,7 @@ export const Game = {
         this._updateCamera();
         this._updateProjectiles();
         this._updateParticles();
+        this._updateSmokeScreens();
         this._updateLandmines();
         this._updateRepairKits();
         this._updateAutoAimUnits();
@@ -768,6 +771,13 @@ export const Game = {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             this.particles[i].update();
             if (!this.particles[i].alive) this.particles.splice(i, 1);
+        }
+    },
+
+    _updateSmokeScreens() {
+        for (let i = this.smokeScreens.length - 1; i >= 0; i--) {
+            this.smokeScreens[i].update();
+            if (!this.smokeScreens[i].alive) this.smokeScreens.splice(i, 1);
         }
     },
 
@@ -1263,6 +1273,9 @@ export const Game = {
         for (const bullet of this.enemyBullets) bullet.draw(ctx);
         if (this.flag) this.flag.draw(ctx);
 
+        // 煙は敵とHPバーの上に重ねる（隠すのが仕事なので最後に描く）
+        for (const screen of this.smokeScreens) screen.draw(ctx);
+
         ctx.restore();
 
         this._restoreRenderInterpolation();
@@ -1386,6 +1399,15 @@ export const Game = {
     /** Spawn damage sparks at position */
     spawnSparks(x, y) {
         this.particles.push(...createSparks(x, y));
+    },
+
+    /**
+     * 煙幕を張る。artillery が自機に発見されたときに呼ぶ。
+     * 当たり判定は持たず、視界と Auto Aim だけを遮る。
+     */
+    spawnSmokeScreen(x, y) {
+        this.smokeScreens.push(new SmokeScreen(x, y));
+        audioManager.playWeapon('smoke', x, y);
     },
 
     /** Spawn heavy damage effect (sparks + sound) */

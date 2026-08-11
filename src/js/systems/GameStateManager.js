@@ -37,6 +37,7 @@ export class GameStateManager {
 
         game.projectiles = [];
         game.particles = [];
+        game.smokeScreens = [];   // 前ステージの煙が残ると開幕から視界が塞がる
         game.landmines = [];
         game.enemies = [];
         game.enemyBullets = [];
