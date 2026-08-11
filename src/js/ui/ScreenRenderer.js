@@ -714,7 +714,6 @@ export class ScreenRenderer {
             ctx.fillStyle = TIER.fame.subtitle;
             ctx.font = font('sub', true);
             ctx.fillText('NO CHAMPIONS YET', canvas.width / 2, canvas.height / 2);
-            drawScanlines(ctx, canvas.width, canvas.height);
         } else {
             // 週ブロックを2列に並べる。1列だと画面の横半分以上が空くうえ、
             // 表示できる週数も半分になってしまう。
@@ -766,10 +765,10 @@ export class ScreenRenderer {
                     y += lineHeight('body');
                 });
             });
-
-            drawScanlines(ctx, canvas.width, canvas.height);
         }
 
+        // 走査線は分岐の外で1回だけ。以前は分岐の中と外で二重に掛かっていて、
+        // この画面だけ走査線の濃さが 0.10 ではなく 0.19 相当になっていた。
         drawScanlines(ctx, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
