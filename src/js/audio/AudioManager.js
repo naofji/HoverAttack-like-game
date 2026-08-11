@@ -35,6 +35,7 @@ export class AudioManager {
         this.isHovering = false;
         this.noiseBuffer = null;
         this.hoverRPM = 0; // Tracks internal engine rev-up (0.0 to 1.0)
+        this._loops = {};        // 鳴り続けている音（key → ノード束）
         this.bgm = null;
         this.useMP3BGM = true; // Set to true to use an external MP3 file
         this.alarmBuffer = null;
@@ -264,6 +265,51 @@ export class AudioManager {
      */
     _seDest() {
         return this.seFade || this.ctx.destination;
+    }
+
+    /**
+     * 鳴り続ける音の共通の骨格。
+     *
+     * 「無ければ作る → 毎回 setTargetAtTime で追従させる」という形は
+     * ホバーにもエンジンにも補給のハムにも要る。ここに集約して、
+     * 音ごとの違いは build / tune の2つだけに出るようにしてある。
+     *
+     * 毎フレーム呼んでよい。呼ぶのをやめるだけでは止まらないので、
+     * 止めるときは _stopLoopSound() を呼ぶこと。
+     *
+     * @param {string} key 音の名前（_loops のキー）
+     * @param {{build: () => object, tune: (nodes: object, t: number) => void}} spec
+     *   build は `{ gain, sources: [...] }` を含むノード束を返す。
+     *   gain は止めるときに引く段、sources は start / stop する音源
+     */
+    _loopSound(key, spec) {
+        if (!this._prepare()) return;
+        let nodes = this._loops[key];
+        if (!nodes) {
+            nodes = spec.build();
+            this._loops[key] = nodes;
+            for (const src of nodes.sources) src.start();
+        }
+        spec.tune(nodes, this.ctx.currentTime);
+    }
+
+    /**
+     * ループ音を止める。ぶつ切りにせず引いてから音源を捨てる。
+     * 鳴っていないときや、音の出せない環境で呼んでも何も起きない。
+     * @param {string} key
+     * @param {number} [fade] 引くのにかける時定数（秒）
+     */
+    _stopLoopSound(key, fade = 0.12) {
+        const nodes = this._loops[key];
+        if (!nodes) return;
+        this._loops[key] = null;
+        nodes.gain.gain.setTargetAtTime(0, this.ctx.currentTime, fade);
+        const { sources } = nodes;
+        setTimeout(() => {
+            for (const src of sources) {
+                try { src.stop(); src.disconnect(); } catch (e) { /* 既に停止 */ }
+            }
+        }, Math.max(250, fade * 2000));
     }
 
     /**
@@ -711,50 +757,39 @@ export class AudioManager {
      * @param {number} throttle 0=停止 1=移動中
      */
     startCarrierEngine(throttle = 0) {
-        if (!this._prepare()) return;
+        this._loopSound('carrier', {
+            build: () => {
+                const osc = this.ctx.createOscillator();
+                const sub = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const filter = this.ctx.createBiquadFilter();
 
-        if (!this.carrierOsc) {
-            this.carrierOsc = this.ctx.createOscillator();
-            this.carrierSub = this.ctx.createOscillator();
-            this.carrierGain = this.ctx.createGain();
-            this.carrierFilter = this.ctx.createBiquadFilter();
+                osc.type = 'sawtooth';
+                sub.type = 'sine';
+                filter.type = 'lowpass';
+                filter.frequency.value = 180;
+                filter.Q.value = 3;
+                gain.gain.value = 0;
 
-            this.carrierOsc.type = 'sawtooth';
-            this.carrierSub.type = 'sine';
-            this.carrierFilter.type = 'lowpass';
-            this.carrierFilter.frequency.value = 180;
-            this.carrierFilter.Q.value = 3;
-
-            this.carrierGain.gain.value = 0;
-            this.carrierOsc.connect(this.carrierFilter);
-            this.carrierSub.connect(this.carrierFilter);
-            this.carrierFilter.connect(this.carrierGain);
-            this.carrierGain.connect(this._seDest());
-
-            this.carrierOsc.start();
-            this.carrierSub.start();
-        }
-
-        // 停止中は低く静かに、移動中は少し上がる
-        const t = this.ctx.currentTime;
-        this.carrierOsc.frequency.setTargetAtTime(46 + throttle * 14, t, 0.12);
-        this.carrierSub.frequency.setTargetAtTime(23 + throttle * 7, t, 0.12);
-        this.carrierFilter.frequency.setTargetAtTime(150 + throttle * 120, t, 0.12);
-        this.carrierGain.gain.setTargetAtTime(0.06 + throttle * 0.05, t, 0.12);
+                osc.connect(filter);
+                sub.connect(filter);
+                filter.connect(gain);
+                gain.connect(this._seDest());
+                return { gain, filter, osc, sub, sources: [osc, sub] };
+            },
+            // 停止中は低く静かに、移動中は少し上がる
+            tune: (n, t) => {
+                n.osc.frequency.setTargetAtTime(46 + throttle * 14, t, 0.12);
+                n.sub.frequency.setTargetAtTime(23 + throttle * 7, t, 0.12);
+                n.filter.frequency.setTargetAtTime(150 + throttle * 120, t, 0.12);
+                n.gain.gain.setTargetAtTime(0.06 + throttle * 0.05, t, 0.12);
+            },
+        });
     }
 
     /** 母艦のエンジンを止める（アタッチ解除時）。 */
     stopCarrierEngine() {
-        if (!this.carrierGain) return;
-        this.carrierGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
-        const osc = this.carrierOsc;
-        const sub = this.carrierSub;
-        this.carrierOsc = null;
-        this.carrierSub = null;
-        this.carrierGain = null;
-        setTimeout(() => {
-            try { osc.stop(); osc.disconnect(); sub.stop(); sub.disconnect(); } catch (e) { /* 既に停止 */ }
-        }, 250);
+        this._stopLoopSound('carrier');
     }
 
     /**
