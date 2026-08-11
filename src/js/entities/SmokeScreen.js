@@ -16,12 +16,56 @@
 import {
     SMOKE_PUFF_COUNT, SMOKE_EMIT_SPAN, SMOKE_PUFF_LIFETIME,
     SMOKE_PUFF_RADIUS_START, SMOKE_PUFF_RADIUS_END, SMOKE_PUFF_ALPHA_MAX,
-    SMOKE_ROTATION_SPEED, SMOKE_SPREAD_RADIUS, SMOKE_SPREAD_BIAS,
+    SMOKE_ROTATION_SPEED, SMOKE_SPREAD_RADIUS,
+    SMOKE_ARC_FROM_HOUR, SMOKE_ARC_TO_HOUR, SMOKE_RING_INNER, SMOKE_RING_OUTER,
     SMOKE_PUFF_RADIUS_JITTER, SMOKE_DRIFT_SPEED,
     SMOKE_RISE_SPEED, SMOKE_SPRITE_SIZE,
 } from '../utils/Constants.js';
 import { envelope } from '../utils/concealment.js';
 import { getSmokeSprites, SMOKE_SHAPES, SMOKE_TINTS } from './smokeSprites.js';
+
+/**
+ * 撒く場所の並び。乱数ではなく決め打ちにしてある。
+ *
+ * 乱数で散らすと、たまたま片側に寄ったり中心が空いたりして「噴き出した」形に
+ * 見えない回が出る。中心 → 内側の列 → 外側の列、の順に撒くと、機体から湧いて
+ * 周りへ回り込む見え方になり、どの発煙でも同じ品質になる。
+ *
+ * 扇形は時計の文字盤で 8時（左下）から 12時 を通って 16時＝4時（右下）まで。
+ * 真下の120°を空けているのは、そちらは地面で、煙は上へ回り込むほうが自然なため。
+ *
+ *        11  12  1
+ *      10    ·    2
+ *      9   (機体)  3
+ *       8         4
+ *          （空き）
+ *
+ * 列ごとの距離は SMOKE_RING_INNER / _OUTER（SMOKE_SPREAD_RADIUS に対する比）。
+ * 合計は SMOKE_PUFF_COUNT と一致していること（テストで縛っている）。
+ */
+const EMISSION_RINGS = [
+    { count: 1, dist: 0 },                  // 中心。いちばん先に出る
+    { count: 9, dist: SMOKE_RING_INNER },
+    { count: 9, dist: SMOKE_RING_OUTER },
+];
+
+/** 時計の文字盤の「時」を canvas の角度へ。12時が真上（y は下向き正）。 */
+function hourToAngle(hour) {
+    return (hour / 12) * Math.PI * 2 - Math.PI / 2;
+}
+
+/** EMISSION_RINGS を {angle, dist} の並びへ展開する。起動時に一度だけ。 */
+const SMOKE_EMISSION_SLOTS = EMISSION_RINGS.flatMap((ring) => {
+    if (ring.dist === 0) return [{ angle: 0, dist: 0 }];
+    return Array.from({ length: ring.count }, (_v, i) => {
+        // 両端（8時と16時）を必ず含めたいので count-1 で割る
+        const hour = SMOKE_ARC_FROM_HOUR
+            + (SMOKE_ARC_TO_HOUR - SMOKE_ARC_FROM_HOUR) * (i / (ring.count - 1));
+        return { angle: hourToAngle(hour), dist: ring.dist };
+    });
+});
+
+export { SMOKE_EMISSION_SLOTS };
 
 export class SmokeScreen {
     /**
@@ -69,29 +113,38 @@ export class SmokeScreen {
             Math.ceil((this.timer / SMOKE_EMIT_SPAN) * SMOKE_PUFF_COUNT),
         );
         while (this.emitted < due) {
-            this.puffs.push(this._makePuff());
+            this.puffs.push(this._makePuff(this.emitted));
             this.emitted++;
         }
     }
 
-    _makePuff() {
-        const angle = Math.random() * Math.PI * 2;
-        // べき乗で中心寄りに偏らせる。一様（べき1）だと円板の外周ほど面積が広いぶん
-        // 外側に密集して、雲の輪郭がきれいな円に揃ってしまう。偏らせると芯の重なりを
-        // 保ったまま、たまに遠くへ飛んだパフが輪郭を不揃いにする
-        const dist = Math.pow(Math.random(), SMOKE_SPREAD_BIAS) * SMOKE_SPREAD_RADIUS;
-        // 大きさもばらす。位置だけ散らしても、同じ年齢のパフが全部同じ半径では
-        // 「同じ丸の反復」に見えてしまう
-        const radiusScale = 1 + (Math.random() * 2 - 1) * SMOKE_PUFF_RADIUS_JITTER;
+    _makePuff(index) {
+        const slot = SMOKE_EMISSION_SLOTS[index] || SMOKE_EMISSION_SLOTS[SMOKE_EMISSION_SLOTS.length - 1];
+        const dist = slot.dist * SMOKE_SPREAD_RADIUS;
+        // 大きさだけはばらつかせる。配置を決めても、同じ年齢のパフが全部同じ半径では
+        // 「同じ丸が並んでいる」に見えてしまう。
+        // ただし中心のパフは縮ませない（上振れだけ）。機体そのものを覆っている当の
+        // パフなので、ここに小さい目が出ると隠蔽の持続が落ちる（実測で 20.4秒の
+        // 中央値に対し、40回に数回 14.7秒まで落ちていた）
+        const radiusScale = slot.dist === 0
+            ? 1 + Math.random() * SMOKE_PUFF_RADIUS_JITTER
+            : 1 + (Math.random() * 2 - 1) * SMOKE_PUFF_RADIUS_JITTER;
+        const isCore = dist === 0;
+        const dirX = isCore ? 0 : Math.cos(slot.angle);
+        const dirY = isCore ? 0 : Math.sin(slot.angle);
         return {
-            x: this.x + Math.cos(angle) * dist,
-            y: this.y + Math.sin(angle) * dist,
+            x: this.x + dirX * dist,
+            y: this.y + dirY * dist,
             radius: SMOKE_PUFF_RADIUS_START * radiusScale,
             radiusScale,
             age: 0,
-            // 外へ広がりながら、ゆっくり浮き上がる
-            vx: Math.cos(angle) * SMOKE_DRIFT_SPEED * (0.5 + Math.random()),
-            vy: Math.sin(angle) * SMOKE_DRIFT_SPEED * (0.5 + Math.random()) - SMOKE_RISE_SPEED,
+            // 自分の居る向きへ広がりながら、ゆっくり浮き上がる。
+            // 中心のパフだけは動かさない。機体そのものを覆っている当のパフで、
+            // これが上へ抜けると停滞しているはずの間に判定点の濃さが落ちていく
+            // （実測: 上昇させると coverage が 0.75 → 0.58 まで下がり、包絡が
+            // 落ちるより先にしきい値を割っていた）
+            vx: dirX * SMOKE_DRIFT_SPEED,
+            vy: isCore ? 0 : dirY * SMOKE_DRIFT_SPEED - SMOKE_RISE_SPEED,
             rotation: Math.random() * Math.PI * 2,
             // 回る向きを揃えると渦に見えてしまうので符号をばらす
             spin: (Math.random() < 0.5 ? -1 : 1) * SMOKE_ROTATION_SPEED * Math.PI / 180,
