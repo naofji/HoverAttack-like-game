@@ -269,3 +269,22 @@ test('消えかけのパフは薄く描かれる', async () => {
   };
   assert.ok(alphaMax(late) < alphaMax(early), '古い煙が薄くなっていない');
 });
+
+test('漂いは成長より遅い（半径や寿命を変えても崩れない）', async () => {
+  // 漂いが成長を追い越すと、煙がまだ濃いうちに雲がばらけて判定点の重なりが崩れ、
+  // 隠蔽が短くなるうえ走るたびに揺れる。以前は px/frame の実数で持っていて、
+  // 半径を変えたときと寿命を変えたときの2回とも手で追随させる必要があった
+  // （とくに寿命は、半径を触っていないのに成長が変わる）。今は比で持っている
+  const {
+    SMOKE_GROWTH_RATE, SMOKE_DRIFT_RATIO, SMOKE_DRIFT_SPEED,
+    SMOKE_PUFF_RADIUS_START: start, SMOKE_PUFF_RADIUS_END: end,
+    SMOKE_PUFF_LIFETIME: life,
+  } = await import('../src/js/utils/Constants.js');
+
+  assert.ok(SMOKE_DRIFT_RATIO > 0 && SMOKE_DRIFT_RATIO < 1,
+    `漂いの比が範囲外: ${SMOKE_DRIFT_RATIO}`);
+  assert.ok(SMOKE_DRIFT_SPEED < SMOKE_GROWTH_RATE, '漂いが成長を追い越している');
+  // 成長は半径と寿命から出る（どちらを変えても勝手に追随する）
+  assert.ok(Math.abs(SMOKE_GROWTH_RATE - (end - start) / life) < 1e-12,
+    '成長が半径と寿命から出ていない');
+});

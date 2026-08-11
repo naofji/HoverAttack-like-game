@@ -86,8 +86,17 @@ export const SMOKE_ARC_TO_HOUR = 16;          // 終わり（16時＝4時＝右�
 export const SMOKE_RING_INNER = 0.42;         // 内側の列の距離（SMOKE_SPREAD_RADIUS に対する比）
 export const SMOKE_RING_OUTER = 0.85;         // 外側の列
 export const SMOKE_PUFF_RADIUS_JITTER = 0.35; // パフごとの大きさのばらつき（±この割合）。同じ年齢のパフが全部同じ半径だと、位置を散らしても「同じ丸の反復」に見える
-export const SMOKE_DRIFT_SPEED = 0.025;       // px/frame: 外向きの初速。**パフ自身の成長（(100-46)/1080 = 0.05px/frame）より遅く保つこと。** 追い越すと、薄くなる前に雲がばらけて隠れなくなる
-export const SMOKE_RISE_SPEED = 0.02;         // px/frame: ゆっくり上昇
+// パフが1フレームに太る量。半径と寿命から出るので、どちらを変えても勝手に追随する
+export const SMOKE_GROWTH_RATE = (SMOKE_PUFF_RADIUS_END - SMOKE_PUFF_RADIUS_START) / SMOKE_PUFF_LIFETIME;
+// 外へ漂う速さは、その成長に対する比で決める。
+// **1 を超えさせないこと。** 漂いが成長を追い越すと、煙がまだ濃いうちに雲がばらけて
+// 判定点の重なりが崩れ、隠蔽が短くなるうえ走るたびに揺れる。
+// この関係は以前 px/frame の実数で持っていたが、半径を変えたときと寿命を変えたときの
+// 2回とも手で追随させ忘れかけた（とくに寿命は、半径を触っていないのに成長が変わる）。
+// 比で持てば式が守ってくれる。
+export const SMOKE_DRIFT_RATIO = 0.5;
+export const SMOKE_DRIFT_SPEED = SMOKE_GROWTH_RATE * SMOKE_DRIFT_RATIO;  // px/frame
+export const SMOKE_RISE_SPEED = 0.02;         // px/frame: ゆっくり上昇。こちらは成長に縛らず実数のまま持つ（浮力は煙の大きさとは別の性質で、寿命が延びればそのぶん高く昇るのが自然）。中心のパフには効かせない
 export const SMOKE_SPRITE_SIZE = 256;         // px: 焼き付けるスプライトの一辺。パフ最大直径(100×1.35×2 = 270px)にほぼ合わせる。焼くのは一度だけなので大きくしても実行時コストは変わらない
 
 // --- Rival alignment avoidance ---
