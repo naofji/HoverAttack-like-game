@@ -68,7 +68,7 @@ export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least
 // 発見された artillery が張る煙幕。設計は
 // docs/superpowers/specs/2026-08-11-artillery-smoke-screen-design.md
 export const SMOKE_COOLDOWN = 2160;           // tick: 発煙の間隔。煙の寿命の倍にして「半分は見えている」を保つ。20秒停滞する煙をこれより短い間隔で撒けると、画面がほぼ常時煙る
-export const SMOKE_PUFF_COUNT = 14;           // 半径34px × 14枚で画面幅の1/4ほど。枚数で濃さを作るので1枚は薄い
+export const SMOKE_PUFF_COUNT = 18;           // 撒く位置と大きさを散らしたぶん、中心の重なりがたまに痩せて隠蔽が短くなる回が出た（14枚で 16.2秒/20.6秒 の振れ）。枚数で埋める
 export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。一斉に生むと全パフの年齢が揃って湧き上がって見えない
 export const SMOKE_PUFF_LIFETIME = 1080;      // tick: パフ1個の寿命。うち961 tick が濃さを保つ停滞で、normal モード(0.8x)の実時間で 20.0秒（newtype 1.0x では16秒）。実測の隠蔽持続は 20.5〜21.3秒（消滅にかかる間も途中までは隠れているぶん、停滞より少し長い）。雲はパフが全部消えたら死ぬ
 export const SMOKE_PUFF_RISE_RATIO = 0.01;    // 寿命のこの割合で 0→1 に立ち上がる（11 tick）。寿命を延ばしても立ち上がりは短いままにする（長いと発煙してから隠れるまで待たされる）
@@ -80,7 +80,9 @@ export const SMOKE_PUFF_ALPHA_MAX = 0.50;     // 上限なしで素直に重ね�
 export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
-export const SMOKE_SPREAD_RADIUS = 16;        // px: 撒く位置のばらつき。パフ半径(30px)の半分までに留める。これを超えると発煙直後の一点で重なりが足りず、いちばん隠れてほしい瞬間にしきい値を越えない
+export const SMOKE_SPREAD_RADIUS = 52;        // px: 撒く位置のばらつきの上限。実機で「できる場所が一定すぎる」と判断されて 16 から上げた
+export const SMOKE_SPREAD_BIAS = 1.8;         // 撒く距離の偏り（乱数のべき乗）。1 だと外側ほど密になって輪郭が円く揃う。>1 で中心寄りに集め、たまに遠くへ飛ばす＝芯は濃いまま輪郭だけ不揃いになる
+export const SMOKE_PUFF_RADIUS_JITTER = 0.35; // パフごとの大きさのばらつき（±この割合）。同じ年齢のパフが全部同じ半径だと、位置を散らしても「同じ丸の反復」に見える
 export const SMOKE_DRIFT_SPEED = 0.025;       // px/frame: 外向きの初速。**パフ自身の成長（(78-30)/1080 = 0.044px/frame）より遅く保つこと。** 追い越すと、薄くなる前に雲がばらけて隠れなくなる（20秒停滞させる今はとくに効く）
 export const SMOKE_RISE_SPEED = 0.02;         // px/frame: ゆっくり上昇
 export const SMOKE_SPRITE_SIZE = 128;         // px: 焼き付けるスプライトの一辺。パフ最大直径(156px)に対してこれ未満だと拡大でぼける。焼くのは一度だけなので大きくしても実行時コストは変わらない

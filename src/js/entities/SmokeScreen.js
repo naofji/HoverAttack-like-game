@@ -16,7 +16,8 @@
 import {
     SMOKE_PUFF_COUNT, SMOKE_EMIT_SPAN, SMOKE_PUFF_LIFETIME,
     SMOKE_PUFF_RADIUS_START, SMOKE_PUFF_RADIUS_END, SMOKE_PUFF_ALPHA_MAX,
-    SMOKE_ROTATION_SPEED, SMOKE_SPREAD_RADIUS, SMOKE_DRIFT_SPEED,
+    SMOKE_ROTATION_SPEED, SMOKE_SPREAD_RADIUS, SMOKE_SPREAD_BIAS,
+    SMOKE_PUFF_RADIUS_JITTER, SMOKE_DRIFT_SPEED,
     SMOKE_RISE_SPEED, SMOKE_SPRITE_SIZE,
 } from '../utils/Constants.js';
 import { envelope } from '../utils/concealment.js';
@@ -48,7 +49,8 @@ export class SmokeScreen {
                 continue;
             }
             const u = p.age / SMOKE_PUFF_LIFETIME;
-            p.radius = SMOKE_PUFF_RADIUS_START + (SMOKE_PUFF_RADIUS_END - SMOKE_PUFF_RADIUS_START) * u;
+            p.radius = (SMOKE_PUFF_RADIUS_START + (SMOKE_PUFF_RADIUS_END - SMOKE_PUFF_RADIUS_START) * u)
+                * p.radiusScale;
             p.x += p.vx;
             p.y += p.vy;
             p.rotation += p.spin;
@@ -74,11 +76,18 @@ export class SmokeScreen {
 
     _makePuff() {
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.random() * SMOKE_SPREAD_RADIUS;
+        // べき乗で中心寄りに偏らせる。一様（べき1）だと円板の外周ほど面積が広いぶん
+        // 外側に密集して、雲の輪郭がきれいな円に揃ってしまう。偏らせると芯の重なりを
+        // 保ったまま、たまに遠くへ飛んだパフが輪郭を不揃いにする
+        const dist = Math.pow(Math.random(), SMOKE_SPREAD_BIAS) * SMOKE_SPREAD_RADIUS;
+        // 大きさもばらす。位置だけ散らしても、同じ年齢のパフが全部同じ半径では
+        // 「同じ丸の反復」に見えてしまう
+        const radiusScale = 1 + (Math.random() * 2 - 1) * SMOKE_PUFF_RADIUS_JITTER;
         return {
             x: this.x + Math.cos(angle) * dist,
             y: this.y + Math.sin(angle) * dist,
-            radius: SMOKE_PUFF_RADIUS_START,
+            radius: SMOKE_PUFF_RADIUS_START * radiusScale,
+            radiusScale,
             age: 0,
             // 外へ広がりながら、ゆっくり浮き上がる
             vx: Math.cos(angle) * SMOKE_DRIFT_SPEED * (0.5 + Math.random()),

@@ -5,6 +5,8 @@ import { isConcealed } from '../src/js/utils/concealment.js';
 import {
   SMOKE_PUFF_COUNT, SMOKE_EMIT_SPAN, SMOKE_PUFF_LIFETIME,
   SMOKE_PUFF_RADIUS_START, SMOKE_PUFF_RADIUS_END,
+  SMOKE_SPREAD_RADIUS, SMOKE_PUFF_RADIUS_JITTER, SMOKE_DRIFT_SPEED,
+  SMOKE_RISE_SPEED,
 } from '../src/js/utils/Constants.js';
 
 before(() => {
@@ -50,6 +52,49 @@ test('パフの年齢がばらける（同じ時計で動いていない）', as
   assert.ok(ages.size > 1, 'すべてのパフの年齢が同じ');
 });
 
+test('同じ年齢でもパフごとに大きさが違う', async () => {
+  // 位置だけ散らしても、同じ年齢のパフが全部同じ半径では
+  // 「同じ丸の反復」に見えてしまう
+  const s = await makeScreen();
+  run(s, SMOKE_EMIT_SPAN + 1);
+  const sameAge = s.puffs.filter((p) => p.age === s.puffs[0].age);
+  assert.ok(sameAge.length > 1, '同じ年齢のパフが1枚しかなく比較できない');
+  const radii = new Set(sameAge.map((p) => Math.round(p.radius * 100)));
+  assert.ok(radii.size > 1, '同じ年齢のパフが全部同じ大きさ');
+  // ばらつきは指定した範囲に収まる
+  for (const p of s.puffs) {
+    assert.ok(p.radiusScale >= 1 - SMOKE_PUFF_RADIUS_JITTER - 1e-9
+      && p.radiusScale <= 1 + SMOKE_PUFF_RADIUS_JITTER + 1e-9,
+    `大きさのばらつきが範囲外: ${p.radiusScale}`);
+  }
+});
+
+test('撒く距離は中心寄りに偏る（芯は濃いまま、輪郭だけ不揃いになる）', async () => {
+  // 一様に撒くと円板の外周ほど面積が広いぶん外側に密集し、雲の輪郭が
+  // きれいな円に揃う。かつ中心の重なりが痩せて隠蔽が不安定になる
+  const dists = [];
+  for (let k = 0; k < 40; k++) {
+    const s = await makeScreen(100, 100);
+    run(s, SMOKE_EMIT_SPAN + 1);
+    for (const p of s.puffs) dists.push(Math.hypot(p.x - 100, p.y - 100));
+  }
+  // 測るのは撒き終えた直後。この時点で既に漂い始めているので、その分を足した
+  // 上限で見る。1 tick の移動量は外向きの初速（0.5〜1.5 倍のばらつき）に
+  // 上昇ぶんが加わるので、両方を足さないと稀に上限を超えて落ちる
+  const perTick = SMOKE_DRIFT_SPEED * 1.5 + SMOKE_RISE_SPEED;
+  const drifted = SMOKE_SPREAD_RADIUS + perTick * (SMOKE_EMIT_SPAN + 2);
+  for (const d of dists) {
+    assert.ok(d <= drifted, `撒く範囲を超えた: ${d} > ${drifted}`);
+  }
+  dists.sort((a, b) => a - b);
+  const median = dists[Math.floor(dists.length / 2)];
+  assert.ok(median < SMOKE_SPREAD_RADIUS * 0.5,
+    `中心寄りに偏っていない（中央値 ${median.toFixed(1)} / 上限 ${SMOKE_SPREAD_RADIUS}）`);
+  // それでも遠くまで飛ぶものが居る（輪郭を不揃いにするのはこれ）
+  assert.ok(dists[dists.length - 1] > SMOKE_SPREAD_RADIUS * 0.8,
+    '遠くへ飛ぶパフが無く、輪郭が揃ってしまう');
+});
+
 test('撒く位置がばらける', async () => {
   const s = await makeScreen(100, 100);
   run(s, SMOKE_EMIT_SPAN + 1);
@@ -66,8 +111,10 @@ test('パフは時間とともに拡大する', async () => {
   const early = p.radius;
   run(s, 100);
   assert.ok(p.radius > early, '拡散していない');
-  assert.ok(p.radius <= SMOKE_PUFF_RADIUS_END + 1e-9, '終端半径を超えた');
-  assert.ok(early >= SMOKE_PUFF_RADIUS_START - 1e-9, '開始半径より小さい');
+  // 半径はパフごとの大きさのばらつき（radiusScale）が掛かるので、
+  // 素の開始・終端半径そのものではなく、それを按分した範囲で見る
+  assert.ok(p.radius <= SMOKE_PUFF_RADIUS_END * p.radiusScale + 1e-9, '終端半径を超えた');
+  assert.ok(early >= SMOKE_PUFF_RADIUS_START * p.radiusScale - 1e-9, '開始半径より小さい');
 });
 
 test('パフは漂う（位置が動く）', async () => {
