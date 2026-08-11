@@ -30,7 +30,7 @@ test('毎フレーム呼ばれた値が追従に反映される', () => {
 
 test('母艦のエンジンは停止時と全速で決まった値を予約する', () => {
   // 音程まわりは _loopSound へ載せ替えたときから不変。
-  // gain だけ 2026-08-12 に実機の判断で 0.06/0.11 から -4dB 下げた
+  // gain だけ 2026-08-12 に実機の判断で 0.060/0.110 から合計 -8dB 下げた
   // （ドッキング中ずっと鳴っていて他の効果音が埋もれるため）。
   const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
@@ -39,15 +39,33 @@ test('母艦のエンジンは停止時と全速で決まった値を予約す�
     assert.equal(n.osc.frequency.target, 46);
     assert.equal(n.sub.frequency.target, 23);
     assert.equal(n.filter.frequency.target, 150);
-    assert.ok(Math.abs(n.gain.gain.target - 0.038) < 1e-9,
+    assert.ok(Math.abs(n.gain.gain.target - 0.024) < 1e-9,
       `停止時の音量: ${n.gain.gain.target}`);
 
     audioManager.startCarrierEngine(1);
     assert.equal(n.osc.frequency.target, 60);
     assert.equal(n.sub.frequency.target, 30);
     assert.equal(n.filter.frequency.target, 270);
-    assert.ok(Math.abs(n.gain.gain.target - 0.070) < 1e-9,
+    assert.ok(Math.abs(n.gain.gain.target - 0.044) < 1e-9,
       `全速の音量: ${n.gain.gain.target}`);
+  });
+});
+
+test('母艦は動かすと音が上がる（停止時と全速の比は保つ）', () => {
+  // 音量を下げるときに base だけ／range だけを触ると、動かしたときの
+  // 手応え（エンジンが唸る感じ）が消える。比で縛っておく
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager.startCarrierEngine(0);
+    const n = audioManager._loops.carrier;
+    const idle = n.gain.gain.target;
+
+    audioManager.startCarrierEngine(1);
+    const full = n.gain.gain.target;
+
+    assert.ok(full > idle, '動かしても音量が上がっていない');
+    assert.ok(Math.abs(full / idle - 110 / 60) < 0.02,
+      `停止時と全速の比が変わっている: ${(full / idle).toFixed(3)}（元は ${(110 / 60).toFixed(3)}）`);
   });
 });
 
