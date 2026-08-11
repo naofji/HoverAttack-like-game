@@ -268,12 +268,15 @@ export const Game = {
             }
         }
 
-        // どの画面でも M で全画面を切り替える。
-        // カーソルが canvas の外に出やすいのが元々の不満だったので、
-        // 画面いっぱいに広げて外に出る余地を減らす狙い。
+        // M で全画面を切り替える。カーソルが canvas の外に出やすいのが
+        // 元々の不満だったので、画面いっぱいに広げて外に出る余地を減らす狙い。
+        // ranking_entry だけは除外する。名前入力中の M キー押下は
+        // getTypedChars() で文字としても消費されるため、除外しないと
+        // 「MAX」などと打つたびに全画面が切り替わってしまう
+        // （_updateVolumeControl() が「-」を除外しているのと同じ理由）。
         // なお全画面はブラウザ仕様で Escape でも解除される（ミッション離脱と
         // 同時に抜けてしまうが、こちらから止める手段はない）。
-        if (this.input.isKeyPressed('KeyM')) toggleFullscreen();
+        if (this.gameState !== 'ranking_entry' && this.input.isKeyPressed('KeyM')) toggleFullscreen();
 
         this._updateGameState(deltaTime);
     },
