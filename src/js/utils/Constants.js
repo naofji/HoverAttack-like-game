@@ -75,12 +75,12 @@ export const SMOKE_PUFF_RISE_RATIO = 0.05;    // 寿命のこの割合で 0→1 
 export const SMOKE_PUFF_DECAY_EXPONENT = 1.3; // (1-u)^この指数 で薄れる。1.0 だと後半までしぶとく、2.0 だと隠れる時間が足りない
 export const SMOKE_PUFF_RADIUS_START = 16;    // px: 出たてで機体（16x24）を覆う大きさ
 export const SMOKE_PUFF_RADIUS_END = 34;      // px: 拡散後は1枚で機体の倍
-export const SMOKE_PUFF_ALPHA_MAX = 0.38;     // 上限なしで素直に重ねるので1枚は薄く。重なり3枚で 0.63 = しきい値超え
+export const SMOKE_PUFF_ALPHA_MAX = 0.50;     // 上限なしで素直に重ねるので1枚は薄く。0.38 では隠蔽が続くのが実測で中央値48 tick しか無く（要求は60超）、パフが自分の成長（16→34px）より速く外へ散る（0.10px/frame × 240 = 24px）ぶん発煙点が早く痩せるため上げた
 export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
 export const SMOKE_SPREAD_RADIUS = 8;         // px: 撒く位置のばらつき。広げると発煙直後に濃くならない（下の注を読むこと）
-export const SMOKE_DRIFT_SPEED = 0.10;        // px/frame: 外向きの初速。半径の伸び（0.075/frame）と釣り合わせてある
+export const SMOKE_DRIFT_SPEED = 0.05;        // px/frame: 外向きの初速。0.10 では 240 tick で 24px 外へ散り、パフ自身の成長（16→34px = 18px）を追い越して発煙点の重なりが崩れていた（隠蔽の持続が実測で中央値62 tick、5回中2回が60を割る不安定さ）。成長より遅くすることで中心が痩せず、ばらつきも収まる
 export const SMOKE_RISE_SPEED = 0.08;         // px/frame: ゆっくり上昇
 export const SMOKE_SPRITE_SIZE = 64;          // px: 焼き付けるスプライトの一辺
 
