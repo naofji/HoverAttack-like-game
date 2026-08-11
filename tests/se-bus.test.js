@@ -6,60 +6,9 @@ import {
   SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_RATIO, SE_COMP_ATTACK,
   SE_FADE_OUT_SECONDS,
 } from '../src/js/utils/Constants.js';
+import { fakeAudioCtx, withCtx } from './helpers/fake-audio-ctx.js';
 
 const SOURCE = readFileSync(new URL('../src/js/audio/AudioManager.js', import.meta.url), 'utf8');
-
-/** ノードの接続とスケジュールを記録する AudioContext もどき。 */
-function fakeCtx() {
-  const ctx = {
-    currentTime: 0,
-    destination: { name: 'destination', inputs: [] },
-    created: [],
-    _param(value = 0) {
-      return {
-        value, events: [],
-        setValueAtTime(v, t) { this.value = v; this.events.push(['set', v, t]); },
-        linearRampToValueAtTime(v, t) { this.target = v; this.events.push(['ramp', v, t]); },
-        setTargetAtTime(v, t) { this.target = v; this.events.push(['target', v, t]); },
-        cancelScheduledValues() { this.events.push(['cancel']); },
-      };
-    },
-    _node(name, extra = {}) {
-      const n = {
-        name, inputs: [], outputs: [],
-        connect(dst) { this.outputs.push(dst); (dst.inputs || []).push(this); },
-        disconnect() {},
-        ...extra,
-      };
-      ctx.created.push(n);
-      return n;
-    },
-    createGain() { return ctx._node('gain', { gain: ctx._param(1) }); },
-    createDynamicsCompressor() {
-      return ctx._node('compressor', {
-        threshold: ctx._param(0), knee: ctx._param(0), ratio: ctx._param(1),
-        attack: ctx._param(0), release: ctx._param(0),
-      });
-    },
-    createStereoPanner() { return ctx._node('panner', { pan: ctx._param(0) }); },
-  };
-  return ctx;
-}
-
-function withCtx(ctx, fn) {
-  const saved = {
-    ctx: audioManager.ctx, fade: audioManager.seFade, master: audioManager.seMaster,
-    faded: audioManager.seFaded, lx: audioManager.listenerX,
-  };
-  audioManager.ctx = ctx;
-  audioManager.seFade = null;
-  audioManager.seMaster = null;
-  audioManager.seFaded = false;
-  try { return fn(); } finally { Object.assign(audioManager, {
-    ctx: saved.ctx, seFade: saved.fade, seMaster: saved.master,
-    seFaded: saved.faded, listenerX: saved.lx,
-  }); }
-}
 
 /** dst まで辿り着けるか（間に何が挟まっていてもよい）。 */
 function reaches(node, dst, seen = new Set()) {
@@ -72,7 +21,7 @@ function reaches(node, dst, seen = new Set()) {
 // --- バスの組み立て -----------------------------------------------------------
 
 test('効果音は フェード段 → 底上げ → リミッタ → 出力 の順に通る', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     const fade = audioManager.seFade;
@@ -89,7 +38,7 @@ test('効果音は フェード段 → 底上げ → リミッタ → 出力 の
 });
 
 test('リミッタの設定値が定数どおり', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     const comp = audioManager.seMaster.outputs[0];
@@ -105,7 +54,7 @@ test('持ち上げは 1.0 を超える（そうでないと底上げにならな
 });
 
 test('DynamicsCompressor の無い環境では素通しして出力へ繋ぐ', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   delete ctx.createDynamicsCompressor;
   withCtx(ctx, () => {
     audioManager._createSeBus();
@@ -116,7 +65,7 @@ test('DynamicsCompressor の無い環境では素通しして出力へ繋ぐ', (
 // --- 効果音がバスを通ること ---------------------------------------------------
 
 test('位置つきの音はパンナーを経てフェード段へ入る（出力へ直結しない）', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     audioManager.setListenerX(0);
@@ -128,7 +77,7 @@ test('位置つきの音はパンナーを経てフェード段へ入る（出�
 });
 
 test('位置なしの音もフェード段へ入る（全体の底上げから漏れない）', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     assert.equal(audioManager._out(undefined), audioManager.seFade);
@@ -137,7 +86,7 @@ test('位置なしの音もフェード段へ入る（全体の底上げから�
 });
 
 test('バスが未構築でも落ちない', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     assert.equal(audioManager._seDest(), ctx.destination);
     assert.equal(audioManager._stingDest(), ctx.destination);
@@ -147,7 +96,7 @@ test('バスが未構築でも落ちない', () => {
 // --- ゲームオーバーのフェード ---------------------------------------------------
 
 test('効果音だけを滑らかに引く', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     audioManager.fadeOutSe();
@@ -167,7 +116,7 @@ test('ぶつ切りにしない（時間をかけて引く）', () => {
 });
 
 test('持続音は音源ごと止める（戻したときに鳴り出さないように）', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   const stopped = [];
   const saved = {
     h: audioManager.stopHover, e: audioManager.stopEnemyHover, c: audioManager.stopCarrierEngine,
@@ -186,7 +135,7 @@ test('持続音は音源ごと止める（戻したときに鳴り出さない�
 });
 
 test('戻すと元の音量に復帰する', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     audioManager.fadeOutSe();
@@ -199,7 +148,7 @@ test('戻すと元の音量に復帰する', () => {
 });
 
 test('引いていないときに戻しても何もしない（毎フレーム呼べる）', () => {
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     const before = audioManager.seFade.gain.events.length;
@@ -212,7 +161,7 @@ test('引いていないときに戻しても何もしない（毎フレーム�
 
 test('ゲームオーバーの曲はフェード段を通さない（引いても消えない）', () => {
   // 効果音と一緒に消えては困る。底上げとリミッタは共有する。
-  const ctx = fakeCtx();
+  const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     assert.equal(audioManager._stingDest(), audioManager.seMaster);
