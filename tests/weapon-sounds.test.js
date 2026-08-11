@@ -153,14 +153,15 @@ test('どの武器も他の効果音と同じ土俵の音量で鳴る', () => {
 });
 
 test('歪まない', () => {
+  // 装填クリックは毎秒6回鳴るフィードバック音なので、単発の発射音より
+  // 意図的に小さい。ただし無音・退化した合成出力を捕まえる下限は免除せず、
+  // 実測ピーク（ammoMissile 0.0126 / ammoGrenade 0.0189）に合わせて床だけ下げる
+  const FLOOR = { ammoMissile: 0.008, ammoGrenade: 0.008 };
   for (const [kind, p] of Object.entries(WEAPON_SOUNDS)) {
     let peak = 0;
     for (const v of renderWeaponProfile(p)) peak = Math.max(peak, Math.abs(v));
     assert.ok(peak < 0.6, `${kind}: 振幅が大きい: ${peak.toFixed(3)}`);
-    // 装填クリックは上と同じ理由で「他の効果音と同じ土俵」の下限を免除する。
-    // reload 比 −18dB という下限（無音バグの見張り）は上の音量テストで別に効いている
-    if (kind === 'ammoMissile' || kind === 'ammoGrenade') continue;
-    assert.ok(peak > 0.02, `${kind}: 振幅が小さすぎる: ${peak.toFixed(3)}`);
+    assert.ok(peak > (FLOOR[kind] ?? 0.02), `${kind}: 振幅が小さすぎる: ${peak.toFixed(3)}`);
   }
 });
 
