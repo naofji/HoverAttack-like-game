@@ -36,6 +36,23 @@ test('自機と敵で音が違う（撃たれている側だと分かる）', ()
   assert.ok(WEAPON_SOUNDS.enemyMissile.tone.from < WEAPON_SOUNDS.playerMissile.tone.from);
 });
 
+test('煙幕の発煙音がある', () => {
+  assert.ok(WEAPON_SOUNDS.smoke, 'smoke が無い');
+});
+
+test('発煙音は「プシュー」と尾を引く（一瞬で切れない）', () => {
+  const p = WEAPON_SOUNDS.smoke;
+  assert.ok(p.hiss, 'ノイズ成分が無いと噴出に聞こえない');
+  assert.ok(p.hiss.hold > 0, 'hold が無いと頭で減衰して「シュッ」と切れる');
+  assert.ok(profileDuration(p) > 0.3, `短すぎる: ${profileDuration(p)}秒`);
+});
+
+test('発煙音は発射音より暗い（撃たれたのではないと分かる）', () => {
+  // マシンガンやミサイルと同じ帯域だと「撃たれた」と誤解する
+  assert.ok(WEAPON_SOUNDS.smoke.hiss.from < WEAPON_SOUNDS.homing.hiss.from,
+    '噴射音より明るいと発射音に聞こえる');
+});
+
 test('マシンガンは連射に耐える短さ', () => {
   for (const kind of ['playerMg', 'enemyMg']) {
     assert.ok(profileDuration(WEAPON_SOUNDS[kind]) <= 0.12,
