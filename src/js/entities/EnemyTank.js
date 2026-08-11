@@ -15,6 +15,7 @@ import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCol
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
+import { applyDamage } from '../utils/damage.js';
 
 export class EnemyTank {
     constructor(game, x, y) {
@@ -235,12 +236,7 @@ export class EnemyTank {
     // ------------------------------------------
 
     takeDamage(amount) {
-        if (!this.alive) return;
-        this.hp -= amount;
-        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
-        if (this.hp <= 0) {
-            this.die();
-        }
+        applyDamage(this, amount);
     }
 
     die() {

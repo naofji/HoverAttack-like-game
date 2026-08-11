@@ -11,6 +11,7 @@ import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
 import { playDestruction } from './destruction.js';
+import { applyDamage } from '../utils/damage.js';
 
 export class EnemyTurret {
     constructor(game, x, y, isCeilingMounted = false) {
@@ -140,12 +141,7 @@ export class EnemyTurret {
     }
 
     takeDamage(amount) {
-        if (!this.alive) return;
-        this.hp -= amount;
-        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
-        if (this.hp <= 0) {
-            this.die();
-        }
+        applyDamage(this, amount);
     }
 
     die() {

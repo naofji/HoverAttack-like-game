@@ -28,6 +28,7 @@ import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { applyDamage } from '../utils/damage.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -1029,12 +1030,7 @@ export class EnemyAttacker {
     // ------------------------------------------
 
     takeDamage(amount) {
-        if (!this.alive) return;
-        this.hp -= amount;
-        this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
-        if (this.hp <= 0) {
-            this.die();
-        }
+        applyDamage(this, amount);
     }
 
     die() {
