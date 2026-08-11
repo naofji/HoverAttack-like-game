@@ -66,7 +66,7 @@ export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least
 // --- Artillery smoke screen ---
 // 発見された artillery が張る煙幕。設計は
 // docs/superpowers/specs/2026-08-11-artillery-smoke-screen-design.md
-export const SMOKE_COOLDOWN = 1620;           // tick: 発煙の間隔。煙の寿命の倍にして「半分は見えている」を保つ。15秒停滞する煙をこれより短い間隔で撒けると、画面がほぼ常時煙る
+export const SMOKE_COOLDOWN = 1200;           // tick: 発煙の間隔。煙の寿命(810)の約1.5倍で、時間の 2/3 は煙っていて 1/3 が晴れている（1620=寿命の2倍では半々で、煙が薄すぎた）。これより短くすると晴れ間が無くなり画面がほぼ常時煙る
 export const SMOKE_PUFF_COUNT = 19;           // 中心1 ＋ 内側の列9 ＋ 外側の列9。SMOKE_EMISSION_SLOTS の合計と一致していること（テストで縛っている）
 export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。一斉に生むと全パフの年齢が揃って湧き上がって見えない
 export const SMOKE_PUFF_LIFETIME = 810;       // tick: パフ1個の寿命。うち721 tick が濃さを保つ停滞で、normal モード(0.8x)の実時間で 15.0秒（newtype 1.0x では12.0秒）。実測の隠蔽持続は 15.5〜15.9秒（消滅にかかる間も途中までは隠れているぶん、停滞より少し長い）。雲はパフが全部消えたら死ぬ
