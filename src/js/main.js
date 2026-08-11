@@ -353,11 +353,20 @@ export const Game = {
         this._enterDemoState(states[next]);
     },
 
+    /**
+     * デモループの画面に入る。Escape・左右キーでの移動・自動送りの
+     * すべてがここを通る。
+     *
+     * 画面ごとの入り口の始末（順位のハイライト消し、面送りの巻き戻し、
+     * タイトル曲）は以前この関数と自動送りの両方に書かれていて、
+     * 自動送りで入ったときだけ処理が抜ける形になりやすかった。
+     */
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
         // 敵のホバー音は音源を残したまま鳴らし続ける作りなので、
-        // ミッションを離れるここで本当に止める
+        // ミッションを離れるここで本当に止める。
+        // 鳴っていなければ即戻るので、画面が変わるたびに呼んで構わない
         audioManager.stopEnemyHover();
         if (state === 'local_ranking_display') {
             this.localRankIndex = -1;
@@ -399,8 +408,7 @@ export const Game = {
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 8000) {
-            this.gameState = 'how_to_play';
-            this.stateTimer = 0;
+            this._enterDemoState('how_to_play');
             this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
         } else {
             this._startGameIfRequested();
@@ -412,10 +420,7 @@ export const Game = {
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
-            this.gameState = 'local_ranking_display';
-            this.stateTimer = 0;
-            this.localRankIndex = -1;
-            this.globalRankIndex = -1;
+            this._enterDemoState('local_ranking_display');
         } else {
             this._startGameIfRequested();
         }
@@ -426,13 +431,9 @@ export const Game = {
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
-            if (this.onlineStatus === 'ok' && this.onlineData) {
-                this.gameState = 'global_ranking_display';
-            } else {
-                this.gameState = 'title';
-                audioManager.playTitleBGM();
-            }
-            this.stateTimer = 0;
+            // オンラインの記録が取れていなければ GLOBAL は飛ばす
+            const hasOnline = this.onlineStatus === 'ok' && this.onlineData;
+            this._enterDemoState(hasOnline ? 'global_ranking_display' : 'title');
         } else {
             this._startGameIfRequested();
         }
@@ -445,14 +446,8 @@ export const Game = {
         if (this.stateTimer > 10000) {
             // Only show stage rankings for stages the player has actually reached
             // locally (keep unseen stages — and their enemies — a surprise).
-            if (this.maxStageReached() >= 1) {
-                this.gameState = 'stage_ranking_display';
-                this.stageDisplayIndex = 0;
-                this.stageDisplayTimer = 0;
-            } else {
-                this.gameState = 'wall_of_fame_display';
-            }
-            this.stateTimer = 0;
+            const hasStages = this.maxStageReached() >= 1;
+            this._enterDemoState(hasStages ? 'stage_ranking_display' : 'wall_of_fame_display');
         } else {
             this._startGameIfRequested();
         }
@@ -487,8 +482,7 @@ export const Game = {
             this.stageDisplayTimer = 0;
             this.stageDisplayIndex++;
             if (this.stageDisplayIndex >= this.maxStageReached()) {
-                this.gameState = 'wall_of_fame_display';
-                this.stateTimer = 0;
+                this._enterDemoState('wall_of_fame_display');
                 return;
             }
         }
@@ -500,9 +494,7 @@ export const Game = {
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 10000) {
-            this.gameState = 'title';
-            this.stateTimer = 0;
-            audioManager.playTitleBGM();
+            this._enterDemoState('title');
         } else {
             this._startGameIfRequested();
         }
