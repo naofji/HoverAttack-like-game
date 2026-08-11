@@ -72,10 +72,47 @@ import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/render
 // ============================================
 
 /** Screens that make up the title/attract-mode loop, in cycle order. */
-const DEMO_CYCLE_STATES = [
+export const DEMO_CYCLE_STATES = [
     'title', 'how_to_play', 'local_ranking_display',
     'global_ranking_display', 'stage_ranking_display', 'wall_of_fame_display'
 ];
+
+/**
+ * デモループの各画面の中身の描画。draw() から状態名で引く。
+ *
+ * この表に載っている状態は「世界を描かない全画面表示」であり、描画の後に
+ * 必ず位置ドットが重なって終わる。その共通部分は draw() 側が持つので、
+ * ここには画面ごとに違うところだけを書く。画面を足すときはここに1行。
+ * @type {Object<string, (game: typeof Game, ctx: CanvasRenderingContext2D) => void>}
+ */
+export const DEMO_SCREEN_DRAWERS = {
+    title: (g, ctx) => g.screenRenderer.drawTitleScreen(ctx),
+
+    // 20秒を2ページに割る（前半10秒が1ページ目）
+    how_to_play: (g, ctx) => g.screenRenderer.drawHowToPlay(ctx, g.stateTimer < 10000 ? 0 : 1),
+
+    local_ranking_display: (g, ctx) => g.screenRenderer.drawLocalRanking(
+        ctx, g.highScoreManager.getTop10(), g.localRankIndex, g.week.weekId,
+    ),
+
+    global_ranking_display: (g, ctx) => {
+        // 未取得でも枠だけは出す（読み込み中に画面が真っ黒にならないように）
+        const data = g.onlineData || { ranking: [], weekId: g.week.weekId };
+        g.screenRenderer.drawGlobalRanking(ctx, data.ranking, g.globalRankIndex, data.weekId);
+    },
+
+    stage_ranking_display: (g, ctx) => {
+        const idx = g.stageDisplayIndex;
+        const online = g.onlineData ? g.onlineData.stageRankings : null;
+        const data = pickStageRanking(online, idx + 1, g.stageRankingManager.getStage(idx + 1));
+        g.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
+    },
+
+    wall_of_fame_display: (g, ctx) => {
+        const fame = (g.onlineData && g.onlineData.fame) || [];
+        g.screenRenderer.drawWallOfFame(ctx, fame);
+    },
+};
 
 export const Game = {
     canvas: null,
@@ -332,6 +369,20 @@ export const Game = {
         }
     },
 
+    /**
+     * デモループの各画面から「ゲームを始める入力」を拾う。
+     * タイトルもランキングも、どの画面から始めても手順は同じなので
+     * ここ1箇所にまとめる（以前は6画面に同じ4行が写されていた）。
+     * @returns {boolean} 開始したら true
+     */
+    _startGameIfRequested() {
+        if (!this._anyKeyOrClick()) return false;
+        this.stateManager.restart();
+        this.gameState = 'playing';
+        audioManager.startBGM(this.missionsCompleted);
+        return true;
+    },
+
     _updateTitle(deltaTime) {
         if (this.input.isKeyPressed('KeyA')) {
             this.mode = cycleMode(this.mode, -1);
@@ -350,10 +401,8 @@ export const Game = {
             this.gameState = 'how_to_play';
             this.stateTimer = 0;
             this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
-        } else if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
+        } else {
+            this._startGameIfRequested();
         }
     },
 
@@ -366,10 +415,8 @@ export const Game = {
             this.stateTimer = 0;
             this.localRankIndex = -1;
             this.globalRankIndex = -1;
-        } else if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
+        } else {
+            this._startGameIfRequested();
         }
     },
 
@@ -385,10 +432,8 @@ export const Game = {
                 audioManager.playTitleBGM();
             }
             this.stateTimer = 0;
-        } else if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
+        } else {
+            this._startGameIfRequested();
         }
     },
 
@@ -407,10 +452,8 @@ export const Game = {
                 this.gameState = 'wall_of_fame_display';
             }
             this.stateTimer = 0;
-        } else if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
+        } else {
+            this._startGameIfRequested();
         }
     },
 
@@ -448,11 +491,7 @@ export const Game = {
                 return;
             }
         }
-        if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
-        }
+        this._startGameIfRequested();
     },
 
     _updateWallOfFameDisplay(deltaTime) {
@@ -463,10 +502,8 @@ export const Game = {
             this.gameState = 'title';
             this.stateTimer = 0;
             audioManager.playTitleBGM();
-        } else if (this._anyKeyOrClick()) {
-            this.stateManager.restart();
-            this.gameState = 'playing';
-            audioManager.startBGM(this.missionsCompleted);
+        } else {
+            this._startGameIfRequested();
         }
     },
 
@@ -597,16 +634,17 @@ export const Game = {
         this._updatePlayer();
         this._updateDeathHold();
         this._updateCamera();
-        this._updateProjectiles();
-        this._updateParticles();
-        this._updateSmokeScreens();
+        // 呼ぶ順序がそのまま更新順。地雷だけは当たり判定を伴うので別扱い。
+        this._updateAndPrune(this.projectiles);
+        this._updateAndPrune(this.particles);
+        this._updateAndPrune(this.smokeScreens);
         this._updateLandmines();
-        this._updateRepairKits();
-        this._updateAutoAimUnits();
-        this._updateMissileKits();
+        this._updateAndPrune(this.repairKits);
+        this._updateAndPrune(this.autoAimUnits);
+        this._updateAndPrune(this.missileKits);
         this._updateAutoAim();
         this.map.update();
-        this._updateEnemies();
+        this._updateAndPrune(this.enemies);
         this._updateEnemyHoverSound();
         this._checkMissionClear();
         this.collisionManager.update();
@@ -759,24 +797,17 @@ export const Game = {
         audioManager.setListenerView(this._viewRect());
     },
 
-    _updateProjectiles() {
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            this.projectiles[i].update();
-            if (!this.projectiles[i].alive) this.projectiles.splice(i, 1);
-        }
-    },
-
-    _updateParticles() {
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update();
-            if (!this.particles[i].alive) this.particles.splice(i, 1);
-        }
-    },
-
-    _updateSmokeScreens() {
-        for (let i = this.smokeScreens.length - 1; i >= 0; i--) {
-            this.smokeScreens[i].update();
-            if (!this.smokeScreens[i].alive) this.smokeScreens.splice(i, 1);
+    /**
+     * 配列の中身を update() して、死んだものを取り除く。
+     *
+     * 弾・パーティクル・煙幕・アイテム・敵と、同じ形のループが7本あった。
+     * 後ろから走査するのは、splice しても未処理の添字がずれないため。
+     * @param {Array<{update:Function, alive:boolean}>} list
+     */
+    _updateAndPrune(list) {
+        for (let i = list.length - 1; i >= 0; i--) {
+            list[i].update();
+            if (!list[i].alive) list.splice(i, 1);
         }
     },
 
@@ -803,27 +834,6 @@ export const Game = {
             }
 
             if (!mine.alive) this.landmines.splice(i, 1);
-        }
-    },
-
-    _updateRepairKits() {
-        for (let i = this.repairKits.length - 1; i >= 0; i--) {
-            this.repairKits[i].update();
-            if (!this.repairKits[i].alive) this.repairKits.splice(i, 1);
-        }
-    },
-
-    _updateAutoAimUnits() {
-        for (let i = this.autoAimUnits.length - 1; i >= 0; i--) {
-            this.autoAimUnits[i].update();
-            if (!this.autoAimUnits[i].alive) this.autoAimUnits.splice(i, 1);
-        }
-    },
-
-    _updateMissileKits() {
-        for (let i = this.missileKits.length - 1; i >= 0; i--) {
-            this.missileKits[i].update();
-            if (!this.missileKits[i].alive) this.missileKits.splice(i, 1);
         }
     },
 
@@ -928,13 +938,6 @@ export const Game = {
         });
     },
 
-    _updateEnemies() {
-        for (let i = this.enemies.length - 1; i >= 0; i--) {
-            this.enemies[i].update();
-            if (!this.enemies[i].alive) this.enemies.splice(i, 1);
-        }
-    },
-
     _checkMissionClear() {
         if (this.base && !this.base.alive && !this.flag && this.gameState === 'playing') {
             this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, this.base.y + this.base.height - 20);
@@ -987,22 +990,41 @@ export const Game = {
         return sr.find((e) => e.stage === stage) || null;
     },
 
-    _wouldStageRankTime(stage, timeMs) {
+    /**
+     * その記録が面別トップ5に入るか。オンラインの記録が取れていればそれで、
+     * 取れていなければ手元の記録で判定する。
+     *
+     * タイムとスコアは「短いほど良い／高いほど良い」が逆なだけで手順は同じ
+     * なので、良し悪しの比較だけを betterThanLast で受け取る。
+     *
+     * @param {number} stage 面番号（1..7）
+     * @param {'time'|'score'} kind どちらの順位表か
+     * @param {(worstEntry: object) => boolean} betterThanLast 5位より良ければ true
+     * @param {() => boolean} localFallback オンラインが無いときの手元判定
+     */
+    _wouldStageRank(stage, kind, betterThanLast, localFallback) {
         const online = this._onlineStageEntry(stage);
         if (online) {
-            const list = online.time || [];
-            return list.length < 5 || timeMs < list[list.length - 1].timeMs;
+            const list = online[kind] || [];
+            return list.length < 5 || betterThanLast(list[list.length - 1]);
         }
-        return this.stageRankingManager ? this.stageRankingManager.wouldRankTime(stage, timeMs) : false;
+        return this.stageRankingManager ? localFallback() : false;
+    },
+
+    _wouldStageRankTime(stage, timeMs) {
+        return this._wouldStageRank(
+            stage, 'time',
+            (worst) => timeMs < worst.timeMs,
+            () => this.stageRankingManager.wouldRankTime(stage, timeMs),
+        );
     },
 
     _wouldStageRankScore(stage, score) {
-        const online = this._onlineStageEntry(stage);
-        if (online) {
-            const list = online.score || [];
-            return list.length < 5 || score > list[list.length - 1].score;
-        }
-        return this.stageRankingManager ? this.stageRankingManager.wouldRankScore(stage, score) : false;
+        return this._wouldStageRank(
+            stage, 'score',
+            (worst) => score > worst.score,
+            () => this.stageRankingManager.wouldRankScore(stage, score),
+        );
     },
 
     // ==========================================
@@ -1085,9 +1107,7 @@ export const Game = {
         const GRENADE_HOLD_THRESHOLD = 10;
 
         if (this.input.isRightClickHeld() && Math.floor(player.grenades) > 0) {
-            const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
-            const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
-            const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
+            const grenadeSpeed = this._grenadeSpeedFor(targetWorld, px, py);
 
             if (this.input.rightHoldFrames >= GRENADE_HOLD_THRESHOLD) {
                 // 長押し確定: 軌道プレビューを表示（毎フレーム更新）
@@ -1110,12 +1130,7 @@ export const Game = {
                     ));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
                     audioManager.playWeapon('grenade', px, py);
-                    this.grenadeTrajectory = null;
-                    this.grenadeWasHeld = false;
-                    this._grenadeHeldAngle = null;
-                    this._grenadeHeldSpeed = null;
-                    this._grenadeHeldPx = null;
-                    this._grenadeHeldPy = null;
+                    this._clearGrenadeHold();
 
                     // 通常兵器の誤射を避けるため、左クリックを離すまで通常射撃を抑制するフラグを立てる
                     this.leftClickSuppress = true;
@@ -1128,23 +1143,36 @@ export const Game = {
             if (this.input.isRightClickReleased() && Math.floor(player.grenades) > 0) {
                 if (!this.grenadeWasHeld) {
                     // 短押し確定（閾値未満でリリース）: 投擲
-                    const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
-                    const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
-                    const grenadeSpeed = GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
+                    const grenadeSpeed = this._grenadeSpeedFor(targetWorld, px, py);
                     this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
                     player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
                     audioManager.playWeapon('grenade', px, py);
                 }
                 // 長押しのリリースはキャンセル（左クリックせずに離した場合）
             }
-            // 状態をクリア
-            this.grenadeTrajectory = null;
-            this.grenadeWasHeld = false;
-            this._grenadeHeldAngle = null;
-            this._grenadeHeldSpeed = null;
-            this._grenadeHeldPx = null;
-            this._grenadeHeldPy = null;
+            this._clearGrenadeHold();
         }
+    },
+
+    /**
+     * グレネードの初速。狙った点が遠いほど強く投げる。
+     * 短押しと長押しの両方から呼ぶので、式はここだけに置く
+     * （以前は2箇所に同じ3行があり、片方だけ触ると投げ分けが狂う）。
+     */
+    _grenadeSpeedFor(targetWorld, px, py) {
+        const dist = Math.hypot(targetWorld.x - px, targetWorld.y - py);
+        const ratio = Math.min(dist / GRENADE_SPEED_MAX_DIST, 1.0);
+        return GRENADE_SPEED_MIN + ratio * (GRENADE_SPEED_MAX - GRENADE_SPEED_MIN);
+    },
+
+    /** 長押し中に溜めていた投擲の情報を捨てる（投げ終わり・キャンセルの両方から）。 */
+    _clearGrenadeHold() {
+        this.grenadeTrajectory = null;
+        this.grenadeWasHeld = false;
+        this._grenadeHeldAngle = null;
+        this._grenadeHeldSpeed = null;
+        this._grenadeHeldPx = null;
+        this._grenadeHeldPy = null;
     },
 
 
@@ -1188,39 +1216,12 @@ export const Game = {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Full-screen states — skip world rendering
-        if (this.gameState === 'title') {
-            this.screenRenderer.drawTitleScreen(ctx);
-            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
-            return;
-        }
-        if (this.gameState === 'how_to_play') {
-            this.screenRenderer.drawHowToPlay(ctx, this.stateTimer < 10000 ? 0 : 1);
-            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
-            return;
-        }
-        if (this.gameState === 'local_ranking_display') {
-            this.screenRenderer.drawLocalRanking(ctx, this.highScoreManager.getTop10(), this.localRankIndex, this.week.weekId);
-            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
-            return;
-        }
-        if (this.gameState === 'global_ranking_display') {
-            const data = this.onlineData || { ranking: [], weekId: this.week.weekId };
-            this.screenRenderer.drawGlobalRanking(ctx, data.ranking, this.globalRankIndex, data.weekId);
-            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
-            return;
-        }
-        if (this.gameState === 'stage_ranking_display') {
-            const idx = this.stageDisplayIndex;
-            const online = this.onlineData ? this.onlineData.stageRankings : null;
-            const data = pickStageRanking(online, idx + 1, this.stageRankingManager.getStage(idx + 1));
-            this.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
-            this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
-            return;
-        }
-        if (this.gameState === 'wall_of_fame_display') {
-            const fame = (this.onlineData && this.onlineData.fame) || [];
-            this.screenRenderer.drawWallOfFame(ctx, fame);
+        // Full-screen states — skip world rendering.
+        // どの画面も「専用の描画 → 位置ドット → 終わり」で同じなので、
+        // 違いのある1行だけを DEMO_SCREEN_DRAWERS の表に置く。
+        const drawDemoScreen = DEMO_SCREEN_DRAWERS[this.gameState];
+        if (drawDemoScreen) {
+            drawDemoScreen(this, ctx);
             this.screenRenderer.drawDemoCycleDots(ctx, this._demoCycleIndex(), this._availableDemoStates().length);
             return;
         }
@@ -1599,33 +1600,16 @@ export const Game = {
         const cy = this.carrier.y + this.carrier.height / 2;
         const rangeSq = CARRIER_PROXIMITY_ALERT_RANGE * CARRIER_PROXIMITY_ALERT_RANGE;
 
-        let foundThreat = false;
+        const inRange = (x, y) => (cx - x) ** 2 + (cy - y) ** 2 < rangeSq;
 
-        // Check for enemies
-        for (const e of this.enemies) {
-            if (!e.alive) continue;
-            const ex = e.x + (e.width || 0) / 2;
-            const ey = e.y + (e.height || 0) / 2;
-            const dSq = (cx - ex) ** 2 + (cy - ey) ** 2;
-            if (dSq < rangeSq) {
-                foundThreat = true;
-                break;
-            }
-        }
-
-        if (!foundThreat) {
-            // Check for enemy bullets, missiles, etc.
-            for (const b of this.enemyBullets) {
-                if (!b.alive) continue;
-                const dSq = (cx - b.x) ** 2 + (cy - b.y) ** 2;
-                if (dSq < rangeSq) {
-                    foundThreat = true;
-                    break;
-                }
-            }
-        }
-
-        this.proximityAlertActive = foundThreat;
+        // 敵は機体の中心で測る。
+        // 敵弾は x,y をそのまま使う（中心は取らない）。enemyBullets には
+        // 大きさを持つ巡航ミサイル(24x16)やレーザーも混ざっており、中心に
+        // 直すと警報の鳴りだす距離が変わってしまう。
+        this.proximityAlertActive =
+            this.enemies.some((e) => e.alive
+                && inRange(e.x + (e.width || 0) / 2, e.y + (e.height || 0) / 2))
+            || this.enemyBullets.some((b) => b.alive && inRange(b.x, b.y));
 
         // Play alarm sound periodically while threat is near
         if (this.proximityAlertActive) {
