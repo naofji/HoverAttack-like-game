@@ -1500,28 +1500,6 @@ export class AudioManager {
         }
     }
 
-    playProximityAlarm() {
-        if (!this._prepare()) return;
-        if (!this.ctx || this.ctx.state === 'suspended') return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        // "Bween!" sound using a low-frequency sawtooth wave
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(80, now);
-        osc.frequency.linearRampToValueAtTime(120, now + 0.3);
-
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-
-        osc.connect(gain);
-        gain.connect(this._seDest());
-
-        osc.start(now);
-        osc.stop(now + 0.5);
-    }
 }
 
 export const audioManager = new AudioManager();

@@ -8,8 +8,6 @@ import {
     ENEMY_HOMING_MISSILE_LIFETIME,
     ENEMY_HOMING_MISSILE_DELAY,
     ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE,
-    TILE_SIZE,
-    EXPLOSION_PARTICLE_COUNT,
     PARTICLE_LIFETIME
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';

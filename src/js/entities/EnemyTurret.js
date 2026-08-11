@@ -6,7 +6,6 @@ import {
     ENEMY_TURRET_HP, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
     ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
-    TILE_SIZE
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';

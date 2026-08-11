@@ -5,14 +5,11 @@
 import {
     TILE_SIZE,
     CARRIER_WIDTH, CARRIER_HEIGHT, CARRIER_SPEED,
-    
-     
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
-import { audioManager } from '../audio/AudioManager.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 

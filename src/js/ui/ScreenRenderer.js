@@ -7,6 +7,7 @@ import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
 import { flagEmoji } from '../utils/geo.js';
+import { formatClock } from '../utils/formatTime.js';
 import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
@@ -48,17 +49,7 @@ export class ScreenRenderer {
 
         drawScanlines(ctx, canvas.width, canvas.height);
 
-        // Blinking text
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.save();
-            ctx.fillStyle = UI.ink;
-            ctx.font = font('sub', true);
-            ctx.textAlign = 'center';
-            glow(ctx, UI.info, 'mid');
-            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
-            ctx.restore();
-        }
-
+        this._drawStartHint(ctx);
 
         this._drawModeSelector(ctx, canvas);
     }
@@ -185,7 +176,7 @@ export class ScreenRenderer {
             const itemsY = rulesY + rulesH + gap;
 
             // PANEL 1: OBJECTIVE
-            this._drawPanel(ctx, cx - 400, objectiveY, 800, objectiveH, 'MISSION OBJECTIVE', UI.accent);
+            drawPanel(ctx, cx - 400, objectiveY, 800, objectiveH, 'MISSION OBJECTIVE', UI.accent);
             ctx.font = font('small');
             ctx.textAlign = 'center';
             let ty = ScreenRenderer.panelContentTop(objectiveY, lineH);
@@ -195,7 +186,7 @@ export class ScreenRenderer {
             ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, ty + lineH);
 
             // PANEL 2: BASIC RULES
-            this._drawPanel(ctx, cx - 400, rulesY, 800, rulesH, 'BASIC RULES', UI.accent);
+            drawPanel(ctx, cx - 400, rulesY, 800, rulesH, 'BASIC RULES', UI.accent);
             ctx.fillStyle = UI.dim;
             ctx.font = font('small');
             ctx.textAlign = 'left';
@@ -235,7 +226,7 @@ export class ScreenRenderer {
             ctx.stroke();
 
             // PANEL 3: ITEMS
-            this._drawPanel(ctx, cx - 400, itemsY, 800, itemsH, 'ITEMS', UI.accent);
+            drawPanel(ctx, cx - 400, itemsY, 800, itemsH, 'ITEMS', UI.accent);
 
             const items = [
                 { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
@@ -301,13 +292,13 @@ export class ScreenRenderer {
             const areaBottom = H - SPACE.xl;
             const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
 
-            this._drawPanel(ctx, cx - 350, panelY, 700, panelH, 'CONTROLS', UI.accent);
+            drawPanel(ctx, cx - 350, panelY, 700, panelH, 'CONTROLS', UI.accent);
 
             const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
             ctx.textAlign = 'left';
             controls.forEach((c, i) => {
                 const y = rowsTop + i * rowH + Math.round(rowH / 2);
-                this._drawKeyCap(ctx, cx - 180, y, c.key);
+                drawKeyCap(ctx, cx - 180, y, c.key);
                 ctx.fillStyle = UI.ink;
                 ctx.font = font('body');
                 ctx.textBaseline = 'middle';
@@ -318,16 +309,30 @@ export class ScreenRenderer {
 
         drawScanlines(ctx, W, H);
 
-        // Press Enter ヒント（点滅）
-        if (Math.floor(Date.now() / 600) % 2 === 0) {
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.fillStyle = UI.ink;
-            glow(ctx, UI.info, 'mid');
-            ctx.font = font('sub', true);
-            ctx.fillText('PRESS ENTER TO START', cx, H - 20);
-            ctx.restore();
-        }
+        this._drawStartHint(ctx, 600);
+    }
+
+    /**
+     * 「PRESS ENTER TO START」の点滅ヒント。デモループの全画面が同じものを
+     * 画面下端の中央に出すので、5画面ぶんの写しをここ1箇所にまとめる。
+     *
+     * save/restore で囲うので、呼び出し側が前後で textAlign を触っていても
+     * 影響しない（従来もこの形だった）。
+     *
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} blinkMs 点滅の半周期。HOW TO PLAY だけ 600ms で、
+     *   他の画面（500ms）とわざとずらしてある
+     */
+    _drawStartHint(ctx, blinkMs = 500) {
+        if (Math.floor(Date.now() / blinkMs) % 2 !== 0) return;
+        const canvas = this.game.canvas;
+        ctx.save();
+        ctx.fillStyle = UI.ink;
+        ctx.font = font('sub', true);
+        ctx.textAlign = 'center';
+        glow(ctx, UI.info, 'mid');
+        ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
+        ctx.restore();
     }
 
     /** Shared position indicator for the title/demo attract-mode loop — every
@@ -350,15 +355,6 @@ export class ScreenRenderer {
         ctx.restore();
     }
 
-    /** パネルとキーキャップの見た目は theme.js が持つ（角丸とグラデーションを廃した面取り版）。 */
-    _drawPanel(ctx, x, y, w, h, title, titleColor) {
-        drawPanel(ctx, x, y, w, h, title, titleColor);
-    }
-
-    _drawKeyCap(ctx, x, y, text) {
-        return drawKeyCap(ctx, x, y, text);
-    }
-
     drawMissionClear(ctx) {
         const canvas = this.game.canvas;
 
@@ -372,11 +368,7 @@ export class ScreenRenderer {
 
         ctx.fillStyle = '#FFFF00';
         ctx.font = font('head');
-        // Format time mm:ss.xx
-        const mm = Math.floor(this.game.missionTimer / 60000).toString().padStart(2, '0');
-        const ss = Math.floor((this.game.missionTimer % 60000) / 1000).toString().padStart(2, '0');
-        const xx = Math.floor((this.game.missionTimer % 1000) / 10).toString().padStart(2, '0');
-        ctx.fillText(`CLEAR TIME: ${mm}:${ss}.${xx}`, canvas.width / 2, canvas.height / 2);
+        ctx.fillText(`CLEAR TIME: ${formatClock(this.game.missionTimer)}`, canvas.width / 2, canvas.height / 2);
 
         if (this.game.targetTimeBonus > 0 || this.game.slotRunning) {
             ctx.fillStyle = '#FF8800';
@@ -448,10 +440,7 @@ export class ScreenRenderer {
 
         ctx.fillStyle = '#FFFF00';
         ctx.font = font('head');
-        const mm = Math.floor(this.game.totalTime / 60000).toString().padStart(2, '0');
-        const ss = Math.floor((this.game.totalTime % 60000) / 1000).toString().padStart(2, '0');
-        const xx = Math.floor((this.game.totalTime % 1000) / 10).toString().padStart(2, '0');
-        ctx.fillText(`TOTAL TIME: ${mm}:${ss}.${xx}`, canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText(`TOTAL TIME: ${formatClock(this.game.totalTime)}`, canvas.width / 2, canvas.height / 2 + 20);
 
         if (this.game.targetTimeBonus > 0 || this.game.slotRunning) {
             ctx.fillStyle = '#FF8800';
@@ -680,14 +669,7 @@ export class ScreenRenderer {
         drawScanlines(ctx, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.save();
-            ctx.fillStyle = UI.ink;
-            glow(ctx, UI.info, 'mid');
-            ctx.font = font('sub', true);
-            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
-            ctx.restore();
-        }
+        this._drawStartHint(ctx);
         ctx.textAlign = 'left';
     }
 
@@ -791,14 +773,7 @@ export class ScreenRenderer {
         drawScanlines(ctx, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.save();
-            ctx.fillStyle = UI.ink;
-            glow(ctx, UI.info, 'mid');
-            ctx.font = font('sub', true);
-            ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
-            ctx.restore();
-        }
+        this._drawStartHint(ctx);
         ctx.textAlign = 'left';
     }
 
@@ -839,14 +814,7 @@ export class ScreenRenderer {
         drawScanlines(ctx, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            ctx.save();
-            ctx.fillStyle = UI.ink;
-            glow(ctx, UI.info, 'mid');
-            ctx.font = font('sub', true);
-            ctx.fillText('PRESS ENTER TO START', W / 2, H - 20);
-            ctx.restore();
-        }
+        this._drawStartHint(ctx);
         ctx.textAlign = 'left';
     }
 
@@ -874,7 +842,7 @@ export class ScreenRenderer {
             const rank = String(i + 1);
             const name = String(entry.name || '').substring(0, 8);
             const flag = flagEmoji(entry.country);
-            const valStr = isTime ? this._formatMs(entry.timeMs) : String(entry.score).toLocaleString();
+            const valStr = isTime ? formatClock(entry.timeMs) : String(entry.score).toLocaleString();
 
             // Rank number in accent, dimmer for lower ranks.
             ctx.font = font('body', true);
@@ -889,14 +857,6 @@ export class ScreenRenderer {
             ctx.fillText(valStr, left + 300, y);
             ctx.textAlign = 'left';
         });
-    }
-
-    _formatMs(ms) {
-        const totalSec = Math.floor(ms / 1000);
-        const m = Math.floor(totalSec / 60);
-        const s = totalSec % 60;
-        const cs = Math.floor((ms % 1000) / 10);
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
     }
 
     drawMiniMap(ctx) {
@@ -1020,31 +980,6 @@ export class ScreenRenderer {
         ctx.fillStyle = '#333333';
         ctx.fillRect(18, 9, 6, 2);
 
-        ctx.restore();
-    }
-
-    _drawItemIcon(ctx, type, x, y) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(0.75, 0.75); // Scale down slightly to fit well inside the 40x40 box
-
-        if (type === 'missile') {
-            ctx.fillStyle = '#000000';
-            ctx.beginPath();
-            ctx.moveTo(0, -12); ctx.lineTo(6, 6); ctx.lineTo(-6, 6); ctx.fill();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(-3, 6, 6, 4);
-        } else if (type === 'autoaim') {
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(0, 12); ctx.stroke();
-        } else if (type === 'repair') {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(-8, -2, 16, 4);
-            ctx.fillRect(-2, -8, 4, 16);
-        }
         ctx.restore();
     }
 

@@ -1,7 +1,4 @@
-import {
-    BASE_LASER_SPEED,
-    COLOR_LASER
-} from '../utils/Constants.js';
+import { BASE_LASER_SPEED } from '../utils/Constants.js';
 
 export class BaseLaser {
     constructor(game, x, y, angle) {

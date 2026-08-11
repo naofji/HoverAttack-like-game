@@ -3,7 +3,6 @@
 // ============================================
 
 import {
-    TILE_SIZE,
     ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS,
     ENEMY_BULLET_LIFETIME
 } from '../utils/Constants.js';

@@ -3,7 +3,6 @@
 // ============================================
 
 import {
-    TILE_SIZE,
     PLAYER_MG_SPEED, PLAYER_MG_RADIUS,
     PLAYER_MG_LIFETIME
 } from '../utils/Constants.js';

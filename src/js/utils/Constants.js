@@ -27,7 +27,6 @@ export const CARRIER_MAX_FALLING_SPEED = 5;
 // --- Player (Attacker) ---
 export const PLAYER_WIDTH = 16;
 export const PLAYER_HEIGHT = 24;
-export const PLAYER_SPEED = 0.3; // acceleration (currently unused, reserved)
 export const PLAYER_MAX_SPEED = 1.75;
 export const PLAYER_MAX_FALLING_SPEED = 7.0;  // Terminal velocity for falling
 export const PLAYER_STUN_FALL_SPEED = 6.0;    // Falling speed that triggers landing stun
@@ -233,7 +232,7 @@ export const CRUISE_MISSILE_MAX_DELAY = 1800; // 30 seconds at 60fps
 export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement range in pixels
 
 // --- Enemy Attacker (Humanoid) ---
-export const ENEMY_ATTACKER_TOTAL_COUNT = 40;
+// 生成数はマップ面積で決まるので Map.js のコンストラクタが持つ（ここには置かない）
 export const ENEMY_ATTACKER_TYPES = {
     standard: {
         name: 'standard',
@@ -333,7 +332,6 @@ export const ENEMY_DRONE_FIRE_INTERVAL = 120; // 2 seconds
 export const ENEMY_DRONE_BURST_COUNT = 5;    // Shots fired per attack
 export const ENEMY_DRONE_BURST_INTERVAL = 6; // Frames between burst shots (0.1s)
 export const ENEMY_DRONE_SCORE = 250;
-export const ENEMY_DRONE_COUNT = 15;        // Number to spawn in air spaces
 export const ENEMY_DRONE_WIDTH = 24;
 export const ENEMY_DRONE_HEIGHT = 16;
 export const ENEMY_DRONE_HOVER_DIST_Y = 120; // Maintain this vertical distance from player
@@ -351,7 +349,6 @@ export const ENEMY_TURRET_WIDTH = 24;
 export const ENEMY_TURRET_HEIGHT = 24;
 export const ENEMY_TURRET_SIGHT_RANGE = CANVAS_WIDTH * 0.5;
 export const ENEMY_TURRET_SCORE = 200;
-export const ENEMY_TURRET_COUNT = 10;           // Number to spawn
 export const ENEMY_TURRET_BURST_COUNT = 5;      // Bullets per burst
 export const ENEMY_TURRET_BURST_DELAY = 10;     // Ticks between burst shots
 export const ENEMY_TURRET_COOLDOWN = 120;       // Ticks between bursts (2 seconds)
@@ -367,7 +364,6 @@ export const ENEMY_BASE_HP = 1;                 // Final core HP
 export const FLAG_WIDTH = 12;
 export const FLAG_HEIGHT = 20;
 export const FLAG_SCORE = 5000;
-export const FLAG_COLOR = '#FF0000';
 
 // --- Enemy Base Laser ---
 export const BASE_LASER_RANGE = CANVAS_WIDTH * 0.55;
@@ -401,10 +397,6 @@ export const STAGE_PALETTES = [
 ];
 
 // --- Colors ---
-export const COLOR_NORMAL_BLOCK = '#8B4513';
-export const COLOR_NORMAL_BLOCK_BORDER = '#5c2e0b';
-export const COLOR_HUD_TEXT = '#00CCFF';
-export const COLOR_LASER = '#00FFAA';
 export const COLOR_HARD_BLOCK = '#555555';
 export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';

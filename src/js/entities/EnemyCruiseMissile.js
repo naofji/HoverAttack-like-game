@@ -8,11 +8,9 @@ import {
     CRUISE_MISSILE_ENGAGE_DISTANCE,
     CRUISE_MISSILE_LIFETIME,
     CRUISE_MISSILE_HP,
-    EXPLOSION_PARTICLE_COUNT,
     PARTICLE_LIFETIME,
     TILE_SIZE,
     GRENADE_BLAST_RADIUS,
-    GRENADE_EXPLOSION_COUNT
 } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';

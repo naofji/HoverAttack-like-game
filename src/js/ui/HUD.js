@@ -3,8 +3,7 @@
 // ============================================
 
 import {
-    CANVAS_WIDTH,
-    HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+    HUD_TOP_HEIGHT,
     HUD_FONT, HUD_COLOR, HUD_BG_COLOR,
     HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL
 } from '../utils/Constants.js';

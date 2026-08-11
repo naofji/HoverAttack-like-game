@@ -2,7 +2,7 @@
 // Missile - Straight-line projectile
 // ============================================
 
-import { MISSILE_SPEED, MISSILE_LIFETIME, TILE_SIZE, PARTICLE_LIFETIME, EXPLOSION_PARTICLE_COUNT } from '../utils/Constants.js';
+import { MISSILE_SPEED, MISSILE_LIFETIME, PARTICLE_LIFETIME } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
 import { playBlast } from './destruction.js';
 

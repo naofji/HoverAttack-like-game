@@ -246,9 +246,6 @@ export class EnemyTank {
     die() {
         this.alive = false;
         playDestruction(this.game, this, 'tank');
-        // Explosion effect
-        const cx = this.x + this.width / 2;
-        const cy = this.y + this.height / 2;
         this.game.addScore(this.score);
     }
 

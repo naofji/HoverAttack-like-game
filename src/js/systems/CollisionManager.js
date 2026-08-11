@@ -21,10 +21,6 @@ const DAMAGE_PLAYER_MG = 3;
 const DAMAGE_ENEMY_MISSILE = 15;
 const DAMAGE_ENEMY_MISSILE_CARRIER = 10;
 
-// Explosion sizes
-const EXPLOSION_CRUISE_HIT = 40;
-const EXPLOSION_CRUISE_KILL = 40;
-
 // Score bonuses for interceptions
 const SCORE_HOMING_INTERCEPT = 20;
 const SCORE_CRUISE_DESTROY = 100;

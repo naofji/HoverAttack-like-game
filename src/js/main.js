@@ -16,15 +16,19 @@ if (typeof window !== 'undefined') {
 
 import { Input } from './utils/Input.js';
 import {
-    CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE,
+    CANVAS_WIDTH, CANVAS_HEIGHT,
     MISSILE_MAX_ON_SCREEN, COLOR_CAVE_BG,
-    HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
     PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
+    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
+    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
+    AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
+    MISSILE_SPEED, PLAYER_MG_SPEED,
+    LEADERBOARD_URL,
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
@@ -35,7 +39,7 @@ import { Carrier } from './entities/Carrier.js';
 import { Missile } from './entities/Missile.js';
 import { PlayerBullet } from './entities/PlayerBullet.js';
 import { Grenade } from './entities/Grenade.js';
-import { Particle, TrailParticle, createExplosion, createSparks } from './entities/Particle.js';
+import { createExplosion, createSparks } from './entities/Particle.js';
 import { SmokeScreen } from './entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
@@ -53,15 +57,9 @@ import { StageRankingManager, pickStageRanking } from './systems/StageRankingMan
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
-import {
-    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
-    AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
-    AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
-    MISSILE_SPEED, PLAYER_MG_SPEED,
-} from './utils/Constants.js';
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
-import { LEADERBOARD_URL } from './utils/Constants.js';
 import { getCountryCode } from './utils/geo.js';
+import { formatClock } from './utils/formatTime.js';
 import { nearestHoveringEnemy } from './utils/audioFalloff.js';
 import { isEnemyConcealed } from './utils/concealment.js';
 import { MODES, cycleMode } from './utils/modes.js';
@@ -504,7 +502,7 @@ export const Game = {
             } else if (c === 'Enter') {
                 if (this.playerNameInput.trim().length === 0) this.playerNameInput = 'AAA';
                 const displayMission = Math.min(7, this.missionsCompleted + 1);
-                const formattedTime = this.missionsCompleted >= 7 ? this._formatTime(this.totalTime) : null;
+                const formattedTime = this.missionsCompleted >= 7 ? formatClock(this.totalTime) : null;
                 const country = getCountryCode();
                 // Overall weekly ranking: only recorded when it's an actual high score.
                 // (A stage-only qualifier reaches naming to save per-stage records, but
@@ -1300,7 +1298,7 @@ export const Game = {
         } else if (this.gameState === 'ranking_entry') {
             this.screenRenderer.drawRankingEntry(ctx, this.playerNameInput, this.score);
         } else if (this.showMiniMap || this.miniMapAlpha > 0) {
-            this.screenRenderer.drawMiniMap(ctx, this.miniMapAlpha);
+            this.screenRenderer.drawMiniMap(ctx);
         }
     },
 
@@ -1364,14 +1362,6 @@ export const Game = {
         return this.input.isKeyPressed('Enter')
             || this.input.isLeftClickPressed()
             || this.input.isRightClickPressed();
-    },
-
-    /** Format milliseconds to "MM:SS.XX" string */
-    _formatTime(ms) {
-        const mm = Math.floor(ms / 60000).toString().padStart(2, '0');
-        const ss = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0');
-        const xx = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
-        return `${mm}:${ss}.${xx}`;
     },
 
     /** Spawn explosion particles and chain-detonate nearby landmines */

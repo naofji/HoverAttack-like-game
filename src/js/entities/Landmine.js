@@ -6,7 +6,6 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     LANDMINE_DAMAGE, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX,
     LANDMINE_BLINK_INTERVAL,
-    EXPLOSION_PARTICLE_COUNT,
     LANDMINE_BLAST_RADIUS
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
