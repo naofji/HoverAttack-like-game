@@ -16,7 +16,7 @@
 import {
     SMOKE_PUFF_COUNT, SMOKE_EMIT_SPAN, SMOKE_PUFF_LIFETIME,
     SMOKE_PUFF_RADIUS_START, SMOKE_PUFF_RADIUS_END, SMOKE_PUFF_ALPHA_MAX,
-    SMOKE_ROTATION_SPEED, SMOKE_SPREAD_RADIUS,
+    SMOKE_ROTATION_SPEED, SMOKE_ROTATION_JITTER, SMOKE_SPREAD_RADIUS,
     SMOKE_ARC_FROM_HOUR, SMOKE_ARC_TO_HOUR, SMOKE_RING_INNER, SMOKE_RING_OUTER,
     SMOKE_PUFF_RADIUS_JITTER, SMOKE_DRIFT_SPEED,
     SMOKE_RISE_SPEED, SMOKE_SPRITE_SIZE,
@@ -66,6 +66,21 @@ const SMOKE_EMISSION_SLOTS = EMISSION_RINGS.flatMap((ring) => {
 });
 
 export { SMOKE_EMISSION_SLOTS };
+
+/**
+ * パフの回転（ラジアン/frame）。
+ * @param {number} dirX 機体から見た左右（-1〜1）。0 は左右が決まらない
+ */
+function _spinFor(dirX) {
+    // canvas は y が下向き正なので、正の角度＝時計回り。右側のパフを時計回りに
+    // 回すと、外側の縁が上へ持ち上がる＝噴き出して巻き上がる向きになる
+    const side = Math.abs(dirX) < 1e-6
+        ? (Math.random() < 0.5 ? -1 : 1)
+        : Math.sign(dirX);
+    const speed = SMOKE_ROTATION_SPEED
+        * (1 + (Math.random() * 2 - 1) * SMOKE_ROTATION_JITTER);
+    return side * speed * Math.PI / 180;
+}
 
 export class SmokeScreen {
     /**
@@ -146,8 +161,12 @@ export class SmokeScreen {
             vx: dirX * SMOKE_DRIFT_SPEED,
             vy: isCore ? 0 : dirY * SMOKE_DRIFT_SPEED - SMOKE_RISE_SPEED,
             rotation: Math.random() * Math.PI * 2,
-            // 回る向きを揃えると渦に見えてしまうので符号をばらす
-            spin: (Math.random() < 0.5 ? -1 : 1) * SMOKE_ROTATION_SPEED * Math.PI / 180,
+            // 回る向きは左右で逆にする。噴き出した煙が外側へ巻き上がる動きになり、
+            // 符号を乱数で決めるより煙らしい（乱数だと隣り合うパフが逆向きに
+            // 回って、互いに打ち消し合うように見える）。
+            // 12時ちょうどと中心のパフは左右が決まらないので乱数のまま。
+            // 速さもばらす。全部が同じ速さで回ると揃って動く機械仕掛けに見える
+            spin: _spinFor(dirX),
             shape: Math.floor(Math.random() * SMOKE_SHAPES.length),
         };
     }

@@ -6,6 +6,7 @@ import {
   SMOKE_PUFF_COUNT, SMOKE_EMIT_SPAN, SMOKE_PUFF_LIFETIME,
   SMOKE_PUFF_RADIUS_START, SMOKE_PUFF_RADIUS_END,
   SMOKE_PUFF_RADIUS_JITTER, SMOKE_CONCEAL_THRESHOLD,
+  SMOKE_ROTATION_SPEED, SMOKE_ROTATION_JITTER,
 } from '../src/js/utils/Constants.js';
 
 before(() => {
@@ -168,6 +169,37 @@ test('列のパフは漂う（位置が動く）', async () => {
   const x0 = p.x, y0 = p.y;
   run(s, 60);
   assert.ok(p.x !== x0 || p.y !== y0, '漂っていない');
+});
+
+test('回転は左右で逆向き（外側へ巻き上がる）', async () => {
+  // 符号を乱数で決めると、隣り合うパフが逆向きに回って互いを打ち消して見える。
+  // 左右で揃えると、噴き出した煙が外へ巻き上がる動きになる
+  const s = await makeScreen(100, 100);
+  run(s, SMOKE_EMIT_SPAN + 1);
+
+  const right = s.puffs.filter((p) => p.x - 100 > 1);
+  const left = s.puffs.filter((p) => p.x - 100 < -1);
+  assert.ok(right.length > 1 && left.length > 1, '左右にパフが撒かれていない');
+
+  // canvas は y が下向き正なので、正の角度＝時計回り＝右側の外縁が持ち上がる向き
+  for (const p of right) assert.ok(p.spin > 0, `右側が時計回りでない: ${p.spin}`);
+  for (const p of left) assert.ok(p.spin < 0, `左側が反時計回りでない: ${p.spin}`);
+});
+
+test('回転の速さはパフごとにばらつく', async () => {
+  // 全部が同じ速さで回ると、揃って動く硬い機械仕掛けに見える
+  const s = await makeScreen(100, 100);
+  run(s, SMOKE_EMIT_SPAN + 1);
+  const speeds = s.puffs.map((p) => Math.abs(p.spin));
+  assert.ok(new Set(speeds.map((v) => Math.round(v * 1e6))).size > 1,
+    '全部同じ速さで回っている');
+
+  const base = SMOKE_ROTATION_SPEED * Math.PI / 180;
+  for (const v of speeds) {
+    assert.ok(v <= base * (1 + SMOKE_ROTATION_JITTER) + 1e-9,
+      `速すぎる（渦に見えて煙から離れる）: ${v}`);
+    assert.ok(v >= base * (1 - SMOKE_ROTATION_JITTER) - 1e-9, `遅すぎる: ${v}`);
+  }
 });
 
 test('パフは回転する', async () => {

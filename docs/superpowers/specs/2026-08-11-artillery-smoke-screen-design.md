@@ -55,7 +55,7 @@ artillery 型の敵アタッカーに、**自機に発見された瞬間に煙�
 | 発煙の撒き方 | 12 tick に分散 | 一斉に生むと全パフの年齢が揃い、雲が一様に膨らんで一様に薄れる（時間変化が見えない）。ずらすと機体の近くに白い生まれたてが残り、外側に紫灰の古いのが漂う層ができて湧き上がって見える |
 | 漂い | 外向きの微小な初速 ＋ ゆっくり上昇 | |
 | パフごとの大きさ | ±35% | 位置だけ散らしても、同じ年齢のパフが全部同じ半径では「同じ丸の反復」に見える |
-| 回転 | ±0.6°/frame | 速いと渦に見えて煙から離れる |
+| 回転 | 基準0.6°/frame ±70%。**向きは左右で逆**（右は時計回り、左は反時計回り） | 噴き出した煙が外側へ巻き上がる動きになる。符号を乱数で決めると隣り合うパフが逆向きに回って互いを打ち消して見えた。速さを揃えると機械仕掛けに見えるのでばらつかせる |
 
 ### 撒く場所 — 乱数ではなく決め打ちの扇形
 
@@ -288,7 +288,8 @@ SMOKE_PUFF_RADIUS_END     = 100
 SMOKE_PUFF_ALPHA_MAX      = 0.62
 SMOKE_FALLOFF_EXPONENT    = 2.5
 SMOKE_CONCEAL_THRESHOLD   = 0.6
-SMOKE_ROTATION_SPEED      = 0.6   // 度/frame。符号はパフごとにばらす
+SMOKE_ROTATION_SPEED      = 0.6   // 度/frame。向きは左右で逆（乱数ではない）
+SMOKE_ROTATION_JITTER     = 0.7   // 回転速度のばらつき（±この割合）
 SMOKE_SPREAD_RADIUS       = 50    // 列の距離の基準
 SMOKE_ARC_FROM_HOUR       = 8     // 扇形の始まり（時計の文字盤）
 SMOKE_ARC_TO_HOUR         = 16    // 終わり（＝4時）。8→12→16 で240°
@@ -370,6 +371,7 @@ drift を据え置くと、停滞しているはずの20秒のあいだに雲が
 | 扇形の広がり方を変えたい | `SMOKE_ARC_FROM_HOUR` / `SMOKE_ARC_TO_HOUR`（時計の文字盤）、`SMOKE_RING_INNER` / `SMOKE_RING_OUTER`、`SmokeScreen.js` の `EMISSION_RINGS`（枚数。**`SMOKE_PUFF_COUNT` と合計を揃える**） |
 | 列が点の並びに見えて壁にならない | `SMOKE_PUFF_RADIUS_START` を上げる（列の間隔より大きく） |
 | 同じ丸が並んで見える | `SMOKE_PUFF_RADIUS_JITTER` |
+| 回転が揃って機械的に見える / 渦に見える | `SMOKE_ROTATION_SPEED`、`SMOKE_ROTATION_JITTER` |
 | 紫が強すぎる / 弱すぎる | `smokeSprites.js` の `SMOKE_TINTS` |
 | 煙の縁なのにロックできてしまう | 副瘤の `r` か `a` を落とす（`SMOKE_SHAPES`）。描画は瘤を5つ重ねる分、判定（`falloff` 単体）より濃く見えるため、縁は見た目にはまだ煙が残っていても判定側は先にしきい値を割ってロック可能になっている |
 | 煙が小さい / アタッカーを隠し切れない | `SMOKE_PUFF_RADIUS_START` と `SMOKE_PUFF_RADIUS_END`。上げたら `SMOKE_DRIFT_SPEED` が成長より遅いままか、`SMOKE_SPRITE_SIZE` がパフ最大直径を下回らないかも確認する |
