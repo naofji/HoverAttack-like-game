@@ -62,6 +62,9 @@ const NOTES = {
     cruise: '巡航ミサイル（最も長く太い）',
     grenade: 'グレネードの投擲',
     reload: 'リロード「ガチャリ」',
+    ammoMissile: '補給：ミサイルが1発入る「カチッ」',
+    ammoGrenade: '補給：グレネードが1発入る「コツン」',
+    readyVoice: '補給完了の「レディ」',
 };
 
 mkdirSync(OUT_DIR, { recursive: true });
