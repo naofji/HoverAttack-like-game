@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS, renderWeaponSound, voiceBreakpoints } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
+import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
+import { EnemyBase } from '../src/js/entities/EnemyBase.js';
 import { transientLevel, db, whiteNoise, SAMPLE_RATE } from './helpers/dsp.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, ENEMY_HOVER_OFFSCREEN_FADE,
@@ -276,11 +278,27 @@ test('古い共用の発射音は残っていない', () => {
 });
 
 test('基地の通常弾で音が二重に鳴らない', () => {
-  // EnemyBullet のコンストラクタが鳴らすので、基地側で足すと2回になる
-  const base = SRC('entities/EnemyBase.js');
-  const bullet = SRC('entities/EnemyBullet.js');
-  assert.ok(bullet.includes("playWeapon('enemyMg'"), '弾自身が音を鳴らしていない');
-  assert.ok(!base.includes("playWeapon('enemyMg'"), '基地でも通常弾の音を鳴らしている');
+  // 発射音は EnemyBullet のコンストラクタが鳴らす。基地側でも足すと2回になる。
+  // 以前はソースを grep していたが、鳴らす場所を Bullet の土台に移したときに
+  // 「実際には1回鳴っている」のに落ちた。呼び出しそのものを数える
+  const original = audioManager.playWeapon;
+  const calls = [];
+  audioManager.playWeapon = (kind) => calls.push(kind);
+  try {
+    const game = { map: { isSolidAtPixel: () => false }, enemyBullets: [] };
+    new EnemyBullet(game, 0, 0, 0);
+    assert.deepEqual(calls, ['enemyMg'], '弾1発につき enemyMg がちょうど1回');
+
+    // 基地が撃つ経路でも1回のまま（基地が自分でも鳴らしていないこと）
+    calls.length = 0;
+    const base = Object.create(EnemyBase.prototype);
+    Object.assign(base, { game, x: 0, y: 0, width: 32, height: 32 });
+    base._fireTurretBullet({ x: 100, y: 100, width: 16, height: 24 });
+    assert.deepEqual(calls, ['enemyMg'], '基地が撃つと二重に鳴っている');
+    assert.equal(game.enemyBullets.length, 1, '弾が撃たれていない');
+  } finally {
+    audioManager.playWeapon = original;
+  }
 });
 
 test('武器ごとに違う種類が渡されている', () => {
