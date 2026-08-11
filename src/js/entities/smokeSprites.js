@@ -27,15 +27,49 @@ import { falloff } from '../utils/concealment.js';
 import { lerpColor, withAlpha } from '../utils/color.js';
 
 /**
- * 瘤の並び。座標と半径はスプライトの半径に対する比。
- * 中心に大きいのを1つ置き、そこから外れた位置に小さいのを2つ足す。
+ * 瘤の並び。1枚のパフは、これらを重ねて焼いたもの。
+ *
+ * - `dx` / `dy` / `r`: 位置と半径。スプライトの半径に対する比
+ * - `a`: その瘤の不透明度の倍率
+ * - `t`: 色段のずらし幅（-1 / 0 / +1）。隣の色段へ半分だけ寄せる
+ *
+ * **`a` と `t` を瘤ごとに散らしているのが、模様を作っている当のもの。**
+ * 全部の瘤を同じ色・同じ濃さで焼くと、重なりが単なる同心円の膨らみにしか
+ * ならず、拡大したときに「大きな丸」に見えてしまう。濃さと色をばらすと、
+ * 濃い芯・薄い裾・冷えた縁が1枚の中に同居して、煙の塊らしい斑が出る。
+ * 焼き付けなので、瘤をいくつ足しても実行時のコストは drawImage 1回のまま。
+ *
  * 完全に対称にすると回転が見えなくなるので、必ずどちらかに寄せている。
  */
 export const SMOKE_SHAPES = [
-    [{ dx: 0.00, dy: 0.00, r: 1.00 }, { dx: 0.26, dy: -0.20, r: 0.60 }, { dx: -0.22, dy: 0.22, r: 0.52 }],
-    [{ dx: -0.06, dy: 0.04, r: 0.94 }, { dx: 0.30, dy: 0.16, r: 0.56 }, { dx: -0.18, dy: -0.26, r: 0.62 }],
-    [{ dx: 0.04, dy: -0.06, r: 0.98 }, { dx: -0.30, dy: 0.08, r: 0.58 }, { dx: 0.20, dy: 0.28, r: 0.50 }],
-    [{ dx: 0.00, dy: 0.08, r: 0.90 }, { dx: 0.16, dy: -0.30, r: 0.64 }, { dx: -0.28, dy: -0.04, r: 0.54 }],
+    [
+        { dx: 0.00, dy: 0.00, r: 0.92, a: 1.00, t: 0 },   // 芯
+        { dx: 0.24, dy: -0.18, r: 0.56, a: 0.80, t: -1 }, // 明るい膨らみ
+        { dx: -0.20, dy: 0.20, r: 0.50, a: 0.65, t: +1 }, // 冷えた影
+        { dx: 0.30, dy: 0.26, r: 0.34, a: 0.45, t: +1 },  // ほつれ
+        { dx: -0.32, dy: -0.14, r: 0.30, a: 0.50, t: 0 },
+    ],
+    [
+        { dx: -0.06, dy: 0.04, r: 0.88, a: 1.00, t: 0 },
+        { dx: 0.28, dy: 0.14, r: 0.52, a: 0.75, t: +1 },
+        { dx: -0.16, dy: -0.24, r: 0.58, a: 0.85, t: -1 },
+        { dx: 0.10, dy: -0.34, r: 0.30, a: 0.45, t: 0 },
+        { dx: -0.34, dy: 0.22, r: 0.28, a: 0.50, t: +1 },
+    ],
+    [
+        { dx: 0.04, dy: -0.06, r: 0.94, a: 1.00, t: 0 },
+        { dx: -0.28, dy: 0.08, r: 0.54, a: 0.80, t: +1 },
+        { dx: 0.18, dy: 0.26, r: 0.46, a: 0.60, t: -1 },
+        { dx: -0.12, dy: -0.32, r: 0.32, a: 0.50, t: -1 },
+        { dx: 0.34, dy: -0.10, r: 0.26, a: 0.45, t: 0 },
+    ],
+    [
+        { dx: 0.00, dy: 0.08, r: 0.86, a: 1.00, t: 0 },
+        { dx: 0.14, dy: -0.28, r: 0.60, a: 0.85, t: -1 },
+        { dx: -0.26, dy: -0.04, r: 0.50, a: 0.70, t: +1 },
+        { dx: 0.30, dy: 0.20, r: 0.30, a: 0.45, t: +1 },
+        { dx: -0.20, dy: 0.30, r: 0.28, a: 0.55, t: 0 },
+    ],
 ];
 
 /**
@@ -59,11 +93,11 @@ const STOP_COUNT = 6;
  * 「濃く見えるのに隠れない」が起きるので、対で直すこと。
  * @returns {Array<[number, string]>} [offset, rgba文字列]
  */
-export function gradientStops(coreColor, midColor, edgeColor) {
+export function gradientStops(coreColor, midColor, edgeColor, alphaScale = 1) {
     const stops = [];
     for (let i = 0; i < STOP_COUNT; i++) {
         const offset = i / (STOP_COUNT - 1);
-        const alpha = falloff(offset, 1);
+        const alpha = falloff(offset, 1) * alphaScale;
         // 色は中心→中間→縁の2区間で補間する
         const color = offset < 0.5
             ? lerpColor(coreColor, midColor, offset * 2)
@@ -78,17 +112,38 @@ export function gradientStops(coreColor, midColor, edgeColor) {
 
 let _sprites = null;
 
+/**
+ * 瘤の色。その色段から、隣の段へ半分だけ寄せた色を作る。
+ * 段をまたいで丸ごと差し替えるのではなく半分に留めるのは、1枚のパフの中で
+ * 色がばらけつつ、パフ全体としてはその年齢の色段に属して見えるようにするため
+ * （寄せ切ると、若いパフの中に古い色の瘤が混じって年齢が読めなくなる）。
+ * @param {number} tintIndex この瘤が属する色段
+ * @param {number} shift -1 / 0 / +1
+ */
+function _lobeTint(tintIndex, shift) {
+    const base = SMOKE_TINTS[tintIndex];
+    if (!shift) return base;
+    const target = SMOKE_TINTS[Math.max(0, Math.min(SMOKE_TINTS.length - 1, tintIndex + shift))];
+    if (target === base) return base;   // 両端では寄せる先が無い
+    return {
+        core: lerpColor(base.core, target.core, 0.5),
+        mid: lerpColor(base.mid, target.mid, 0.5),
+        edge: lerpColor(base.edge, target.edge, 0.5),
+    };
+}
+
 /** 1枚焼く。 */
-function _bake(shape, tint) {
+function _bake(shape, tintIndex) {
     const canvas = document.createElement('canvas');
     canvas.width = SMOKE_SPRITE_SIZE;
     canvas.height = SMOKE_SPRITE_SIZE;
     const ctx = canvas.getContext('2d');
 
     const half = SMOKE_SPRITE_SIZE / 2;
-    const stops = gradientStops(tint.core, tint.mid, tint.edge);
 
     for (const lobe of shape) {
+        const tint = _lobeTint(tintIndex, lobe.t);
+        const stops = gradientStops(tint.core, tint.mid, tint.edge, lobe.a);
         const cx = half + lobe.dx * half;
         const cy = half + lobe.dy * half;
         const r = lobe.r * half;
@@ -108,7 +163,7 @@ function _bake(shape, tint) {
  */
 export function getSmokeSprites() {
     if (_sprites) return _sprites;
-    _sprites = SMOKE_SHAPES.map((shape) => SMOKE_TINTS.map((tint) => _bake(shape, tint)));
+    _sprites = SMOKE_SHAPES.map((shape) => SMOKE_TINTS.map((_tint, i) => _bake(shape, i)));
     return _sprites;
 }
 

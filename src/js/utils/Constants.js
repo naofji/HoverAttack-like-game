@@ -73,16 +73,16 @@ export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。�
 export const SMOKE_PUFF_LIFETIME = 240;       // tick: パフ1個の寿命（4秒）。雲はパフが全部消えたら死ぬ
 export const SMOKE_PUFF_RISE_RATIO = 0.05;    // 寿命のこの割合で 0→1 に立ち上がる（最初の12 tick）
 export const SMOKE_PUFF_DECAY_EXPONENT = 1.3; // (1-u)^この指数 で薄れる。1.0 だと後半までしぶとく、2.0 だと隠れる時間が足りない
-export const SMOKE_PUFF_RADIUS_START = 16;    // px: 出たてで機体（16x24）を覆う大きさ
-export const SMOKE_PUFF_RADIUS_END = 34;      // px: 拡散後は1枚で機体の倍
+export const SMOKE_PUFF_RADIUS_START = 30;    // px: 出たてで機体（16x24）をゆうに覆う。実機で 16px は「アタッカーを隠し切れない」と判断された
+export const SMOKE_PUFF_RADIUS_END = 78;      // px: 拡散後は1枚で機体の3倍以上。雲の広がりは主にこの成長が作る
 export const SMOKE_PUFF_ALPHA_MAX = 0.50;     // 上限なしで素直に重ねるので1枚は薄く。0.38 では隠蔽が続くのが実測で中央値48 tick しか無く（要求は60超）、パフが自分の成長（16→34px）より速く外へ散る（0.10px/frame × 240 = 24px）ぶん発煙点が早く痩せるため上げた
 export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
-export const SMOKE_SPREAD_RADIUS = 8;         // px: 撒く位置のばらつき。広げると発煙直後に濃くならない（下の注を読むこと）
-export const SMOKE_DRIFT_SPEED = 0.05;        // px/frame: 外向きの初速。0.10 では 240 tick で 24px 外へ散り、パフ自身の成長（16→34px = 18px）を追い越して発煙点の重なりが崩れていた（隠蔽の持続が実測で中央値62 tick、5回中2回が60を割る不安定さ）。成長より遅くすることで中心が痩せず、ばらつきも収まる
-export const SMOKE_RISE_SPEED = 0.08;         // px/frame: ゆっくり上昇
-export const SMOKE_SPRITE_SIZE = 64;          // px: 焼き付けるスプライトの一辺
+export const SMOKE_SPREAD_RADIUS = 16;        // px: 撒く位置のばらつき。パフ半径(30px)の半分までに留める。これを超えると発煙直後の一点で重なりが足りず、いちばん隠れてほしい瞬間にしきい値を越えない
+export const SMOKE_DRIFT_SPEED = 0.14;        // px/frame: 外向きの初速。**パフ自身の成長（(78-30)/240 = 0.20px/frame）より遅く保つこと。** 追い越すと発煙点の重なりが寿命の半ばで崩れ、隠蔽が短くなるうえ撒き位置の乱数で毎回ばらつく（実測で中央値48 tick・振れ幅45〜80）
+export const SMOKE_RISE_SPEED = 0.12;         // px/frame: ゆっくり上昇
+export const SMOKE_SPRITE_SIZE = 128;         // px: 焼き付けるスプライトの一辺。パフ最大直径(156px)に対してこれ未満だと拡大でぼける。焼くのは一度だけなので大きくしても実行時コストは変わらない
 
 // --- Rival alignment avoidance ---
 export const RIVAL_ALIGN_THRESHOLD = 24;      // px: closer than this on an axis = aligned

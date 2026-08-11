@@ -114,3 +114,64 @@ test('色段は白 → 淡い紫 → 紫灰 の順に暗くなる（年齢で冷
       `色段 ${i} が前より明るい`);
   }
 });
+
+// --- 瘤ごとに色と濃さを変える（模様を作っているのはこれ） --------------------
+
+test('gradientStops は alphaScale で濃さを按分する', async () => {
+  const { gradientStops } = await import('../src/js/entities/smokeSprites.js');
+  const alphaOf = (stops, i) => Number(/rgba\([^)]*,\s*([0-9.]+)\)$/.exec(stops[i][1])[1]);
+
+  const full = gradientStops('#FFFFFF', '#B4A9C4', '#7A7089');
+  const half = gradientStops('#FFFFFF', '#B4A9C4', '#7A7089', 0.5);
+
+  // 形（falloff）は変えずに、全体の濃さだけが比例して落ちる
+  for (let i = 0; i < full.length; i++) {
+    assert.ok(Math.abs(alphaOf(half, i) - alphaOf(full, i) * 0.5) < 0.005,
+      `停止点 ${i}: 按分されていない`);
+  }
+});
+
+test('どの形も、濃さと色段のずらしを瘤ごとに散らしている', async () => {
+  // 全部の瘤を同じ色・同じ濃さで焼くと、重なりが同心円の膨らみにしかならず
+  // 拡大したとき「大きな丸」に見えてしまう。散らばりが模様を作る
+  const { SMOKE_SHAPES } = await import('../src/js/entities/smokeSprites.js');
+  for (const [i, shape] of SMOKE_SHAPES.entries()) {
+    assert.ok(shape.length >= 4, `形 ${i}: 瘤が少なく模様にならない`);
+    assert.ok(new Set(shape.map((l) => l.a)).size > 1, `形 ${i}: 濃さが全部同じ`);
+    assert.ok(new Set(shape.map((l) => l.t)).size > 1, `形 ${i}: 色段のずらしが全部同じ`);
+    assert.ok(shape.some((l) => l.a === 1), `形 ${i}: 芯になる瘤（a=1）が無い`);
+    for (const l of shape) {
+      assert.ok(l.a > 0 && l.a <= 1, `形 ${i}: 濃さの倍率が範囲外: ${l.a}`);
+      assert.ok(Math.abs(l.t) <= 1, `形 ${i}: 色段のずらしが大きすぎる: ${l.t}`);
+    }
+  }
+});
+
+test('焼いた1枚の中に、濃さの違う瘤と色の違う瘤が同居する', async () => {
+  const { getSmokeSprites, _resetSmokeSprites, SMOKE_SHAPES } =
+    await import('../src/js/entities/smokeSprites.js');
+  _resetSmokeSprites();
+  created.length = 0;
+  getSmokeSprites();
+
+  // 最初の1枚（形0 × 色段0）に来たグラデーションを見る
+  const grads = created[0].calls.filter((c) => c.name === 'createRadialGradient').map((c) => c.grad);
+  assert.equal(grads.length, SMOKE_SHAPES[0].length, '瘤の数だけグラデーションが作られていない');
+
+  const peakAlpha = (g) => Number(/rgba\([^)]*,\s*([0-9.]+)\)$/.exec(g.stops[0][1])[1]);
+  const coreColor = (g) => /rgba\((\d+),\s*(\d+),\s*(\d+)/.exec(g.stops[0][1])[0];
+
+  assert.ok(new Set(grads.map(peakAlpha)).size > 1, '全部の瘤が同じ濃さで焼かれている');
+  assert.ok(new Set(grads.map(coreColor)).size > 1, '全部の瘤が同じ色で焼かれている');
+});
+
+test('端の色段では、寄せる先が無くても落ちない', async () => {
+  // t: -1 の瘤が色段0に、t: +1 の瘤が最終段にあると、隣が存在しない。
+  // クランプして自分自身に落ちるので色は変わらないが、例外を出さないこと
+  const { getSmokeSprites, _resetSmokeSprites, SMOKE_TINTS } =
+    await import('../src/js/entities/smokeSprites.js');
+  _resetSmokeSprites();
+  created.length = 0;
+  assert.doesNotThrow(() => getSmokeSprites());
+  assert.equal(created.length, 4 * SMOKE_TINTS.length);
+});
