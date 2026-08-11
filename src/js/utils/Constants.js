@@ -64,6 +64,26 @@ export const ATTACKER_COVER_CHECK_INTERVAL = 30; // frames between line-of-sight
 export const ATTACKER_COVER_SCAN_TILES = 6;      // cover candidate scan range (+/- tiles)
 export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least this range
 
+// --- Artillery smoke screen ---
+// 発見された artillery が張る煙幕。設計は
+// docs/superpowers/specs/2026-08-11-artillery-smoke-screen-design.md
+export const SMOKE_COOLDOWN = 480;            // tick: 発煙の間隔（8秒）。煙の寿命4秒の倍で「半分は見えている」
+export const SMOKE_PUFF_COUNT = 14;           // 半径34px × 14枚で画面幅の1/4ほど。枚数で濃さを作るので1枚は薄い
+export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。一斉に生むと全パフの年齢が揃って湧き上がって見えない
+export const SMOKE_PUFF_LIFETIME = 240;       // tick: パフ1個の寿命（4秒）。雲はパフが全部消えたら死ぬ
+export const SMOKE_PUFF_RISE_RATIO = 0.05;    // 寿命のこの割合で 0→1 に立ち上がる（最初の12 tick）
+export const SMOKE_PUFF_DECAY_EXPONENT = 1.3; // (1-u)^この指数 で薄れる。1.0 だと後半までしぶとく、2.0 だと隠れる時間が足りない
+export const SMOKE_PUFF_RADIUS_START = 16;    // px: 出たてで機体（16x24）を覆う大きさ
+export const SMOKE_PUFF_RADIUS_END = 34;      // px: 拡散後は1枚で機体の倍
+export const SMOKE_PUFF_ALPHA_MAX = 0.38;     // 上限なしで素直に重ねるので1枚は薄く。重なり3枚で 0.63 = しきい値超え
+export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
+export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
+export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
+export const SMOKE_SPREAD_RADIUS = 8;         // px: 撒く位置のばらつき。広げると発煙直後に濃くならない（下の注を読むこと）
+export const SMOKE_DRIFT_SPEED = 0.10;        // px/frame: 外向きの初速。半径の伸び（0.075/frame）と釣り合わせてある
+export const SMOKE_RISE_SPEED = 0.08;         // px/frame: ゆっくり上昇
+export const SMOKE_SPRITE_SIZE = 64;          // px: 焼き付けるスプライトの一辺
+
 // --- Rival alignment avoidance ---
 export const RIVAL_ALIGN_THRESHOLD = 24;      // px: closer than this on an axis = aligned
 export const RIVAL_ALIGN_TRIGGER_FRAMES = 45; // aligned this long -> evade
