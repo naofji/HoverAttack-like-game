@@ -53,6 +53,10 @@ export class Player {
 
         // Docking
         this.docked = false;
+        // 新規に作った自機は常に満タン。resupply()/respawn() を通さずに
+        // docked = true にされる経路（起動時・ミッション遷移）でも「レディ」が
+        // 誤発火しないよう、ここで初期化しておく
+        this._dockAllFull = true;
 
         // Crouching & Stun
         this.crouching = false;

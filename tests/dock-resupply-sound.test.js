@@ -135,6 +135,23 @@ test('最初から満タンならドックしても鳴らない', () => {
   } finally { spy.restore(); }
 });
 
+test('起動直後・ミッション遷移直後（resupply/respawn を通さず docked = true にするだけ）でも鳴らない', () => {
+  // main.js の初回起動や GameStateManager.resetLevel() は
+  // `new Player(...)` した直後に `docked = true` を代入するだけで、
+  // resupply() も respawn() も通らない。コンストラクタ由来の自機は
+  // 常に満タンなので、この経路でも「レディ」が誤発火してはいけない。
+  const spy = spyAudio(['playWeapon', 'startRepairHum', 'stopRepairHum']);
+  try {
+    const game = { gameSpeed: 1 };
+    const p = new Player(game, 100, 100);
+    p.docked = true;
+    runUntilFull(p, 120);
+    assert.equal(spy.weapons('readyVoice'), 0, '起動直後のドックで鳴っている');
+    assert.equal(spy.weapons('ammoMissile'), 0);
+    assert.equal(spy.count('startRepairHum'), 0, '減っていないのにハムが鳴っている');
+  } finally { spy.restore(); }
+});
+
 test('補給の途中で離陸するとハムが止まる', () => {
   const source = readFileSync(new URL('../src/js/main.js', import.meta.url), 'utf8');
   const undock = source.slice(source.indexOf('player.docked = false;'));
