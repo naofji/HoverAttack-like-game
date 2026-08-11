@@ -451,78 +451,102 @@ export class Map {
     }
 
     /**
-     * Find valid floor positions for landmine placement.
-     * A valid position is an empty tile with a solid tile directly below it.
-     * Returns an array of {x, y} pixel coordinates.
+     * 候補タイルを集め、混ぜて、先頭から必要数だけピクセル座標にして返す。
+     *
+     * 地雷・タンク・アタッカー・ドローンの4つが、この「走査 → シャッフル →
+     * 先頭n件 → ピクセル変換」の骨格を丸ごと写していた。違うのは候補の
+     * 条件・必要数・機体の大きさ・足元の合わせ方だけなので、そこだけを
+     * spec で受け取る。
+     *
+     * ★ 週次の決定性に直結する。シャッフルは候補数-1 回ちょうど乱数を引き、
+     * 必要数で打ち切らない。ここで消費回数が変わると以降の生成がすべて
+     * ずれて、同じ週なのに別のステージになる（tests/MapDeterminism.test.js）。
+     *
+     * @param {object} spec
+     * @param {number} spec.rowFrom 走査する行の始まり
+     * @param {number} spec.rowTo   終わり（この値は含まない）
+     * @param {number} spec.colFrom 走査する列の始まり
+     * @param {number} spec.colTo   終わり（この値は含まない）
+     * @param {number} spec.startAreaRows 開始地点の除外範囲（行）
+     * @param {number} spec.startAreaCols 開始地点の除外範囲（列）
+     * @param {(r:number, c:number) => boolean} spec.accept 置ける地形か
+     * @param {number} spec.count 置きたい数
+     * @param {number} spec.width  機体の幅（タイル中央に寄せるのに使う）
+     * @param {number} spec.height 機体の高さ
+     * @param {boolean} [spec.centerInTile] true なら空中に浮かせてタイル中央へ、
+     *   false（既定）ならタイルの床に足を着ける
+     * @returns {Array<{x:number, y:number}>} ピクセル座標
      */
-    _findLandminePositions() {
+    _pickSpawnPositions(spec) {
         const candidates = [];
-        // Exclude borders and the start area (top-left 15x12 tiles)
-        for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
-            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                // Skip start area
-                if (r < 14 && c < 16) continue;
-                // Empty tile with solid floor below
-                if (this.grid[r][c] === BLOCK_EMPTY &&
-                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
-                    candidates.push({ r, c });
-                }
+        for (let r = spec.rowFrom; r < spec.rowTo; r++) {
+            for (let c = spec.colFrom; c < spec.colTo; c++) {
+                // 開始地点のまわりには置かない（出た瞬間に撃たれないように）
+                if (r < spec.startAreaRows && c < spec.startAreaCols) continue;
+                if (!spec.accept(r, c)) continue;
+                candidates.push({ r, c });
             }
         }
 
-        // Shuffle and pick LANDMINE_COUNT positions
-        const spawns = [];
-        const count = Math.min(this.targetLandmineCount, candidates.length);
+        // Fisher-Yates。候補全体を混ぜてから先頭を採る（上の走査順の偏りを消す）
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(this.game.rng.next() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
+
+        const count = Math.min(spec.count, candidates.length);
+        const spawns = [];
         for (let i = 0; i < count; i++) {
             const tile = candidates[i];
-            // Place centered on the tile floor
             spawns.push({
-                x: tile.c * TILE_SIZE + (TILE_SIZE - LANDMINE_WIDTH) / 2,
-                y: (tile.r + 1) * TILE_SIZE - LANDMINE_HEIGHT // Sit on top of the floor tile
+                x: tile.c * TILE_SIZE + (TILE_SIZE - spec.width) / 2,
+                y: spec.centerInTile
+                    ? tile.r * TILE_SIZE + (TILE_SIZE - spec.height) / 2
+                    : (tile.r + 1) * TILE_SIZE - spec.height,
             });
         }
         return spawns;
     }
 
+    /** 床の上が空いているタイル（真下が地面）。 */
+    _hasFloorBelow(r, c) {
+        return this.grid[r][c] === BLOCK_EMPTY &&
+            r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY;
+    }
+
+    /** 上に2マスぶんの空きがある足場（背の高い機体はこれが要る）。 */
+    _hasHeadroomOnFloor(r, c) {
+        return this.grid[r - 1][c] === BLOCK_EMPTY && this._hasFloorBelow(r, c);
+    }
+
+    /**
+     * Find valid floor positions for landmine placement.
+     * A valid position is an empty tile with a solid tile directly below it.
+     */
+    _findLandminePositions() {
+        return this._pickSpawnPositions({
+            rowFrom: BORDER_THICKNESS, rowTo: this.rows - BORDER_THICKNESS,
+            colFrom: BORDER_THICKNESS, colTo: this.cols - BORDER_THICKNESS,
+            startAreaRows: 14, startAreaCols: 16,
+            accept: (r, c) => this._hasFloorBelow(r, c),
+            count: this.targetLandmineCount,
+            width: LANDMINE_WIDTH, height: LANDMINE_HEIGHT,
+        });
+    }
+
     /**
      * Find valid positions for enemy hover tanks.
      * Needs an empty tile (and empty tile above) with solid floor below.
-     * Returns an array of {x, y} pixel coordinates.
      */
     _findEnemyTankPositions() {
-        const candidates = [];
-        for (let r = BORDER_THICKNESS + 1; r < this.rows - BORDER_THICKNESS; r++) {
-            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                // Skip start area (larger exclusion zone)
-                if (r < 16 && c < 20) continue;
-                // Need empty tile + empty tile above + solid floor below
-                if (this.grid[r][c] === BLOCK_EMPTY &&
-                    this.grid[r - 1][c] === BLOCK_EMPTY &&
-                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
-                    candidates.push({ r, c });
-                }
-            }
-        }
-
-        // Shuffle and pick ENEMY_TANK_COUNT positions
-        const spawns = [];
-        const count = Math.min(this.targetTankCount, candidates.length);
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(this.game.rng.next() * (i + 1));
-            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-        }
-        for (let i = 0; i < count; i++) {
-            const tile = candidates[i];
-            spawns.push({
-                x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_TANK_WIDTH) / 2,
-                y: (tile.r + 1) * TILE_SIZE - ENEMY_TANK_HEIGHT // Hover just above the floor
-            });
-        }
-        return spawns;
+        return this._pickSpawnPositions({
+            rowFrom: BORDER_THICKNESS + 1, rowTo: this.rows - BORDER_THICKNESS,
+            colFrom: BORDER_THICKNESS, colTo: this.cols - BORDER_THICKNESS,
+            startAreaRows: 16, startAreaCols: 20,
+            accept: (r, c) => this._hasHeadroomOnFloor(r, c),
+            count: this.targetTankCount,
+            width: ENEMY_TANK_WIDTH, height: ENEMY_TANK_HEIGHT,
+        });
     }
 
     /**
@@ -530,33 +554,15 @@ export class Map {
      * Needs 2 empty tiles above a solid floor for the 24px tall body.
      */
     _findEnemyAttackerPositions() {
-        const candidates = [];
-        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS; r++) {
-            for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                if (r < 16 && c < 20) continue; // Skip start area
-                // Need 2 empty tiles above solid floor (blocks or platforms)
-                if (this.grid[r][c] === BLOCK_EMPTY &&
-                    this.grid[r - 1][c] === BLOCK_EMPTY &&
-                    r + 1 < this.rows && this.grid[r + 1][c] !== BLOCK_EMPTY) {
-                    candidates.push({ r, c });
-                }
-            }
-        }
-
-        const spawns = [];
-        const count = Math.min(this.targetAttackerCount, candidates.length);
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(this.game.rng.next() * (i + 1));
-            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-        }
-        for (let i = 0; i < count; i++) {
-            const tile = candidates[i];
-            spawns.push({
-                x: tile.c * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) / 2,
-                y: (tile.r + 1) * TILE_SIZE - PLAYER_HEIGHT
-            });
-        }
-        return spawns;
+        return this._pickSpawnPositions({
+            // 地雷やタンクより1行ぶん内側から。背が高いので上の余白が要る
+            rowFrom: BORDER_THICKNESS + 2, rowTo: this.rows - BORDER_THICKNESS,
+            colFrom: BORDER_THICKNESS, colTo: this.cols - BORDER_THICKNESS,
+            startAreaRows: 16, startAreaCols: 20,
+            accept: (r, c) => this._hasHeadroomOnFloor(r, c),
+            count: this.targetAttackerCount,
+            width: PLAYER_WIDTH, height: PLAYER_HEIGHT,
+        });
     }
 
     /**
@@ -564,31 +570,16 @@ export class Map {
      * Needs ample empty space (e.g., 3x3 empty blocks) so they spawn hovering in the air.
      */
     _findEnemyDronePositions() {
-        const candidates = [];
-        for (let r = BORDER_THICKNESS + 2; r < this.rows - BORDER_THICKNESS - 2; r++) {
-            for (let c = BORDER_THICKNESS + 2; c < this.cols - BORDER_THICKNESS - 2; c++) {
-                if (r < 16 && c < 20) continue; // Skip start area
-                // Need a 3x3 empty area to ensure it spawns floating in an open space
-                if (this._isAreaEmpty(r - 1, c - 1, 3, 3)) {
-                    candidates.push({ r, c });
-                }
-            }
-        }
-
-        const spawns = [];
-        const count = Math.min(this.targetDroneCount, candidates.length);
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(this.game.rng.next() * (i + 1));
-            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-        }
-        for (let i = 0; i < count; i++) {
-            const tile = candidates[i];
-            spawns.push({
-                x: tile.c * TILE_SIZE + (TILE_SIZE - ENEMY_DRONE_WIDTH) / 2,
-                y: tile.r * TILE_SIZE + (TILE_SIZE - ENEMY_DRONE_HEIGHT) / 2
-            });
-        }
-        return spawns;
+        return this._pickSpawnPositions({
+            rowFrom: BORDER_THICKNESS + 2, rowTo: this.rows - BORDER_THICKNESS - 2,
+            colFrom: BORDER_THICKNESS + 2, colTo: this.cols - BORDER_THICKNESS - 2,
+            startAreaRows: 16, startAreaCols: 20,
+            // 3x3 が空いている＝壁に埋まらず宙に浮ける
+            accept: (r, c) => this._isAreaEmpty(r - 1, c - 1, 3, 3),
+            count: this.targetDroneCount,
+            width: ENEMY_DRONE_WIDTH, height: ENEMY_DRONE_HEIGHT,
+            centerInTile: true,   // 床ではなくタイルの中央に浮かせる
+        });
     }
 
     _carveMainBaseRoom() {
