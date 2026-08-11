@@ -210,8 +210,9 @@ export const ENEMY_TANK_MAX_FALLING_SPEED = 3;
 // --- Enemy Bullet ---
 export const ENEMY_BULLET_SPEED = 3;
 export const ENEMY_BULLET_RADIUS = 2;
-export const ENEMY_BULLET_DAMAGE_PLAYER = 15;
-export const ENEMY_BULLET_DAMAGE_CARRIER = 10;
+// 自機と母艦で同じ値。以前は PLAYER=15 / CARRIER=10 と分けて書いてあったが
+// どちらも読まれておらず、実際には CollisionManager 側の 10 が両方に効いていた
+export const ENEMY_BULLET_DAMAGE = 10;
 export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
 
 export const ENEMY_HOMING_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
@@ -370,7 +371,9 @@ export const BASE_LASER_RANGE = CANVAS_WIDTH * 0.55;
 export const BASE_LASER_CHARGE_TIME = 40; // frames
 export const BASE_LASER_COOLDOWN = 90;  // frames
 export const BASE_LASER_SPEED = 12;
-export const BASE_LASER_DAMAGE = 15;
+// 15 と書かれていたが読まれておらず、実際に当たっていたのは 50。
+// 自機(100HP)なら2発、母艦(120HP)なら3発で落ちる強さ
+export const BASE_LASER_DAMAGE = 50;
 
 // --- Enemy Base Additional Weapons ---
 export const ENEMY_BASE_TURRET_COOLDOWN = 120;
@@ -581,6 +584,24 @@ export const ENEMY_RECOIL_PROFILES = {
 
 export const MISSILE_HIT_KNOCKBACK_VY = -2;
 export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
+
+// --- 命中時のダメージ ---
+// CollisionManager が当たり判定と一緒に private な定数として抱えていたもの。
+// 弾の速さや射程は上のほうに、威力だけが別ファイルにある状態だったので、
+// 火力を触るのに2箇所を見る必要があった。実際に効いている値をそのまま移す。
+export const DAMAGE_CRUISE_MISSILE = 40;         // 巡航ミサイルの直撃
+export const DAMAGE_HOMING_MISSILE = 20;         // 誘導ミサイルの直撃
+export const DAMAGE_PLAYER_MISSILE = 15;         // 自機ミサイル → 敵
+export const DAMAGE_ENEMY_MISSILE_PLAYER = 15;   // 敵ミサイル → 自機（rival は2倍）
+export const DAMAGE_ENEMY_MISSILE_CARRIER = 10;  // 敵ミサイル → 母艦（同上）
+
+// --- 飛来するミサイルの迎撃 ---
+// 自機の弾で撃ち落とせる距離と、成功したときの得点。
+// 距離は二乗で持つ（毎フレーム全弾ぶん比較するので平方根を取らない）。
+export const HOMING_INTERCEPT_RADIUS_SQ = 144;   // 12px
+export const CRUISE_INTERCEPT_RADIUS_SQ = 400;   // 20px。巡航ミサイルは大きいので広め
+export const SCORE_HOMING_INTERCEPT = 20;        // 誘導ミサイルは1発で消える
+export const SCORE_CRUISE_DESTROY = 100;         // 巡航ミサイルは HP を削り切ったときだけ
 
 // --- 敵基地破壊のフィナーレ演出 ---
 // 閃光 → 集中線 → 衝撃波リング の順に効き、寿命もこの順に長くなる。

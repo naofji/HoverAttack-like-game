@@ -7,27 +7,16 @@ import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { pointInRect } from '../utils/Physics.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { applyRecoil } from '../utils/Recoil.js';
-import { MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX } from '../utils/Constants.js';
+import {
+    MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX,
+    ENEMY_BULLET_DAMAGE, BASE_LASER_DAMAGE, PLAYER_MG_DAMAGE,
+    DAMAGE_CRUISE_MISSILE, DAMAGE_HOMING_MISSILE, DAMAGE_PLAYER_MISSILE,
+    DAMAGE_ENEMY_MISSILE_PLAYER, DAMAGE_ENEMY_MISSILE_CARRIER,
+    HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
+    SCORE_HOMING_INTERCEPT, SCORE_CRUISE_DESTROY,
+} from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
-
-// Damage values
-const DAMAGE_DEFAULT_BULLET = 10;
-const DAMAGE_BASE_LASER = 50;
-const DAMAGE_CRUISE_MISSILE = 40;
-const DAMAGE_HOMING_MISSILE = 20;
-const DAMAGE_PLAYER_MISSILE = 15;
-const DAMAGE_PLAYER_MG = 3;
-const DAMAGE_ENEMY_MISSILE = 15;
-const DAMAGE_ENEMY_MISSILE_CARRIER = 10;
-
-// Score bonuses for interceptions
-const SCORE_HOMING_INTERCEPT = 20;
-const SCORE_CRUISE_DESTROY = 100;
-
-// Intercept collision radii (squared)
-const HOMING_INTERCEPT_RADIUS_SQ = 144; // 12px radius
-const CRUISE_INTERCEPT_RADIUS_SQ = 400; // 20px radius
 
 export class CollisionManager {
     constructor(game) {
@@ -74,10 +63,10 @@ export class CollisionManager {
      */
     _applyBulletHit(bullet, target) {
         const game = this.game;
-        let damage = DAMAGE_DEFAULT_BULLET;
+        let damage = ENEMY_BULLET_DAMAGE;
 
         if (bullet.isBaseLaser) {
-            damage = DAMAGE_BASE_LASER;
+            damage = BASE_LASER_DAMAGE;
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = DAMAGE_CRUISE_MISSILE;
             bullet._explode();
@@ -116,7 +105,7 @@ export class CollisionManager {
                 }
             } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
                 if (this._distSq(proj, bullet) < CRUISE_INTERCEPT_RADIUS_SQ) {
-                    const damage = proj instanceof Missile ? DAMAGE_PLAYER_MISSILE : DAMAGE_PLAYER_MG;
+                    const damage = proj instanceof Missile ? DAMAGE_PLAYER_MISSILE : PLAYER_MG_DAMAGE;
                     bullet.hp -= damage;
                     proj.alive = false;
                     if (proj instanceof Missile) proj.exploded = true;
@@ -184,7 +173,7 @@ export class CollisionManager {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
                 recordHit(enemy, proj.x, proj.y);
-                if (!enemy.isBase) enemy.takeDamage(DAMAGE_PLAYER_MG);
+                if (!enemy.isBase) enemy.takeDamage(PLAYER_MG_DAMAGE);
                 playBlast(game, proj.x, proj.y, 'mgHit');
                 proj.alive = false;
                 break;
@@ -203,7 +192,7 @@ export class CollisionManager {
         if (player && player.alive && !player.docked && player.invincibleTimer <= 0
             && pointInRect(proj.x, proj.y, player)) {
             recordHit(player, proj.x, proj.y);
-            player.takeDamage(DAMAGE_ENEMY_MISSILE * damageMultiplier);
+            player.takeDamage(DAMAGE_ENEMY_MISSILE_PLAYER * damageMultiplier);
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
             playBlast(game, proj.x, proj.y, 'enemyMissileHit');
