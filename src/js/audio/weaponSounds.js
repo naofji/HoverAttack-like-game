@@ -14,6 +14,8 @@
  *   puffs 短い破裂の連なり。低く柔らかい。ホーミングの頭の「プ」
  *   clicks 硬く短い打撃の連なり。共鳴を鋭くし、整数倍でない成分を重ねて
  *         金属らしさを出す。リロードの「ガチャリ」
+ *   voice  合成音声。声帯パルス（ノコギリ波）を3本のバンドパスに通し、
+ *         母音を滑らせて音節にする。補給完了の「レディ」
  */
 
 /**
@@ -34,6 +36,12 @@
  *   gain が数値のときだけ fade（打撃ごとに音量を落とす割合）が効く。
  *   fade は負の値で逆に持ち上がる（低い音程は通る帯域が狭く痩せるため）。
  *   metal は重ねる非整数倍の比
+ * @property {{f0:number, f0End?:number, gain:number, Q?:number,
+ *   levels?:number[], segments:{f:number[], dur:number, gain?:number,
+ *   closure?:number}[]}} [voice]
+ *   合成音声。segments が音節の並び。f はフォルマント3本の周波数、
+ *   closure（秒）を与えるとその音節の前に無音の間（子音の閉鎖）を挟む。
+ *   時間の設計は voiceBreakpoints() に集約してある
  */
 
 /** @type {Record<string, WeaponProfile>} */
@@ -118,10 +126,61 @@ export const WEAPON_SOUNDS = {
         hiss: { from: 1200, to: 300, dur: 0.10, gain: 0.08 },
         tone: { type: 'triangle', from: 300, to: 110, dur: 0.09, gain: 0.06 },
     },
+
+    // --- 補給完了の「レディ」---
+    // 合成音声。声帯パルス（ノコギリ波）を3本のバンドパスに通し、
+    // 母音を e → i へ滑らせて2音節にする。f0 をほとんど動かさないので
+    // 人ではなく機械が喋っているように聞こえる。
+    // closure は d の閉鎖。ここを無音にしないと「レーイ」と繋がる。
+    readyVoice: {
+        voice: {
+            f0: 150, f0End: 132, gain: 0.16, Q: 9,
+            segments: [
+                { f: [520, 1650, 2500], dur: 0.11, gain: 1.0 },                  // レ（e）
+                { f: [330, 2200, 2900], dur: 0.17, gain: 0.85, closure: 0.035 }, // ディ（i）
+            ],
+        },
+    },
 };
 
 /** 減衰の下限。exponentialRamp は 0 を受け付けない。 */
 const FLOOR = 0.0008;
+
+/** 音節の立ち上がり／消え際／母音が移り終わる位置（区間長に対する割合）。 */
+const VOICE_ATTACK = 0.012;
+const VOICE_RELEASE = 0.020;
+const VOICE_GLIDE = 0.5;
+
+/**
+ * `voice` の時間変化を折れ線で返す。
+ *
+ * WebAudio 版とオフラインの測定版で同じ音にするために、時間の設計は
+ * ここ1箇所だけに置く。前者は折れ線をそのまま linearRamp で予約し、
+ * 後者はサンプルごとに線形補間する。
+ *
+ * @param {object} voice プロファイルの voice パーツ
+ * @returns {{env: [number, number][], formants: [number, number[]][], total: number}}
+ *   時刻は音の先頭からの秒数
+ */
+export function voiceBreakpoints(voice) {
+    const { gain = 1, segments } = voice;
+    const env = [[0, 0]];
+    const formants = [[0, segments[0].f]];
+    let t = 0;
+    for (const seg of segments) {
+        const closure = seg.closure || 0;
+        // 閉鎖の間は 0 のまま保つ。ここで折らないと閉鎖を横切って持ち上がる
+        if (closure > 0) env.push([t + closure, 0]);
+        t += closure;
+
+        const g = gain * (seg.gain ?? 1);
+        env.push([t + VOICE_ATTACK, g], [t + seg.dur - VOICE_RELEASE, g], [t + seg.dur, 0]);
+        // 母音は区間の前半で移り終え、残りは保つ
+        formants.push([t + seg.dur * VOICE_GLIDE, seg.f], [t + seg.dur, seg.f]);
+        t += seg.dur;
+    }
+    return { env, formants, total: t };
+}
 
 /**
  * プロファイルどおりに音を組み立てて鳴らす。
@@ -250,5 +309,41 @@ export function renderWeaponSound(ctx, out, profile, noiseBuffer, level, t0) {
 
             t += at(gap, i);
         }
+    }
+
+    if (profile.voice) {
+        const { f0, f0End = f0, Q = 9, levels = [1, 0.5, 0.25] } = profile.voice;
+        const { env, formants, total } = voiceBreakpoints(profile.voice);
+
+        // 声帯パルス。高さをほとんど動かさないのがロボットらしさ
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f0, t0);
+        osc.frequency.linearRampToValueAtTime(f0End, t0 + total);
+
+        // 音節の包絡。閉鎖の間は 0 に落ちる
+        const eg = ctx.createGain();
+        eg.gain.setValueAtTime(env[0][1] * level, t0);
+        for (let i = 1; i < env.length; i++) {
+            eg.gain.linearRampToValueAtTime(env[i][1] * level, t0 + env[i][0]);
+        }
+        osc.connect(eg);
+
+        // 3本のフォルマント。母音の違いはここに出る
+        for (let k = 0; k < 3; k++) {
+            const bp = ctx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.Q.value = Q;
+            bp.frequency.setValueAtTime(formants[0][1][k], t0);
+            for (let i = 1; i < formants.length; i++) {
+                bp.frequency.linearRampToValueAtTime(formants[i][1][k], t0 + formants[i][0]);
+            }
+            const fg = ctx.createGain();
+            fg.gain.value = levels[k];
+            eg.connect(bp); bp.connect(fg); fg.connect(out);
+        }
+
+        osc.start(t0);
+        osc.stop(t0 + total);
     }
 }

@@ -5,6 +5,7 @@
 // 両者がずれると測定の意味が無くなるので、変えるときは対にして直すこと。
 
 import { whiteNoise, SAMPLE_RATE } from './dsp.js';
+import { voiceBreakpoints } from '../../src/js/audio/weaponSounds.js';
 
 const FLOOR = 0.0008;   // renderWeaponSound と同じ
 
@@ -40,6 +41,38 @@ function sweepingLowpass() {
     };
 }
 
+/** 掃引するバンドパス（WebAudio の BiquadFilterNode と同じ係数）。 */
+function sweepingBandpass(Q) {
+    const st = { x1: 0, x2: 0, y1: 0, y2: 0 };
+    return (x, f0) => {
+        const w0 = 2 * Math.PI * Math.max(20, f0) / SAMPLE_RATE;
+        const cw = Math.cos(w0);
+        const al = Math.sin(w0) / (2 * Q);
+        const b0 = al, b1 = 0, b2 = -al;
+        const a0 = 1 + al, a1 = -2 * cw, a2 = 1 - al;
+        const y = (b0 / a0) * x + (b1 / a0) * st.x1 + (b2 / a0) * st.x2
+                - (a1 / a0) * st.y1 - (a2 / a0) * st.y2;
+        st.x2 = st.x1; st.x1 = x; st.y2 = st.y1; st.y1 = y;
+        return y;
+    };
+}
+
+/** 折れ線を時刻 t で線形補間する。voiceBreakpoints の出力を読むために使う。 */
+function lerpBreakpoints(points, t, pick = (v) => v) {
+    let prev = points[0];
+    for (const p of points) {
+        if (p[0] >= t) {
+            const span = p[0] - prev[0];
+            if (span <= 0) return pick(p[1]);
+            const k = (t - prev[0]) / span;
+            const a = pick(prev[1]), b = pick(p[1]);
+            return a + (b - a) * k;
+        }
+        prev = p;
+    }
+    return pick(prev[1]);
+}
+
 /** 1サンプルぶんの波形。OscillatorNode の type に対応する。 */
 function wave(type, phase) {
     if (type === 'square') return phase < 0.5 ? 1 : -1;
@@ -64,6 +97,7 @@ export function profileDuration(profile) {
         profile.tone ? profile.tone.dur : 0,
         profile.puffs ? profile.puffs.gap * (profile.puffs.count - 1) + profile.puffs.dur : 0,
         clicks,
+        profile.voice ? voiceBreakpoints(profile.voice).total : 0,
     );
 }
 
@@ -149,6 +183,22 @@ export function renderWeaponProfile(profile) {
                 }
             }
             start += at(gap, i);
+        }
+    }
+
+    if (profile.voice) {
+        const { f0, f0End = f0, Q = 9, levels = [1, 0.5, 0.25] } = profile.voice;
+        const { env, formants, total } = voiceBreakpoints(profile.voice);
+        const bps = [0, 1, 2].map(() => sweepingBandpass(Q));
+        const len = Math.min(n, Math.floor(total * SAMPLE_RATE));
+        let phase = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / SAMPLE_RATE;
+            phase = (phase + (f0 + (f0End - f0) * (t / total)) / SAMPLE_RATE) % 1;
+            const src = (2 * phase - 1) * lerpBreakpoints(env, t);
+            for (let k = 0; k < 3; k++) {
+                buf[i] += bps[k](src, lerpBreakpoints(formants, t, (f) => f[k])) * levels[k];
+            }
         }
     }
 

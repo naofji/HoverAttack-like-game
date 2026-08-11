@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
-import { WEAPON_SOUNDS, renderWeaponSound } from '../src/js/audio/weaponSounds.js';
+import { WEAPON_SOUNDS, renderWeaponSound, voiceBreakpoints } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
 import { transientLevel, db, whiteNoise, SAMPLE_RATE } from './helpers/dsp.js';
 import {
@@ -24,7 +24,7 @@ test('武器ごとに別の音が定義されている', () => {
 
 test('どの音も少なくとも1つの部品を持つ', () => {
   for (const [kind, p] of Object.entries(WEAPON_SOUNDS)) {
-    assert.ok(p.hiss || p.tone || p.puffs || p.clicks, `${kind}: 中身が空`);
+    assert.ok(p.hiss || p.tone || p.puffs || p.clicks || p.voice, `${kind}: 中身が空`);
   }
 });
 
@@ -408,4 +408,72 @@ test('自機のリロードは定位させない（自分の銃なので中央�
   const player = readFileSync(new URL('../src/js/entities/Player.js', import.meta.url), 'utf8');
   assert.ok(player.includes("playWeapon('reload')"), 'リロード音が呼ばれていない');
   assert.ok(!player.includes("playWeapon('reload',"), '座標を渡していて左右に振れる');
+});
+
+// --- Ready ボイス ---------------------------------------------------------------
+
+test('「レディ」は2音節で、間に子音の閉鎖がある', () => {
+  const v = WEAPON_SOUNDS.readyVoice.voice;
+  assert.equal(v.segments.length, 2, '2音節になっていない');
+  assert.ok(v.segments[1].closure > 0, 'd の閉鎖が無く1音節に繋がって聞こえる');
+});
+
+test('母音が e から i へ動く（動かないと「レーレー」に聞こえる）', () => {
+  const [a, b] = WEAPON_SOUNDS.readyVoice.voice.segments;
+  // i は口が狭い。F1 が下がって F2 が上がるのが e→i の特徴
+  assert.ok(b.f[0] < a.f[0], `F1 が下がっていない: ${a.f[0]} → ${b.f[0]}Hz`);
+  assert.ok(b.f[1] > a.f[1], `F2 が上がっていない: ${a.f[1]} → ${b.f[1]}Hz`);
+});
+
+test('声の高さはほぼ一定（人ではなく機械の声）', () => {
+  const v = WEAPON_SOUNDS.readyVoice.voice;
+  const drop = Math.abs((v.f0End ?? v.f0) - v.f0) / v.f0;
+  assert.ok(drop < 0.25, `抑揚が大きすぎて人の声に寄る: ${(drop * 100).toFixed(0)}%`);
+});
+
+test('breakpoint は時間順で、閉鎖の間は無音', () => {
+  const { env, formants, total } = voiceBreakpoints(WEAPON_SOUNDS.readyVoice.voice);
+  for (let i = 1; i < env.length; i++) {
+    assert.ok(env[i][0] >= env[i - 1][0], `包絡の時刻が戻っている: ${env[i - 1][0]} → ${env[i][0]}`);
+  }
+  for (let i = 1; i < formants.length; i++) {
+    assert.ok(formants[i][0] >= formants[i - 1][0], 'フォルマントの時刻が戻っている');
+  }
+  assert.ok(total > 0.2 && total < 0.45, `長さが「レディ」らしくない: ${total.toFixed(2)}秒`);
+
+  // 閉鎖の中央では包絡が 0
+  const seg = WEAPON_SOUNDS.readyVoice.voice.segments;
+  const closureMid = seg[0].dur + seg[1].closure / 2;
+  const at = (t) => {
+    let prev = env[0];
+    for (const e of env) { if (e[0] >= t) {
+      const span = e[0] - prev[0];
+      return span <= 0 ? e[1] : prev[1] + (e[1] - prev[1]) * (t - prev[0]) / span;
+    } prev = e; }
+    return prev[1];
+  };
+  assert.ok(at(closureMid) < 1e-9, `閉鎖が無音になっていない: ${at(closureMid)}`);
+});
+
+test('波形が壊れず、2つの音節として鳴る', () => {
+  const buf = renderWeaponProfile(WEAPON_SOUNDS.readyVoice);
+  assert.ok(buf.some((v) => v !== 0), '無音になっている');
+  assert.ok(buf.every((v) => Number.isFinite(v)), 'NaN / Infinity が出ている');
+
+  // 閉鎖のところで一度落ちる（＝2つの山に分かれる）
+  const seg = WEAPON_SOUNDS.readyVoice.voice.segments;
+  const win = (from, to) => {
+    let peak = 0;
+    for (let i = Math.floor(from * SAMPLE_RATE); i < Math.floor(to * SAMPLE_RATE); i++) {
+      peak = Math.max(peak, Math.abs(buf[i]));
+    }
+    return peak;
+  };
+  const first = win(0.01, seg[0].dur - 0.02);
+  const gap = win(seg[0].dur + 0.005, seg[0].dur + seg[1].closure);
+  const second = win(seg[0].dur + seg[1].closure + 0.02,
+    seg[0].dur + seg[1].closure + seg[1].dur - 0.02);
+  assert.ok(first > 0, '1音節目が鳴っていない');
+  assert.ok(second > 0, '2音節目が鳴っていない');
+  assert.ok(gap < first * 0.25, `音節が繋がっている: 谷 ${gap.toFixed(4)} / 山 ${first.toFixed(4)}`);
 });
