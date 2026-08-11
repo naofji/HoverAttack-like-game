@@ -67,20 +67,20 @@ export const ATTACKER_COVER_MIN_DIST = 160;      // px: cover must keep at least
 // --- Artillery smoke screen ---
 // 発見された artillery が張る煙幕。設計は
 // docs/superpowers/specs/2026-08-11-artillery-smoke-screen-design.md
-export const SMOKE_COOLDOWN = 2160;           // tick: 発煙の間隔。煙の寿命の倍にして「半分は見えている」を保つ。20秒停滞する煙をこれより短い間隔で撒けると、画面がほぼ常時煙る
+export const SMOKE_COOLDOWN = 1620;           // tick: 発煙の間隔。煙の寿命の倍にして「半分は見えている」を保つ。15秒停滞する煙をこれより短い間隔で撒けると、画面がほぼ常時煙る
 export const SMOKE_PUFF_COUNT = 19;           // 中心1 ＋ 内側の列9 ＋ 外側の列9。SMOKE_EMISSION_SLOTS の合計と一致していること（テストで縛っている）
 export const SMOKE_EMIT_SPAN = 12;            // tick: 撒き終わるまで。一斉に生むと全パフの年齢が揃って湧き上がって見えない
-export const SMOKE_PUFF_LIFETIME = 1080;      // tick: パフ1個の寿命。うち961 tick が濃さを保つ停滞で、normal モード(0.8x)の実時間で 20.0秒（newtype 1.0x では16秒）。実測の隠蔽持続は 20.5〜21.3秒（消滅にかかる間も途中までは隠れているぶん、停滞より少し長い）。雲はパフが全部消えたら死ぬ
-export const SMOKE_PUFF_RISE_RATIO = 0.01;    // 寿命のこの割合で 0→1 に立ち上がる（11 tick）。寿命を延ばしても立ち上がりは短いままにする（長いと発煙してから隠れるまで待たされる）
+export const SMOKE_PUFF_LIFETIME = 810;       // tick: パフ1個の寿命。うち721 tick が濃さを保つ停滞で、normal モード(0.8x)の実時間で 15.0秒（newtype 1.0x では12.0秒）。実測の隠蔽持続は 15.5〜15.9秒（消滅にかかる間も途中までは隠れているぶん、停滞より少し長い）。雲はパフが全部消えたら死ぬ
+export const SMOKE_PUFF_RISE_RATIO = 0.01;    // 寿命のこの割合で 0→1 に立ち上がる（8 tick）。寿命を延ばしても立ち上がりは短いままにする（長いと発煙してから隠れるまで待たされる）
 export const SMOKE_PUFF_HOLD_RATIO = 0.90;    // この割合まで濃さを保ち、残りで消える。停滞と消滅の境目
-export const SMOKE_PUFF_DECAY_EXPONENT = 1.6; // 消滅は寿命の残り10%(108 tick = 実時間2.3秒)で。指数>1 なので落ち始めは緩く、最後に加速して「スッ」と消える
-export const SMOKE_PUFF_RADIUS_START = 46;    // px: 出たての半径。**列の間隔（内側 22px / 外側 44px）より大きく取ること。** 小さいと扇形の列がただの点の並びになり、隣と繋がらないので壁にならない
+export const SMOKE_PUFF_DECAY_EXPONENT = 1.6; // 消滅は寿命の残り10%(81 tick = 実時間1.7秒)で。指数>1 なので落ち始めは緩く、最後に加速して「スッ」と消える
+export const SMOKE_PUFF_RADIUS_START = 44;    // px: 出たての半径。**列の距離（内側 21px / 外側 42.5px）より大きく取ること。** 小さいと扇形の列がただの点の並びになり、隣と繋がらないので壁にならない
 export const SMOKE_PUFF_RADIUS_END = 100;     // px: 拡散後
 export const SMOKE_PUFF_ALPHA_MAX = 0.62;     // 上限なしで素直に重ねるので1枚は薄く。扇形の配置にしてから、停滞中も判定点の濃さが少しずつ落ちる（列が外へ漂うぶん）。0.50 では停滞が明ける前にしきい値を割る回があったので余裕を持たせた
 export const SMOKE_FALLOFF_EXPONENT = 2.5;    // 中心を濃く保ち端で急に落とす形
 export const SMOKE_CONCEAL_THRESHOLD = 0.6;   // この濃さを超えるとロック不能（重なり3枚ぶんで越える）
 export const SMOKE_ROTATION_SPEED = 0.6;      // 度/frame: 4秒で約1/4回転。速いと渦に見えて煙から離れる
-export const SMOKE_SPREAD_RADIUS = 52;        // px: 外側の列までの基準距離。列ごとの距離はこれに SMOKE_RING_* を掛けたもの
+export const SMOKE_SPREAD_RADIUS = 50;        // px: 外側の列までの基準距離。列ごとの距離はこれに SMOKE_RING_* を掛けたもの
 export const SMOKE_ARC_FROM_HOUR = 8;         // 扇形の始まり（時計の文字盤。8時＝左下）
 export const SMOKE_ARC_TO_HOUR = 16;          // 終わり（16時＝4時＝右下）。8→12→16 と時計回りに240°ぶん取る。真下の120°を空けているのは、そちらは地面で、煙は上へ回り込むほうが自然なため
 export const SMOKE_RING_INNER = 0.42;         // 内側の列の距離（SMOKE_SPREAD_RADIUS に対する比）
