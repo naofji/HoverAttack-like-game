@@ -70,7 +70,7 @@ export class Input {
         window.addEventListener('mousemove', (e) => {
             this._lastClientX = e.clientX;
             this._lastClientY = e.clientY;
-            this._applyClientPos(e.clientX, e.clientY);
+            this._applyClientPos(e.clientX, e.clientY, true);
         });
 
         window.addEventListener('mousedown', (e) => {
@@ -95,11 +95,18 @@ export class Input {
         // mouse.x/y が古い拡大率のままになり、クロスヘアが実際のクリック先から
         // ズレて見える。カーソル自体は動いていないので mousemove は来ない —
         // 記憶している最後の client 座標を新しい拡大率で再変換して追従させる。
+        //
+        // 第3引数を false にしてロック解除を止めている。ロックは Shift で
+        // プレイヤーが明示的に掛けた状態で、画面サイズが変わるだけでは
+        // 「マウスを動かした」ことにはならない。ここを true のままにすると
+        // rect が変わるたびほぼ確実に mouse.x/y の再計算結果が前回値と
+        // 食い違い、M を押しただけで戦闘中のロックオンが無言で外れてしまう
+        // （実際に発生した回帰）。
         window.addEventListener('resize', () => {
-            this._applyClientPos(this._lastClientX, this._lastClientY);
+            this._applyClientPos(this._lastClientX, this._lastClientY, false);
         });
         document.addEventListener('fullscreenchange', () => {
-            this._applyClientPos(this._lastClientX, this._lastClientY);
+            this._applyClientPos(this._lastClientX, this._lastClientY, false);
         });
 
         // window レベルの mouseup は、ボタンを離した瞬間がブラウザの外
@@ -117,8 +124,12 @@ export class Input {
     /**
      * 記憶している client 座標を canvas 内部座標に変換して mouse.x/y に反映する。
      * まだ一度も mousemove が来ていない（座標が未知の）間は何もしない。
+     *
+     * @param {boolean} unlockOnChange 座標が変わったときロックを解除するか。
+     *   mousemove（実際にマウスが動いた）は true、resize/fullscreenchange
+     *   （rect が変わっただけでマウスは動いていない）は false で呼ぶ。
      */
-    _applyClientPos(clientX, clientY) {
+    _applyClientPos(clientX, clientY, unlockOnChange) {
         if (clientX === null || clientY === null) return;
 
         const { x, y } = canvasPointer(
@@ -131,7 +142,7 @@ export class Input {
             this.mouse.x = x;
             this.mouse.y = y;
 
-            if (this.crosshairLocked) {
+            if (unlockOnChange && this.crosshairLocked) {
                 this.crosshairLocked = false;
                 console.log('Crosshair Unlocked (Mouse Moved)');
             }
