@@ -23,6 +23,9 @@ export class EnemyCruiseMissile {
         this.y = y;
         this.width = 24; // Visual size from exhaust (-10) to tip (+14)
         this.height = 16; // Visual size from top wing (-8) to bottom wing (+8)
+        // x,y は左上ではなく中心。width/height は見た目の広がりを表すだけで、
+        // 描画も translate(x,y) してから -width/2 を基準にしている（Physics.centerOf）
+        this.originIsCenter = true;
         this.angle = initialAngle;
         this.speed = 0; // Starts from zero
         this.maxSpeed = CRUISE_MISSILE_MAX_SPEED;

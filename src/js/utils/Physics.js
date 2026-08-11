@@ -130,6 +130,26 @@ export function pointInRect(px, py, entity) {
 }
 
 /**
+ * エンティティの中心座標。
+ *
+ * この作りには x,y の約束が2通りある。
+ *  - 機体・アイテム: x,y は左上。中心は x + width/2
+ *  - 巡航ミサイル・基地レーザー: x,y が中心そのもので、width/height は
+ *    見た目の広がり（描画が translate(x,y) してから -width/2 を基準に描く）
+ *
+ * 見分けが付かないまま一律に width/2 を足すと、巡航ミサイル(24x16)で12px、
+ * レーザー(100x6)では50pxも実際と違う場所を測ってしまう。約束の違いは
+ * originIsCenter で自己申告してもらい、中心の求め方はここ1箇所に置く。
+ *
+ * @param {object} e x, y を持つ。左上基準なら width/height も
+ * @returns {{x:number, y:number}}
+ */
+export function centerOf(e) {
+    if (e.originIsCenter) return { x: e.x, y: e.y };
+    return { x: e.x + (e.width || 0) / 2, y: e.y + (e.height || 0) / 2 };
+}
+
+/**
  * Calculate distance between the centers of two entities.
  * @param {object} e1 - Must have x, y, width, height
  * @param {object} e2 - Must have x, y, width, height

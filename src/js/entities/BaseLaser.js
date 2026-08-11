@@ -10,6 +10,9 @@ export class BaseLaser {
         this.angle = angle;
         this.width = 100;  // Increased from 16
         this.height = 6;  // Increased from 4
+        // x,y は左上ではなくビームの中心。描画も translate(x,y) してから
+        // -width/2 を基準にしている（Physics.centerOf）
+        this.originIsCenter = true;
         this.alive = true;
         this.life = 120; // Maximum life in frames
         this.isBaseLaser = true;

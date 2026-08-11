@@ -59,6 +59,7 @@ import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { getCountryCode } from './utils/geo.js';
+import { centerOf } from './utils/Physics.js';
 import { formatClock } from './utils/formatTime.js';
 import { nearestHoveringEnemy } from './utils/audioFalloff.js';
 import { isEnemyConcealed } from './utils/concealment.js';
@@ -1600,16 +1601,16 @@ export const Game = {
         const cy = this.carrier.y + this.carrier.height / 2;
         const rangeSq = CARRIER_PROXIMITY_ALERT_RANGE * CARRIER_PROXIMITY_ALERT_RANGE;
 
-        const inRange = (x, y) => (cx - x) ** 2 + (cy - y) ** 2 < rangeSq;
+        // 敵も敵弾も、機体の中心が範囲に入ったら警報。x,y が左上か中心かは
+        // クラスによって違うので、中心の求め方は centerOf に任せる。
+        const nearCarrier = (obj) => {
+            if (!obj.alive) return false;
+            const c = centerOf(obj);
+            return (cx - c.x) ** 2 + (cy - c.y) ** 2 < rangeSq;
+        };
 
-        // 敵は機体の中心で測る。
-        // 敵弾は x,y をそのまま使う（中心は取らない）。enemyBullets には
-        // 大きさを持つ巡航ミサイル(24x16)やレーザーも混ざっており、中心に
-        // 直すと警報の鳴りだす距離が変わってしまう。
-        this.proximityAlertActive =
-            this.enemies.some((e) => e.alive
-                && inRange(e.x + (e.width || 0) / 2, e.y + (e.height || 0) / 2))
-            || this.enemyBullets.some((b) => b.alive && inRange(b.x, b.y));
+        this.proximityAlertActive = this.enemies.some(nearCarrier)
+            || this.enemyBullets.some(nearCarrier);
 
         // Play alarm sound periodically while threat is near
         if (this.proximityAlertActive) {
