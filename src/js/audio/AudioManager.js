@@ -15,6 +15,10 @@ import {
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
     SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_KNEE,
     SE_COMP_RATIO, SE_COMP_ATTACK, SE_COMP_RELEASE, SE_FADE_OUT_SECONDS,
+    CARRIER_ENGINE_FREQ_BASE, CARRIER_ENGINE_FREQ_RANGE,
+    CARRIER_ENGINE_SUB_BASE, CARRIER_ENGINE_SUB_RANGE,
+    CARRIER_ENGINE_FILTER_BASE, CARRIER_ENGINE_FILTER_RANGE,
+    CARRIER_ENGINE_GAIN_BASE, CARRIER_ENGINE_GAIN_RANGE,
     REPAIR_HUM_FREQ_FROM, REPAIR_HUM_FREQ_TO, REPAIR_HUM_GAIN,
     REPAIR_HUM_WOBBLE_HZ, REPAIR_HUM_WOBBLE_DEPTH,
 } from '../utils/Constants.js';
@@ -850,10 +854,14 @@ export class AudioManager {
             },
             // 停止中は低く静かに、移動中は少し上がる
             tune: (n, t) => {
-                n.osc.frequency.setTargetAtTime(46 + throttle * 14, t, 0.12);
-                n.sub.frequency.setTargetAtTime(23 + throttle * 7, t, 0.12);
-                n.filter.frequency.setTargetAtTime(150 + throttle * 120, t, 0.12);
-                n.gain.gain.setTargetAtTime(0.06 + throttle * 0.05, t, 0.12);
+                n.osc.frequency.setTargetAtTime(
+                    CARRIER_ENGINE_FREQ_BASE + throttle * CARRIER_ENGINE_FREQ_RANGE, t, 0.12);
+                n.sub.frequency.setTargetAtTime(
+                    CARRIER_ENGINE_SUB_BASE + throttle * CARRIER_ENGINE_SUB_RANGE, t, 0.12);
+                n.filter.frequency.setTargetAtTime(
+                    CARRIER_ENGINE_FILTER_BASE + throttle * CARRIER_ENGINE_FILTER_RANGE, t, 0.12);
+                n.gain.gain.setTargetAtTime(
+                    CARRIER_ENGINE_GAIN_BASE + throttle * CARRIER_ENGINE_GAIN_RANGE, t, 0.12);
             },
         });
     }

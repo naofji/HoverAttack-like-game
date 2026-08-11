@@ -164,6 +164,20 @@ export const DOCK_FUEL_RATE = 100 / 240; // ~0.417 fuel/frame → full in 4s
 
 // 回復ハム：ドッキング中に HP が満ちるまで鳴り続ける。進むほど音程が上がるので、
 // あと何秒で満ちるかが耳で分かる。母艦のエンジン（46〜60Hz）と被らない中域に置く。
+// --- 母艦のエンジン音（ドッキング中だけ鳴るループ）---
+// 停止時が下限、全速で下限＋幅ぶんまで上がる。
+// gain は 2026-08-12 に 0.06/0.05 から -4dB 下げた（ドッキング中ずっと
+// 鳴っているので、この音だけで他の効果音が埋もれるという実機の判断）。
+// 回復ハム(240〜460Hz)と帯域が重ならないよう、こちらは低いまま保つこと。
+export const CARRIER_ENGINE_FREQ_BASE = 46;      // 停止時の基音
+export const CARRIER_ENGINE_FREQ_RANGE = 14;     // 全速で足す量
+export const CARRIER_ENGINE_SUB_BASE = 23;       // 1オクターブ下の副音
+export const CARRIER_ENGINE_SUB_RANGE = 7;
+export const CARRIER_ENGINE_FILTER_BASE = 150;   // ローパス。開くほど荒くなる
+export const CARRIER_ENGINE_FILTER_RANGE = 120;
+export const CARRIER_ENGINE_GAIN_BASE = 0.038;   // 停止時
+export const CARRIER_ENGINE_GAIN_RANGE = 0.032;  // 全速で足す量
+
 export const REPAIR_HUM_FREQ_FROM = 240;    // HP 空
 export const REPAIR_HUM_FREQ_TO = 460;      // 満タン直前
 export const REPAIR_HUM_GAIN = 0.05;        // 鳴り続けるので単発の効果音より控えめ

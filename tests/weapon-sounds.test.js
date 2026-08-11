@@ -551,7 +551,12 @@ test('装填音はリロードと同じ機構の音に聞こえる', () => {
 
 test('装填音は2種の聞こえる大きさが揃い、リロードより控えめ', () => {
   // 低い打撃はバンドパスを通る帯域が狭くて痩せるので、同じ gain だと揃わない。
-  // 毎秒6回鳴るため、1回だけのリロードより明確に小さくないと煩い
+  // 毎秒6回鳴るため、1回だけのリロードより小さくないと煩い。
+  //
+  // 上限は当初 -5dB だったが、2026-08-12 に実機で「小さすぎる」という判断が
+  // 出たため -2.5dB へ緩めた（実測 -6.3dB → -3.3dB）。下限 -18dB は据え置き。
+  // 上限を外してしまうと補給のたびにクリックが前に出て煩くなるので、
+  // 「リロードより明確に小さい」という関係自体は残してある。
   const level = (kind) => {
     const buf = renderWeaponProfile(WEAPON_SOUNDS[kind]);
     return transientLevel((i) => buf[i] ?? 0, profileDuration(WEAPON_SOUNDS[kind]));
@@ -563,7 +568,7 @@ test('装填音は2種の聞こえる大きさが揃い、リロードより控�
   assert.ok(Math.abs(db(m / g)) < 2.5,
     `2種の音量が揃っていない: ${db(m / g).toFixed(1)}dB 差`);
   for (const [kind, v] of [['ammoMissile', m], ['ammoGrenade', g]]) {
-    assert.ok(db(v / reload) < -5, `${kind}: リロードに対して大きすぎる: ${db(v / reload).toFixed(1)}dB`);
+    assert.ok(db(v / reload) < -2.5, `${kind}: リロードに対して大きすぎる: ${db(v / reload).toFixed(1)}dB`);
     assert.ok(db(v / reload) > -18, `${kind}: 小さすぎて聞こえない: ${db(v / reload).toFixed(1)}dB`);
   }
 });

@@ -28,7 +28,10 @@ test('毎フレーム呼ばれた値が追従に反映される', () => {
   });
 });
 
-test('母艦のエンジンの音は載せ替え前と同じ値を予約する', () => {
+test('母艦のエンジンは停止時と全速で決まった値を予約する', () => {
+  // 音程まわりは _loopSound へ載せ替えたときから不変。
+  // gain だけ 2026-08-12 に実機の判断で 0.06/0.11 から -4dB 下げた
+  // （ドッキング中ずっと鳴っていて他の効果音が埋もれるため）。
   const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager.startCarrierEngine(0);
@@ -36,13 +39,27 @@ test('母艦のエンジンの音は載せ替え前と同じ値を予約する',
     assert.equal(n.osc.frequency.target, 46);
     assert.equal(n.sub.frequency.target, 23);
     assert.equal(n.filter.frequency.target, 150);
-    assert.ok(Math.abs(n.gain.gain.target - 0.06) < 1e-9);
+    assert.ok(Math.abs(n.gain.gain.target - 0.038) < 1e-9,
+      `停止時の音量: ${n.gain.gain.target}`);
 
     audioManager.startCarrierEngine(1);
     assert.equal(n.osc.frequency.target, 60);
     assert.equal(n.sub.frequency.target, 30);
     assert.equal(n.filter.frequency.target, 270);
-    assert.ok(Math.abs(n.gain.gain.target - 0.11) < 1e-9);
+    assert.ok(Math.abs(n.gain.gain.target - 0.070) < 1e-9,
+      `全速の音量: ${n.gain.gain.target}`);
+  });
+});
+
+test('母艦のエンジンは回復ハムと帯域が重ならない', () => {
+  // 2つはドッキング中に同時に鳴る。帯域が近づくと片方が聞き取れなくなる。
+  // エンジンを触るときはこの分離を保つこと
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager.startCarrierEngine(1);   // 全速＝いちばん高くなる条件
+    const engineTop = audioManager._loops.carrier.osc.frequency.target;
+    assert.ok(engineTop < REPAIR_HUM_FREQ_FROM / 2,
+      `エンジン ${engineTop}Hz がハムの下限 ${REPAIR_HUM_FREQ_FROM}Hz に近すぎる`);
   });
 });
 
