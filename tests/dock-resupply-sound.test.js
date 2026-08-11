@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { Player } from '../src/js/entities/Player.js';
+import { Carrier } from '../src/js/entities/Carrier.js';
+import { Game } from '../src/js/main.js';
 import {
   PLAYER_MAX_HP, MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT, HOVER_MAX_FUEL,
 } from '../src/js/utils/Constants.js';
@@ -152,9 +153,52 @@ test('起動直後・ミッション遷移直後（resupply/respawn を通さず
   } finally { spy.restore(); }
 });
 
-test('補給の途中で離陸するとハムが止まる', () => {
-  const source = readFileSync(new URL('../src/js/main.js', import.meta.url), 'utf8');
-  const undock = source.slice(source.indexOf('player.docked = false;'));
-  assert.ok(undock.slice(0, 400).includes('stopRepairHum()'),
-    '離脱してもハムが鳴り続ける');
+test('補給の途中で離陸するとハムが止まる（自発的な離脱）', () => {
+  // W キーでの通常離脱後、docked が false になった状態で
+  // 毎フレームの _updateCarrierEngineSound() がハムも止めることを確かめる
+  const spy = spyAudio(['stopRepairHum']);
+  try {
+    const game = Object.create(Game);
+    const player = makeDockedPlayer();
+    player.docked = false; // 離脱直後を再現
+    player.alive = true;
+    game.player = player;
+    game.carrier = { alive: true, vx: 0 };
+
+    game._updateCarrierEngineSound();
+
+    assert.ok(spy.count('stopRepairHum') > 0, '離脱してもハムが鳴り続ける');
+  } finally { spy.restore(); }
+});
+
+test('補給の途中で母艦が撃墜され強制離脱してもハムが止まる', () => {
+  // Carrier.die() は docked を強制的に false にするだけでハムは止めない。
+  // main.js の _updateCarrierEngineSound() が毎フレーム再判定してハムを止める、
+  // という安全網が効いていることを確かめる（Carrier.js 単体の修正では拾えない経路）
+  const spy = spyAudio(['stopRepairHum']);
+  try {
+    const game = {
+      input: { isKeyDown: () => false },
+      particles: [],
+      spawnDebris() {}, spawnExplosion() {}, spawnHeavyDamage() {}, spawnSparks() {},
+    };
+    const carrier = new Carrier(game, 0, 0);
+    const player = makeDockedPlayer();
+    player.alive = true;
+    player.docked = true;
+    game.player = player;
+    game.carrier = carrier;
+
+    carrier.die();
+    assert.equal(player.docked, false, '前提が崩れている: die() で強制離脱していない');
+    assert.equal(spy.count('stopRepairHum'), 0,
+      'Carrier.die() 自体はハムを止めない想定（安全網側の担当）');
+
+    const gameObj = Object.create(Game);
+    gameObj.player = player;
+    gameObj.carrier = carrier;
+    gameObj._updateCarrierEngineSound();
+
+    assert.ok(spy.count('stopRepairHum') > 0, '母艦の撃墜で強制離脱してもハムが鳴り続ける');
+  } finally { spy.restore(); }
 });

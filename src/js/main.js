@@ -729,6 +729,7 @@ export const Game = {
         const running = player && player.docked && player.alive && carrier.alive;
         if (!running) {
             audioManager.stopCarrierEngine();
+            audioManager.stopRepairHum(); // 母艦の撃墜で強制離脱したときもハムを残さない
             return;
         }
         const throttle = Math.min(1, Math.abs(carrier.vx) / CARRIER_SPEED);
