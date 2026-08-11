@@ -364,10 +364,13 @@ export const Game = {
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
-        // 敵のホバー音は音源を残したまま鳴らし続ける作りなので、
-        // ミッションを離れるここで本当に止める。
-        // 鳴っていなければ即戻るので、画面が変わるたびに呼んで構わない
-        audioManager.stopEnemyHover();
+        // ミッションを抜けるので効果音を落とす。ホバー音・母艦のエンジン・
+        // 回復ハムは止める指示があるまで鳴り続ける作りで、ここを抜けると
+        // 毎フレームの更新も止まるため、放っておくとタイトルで鳴りっぱなしに
+        // なる（Escape で抜けたときに実際そうなっていた）。
+        // 鳴っていなければ何もしないので、画面が変わるたびに呼んで構わない。
+        // 'playing' に戻ると update() が resumeSe() でバスを戻す。
+        audioManager.fadeOutSe();
         if (state === 'local_ranking_display') {
             this.localRankIndex = -1;
             this.globalRankIndex = -1;
@@ -974,6 +977,9 @@ export const Game = {
         this.gameState = this.missionsCompleted >= 7 ? 'game_clear' : 'mission_clear';
         this.stateTimer = 0;
         audioManager.stopBGM();
+        // ここでシミュレーションが止まるので、鳴り続ける音は自分で止める。
+        // バスは引かない（この直後のファンファーレは同じバスを通るため）
+        audioManager.stopLoopingSe();
         audioManager.playSuccess();
     },
 
@@ -1335,9 +1341,9 @@ export const Game = {
             this.playerNameInput = "";
             audioManager.playRankingBGM();
         } else {
-            this.gameState = 'title';
-            this.stateTimer = 0;
-            audioManager.playTitleBGM();
+            // 全クリアからここへ来る経路があるので、タイトルへは
+            // _enterDemoState を通す（効果音を落とすのはそちらの仕事）
+            this._enterDemoState('title');
         }
     },
 

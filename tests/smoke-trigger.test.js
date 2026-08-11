@@ -154,16 +154,37 @@ test('【統合】遮蔽に隠れている状態から露出した最初のチ�
     `露出した瞬間に発煙していない（!this.inCover ガードが戻っていないか確認: ${game.smokeCalls.length}）`);
 });
 
-test('【統合】update() を SMOKE_COOLDOWN 回まわすと2回目が撃てる（クールダウンの減算が update() の中で進む）', () => {
+test('【統合】クールダウンが明ければ2回目が撃てる（減算が update() の中で進む）', () => {
   const { game, e } = setup('artillery'); // openWorld = 常に露出している世界
   e.maxSpeed = 0; // 距離を固定して cover-seek の分岐を安定させる（fix1 と無関係な揺れを排除）
 
   e.update(); // 最初のチェックで発煙（既存8本と同じ経路）
   assert.equal(game.smokeCalls.length, 1, '前提が崩れている: 最初の発煙が起きていない');
 
-  for (let i = 0; i < SMOKE_COOLDOWN; i++) e.update();
+  // 発煙には「クールダウンが明けている」と「遮蔽チェックのタイミング」の
+  // 両方が要る。チェックは ATTACKER_COVER_CHECK_INTERVAL おきなので、
+  // クールダウンが明けた直後のフレームに必ずチェックが来るとは限らない。
+  // ちょうど SMOKE_COOLDOWN 回だけ回して判定すると、SMOKE_COOLDOWN が
+  // チェック間隔の倍数のときしか通らない（1620 は倍数、1215 は違う）。
+  // 実機では最大でチェック間隔ぶん遅れて撃たれるだけなので、
+  // ここもチェック1回ぶんの猶予を見る。
+  for (let i = 0; i < SMOKE_COOLDOWN + ATTACKER_COVER_CHECK_INTERVAL; i++) e.update();
 
   assert.equal(game.smokeCalls.length, 2,
-    `SMOKE_COOLDOWN 回の update() 後に2回目の発煙が起きていない`
+    'クールダウンが明けても2回目の発煙が起きていない'
     + `（smokeCooldown-- が update() から消えたか、早期 return の先に移った疑い: ${game.smokeCalls.length}）`);
+});
+
+test('クールダウン中は撃たない（明ける手前まで回しても1回のまま）', () => {
+  // 上のテストに猶予を持たせたぶん、「早く撃ってしまう」側はここで縛る
+  const { game, e } = setup('artillery');
+  e.maxSpeed = 0;
+
+  e.update();
+  assert.equal(game.smokeCalls.length, 1);
+
+  for (let i = 0; i < SMOKE_COOLDOWN - 1; i++) e.update();
+
+  assert.equal(game.smokeCalls.length, 1,
+    `クールダウンが明ける前に2回目を撃っている: ${game.smokeCalls.length}`);
 });

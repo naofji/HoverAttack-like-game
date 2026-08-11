@@ -338,12 +338,27 @@ export class AudioManager {
      *
      * @param {number} [seconds]
      */
-    fadeOutSe(seconds = SE_FADE_OUT_SECONDS) {
-        this.seFaded = true;
+    /**
+     * 鳴り続ける音を全部止める。
+     *
+     * 自機のホバー、敵のホバー、母艦のエンジン、回復ハムの4つは、
+     * 止める指示があるまで鳴り続ける作り（毎フレームの更新で音量を
+     * 追従させている）。ミッションを抜けると更新が止まるので、
+     * 抜けるときに明示的に止めないと鳴りっぱなしになる。
+     *
+     * 効果音バスは触らないので、この後に鳴らす音（クリアのファンファーレ）は
+     * 影響を受けない。バスごと引きたいときは fadeOutSe を使う。
+     */
+    stopLoopingSe() {
         this.stopHover();
         this.stopEnemyHover();
         this.stopCarrierEngine();
         this.stopRepairHum();
+    }
+
+    fadeOutSe(seconds = SE_FADE_OUT_SECONDS) {
+        this.seFaded = true;
+        this.stopLoopingSe();
         if (!this.ctx || !this.seFade) return;
 
         const t = this.ctx.currentTime;
