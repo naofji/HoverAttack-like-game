@@ -140,6 +140,10 @@ test('どの武器も他の効果音と同じ土俵の音量で鳴る', () => {
   // 音作りを変えたときの音量再調整漏れを止める。敵のホバー音で実際にやらかした。
   const ref = referenceLevel();
   for (const [kind, p] of Object.entries(WEAPON_SOUNDS)) {
+    // 装填クリックは毎秒6回鳴り続けるフィードバック音で、単発の発射音と同じ
+    // 土俵に乗せると煩い。音量は「装填音は2種の聞こえる大きさが揃い…」で
+    // reload 比の上下を縛ってある
+    if (kind === 'ammoMissile' || kind === 'ammoGrenade') continue;
     const buf = renderWeaponProfile(p);
     const level = transientLevel((i) => buf[i], profileDuration(p));
     const diff = db(level / ref);
@@ -153,6 +157,9 @@ test('歪まない', () => {
     let peak = 0;
     for (const v of renderWeaponProfile(p)) peak = Math.max(peak, Math.abs(v));
     assert.ok(peak < 0.6, `${kind}: 振幅が大きい: ${peak.toFixed(3)}`);
+    // 装填クリックは上と同じ理由で「他の効果音と同じ土俵」の下限を免除する。
+    // reload 比 −18dB という下限（無音バグの見張り）は上の音量テストで別に効いている
+    if (kind === 'ammoMissile' || kind === 'ammoGrenade') continue;
     assert.ok(peak > 0.02, `${kind}: 振幅が小さすぎる: ${peak.toFixed(3)}`);
   }
 });
@@ -476,4 +483,51 @@ test('波形が壊れず、2つの音節として鳴る', () => {
   assert.ok(first > 0, '1音節目が鳴っていない');
   assert.ok(second > 0, '2音節目が鳴っていない');
   assert.ok(gap < first * 0.25, `音節が繋がっている: 谷 ${gap.toFixed(4)} / 山 ${first.toFixed(4)}`);
+});
+
+// --- 補給の装填クリック ---------------------------------------------------------
+
+test('装填は1発＝1打撃', () => {
+  for (const kind of ['ammoMissile', 'ammoGrenade']) {
+    assert.equal(WEAPON_SOUNDS[kind].clicks.count, 1, `${kind}: 打撃が1つでない`);
+  }
+});
+
+test('装填音は連続して鳴っても潰れない短さ（毎秒6回鳴る）', () => {
+  for (const kind of ['ammoMissile', 'ammoGrenade']) {
+    assert.ok(profileDuration(WEAPON_SOUNDS[kind]) < 1 / 6,
+      `${kind}: 次の1発に重なる: ${profileDuration(WEAPON_SOUNDS[kind]).toFixed(3)}秒`);
+  }
+});
+
+test('ミサイルとグレネードで音色が違う（どちらが入ったか分かる）', () => {
+  const m = WEAPON_SOUNDS.ammoMissile.clicks;
+  const g = WEAPON_SOUNDS.ammoGrenade.clicks;
+  assert.ok(m.freq > g.freq * 2, `高さが近すぎて聞き分けられない: ${m.freq} / ${g.freq}Hz`);
+});
+
+test('装填音はリロードと同じ機構の音に聞こえる', () => {
+  // 非整数倍の共鳴比が金属らしさを決める。ここが違うと別の機械の音になる
+  const metal = WEAPON_SOUNDS.reload.clicks.metal;
+  assert.equal(WEAPON_SOUNDS.ammoMissile.clicks.metal, metal);
+  assert.equal(WEAPON_SOUNDS.ammoGrenade.clicks.metal, metal);
+});
+
+test('装填音は2種の聞こえる大きさが揃い、リロードより控えめ', () => {
+  // 低い打撃はバンドパスを通る帯域が狭くて痩せるので、同じ gain だと揃わない。
+  // 毎秒6回鳴るため、1回だけのリロードより明確に小さくないと煩い
+  const level = (kind) => transientLevel(
+    (i) => renderWeaponProfile(WEAPON_SOUNDS[kind])[i] ?? 0,
+    profileDuration(WEAPON_SOUNDS[kind]),
+  );
+  const m = level('ammoMissile');
+  const g = level('ammoGrenade');
+  const reload = level('reload');
+
+  assert.ok(Math.abs(db(m / g)) < 2.5,
+    `2種の音量が揃っていない: ${db(m / g).toFixed(1)}dB 差`);
+  for (const [kind, v] of [['ammoMissile', m], ['ammoGrenade', g]]) {
+    assert.ok(db(v / reload) < -5, `${kind}: リロードに対して大きすぎる: ${db(v / reload).toFixed(1)}dB`);
+    assert.ok(db(v / reload) > -18, `${kind}: 小さすぎて聞こえない: ${db(v / reload).toFixed(1)}dB`);
+  }
 });
