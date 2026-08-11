@@ -32,6 +32,7 @@ import {
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
+import { toggleFullscreen } from './utils/fullscreen.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
 import { Player } from './entities/Player.js';
@@ -266,6 +267,13 @@ export const Game = {
                 this.input.lockedWorldY = world.y;
             }
         }
+
+        // どの画面でも M で全画面を切り替える。
+        // カーソルが canvas の外に出やすいのが元々の不満だったので、
+        // 画面いっぱいに広げて外に出る余地を減らす狙い。
+        // なお全画面はブラウザ仕様で Escape でも解除される（ミッション離脱と
+        // 同時に抜けてしまうが、こちらから止める手段はない）。
+        if (this.input.isKeyPressed('KeyM')) toggleFullscreen();
 
         this._updateGameState(deltaTime);
     },
