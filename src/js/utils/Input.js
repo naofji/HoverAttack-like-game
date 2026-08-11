@@ -20,6 +20,12 @@ export class Input {
         this.prevMouse = { left: false, right: false };
         this.rightHoldFrames = 0; // 右クリック長押しフレームカウント
 
+        // 直近の mousemove の client 座標。canvas がリサイズ/全画面切替で
+        // 拡大率を変えたときに mouse.x/y を再計算するために持っておく。
+        // 一度も mousemove が来ていない間は null（既知の位置が無いので再計算しない）。
+        this._lastClientX = null;
+        this._lastClientY = null;
+
         // Lock-on state
         this.crosshairLocked = false;
         this.lockedWorldX = 0;
@@ -62,21 +68,9 @@ export class Input {
         // さらに canvas 内で押して外で離すと mouseup を取り逃がして
         // mouse.left が true のまま残っていた（押しっぱなし判定になる）。
         window.addEventListener('mousemove', (e) => {
-            const { x, y } = canvasPointer(
-                this.canvas.getBoundingClientRect(),
-                this.canvas.width, this.canvas.height,
-                e.clientX, e.clientY
-            );
-
-            if (this.mouse.x !== x || this.mouse.y !== y) {
-                this.mouse.x = x;
-                this.mouse.y = y;
-
-                if (this.crosshairLocked) {
-                    this.crosshairLocked = false;
-                    console.log('Crosshair Unlocked (Mouse Moved)');
-                }
-            }
+            this._lastClientX = e.clientX;
+            this._lastClientY = e.clientY;
+            this._applyClientPos(e.clientX, e.clientY);
         });
 
         window.addEventListener('mousedown', (e) => {
@@ -94,6 +88,54 @@ export class Input {
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        // canvas は CSS で画面幅に合わせて拡大表示されるので、ウィンドウの
+        // リサイズや M での全画面切替で拡大率（getBoundingClientRect() の結果）
+        // が変わる。マウスを1px も動かさずに切り替えた場合、動かすまで
+        // mouse.x/y が古い拡大率のままになり、クロスヘアが実際のクリック先から
+        // ズレて見える。カーソル自体は動いていないので mousemove は来ない —
+        // 記憶している最後の client 座標を新しい拡大率で再変換して追従させる。
+        window.addEventListener('resize', () => {
+            this._applyClientPos(this._lastClientX, this._lastClientY);
+        });
+        document.addEventListener('fullscreenchange', () => {
+            this._applyClientPos(this._lastClientX, this._lastClientY);
+        });
+
+        // window レベルの mouseup は、ボタンを離した瞬間がブラウザの外
+        // （タスクバー、他アプリ、OS、Alt-Tab 中）だと発火しない。
+        // その状態でウィンドウがフォーカスを失うと mouse.left/right が
+        // true のまま固まり、撃ちっぱなしになる上 isLeftClickPressed()
+        // が二度と立たなくなる（グレネード投擲やクリックで進む画面が
+        // 全部死ぬ）。blur で強制的に離した状態に戻す。
+        window.addEventListener('blur', () => {
+            this.mouse.left = false;
+            this.mouse.right = false;
+        });
+    }
+
+    /**
+     * 記憶している client 座標を canvas 内部座標に変換して mouse.x/y に反映する。
+     * まだ一度も mousemove が来ていない（座標が未知の）間は何もしない。
+     */
+    _applyClientPos(clientX, clientY) {
+        if (clientX === null || clientY === null) return;
+
+        const { x, y } = canvasPointer(
+            this.canvas.getBoundingClientRect(),
+            this.canvas.width, this.canvas.height,
+            clientX, clientY
+        );
+
+        if (this.mouse.x !== x || this.mouse.y !== y) {
+            this.mouse.x = x;
+            this.mouse.y = y;
+
+            if (this.crosshairLocked) {
+                this.crosshairLocked = false;
+                console.log('Crosshair Unlocked (Mouse Moved)');
+            }
+        }
     }
 
     /** Key is currently held down */

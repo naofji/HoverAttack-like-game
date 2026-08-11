@@ -43,6 +43,13 @@ test('document 相当が無くても例外を投げない', () => {
     assert.doesNotThrow(() => toggleFullscreen(undefined, undefined));
 });
 
+test('element を省略すると doc.documentElement を対象にする', () => {
+    const docEl = fakeElement();
+    const doc = { calls: [], documentElement: docEl, fullscreenElement: null };
+    toggleFullscreen(undefined, doc);
+    assert.deepEqual(docEl.calls, ['request']);
+});
+
 test('reject する Promise を返しても未処理拒否にならない', async () => {
     const el = fakeElement(Promise.reject(new Error('denied')));
     toggleFullscreen(el, fakeDoc(null));

@@ -434,7 +434,14 @@ export const COLOR_HOVER_EXHAUST = 'rgba(0, 255, 255, 0.6)';
 export const AUTO_AIM_DURATION = 3600;         // 60秒 (60fps)
 export const AUTO_AIM_MAX_DURATION = 10800;    // 上限3分 (60fps)
 export const AUTO_AIM_SNAP_RADIUS = 120;      // スナップ判定半径 (world px)
-export const AUTO_AIM_CANCEL_THRESHOLD = 4;   // キャンセルに必要なマウス移動量 (screen px/frame)
+// キャンセルに必要なマウス移動量 (canvas px/frame。input.mouse.x/y の差分がこの単位)。
+// canvas は CSS で表示サイズに拡大されるようになったので、この値が要求する
+// 物理的なマウスの動きは表示の拡大率に比例して変わる（2560x1440 で canvas が
+// 1920 幅に拡大＝倍率1.875なら、この4は物理7.5px/frame 相当。ウィンドウを
+// 小さくすれば逆に緩くなる）。値はあえてそのままにしてある — 実機で感触を
+// 見てから決める、という判断（低リスクな数値調整を後回しにしただけで、
+// スケール補正を入れていないのは意図的）。
+export const AUTO_AIM_CANCEL_THRESHOLD = 4;
 
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.

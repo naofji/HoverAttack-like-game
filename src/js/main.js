@@ -274,8 +274,10 @@ export const Game = {
         // getTypedChars() で文字としても消費されるため、除外しないと
         // 「MAX」などと打つたびに全画面が切り替わってしまう
         // （_updateVolumeControl() が「-」を除外しているのと同じ理由）。
-        // なお全画面はブラウザ仕様で Escape でも解除される（ミッション離脱と
-        // 同時に抜けてしまうが、こちらから止める手段はない）。
+        // なお全画面はブラウザ仕様で Escape でも解除される。Chrome/Firefox は
+        // 全画面解除に Escape を使ったとき keydown 自体を握って渡してこないため、
+        // 想定では「1回目の Escape は全画面解除のみ、2回目でミッション離脱」に
+        // 分かれるはず（同時に両方起きるわけではない）。ただし未確認 — 実機で確かめること。
         if (this.gameState !== 'ranking_entry' && this.input.isKeyPressed('KeyM')) toggleFullscreen();
 
         this._updateGameState(deltaTime);
