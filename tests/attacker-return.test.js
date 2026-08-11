@@ -388,6 +388,40 @@ test('heavy breaks Y-axis alignment within its evade budget', () => {
     `Y alignment persisted ${maxAlignedRun} frames`);
 });
 
+test('evade goal never lands on the far side of the target', () => {
+  // 退避先を左右ランダムに選ぶと、自機の反対側が当たったときに、そこへ向かう
+  // 経路が自機を突っ切る。evadeDuration のあいだ張り付き続けるので、
+  // 「standoff distance を保つ」という heavy の性格が壊れる（実測: 900フレーム中
+  // 163〜340フレームを60px以内で過ごし、最接近 12.7px でめり込んでいた）。
+  // 同じ側でも targetX から 60〜120px 離れるので、軸をずらす目的は果たせる。
+  for (const typeKey of ['heavy', 'rival']) {
+    for (let trial = 0; trial < 60; trial++) {
+      const game = makeGame(makeMap(flatFloorRows()));
+      game.player = makePlayer(24, FLOOR_Y);
+      const e = makeAttacker(game, 350, FLOOR_Y, typeKey);
+
+      let seenEvades = 0;
+      let prevTimer = 0;
+      for (let i = 0; i < 900; i++) {
+        e.update();
+        if (e.evadeTimer > 0 && prevTimer <= 0) {   // 退避が始まった瞬間
+          seenEvades++;
+          const cx = e.x + e.width / 2;
+          const targetX = game.player.x + 8;
+          const goalSide = Math.sign(e.evadeGoalX - targetX);
+          const selfSide = Math.sign(cx - targetX);
+          if (selfSide !== 0) {
+            assert.equal(goalSide, selfSide,
+              `${typeKey}: 自機の反対側へ退避しようとした（自分 ${(cx - targetX).toFixed(0)}px, 目標 ${(e.evadeGoalX - targetX).toFixed(0)}px）`);
+          }
+        }
+        prevTimer = e.evadeTimer;
+      }
+      assert.ok(seenEvades > 0, `${typeKey}: 退避が一度も起きず検証になっていない`);
+    }
+  }
+});
+
 /**
  * 24x24: player platform (row 14, cols 0-4), a 2-tile pillar at col 12
  * (rows 18-19), full floor rows 20-23. From the right side the artillery

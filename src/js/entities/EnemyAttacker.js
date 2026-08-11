@@ -474,8 +474,18 @@ export class EnemyAttacker {
             (this.alignXFrames > RIVAL_ALIGN_TRIGGER_FRAMES || this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES)) {
             const range = RIVAL_EVADE_OFFSET_MAX - RIVAL_EVADE_OFFSET_MIN;
             const offset = RIVAL_EVADE_OFFSET_MIN + Math.random() * range;
-            const dir = Math.random() < 0.5 ? -1 : 1;
-            this.evadeGoalX = targetX + dir * offset;
+            // 退避先は「いま自分が居る側」に取る。左右を乱数で決めていたころは、
+            // 反対側が当たると目標へ向かう経路が自機を突っ切り、evadeDuration
+            // （heavy は90フレーム）のあいだ張り付いてしまっていた。
+            // 実測では 900フレーム中 163〜340フレームを 60px 以内で過ごし、
+            // 最接近 12.7px と自機にめり込んでいた（heavy の
+            // 'keeps its standoff distance' テストが 0.65% の確率で落ちる原因）。
+            // 同じ側でも targetX から 60〜120px 離れるので、軸をずらすという
+            // 退避の目的は変わらず果たせる。
+            // dx = targetX - 自分の中心 なので、-dx が「自分が居る側」。
+            // 完全に重なっているときだけ決められないので、そこは乱数に落とす。
+            const side = Math.sign(-dx) || (Math.random() < 0.5 ? -1 : 1);
+            this.evadeGoalX = targetX + side * offset;
             if (this.alignYFrames > RIVAL_ALIGN_TRIGGER_FRAMES) {
                 // Break Y alignment: climb, or drop if airborne and the coin says so
                 this.evadeVertical = (!this.onGround && Math.random() < 0.5) ? 1 : -1;
