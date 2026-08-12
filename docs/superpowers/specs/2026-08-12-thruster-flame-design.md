@@ -44,6 +44,15 @@ for (let i = 0; i < 3; i++) {
 3. **揺らぎを強くする** — 大人しすぎて勢いが出ていなかった。`THRUSTER_FLAME_FLICKER` を 0.15→0.35 に上げ、
    さらに**先端の左右の振れ**（`THRUSTER_FLAME_SWAY`）を足した。長さの伸び縮みだけだと
    「息をしている」だけで、噴き出している感じにならなかったため
+4. **型ごとの差を見えるようにする** — 炎の長さは元から `climbThrust` に連動していたが、
+   型ごとの差（3.2px）より揺らぎ（±5px）のほうが大きく、動いている画面では区別できなかった。
+   `ATTACKER_FLAME_POWER_MIN` を 0.6→0.45 に下げて長さの差を広げたうえで、
+   **`flameWidth`（型ごとの太さ）を追加**した。太さは揺らぎの影響を受けないので識別はこちらが担う。
+   heavy=太く短い（ずんぐり）／rival=細く長い（鋭い）と、機体のシルエットに対応させてある
+5. **ノズルの位置を型ごとにする** — `flameX` / `flameY`。2足の3型は背中のバックパック直下 (4, 14) のまま、
+   **artillery は4脚で背中という概念が薄いので胴体 `fillRect(5, 5, 11, 11)` の真下 (10, 16) から**出す。
+   あわせて `- crouchOffset` の補正をやめた。以前は炎のワールド上の高さを固定していたため、
+   しゃがむ機体（artillery のバースト射撃）で炎が胴体から 4px 離れて浮いていた
 
 ## 設計
 
@@ -169,7 +178,10 @@ CLAUDE.md の方針どおり、ソース文字列の grep はしない（実際�
 | 先端の左右の揺れがうるさい／足りない | `THRUSTER_FLAME_SWAY` |
 | 炎が機体に近すぎる／離れすぎ | `THRUSTER_FLAME_GAP` |
 | 敵の炎の色 | `ENEMY_ATTACKER_TYPES[型].flameColor` |
-| 敵 heavy の炎が弱い | `ATTACKER_FLAME_POWER_MIN` |
+| 敵の炎の太さ | `ENEMY_ATTACKER_TYPES[型].flameWidth` |
+| 敵の炎の出る位置 | `ENEMY_ATTACKER_TYPES[型].flameX` / `.flameY`（機体のローカル座標） |
+| 型ごとの長さの差が足りない | `ATTACKER_FLAME_POWER_MIN`（下げるほど差が開く） |
+| 敵 heavy の炎が弱い | `ATTACKER_FLAME_POWER_MIN`（上げるほど底上げ） |
 
 ## やらないこと
 

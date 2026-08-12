@@ -47,14 +47,18 @@ function _drawTaper(ctx, cx, topY, topW, length, swayPx) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} nozzleX ノズルの中心 x
  * @param {number} nozzleY ノズルの下端 y（炎の根元はここから GAP ぶん下）
- * @param {{color: string, power: number, flicker?: number, sway?: number}} opts
+ * @param {{color: string, power: number, width?: number, flicker?: number, sway?: number}} opts
  *   color   外炎の色（#rrggbb）
  *   power   0〜1。1 で LEN_MAX、0 で LEN_MIN
+ *   width   根元の太さ px。既定は THRUSTER_FLAME_WIDTH。
+ *           **長さは flicker に埋もれるが太さは埋もれない**ので、機体の型を
+ *           見分けさせたいときはこちらを変える（敵アタッカーの flameWidth）
  *   flicker 0〜1。先端の伸び縮み。既定は Math.random()（テストは固定値を渡す）
  *   sway    0〜1。先端の左右の振れ。0.5 で振れなし。既定は Math.random()
  */
 export function drawThrusterFlame(ctx, nozzleX, nozzleY,
-                                  { color, power, flicker = Math.random(), sway = Math.random() }) {
+                                  { color, power, width = THRUSTER_FLAME_WIDTH,
+                                    flicker = Math.random(), sway = Math.random() }) {
     const p = clamp01(power);
     const base = THRUSTER_FLAME_LEN_MIN + (THRUSTER_FLAME_LEN_MAX - THRUSTER_FLAME_LEN_MIN) * p;
     // flicker / sway とも 0〜1 を -1〜+1 に写して振れ幅を掛ける
@@ -67,15 +71,19 @@ export function drawThrusterFlame(ctx, nozzleX, nozzleY,
     // 機体にめり込んで見えないよう、ノズル下端から GAP ぶん空けて根元を置く
     const top = Math.round(nozzleY) + THRUSTER_FLAME_GAP;
 
+    // 芯は外炎より 2px 細い。1px 以上は残す（幅4の rival でも芯が消えないように）
+    const outerW = Math.max(1, Math.round(width));
+    const coreW = Math.max(1, outerW - 2);
+
     ctx.fillStyle = color;
     ctx.globalAlpha = THRUSTER_FLAME_ALPHA;
-    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH, outerLen, swayPx);
+    _drawTaper(ctx, cx, top, outerW, outerLen, swayPx);
 
     // 芯の振れは長さの比で割り戻す。_drawTaper の t は「その炎自身の先端まで」の比なので、
     // 同じ swayPx を渡すと短い芯のほうが急に傾き、途中で外炎からはみ出す
     ctx.fillStyle = lerpColor(color, '#FFFFFF', THRUSTER_FLAME_CORE_WHITE);
     ctx.globalAlpha = THRUSTER_FLAME_CORE_ALPHA;
-    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH - 2, coreLen, swayPx * (coreLen / outerLen));
+    _drawTaper(ctx, cx, top, coreW, coreLen, swayPx * (coreLen / outerLen));
 
     ctx.globalAlpha = 1.0;
 }

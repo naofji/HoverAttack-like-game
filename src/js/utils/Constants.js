@@ -53,7 +53,7 @@ export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before
 // 置き換え前は「1〜4px の四角を毎フレーム3個ランダムに置く」だけで、実質 5px ぶんしか
 // 見えていなかった。地味に見えた原因は小ささより「毎フレーム形が変わって芯が無い」ことに
 // あったので、台形で芯を固定し、先端だけを揺らす形にした。
-export const THRUSTER_FLAME_WIDTH = 5;       // px: ノズル直下の幅
+export const THRUSTER_FLAME_WIDTH = 5;       // px: ノズル直下の幅（自機と、幅を指定しない呼び出しの既定）
 export const THRUSTER_FLAME_LEN_MIN = 6;     // px: power=0（燃料切れ間際）の長さ
 export const THRUSTER_FLAME_LEN_MAX = 14;    // px: power=1 の長さ。置き換え前の実質 5px の約3倍
 export const THRUSTER_FLAME_CORE_RATIO = 0.55; // 芯の長さ（外炎に対する比）
@@ -70,10 +70,15 @@ export const THRUSTER_FLAME_ALPHA = 0.75;      // 外炎の不透明度
 export const THRUSTER_FLAME_CORE_ALPHA = 0.9;  // 芯の不透明度。外炎より濃く出して芯を立てる
 
 // 敵アタッカーの炎の長さは型ごとの climbThrust から作る。0〜1 へ素直に正規化すると
-// heavy（0.45 = 最小）の炎がほぼ消えてしまうので、下限を 0.6 に上げて差だけ残す。
+// heavy（0.45 = 最小）の炎がほぼ消えてしまうので、下限を上げて差だけ残す。
+//
+// 下限は当初 0.6 にしていたが、それだと型ごとの基準長が 10.8〜14.0px の 3.2px しか
+// 開かず、揺らぎ（±35% ＝ ±5px 前後）に埋もれて動いている画面では見分けられなかった。
+// 0.45 まで下げて 9.6〜14.0px に開いてある。それでも長さだけでは足りないので、
+// 型ごとの flameWidth（揺らぎの影響を受けない）と合わせて識別させる。
 export const ATTACKER_CLIMB_THRUST_MIN = 0.45; // heavy
 export const ATTACKER_CLIMB_THRUST_MAX = 0.75; // standard
-export const ATTACKER_FLAME_POWER_MIN = 0.6;
+export const ATTACKER_FLAME_POWER_MIN = 0.45;
 
 // --- Attacker return-home & climbing ---
 export const ATTACKER_RETURN_TRIGGER_Y = 6 * TILE_SIZE;  // start returning when this far BELOW home
@@ -282,6 +287,15 @@ export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement ra
 // 機体色の補色寄りに振ってある（standard 水色の機体に赤い炎、heavy 緑にオレンジ、
 // rival 赤に水色、artillery 黄にピンク）。炎を機体色にすると機体に溶けて見分けが
 // つかなかったため、実機判断で分離した。
+//
+// flameWidth は炎の根元の太さ（px）。**炎の長さは climbThrust から自動で決まるが、
+// 揺らぎ幅のほうが型ごとの差より大きいので、長さだけでは動いている画面で見分けられない。**
+// 太さは揺らぎの影響を受けないので、識別はこちらが担う。機体のシルエットに合わせて
+// heavy=太く短い（ずんぐり）、rival=細く長い（鋭い）という対比を作ってある。
+//
+// flameX / flameY はノズルの位置（機体のローカル座標。draw() が向きで反転する前）。
+// 2足の3型は背中のバックパック直下だが、artillery は4脚で背中という概念が薄いので
+// 胴体の真下から出す。型ごとにスプライトの形が違う以上、ここは表で持つしかない。
 
 export const ENEMY_ATTACKER_TYPES = {
     standard: {
@@ -304,6 +318,8 @@ export const ENEMY_ATTACKER_TYPES = {
         backpackColor: '#338899',
         exhaustColor: '#33DDEE',
         flameColor: '#FF4433',   // 赤（機体は水色）
+        flameWidth: 5,           // 標準
+        flameX: 4, flameY: 14,   // 背中のバックパック直下
     },
     heavy: {
         name: 'heavy',
@@ -327,6 +343,8 @@ export const ENEMY_ATTACKER_TYPES = {
         backpackColor: '#226622',
         exhaustColor: '#66FF66',
         flameColor: '#FF9922',   // オレンジ（機体は緑）
+        flameWidth: 7,           // 太い。重量級のずんぐりしたシルエットに合わせる
+        flameX: 4, flameY: 14,   // 背中のバックパック直下
     },
     rival: {
         name: 'rival',
@@ -351,6 +369,8 @@ export const ENEMY_ATTACKER_TYPES = {
         backpackColor: '#882222',
         exhaustColor: '#FF6644',
         flameColor: '#33DDFF',   // 水色（機体は赤）
+        flameWidth: 4,           // 細い。速さを出すため鋭く
+        flameX: 4, flameY: 14,   // 背中のバックパック直下
     },
     artillery: {
         name: 'artillery',
@@ -374,6 +394,8 @@ export const ENEMY_ATTACKER_TYPES = {
         backpackColor: '#996600',
         exhaustColor: '#FFEE44',
         flameColor: '#FF44BB',   // ピンク（機体は黄）
+        flameWidth: 6,           // やや太い。4脚の大柄な機体
+        flameX: 10, flameY: 16,  // 4脚なので胴体 (5,5,11,11) の真下から。背中側から出すと脚の間で浮いて見えた
     },
 };
 

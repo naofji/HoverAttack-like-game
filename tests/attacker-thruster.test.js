@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
 import { makeFakeCtx, extractFillRectsWithColor } from './helpers/fake-ctx.js';
-import { ENEMY_ATTACKER_TYPES } from '../src/js/utils/Constants.js';
+import { ENEMY_ATTACKER_TYPES, ATTACKER_FLAME_POWER_MIN } from '../src/js/utils/Constants.js';
 import { attackerFlamePower, drawThrusterFlame } from '../src/js/entities/thrusterFlame.js';
 
 const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
@@ -113,7 +113,68 @@ test('power の差は炎の実際の長さにも反映される（flicker を固
   assert.ok(standard > heavy, `standard=${standard} heavy=${heavy}`);
 });
 
-test('heavy でも炎が最低限の長さを保つ（power の下限 0.6）', () => {
-  assert.ok(attackerFlamePower(ENEMY_ATTACKER_TYPES.heavy.climbThrust) >= 0.6);
+// climbThrust を 0〜1 へ素直に正規化すると heavy（最小）の炎がほぼ消えるので、
+// power に下限を設けてある。下限の値そのものは実機の見え方で動かすため、
+// 定数を参照して「下限が効いていること」だけを縛る。
+test('heavy でも炎が最低限の長さを保つ（power の下限が効いている）', () => {
+  assert.equal(attackerFlamePower(ENEMY_ATTACKER_TYPES.heavy.climbThrust),
+    ATTACKER_FLAME_POWER_MIN);
   assert.ok(flameRects('heavy').length >= 6);
+});
+
+// 長さは flicker（±35%）に埋もれて型を見分けられないので、太さで見分けさせている。
+// flameWidth を全型そろえてしまうと、その手掛かりが消える。
+test('炎の太さが型ごとに違う（長さの差は揺らぎに埋もれるので太さが識別を担う）', () => {
+  const widths = Object.values(ENEMY_ATTACKER_TYPES).map((cfg) => cfg.flameWidth);
+  assert.ok(new Set(widths).size >= 3, `太さが揃いすぎている: ${widths.join(', ')}`);
+  // heavy=ずんぐり, rival=鋭い、という機体シルエットとの対応
+  assert.ok(ENEMY_ATTACKER_TYPES.heavy.flameWidth > ENEMY_ATTACKER_TYPES.rival.flameWidth);
+});
+
+test('指定した太さが炎の根元の幅になる（型ごとの flameWidth が効いている）', () => {
+  for (const typeKey of ['standard', 'heavy', 'rival', 'artillery']) {
+    const rects = flameRects(typeKey);
+    const root = rects.reduce((a, b) => (b.w > a.w ? b : a));
+    assert.equal(root.w, ENEMY_ATTACKER_TYPES[typeKey].flameWidth, typeKey);
+  }
+});
+
+// artillery は4脚で背中という概念が薄いので、胴体 fillRect(5, 5, 11, 11) の真下
+// （中心 x=10.5、下端 y=16）から炎を出す。2足の3型は背中のバックパック直下のまま。
+test('artillery の炎は胴体の真下から出る（他の3型は背中側）', () => {
+  const rootCenter = (typeKey) => {
+    const rects = flameRects(typeKey);
+    const root = rects.reduce((a, b) => (b.w > a.w ? b : a));
+    return root.x + root.w / 2;
+  };
+  const artillery = rootCenter('artillery');
+  assert.ok(artillery >= 9 && artillery <= 12,
+    `artillery の炎の中心 ${artillery} が胴体 (5〜16) の中央から外れている`);
+  for (const typeKey of ['standard', 'heavy', 'rival']) {
+    assert.ok(rootCenter(typeKey) < artillery, `${typeKey} が背中側にない`);
+  }
+});
+
+// 置き換え前は crouchOffset を引いて炎のワールド上の高さを固定していたため、
+// しゃがむ機体（artillery のバースト射撃）で炎が胴体から 4px 離れて浮いた。
+// 今は引いていないので、draw() が積む translate(0, crouchOffset) にそのまま乗る。
+//
+// fake-ctx は transform を適用しない（fillRect の引数はローカル座標のまま記録される）
+// ので、「炎の y が変わらないこと」＋「しゃがみぶんの translate が積まれていること」を
+// 見る。この2つが揃えば、実際の canvas では炎が機体と一緒に下がる。
+test('しゃがんでも炎が機体から離れない（artillery のバースト中）', () => {
+  const topOf = (overrides) => Math.min(...flameRects('artillery', overrides).map((r) => r.y));
+  assert.equal(topOf({ burstCount: 3 }), topOf({}),
+    '炎の位置を自前で補正している（translate と二重に効く）');
+
+  const translatesOf = (overrides) => {
+    const ctx = makeFakeCtx();
+    makeAttacker('artillery', overrides).draw(ctx);
+    return ctx.calls.filter((c) => c.name === 'translate').map((c) => c.args);
+  };
+  const crouchShift = translatesOf({ burstCount: 3 })
+    .filter(([dx, dy]) => dx === 0 && dy === 4);
+  assert.equal(crouchShift.length, 1, 'しゃがみぶんの translate(0, 4) が積まれていない');
+  assert.equal(translatesOf({}).filter(([dx, dy]) => dx === 0 && dy === 4).length, 0,
+    '立っているのにしゃがみぶんの translate が積まれている');
 });
