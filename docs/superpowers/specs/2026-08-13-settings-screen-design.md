@@ -65,12 +65,30 @@
 
 | 項目 | 型 | 既定 | 既定の根拠 |
 |---|---|---|---|
+| 全体音量 | 0〜100（5刻み） | 100 | 新設。既定 100 なら現行と同じ音量 |
 | BGM 音量 | 0〜100（5刻み） | 既存の保存値 | 現行の `hoverAttack.bgmVolume` を引き継ぐ |
 | SE 音量 | 0〜100（5刻み） | 100 | 今は調整手段が無く常に最大 |
 | ドッキング時にミサイルへ持ち替え | ON/OFF | **OFF** | 今は持ち替えない（`respawn()` だけが `currentWeapon='missile'` にする） |
 | MG オートリロード | ON/OFF | **ON** | 今は残弾50%以下＋引き金を離すと自動装填する |
 | 全画面 | 実行 | — | `M` と同じ `toggleFullscreen()` |
 | 途中終了 | 実行 | — | 現行の `Escape` の動作。**確認を1段挟む** |
+
+**全体音量は「掛け算」で実装する。** BGM と効果音は別々の経路で出ている
+（効果音は `seFade → seMaster → コンプレッサ`、BGM は `BGMManager` が自前の音量を持つ）ので、
+両方の上に1つのノードを差し込む配線変更はせず、**適用時に掛ける**:
+
+```
+実際のBGM音量 = masterVolume × bgmVolume
+実際のSE音量  = masterVolume × seVolume
+```
+
+`utils/settings.js` の純関数 `effectiveVolumes(settings)` にまとめる。音の配線に手を入れないので
+既存の音量の実測値（母艦エンジンと回復ハムの帯域分離など）に影響しない。
+
+**PC 本体の音量は扱えない。** ブラウザから OS のマスターボリュームを読む／変える API は
+存在しない（どのブラウザでも同じ）。この「全体音量」はこのページの出力だけを下げるもので、
+他のタブや OS の音量には影響しない。**「PC の音量を取得したい」という要望が来ても実現できない**
+ので、ここに書き残しておく。
 
 **「MG オートリロード OFF」の意味**: 手動リロードのキーは作らない（`R` はミニマップで埋まっている）。
 OFF は「**弾が尽きたときだけ装填する**」とする。`shouldStartMGReload()` の
@@ -103,8 +121,9 @@ OFF は「**弾が尽きたときだけ装填する**」とする。`shouldStart
 `node --test` で直接テストできる（既存の `utils/bgmVolume.js` と同じ作り）。
 
 ```js
-loadSettings(storage) -> {bgmVolume, seVolume, autoSwitchMissile, mgAutoReload}
+loadSettings(storage) -> {masterVolume, bgmVolume, seVolume, autoSwitchMissile, mgAutoReload}
 saveSettings(settings, storage) -> void
+effectiveVolumes(settings) -> {bgm, se}      // マスターを掛けた実効値
 stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 ```
 
@@ -123,6 +142,7 @@ stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 
 ```js
 // ui/settingsItems.js
+{ key: 'masterVolume', label: 'MASTER VOLUME', type: 'volume' }
 { key: 'bgmVolume', label: 'BGM VOLUME', type: 'volume' }
 { key: 'mgAutoReload', label: 'MG AUTO-RELOAD', type: 'toggle' }
 { key: 'fullscreen', label: 'FULLSCREEN', type: 'action', run: (game) => toggleFullscreen() }
@@ -161,6 +181,8 @@ stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 
 1. **`utils/settings.js` の純ロジック** — 既定値、保存と読み込みの往復、壊れた JSON、
    未知のキー、範囲外の値、`localStorage` が例外を投げる環境、旧 `hoverAttack.bgmVolume` からの移行
+1b. **`effectiveVolumes()`** — マスター 100 なら BGM/SE がそのまま出ること（＝現行と同じ音量）、
+   マスター 0 で両方 0 になること、掛け算の丸めで 0.30000000000000004 が出ないこと
 2. **`stepSetting()`** — 音量が 0〜100 で止まる（巻き戻らない）、ON/OFF が反転する
 3. **ポーズ中に時間が進まない** — `gameState='settings'` で `update()` を実時間10秒ぶん回しても
    `missionTimer` / `totalTime` / `simAccumulator` が変わらない
@@ -187,6 +209,7 @@ CLAUDE.md の方針どおり、ソース文字列を grep するテストは書�
 | ポーズしてもミッションタイムが増えていないか | — |
 | 音量の刻みが細かすぎ／粗すぎ | `SETTINGS_VOLUME_STEP` |
 | SE 音量 100 が今までと同じ大きさか | — |
+| 全体音量 100 が今までと同じ大きさか（掛け算で目減りしていないか） | — |
 | 項目の並び順・文言 | `ui/settingsItems.js` の表 |
 
 ## やらないこと
@@ -194,4 +217,5 @@ CLAUDE.md の方針どおり、ソース文字列を grep するテストは書�
 - モード選択をポーズメニューに入れる（プレイ中に変えられると進行中のスコアの前提が壊れる）
 - 手動リロードのキーを新設する（`R` が埋まっている。OFF は「空になったら装填」で代替）
 - 設定のクラウド同期・プロファイル複数持ち（ローカル1つで足りる）
+- **PC 本体（OS）の音量の取得・変更** — ブラウザに API が無く、実現できない
 - キーコンフィグの**変更**（フェーズBは一覧の表示のみ。変更まで作ると入力系の作りに手が入る）
