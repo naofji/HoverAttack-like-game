@@ -32,7 +32,7 @@ import {
 } from './utils/Constants.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
-import { toggleFullscreen } from './utils/fullscreen.js';
+import { toggleFullscreen, enterFullscreen } from './utils/fullscreen.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
 import { Player } from './entities/Player.js';
@@ -403,6 +403,13 @@ export const Game = {
      */
     _startGameIfRequested() {
         if (!this._anyKeyOrClick()) return false;
+        // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
+        // 実機の要望。requestFullscreen はユーザー操作の直後でないと拒否されるが、
+        // ここは _anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった場合
+        // しか通らないので、transient activation が生きている（M キーが
+        // ゲームループから呼んでも効いているのと同じ理屈）。
+        // 既に全画面なら enterFullscreen は何もしない＝M で入れた状態を壊さない。
+        enterFullscreen();
         this.stateManager.restart();
         this.gameState = 'playing';
         audioManager.startBGM(this.missionsCompleted);
