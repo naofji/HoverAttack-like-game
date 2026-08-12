@@ -23,6 +23,7 @@ import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
+import { drawThrusterFlame } from './thrusterFlame.js';
 
 /**
  * 歩行4フレーム → 手前脚/奥脚のポーズ番号（_legPose の walkPose に渡す）。
@@ -907,16 +908,16 @@ export class Player {
     _drawHoverExhaust(ctx) {
         if (!this.hovering) return;
 
-        // バックパックのノズル位置（ローカル x:2〜6, y:12〜14 の橙ノズル直下）
+        // バックパックのノズル位置（ローカル x:2〜6, y:12〜14 の橙ノズル直下）。
+        // 中心 = backpackX + 2（置き換え前は幅 4px にランダムで散らしていた）
         const backpackX = this.facingRight ? (this.x - 2) : (this.x + this.width - 4);
-        for (let i = 0; i < 3; i++) {
-            const px = backpackX + Math.random() * 4;
-            const py = this.y + 12 + Math.random() * 5;
-            const size = 1 + Math.random() * 4;
-            ctx.fillStyle = COLOR_HOVER_EXHAUST;
-            ctx.globalAlpha = 0.3 + Math.random() * 0.6;
-            ctx.fillRect(px, py, size, size);
-        }
-        ctx.globalAlpha = 1.0;
+        // 残燃料で実際の推力が変わる（HOVER_THRUST → HOVER_THRUST_MIN）ので、
+        // 炎の長さも同じ比に合わせる。ホバー音も playHover(fuelRatio) で同じ値を
+        // 受けているため、炎・音・推力が1つの値を指すことになる
+        const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
+        drawThrusterFlame(ctx, backpackX + 2, this.y + 12, {
+            color: COLOR_HOVER_EXHAUST,
+            power: fuelRatio,
+        });
     }
 }
