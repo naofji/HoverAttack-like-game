@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
 import { makeFakeCtx, extractFillRectsWithColor } from './helpers/fake-ctx.js';
 import { ENEMY_ATTACKER_TYPES } from '../src/js/utils/Constants.js';
-import { attackerFlamePower } from '../src/js/entities/thrusterFlame.js';
+import { attackerFlamePower, drawThrusterFlame } from '../src/js/entities/thrusterFlame.js';
 
 const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
 
@@ -62,11 +62,39 @@ test('ホバーしていなければ炎を描かない', () => {
   assert.equal(flameRects('rival', { hovering: false }).length, 0);
 });
 
-test('climbThrust が大きい型ほど炎が長い', () => {
-  const bottom = (rects) => Math.max(...rects.map((r) => r.y + r.h));
+test('climbThrust が大きい型ほど炎の power が大きい（4型の完全な順序）', () => {
+  // draw() は flicker を渡さないため実際の描画は Math.random() を使う。standard
+  // (power 1.0, outerLen 12..16) と heavy (power 0.6, outerLen 9..12) は 12 で
+  // 範囲が重なるため、draw() 経由の長さ比較を assert すると約4%の確率で落ちる
+  // （20,000回のモンテカルロで4.10%、実測でも40回中1回失敗した）。乱数を経由しない
+  // 純関数 attackerFlamePower() の出力を直接比較して、4型の順序を決定的に検証する。
   // standard(0.75) > rival(0.65) > artillery(0.5) > heavy(0.45)
-  const standard = bottom(flameRects('standard'));
-  const heavy = bottom(flameRects('heavy'));
+  const standard = attackerFlamePower(ENEMY_ATTACKER_TYPES.standard.climbThrust);
+  const rival = attackerFlamePower(ENEMY_ATTACKER_TYPES.rival.climbThrust);
+  const artillery = attackerFlamePower(ENEMY_ATTACKER_TYPES.artillery.climbThrust);
+  const heavy = attackerFlamePower(ENEMY_ATTACKER_TYPES.heavy.climbThrust);
+  assert.ok(standard > rival, `standard=${standard} rival=${rival}`);
+  assert.ok(rival > artillery, `rival=${rival} artillery=${artillery}`);
+  assert.ok(artillery > heavy, `artillery=${artillery} heavy=${heavy}`);
+});
+
+test('power の差は炎の実際の長さにも反映される（flicker を固定して決定的に検証）', () => {
+  // 上のテストは power 自体の順序を見るだけなので、power が実際に描画へ効いている
+  // ことも別途確かめる。draw() を経由せず drawThrusterFlame() を flicker 固定で
+  // 直接呼び、standard と heavy の描画結果（外炎の最下段の y）を比較する。
+  const bottom = (rects) => Math.max(...rects.map((r) => r.y + r.h));
+  const drawFixed = (typeKey) => {
+    const ctx = makeFakeCtx();
+    const color = ENEMY_ATTACKER_TYPES[typeKey].exhaustColor;
+    drawThrusterFlame(ctx, 4, 14, {
+      color,
+      power: attackerFlamePower(ENEMY_ATTACKER_TYPES[typeKey].climbThrust),
+      flicker: 0.5, // 揺らぎをゼロにして幾何だけを比較する
+    });
+    return extractFillRectsWithColor(ctx.calls).filter((r) => r.color === color && r.h === 1);
+  };
+  const standard = bottom(drawFixed('standard'));
+  const heavy = bottom(drawFixed('heavy'));
   assert.ok(standard > heavy, `standard=${standard} heavy=${heavy}`);
 });
 
