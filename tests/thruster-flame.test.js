@@ -5,6 +5,8 @@ import { drawThrusterFlame, attackerFlamePower } from '../src/js/entities/thrust
 import {
   THRUSTER_FLAME_WIDTH, THRUSTER_FLAME_LEN_MIN, THRUSTER_FLAME_LEN_MAX,
   THRUSTER_FLAME_CORE_WHITE, ATTACKER_FLAME_POWER_MIN,
+  ATTACKER_CLIMB_THRUST_MIN, ATTACKER_CLIMB_THRUST_MAX,
+  COLOR_HOVER_EXHAUST, ENEMY_ATTACKER_TYPES,
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
 
@@ -99,4 +101,27 @@ test('attackerFlamePower は 0.6〜1.0 に写す', () => {
   const rival = attackerFlamePower(0.65);
   assert.ok(rival > ATTACKER_FLAME_POWER_MIN && rival < 1.0);
   assert.ok(attackerFlamePower(0.65) > attackerFlamePower(0.5));    // rival > artillery
+});
+
+// lerpColor() は parseInt で色を解釈するので、hex 以外（例: 'rgba(0, 255, 255, 0.6)'）を
+// 渡すと '#NaNNaNNaN' になる。実 canvas ではこれを fillStyle に代入しても無視され、
+// 直前の色のまま描画される。つまり芯が外炎と同じ色になるだけの「無言の失敗」になり、
+// テストが無ければ気付けない。COLOR_HOVER_EXHAUST は今回 rgba から hex に変えたばかりで、
+// 将来また rgba に戻される危険があるため、色の形式そのものを縛る。
+test('炎に渡す色はすべて #rrggbb 形式（rgba() 等が紛れ込むと lerpColor が無言で壊れる）', () => {
+  const HEX6 = /^#[0-9A-Fa-f]{6}$/;
+  assert.match(COLOR_HOVER_EXHAUST, HEX6, `COLOR_HOVER_EXHAUST=${COLOR_HOVER_EXHAUST}`);
+  for (const [typeKey, cfg] of Object.entries(ENEMY_ATTACKER_TYPES)) {
+    assert.match(cfg.exhaustColor, HEX6, `${typeKey}.exhaustColor=${cfg.exhaustColor}`);
+  }
+});
+
+// ATTACKER_CLIMB_THRUST_MIN/MAX は ENEMY_ATTACKER_TYPES の climbThrust の実際の
+// 最小・最大値を手で二重に持っているだけの定数。どちらかの型の climbThrust を変えて
+// この定数を更新し忘れると、attackerFlamePower() が範囲外の値をクランプして型ごとの
+// 差が静かに潰れるが、既存のテストはどれも落ちない。ここで整合性を縛る。
+test('ATTACKER_CLIMB_THRUST_MIN/MAX は ENEMY_ATTACKER_TYPES の climbThrust の実際の範囲と一致する', () => {
+  const climbThrusts = Object.values(ENEMY_ATTACKER_TYPES).map((cfg) => cfg.climbThrust);
+  assert.equal(Math.min(...climbThrusts), ATTACKER_CLIMB_THRUST_MIN);
+  assert.equal(Math.max(...climbThrusts), ATTACKER_CLIMB_THRUST_MAX);
 });
