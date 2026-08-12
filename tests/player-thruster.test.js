@@ -35,7 +35,9 @@ test('燃料が多いほど炎が長い', () => {
 test('炎はノズル（バックパック直下）から下へ伸びる', () => {
   const rects = drawExhaust({});
   const top = Math.min(...rects.map((r) => r.y));
-  assert.equal(top, 62, 'this.y(50) + 12 が根元');
+  // _drawBody() のノズル矩形 fillRect(2, 12, 4, 2) の下端 (12+2=14) が根元。
+  // this.y(50) + 14 = 64
+  assert.equal(top, 64, 'this.y(50) + 14 が根元');
   assert.ok(Math.max(...rects.map((r) => r.y + r.h)) > top, '下へ伸びていない');
 });
 
@@ -46,10 +48,12 @@ test('左右の向きでノズル位置が入れ替わる', () => {
   };
   // 炎の根元の幅は奇数（先端 1px の左右対称な台形にするため）なので、
   // ノズル中心が整数でも描画矩形の中心は 0.5px ずれる。設計どおりの挙動
+  // ノズル矩形 (2, 12, 4, 2) の中心 x (2+4/2=4) を向きで場合分け:
+  // 右向き x + 4 = 104、左向き x + width - 4 = 112
   const right = centerOf(drawExhaust({ facingRight: true }));
   const left = centerOf(drawExhaust({ facingRight: false }));
-  assert.ok(Math.abs(right - (100 - 2 + 2)) <= 0.5, `右向き: ${right}`);
-  assert.ok(Math.abs(left - (100 + PLAYER_WIDTH - 4 + 2)) <= 0.5, `左向き: ${left}`);
+  assert.ok(Math.abs(right - (100 + 4)) <= 0.5, `右向き: ${right}`);
+  assert.ok(Math.abs(left - (100 + PLAYER_WIDTH - 4)) <= 0.5, `左向き: ${left}`);
 });
 
 test('globalAlpha を 1.0 に戻す（後続の描画を薄くしない）', () => {

@@ -908,14 +908,20 @@ export class Player {
     _drawHoverExhaust(ctx) {
         if (!this.hovering) return;
 
-        // バックパックのノズル位置（ローカル x:2〜6, y:12〜14 の橙ノズル直下）。
-        // 中心 = backpackX + 2（置き換え前は幅 4px にランダムで散らしていた）
-        const backpackX = this.facingRight ? (this.x - 2) : (this.x + this.width - 4);
+        // ノズルの位置は _drawBody() が描く橙のノズル矩形
+        // fillRect(2, 12, 4, 2)（ローカル座標、しゃがみ中はここを呼ばない）から直接出す。
+        // _drawBody() は右向き translate(x, y)、左向き translate(x+width, y) + scale(-1, 1)
+        // なので、ワールド座標での中心 x はノズル矩形の中心 (2+4/2=4) を向きに応じて
+        // 場合分けする必要がある（右向き: x+4、左向き: x+width-4）。上端 y はノズル
+        // 矩形の下端 (12+2=14) で揃える（描画専用の値なので、敵側の
+        // drawThrusterFlame(ctx, 4, 14 - crouchOffset, ...) と同じくコードに直接書く）。
+        // 旧実装は向きで x のずれ幅が違い（-4px と +2px）、振り向くたびに炎が横へ飛んでいた。
+        const nozzleX = this.facingRight ? (this.x + 4) : (this.x + this.width - 4);
         // 残燃料で実際の推力が変わる（HOVER_THRUST → HOVER_THRUST_MIN）ので、
         // 炎の長さも同じ比に合わせる。ホバー音も playHover(fuelRatio) で同じ値を
         // 受けているため、炎・音・推力が1つの値を指すことになる
         const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
-        drawThrusterFlame(ctx, backpackX + 2, this.y + 12, {
+        drawThrusterFlame(ctx, nozzleX, this.y + 14, {
             color: COLOR_HOVER_EXHAUST,
             power: fuelRatio,
         });
