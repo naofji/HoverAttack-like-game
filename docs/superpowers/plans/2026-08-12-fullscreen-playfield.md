@@ -1,5 +1,7 @@
 # プレイフィールドの全画面表示 実装計画
 
+> **注意（2026-08-12 実装完了後に追記）**: この計画は着手前のスナップショットで、**出荷した実装とは4点ずれている**（`pointer.js` の潰れた rect の扱い、`toggleFullscreen` の引数、`M` キーの `ranking_entry` 除外、`Input.js` の `blur` / `resize` / `fullscreenchange`）。出荷内容は `docs/superpowers/specs/2026-08-12-fullscreen-playfield-design.md` が正。以下は履歴として残している。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** canvas を 4:3 維持でウィンドウいっぱいに拡大し、カーソルがフィールド外に出ても照準と射撃が効き続けるようにする。
