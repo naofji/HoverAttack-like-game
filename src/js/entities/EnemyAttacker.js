@@ -1185,8 +1185,11 @@ export class EnemyAttacker {
         // --- Hover Exhaust (Common) ---
         if (this.hovering) {
             // 炎はノズル中心に左右対称なので、scale(-1, 1) 済みのこの座標系でも
-            // 向きの場合分けなしで置ける。crouchOffset を引いて打ち消しているのは、
-            // しゃがんでもノズルがワールド上の同じ高さに留まるようにするため
+            // 向きの場合分けなしで置ける。crouchOffset を引いているのは置き換え前の
+            // 挙動をそのまま保っているだけで、正しい座標合わせではない。ノズルの
+            // スプライト自体は ctx.translate(0, crouchOffset) の中で描かれて下がるので、
+            // artillery のバースト中（isCrouching）は実際には炎が胴体から 4px 離れる。
+            // 見た目としてこれで良いかはユーザーの実機確認に委ねる（不具合ではない）
             drawThrusterFlame(ctx, 4, 14 - crouchOffset, {
                 color: cfg.exhaustColor,
                 power: attackerFlamePower(cfg.climbThrust),

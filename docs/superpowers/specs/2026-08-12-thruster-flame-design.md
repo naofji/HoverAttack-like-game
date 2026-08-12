@@ -47,7 +47,8 @@ drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random()
 
 | 引数 | 意味 |
 |---|---|
-| `nozzleX` / `nozzleY` | ノズルの**中心**座標。呼び出し側の座標系のまま渡す |
+| `nozzleX` | ノズルの**中心** x 座標。呼び出し側の座標系のまま渡す |
+| `nozzleY` | ノズルの**上端** y 座標。呼び出し側の座標系のまま渡す |
 | `color` | 外炎の色（`#rrggbb`） |
 | `power` | 0〜1。炎の長さ |
 | `flicker` | 0〜1。先端の伸び縮み。既定は `Math.random()` |
@@ -114,8 +115,12 @@ power = ATTACKER_FLAME_POWER_MIN + 0.4 * (climbThrust - ATTACKER_CLIMB_THRUST_MI
 ### 呼び出し側の変更
 
 - `Player._drawHoverExhaust()` — ループを消し、`drawThrusterFlame()` の 1 回呼び出しに置換。
-  ノズル中心はバックパックのノズル（ローカル x:2〜6, y:12〜14）の中心。向きで x を場合分けする
-  現状の計算はそのまま使う
+  ノズル位置は `_drawBody()` が描く橙のノズル矩形 `fillRect(2, 12, 4, 2)`（ローカル座標）
+  から直接出す。`_drawBody()` は右向き `translate(x, y)`、左向き `translate(x+width, y)` +
+  `scale(-1, 1)` なので、ワールド座標の中心 x は向きで場合分けが要る（右向き `x+4`、
+  左向き `x+width-4`）。上端 y はノズル矩形の下端 (`12+2=14`) に揃えて `y+14`。
+  旧実装は向きでずれ幅が違っていて（`-4px` と `+2px`）、振り向くたびに炎が横へ飛ぶ
+  不具合があったため、最終レビューで座標を引き直した
 - `EnemyAttacker.draw()` の `--- Hover Exhaust (Common) ---` ブロック — 同じく 1 回呼び出しに置換。
   色は `cfg.exhaustColor`、ノズル中心はローカル (4, 14 - crouchOffset)
 
