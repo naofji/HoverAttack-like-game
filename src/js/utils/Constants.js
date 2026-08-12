@@ -49,6 +49,26 @@ export const HOVER_FUEL_RECOVERY = 0.5;     // per frame when not hovering
 export const HOVER_FUEL_RECOVERY_BOOST = 0.75; // per frame when pressing S solo
 export const HOVER_COOLDOWN_AFTER_BURST = 20; // frames (~0.33s at 60fps) before hover activates after burst
 
+// --- スラスターの炎（描画） ---
+// 置き換え前は「1〜4px の四角を毎フレーム3個ランダムに置く」だけで、実質 5px ぶんしか
+// 見えていなかった。地味に見えた原因は小ささより「毎フレーム形が変わって芯が無い」ことに
+// あったので、台形で芯を固定し、先端だけを揺らす形にした。
+export const THRUSTER_FLAME_WIDTH = 5;       // px: ノズル直下の幅
+export const THRUSTER_FLAME_LEN_MIN = 6;     // px: power=0（燃料切れ間際）の長さ
+export const THRUSTER_FLAME_LEN_MAX = 14;    // px: power=1 の長さ。置き換え前の実質 5px の約3倍
+export const THRUSTER_FLAME_CORE_RATIO = 0.55; // 芯の長さ（外炎に対する比）
+export const THRUSTER_FLAME_CORE_WHITE = 0.7;  // 芯を白へ寄せる量（0=機体色のまま, 1=真っ白）
+export const THRUSTER_FLAME_FLICKER = 0.15;    // 先端の伸び縮み幅（±15%）。置き換え前の
+                                               // 完全ランダムは形が定まらず逆に目に入らなかった
+export const THRUSTER_FLAME_ALPHA = 0.75;      // 外炎の不透明度
+export const THRUSTER_FLAME_CORE_ALPHA = 0.9;  // 芯の不透明度。外炎より濃く出して芯を立てる
+
+// 敵アタッカーの炎の長さは型ごとの climbThrust から作る。0〜1 へ素直に正規化すると
+// heavy（0.45 = 最小）の炎がほぼ消えてしまうので、下限を 0.6 に上げて差だけ残す。
+export const ATTACKER_CLIMB_THRUST_MIN = 0.45; // heavy
+export const ATTACKER_CLIMB_THRUST_MAX = 0.75; // standard
+export const ATTACKER_FLAME_POWER_MIN = 0.6;
+
 // --- Attacker return-home & climbing ---
 export const ATTACKER_RETURN_TRIGGER_Y = 6 * TILE_SIZE;  // start returning when this far BELOW home
 export const ATTACKER_RETURN_TRIGGER_X = 20 * TILE_SIZE; // or this far horizontally from home
@@ -428,7 +448,7 @@ export const COLOR_CAVE_BG = '#1a0a00';
 export const FAR_BG_PARALLAX = 0.25;
 
 export const COLOR_CROSSHAIR = 'rgba(255, 255, 0, 0.8)';
-export const COLOR_HOVER_EXHAUST = 'rgba(0, 255, 255, 0.6)';
+export const COLOR_HOVER_EXHAUST = '#00FFFF';
 
 // Auto-Aim Unit
 export const AUTO_AIM_DURATION = 3600;         // 60秒 (60fps)
