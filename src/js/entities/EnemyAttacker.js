@@ -29,6 +29,7 @@ import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
+import { drawThrusterFlame, attackerFlamePower } from './thrusterFlame.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -1183,15 +1184,13 @@ export class EnemyAttacker {
 
         // --- Hover Exhaust (Common) ---
         if (this.hovering) {
-            for (let i = 0; i < 3; i++) {
-                const px = 2 + Math.random() * 4;
-                const py = 14 + Math.random() * 6 - crouchOffset;
-                const size = 1 + Math.random() * 3;
-                ctx.fillStyle = '#00FFFF';
-                ctx.globalAlpha = 0.3 + Math.random() * 0.4;
-                ctx.fillRect(px, py, size, size);
-            }
-            ctx.globalAlpha = 1.0;
+            // 炎はノズル中心に左右対称なので、scale(-1, 1) 済みのこの座標系でも
+            // 向きの場合分けなしで置ける。crouchOffset を引いて打ち消しているのは、
+            // しゃがんでもノズルがワールド上の同じ高さに留まるようにするため
+            drawThrusterFlame(ctx, 4, 14 - crouchOffset, {
+                color: cfg.exhaustColor,
+                power: attackerFlamePower(cfg.climbThrust),
+            });
         }
 
         ctx.restore();
