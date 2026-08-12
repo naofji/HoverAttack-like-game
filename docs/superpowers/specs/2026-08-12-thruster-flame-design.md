@@ -88,6 +88,8 @@ drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random()
 | `THRUSTER_FLAME_CORE_RATIO` | 0.55 | 芯の長さ比 |
 | `THRUSTER_FLAME_CORE_WHITE` | 0.7 | 芯を白へ寄せる量 |
 | `THRUSTER_FLAME_FLICKER` | 0.15 | 先端の伸び縮み幅 |
+| `THRUSTER_FLAME_ALPHA` | 0.75 | 外炎の不透明度 |
+| `THRUSTER_FLAME_CORE_ALPHA` | 0.9 | 芯の不透明度。外炎より濃くして芯を立てる |
 
 既存の `COLOR_HOVER_EXHAUST` は `'rgba(0, 255, 255, 0.6)'` で `lerpColor()` が解釈できない。
 **`'#00FFFF'` に変える**（薄さは `globalAlpha` で出す）。参照は `Player.js` の 1 箇所のみ。
@@ -100,13 +102,13 @@ drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random()
 受けているので、**炎・音・実際の推力が同じ 1 つの値を指す**ことになる。
 燃料切れが近いことが HUD を見ずに炎の長さで分かる。
 
-**敵** — `config.climbThrust`（0.45〜0.75）を **0.6〜1.0 に写す**。
+**敵** — `config.climbThrust`（`ATTACKER_CLIMB_THRUST_MIN` 0.45 〜 `ATTACKER_CLIMB_THRUST_MAX` 0.75）を **`ATTACKER_FLAME_POWER_MIN` 0.6 〜 1.0 に写す**。
 
 ```js
-power = 0.6 + 0.4 * (climbThrust - 0.45) / (0.75 - 0.45);
+power = ATTACKER_FLAME_POWER_MIN + 0.4 * (climbThrust - ATTACKER_CLIMB_THRUST_MIN) / (ATTACKER_CLIMB_THRUST_MAX - ATTACKER_CLIMB_THRUST_MIN);
 ```
 
-0〜1 に正規化すると heavy（0.45）の炎がほぼ消えてしまうため、下限を上げている。
+0〜1 に正規化すると heavy（`ATTACKER_CLIMB_THRUST_MIN`）の炎がほぼ消えてしまうため、下限を上げている。
 型ごとの差は残しつつ、どの型でも噴射が見える。
 
 ### 呼び出し側の変更
