@@ -33,7 +33,7 @@ function makeAttacker(typeKey, overrides = {}) {
 }
 
 /**
- * 炎の段だけを取り出す。artillery は胴体にも exhaustColor のノズル
+ * 炎の段だけを取り出す。standard は胴体にも exhaustColor のノズル
  * (2, 12, 4, 2) を描くので、色だけでは分けられない。炎の段は必ず
  * 高さ 1px なので、そこで切り分ける。
  */
