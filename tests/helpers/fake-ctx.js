@@ -42,6 +42,22 @@ export function makeFakeCtx() {
     stops: [],
     addColorStop(offset, color) { this.stops.push([offset, color]); },
   });
+  // 文字幅の実測は node には無いので、フォントサイズ×文字数の概算を返す。
+  // レイアウトが実測幅に依存する箇所（キーキャップの幅、ロゴの拡大率、モード表の
+  // 桁揃え）を通すためのもので、px 単位の正しさは求めない。等幅フォント前提の
+  // 画面なので、係数 0.6 は実測におおむね近い。
+  ctx.measureText = (text) => {
+    const px = /(\d+(?:\.\d+)?)px/.exec(ctx.font || '');
+    const size = px ? parseFloat(px[1]) : 16;
+    return { width: String(text).length * size * 0.6 };
+  };
+  // 線形グラデーションも同じ扱い（UI のパネルやキーキャップが使う）
+  ctx.createLinearGradient = (...args) => ({
+    type: 'linearGradient',
+    args,
+    stops: [],
+    addColorStop(offset, color) { this.stops.push([offset, color]); },
+  });
   return ctx;
 }
 

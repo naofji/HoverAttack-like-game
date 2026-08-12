@@ -3,6 +3,7 @@ import assert from 'node:assert';
 
 import { DEMO_CYCLE_STATES, DEMO_SCREEN_DRAWERS } from '../src/js/main.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 
 /**
  * デモループ（タイトル／遊び方／各ランキング）の画面は、draw() 側が
@@ -91,4 +92,30 @@ test('オンラインの記録が未取得でも描画は落ちない（読み�
     assert.strictEqual(drawn[0].args[3], '2026-W33');
     // FAME は空配列
     assert.deepStrictEqual(drawn[1].args[1], []);
+});
+
+/**
+ * HOW TO PLAY の 2 ページ目（CONTROLS）は、実際に使えるキーの一覧そのもの。
+ * キーを足したのに載せ忘れると、プレイヤーからは存在しない機能になる
+ * （M キーの全画面が実際にその状態だった）。
+ *
+ * パネルの高さは行数から自動で決まる（rowH * controls.length）ので、行を
+ * 足しても座標の手直しは要らない。画面からはみ出していないことだけ見ておく。
+ */
+test('HOW TO PLAY の CONTROLS に主要キーが載っている', () => {
+    const ctx = makeFakeCtx();
+    const renderer = new ScreenRenderer({ canvas: { width: 1024, height: 768 } });
+    renderer.drawHowToPlay(ctx, 1);
+
+    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    for (const key of ['A / D', 'W', 'SHIFT', 'L-CLICK', 'R-CLICK', 'F', 'S', 'R', 'M']) {
+        assert.ok(texts.includes(key), `CONTROLS に ${key} のキーキャップが無い`);
+    }
+    assert.ok(texts.includes('TOGGLE FULLSCREEN'), 'M キーの説明が無い');
+
+    // 行が増えてもパネルが画面に収まっていること
+    const ys = ctx.calls
+        .filter((c) => c.name === 'fillText' || c.name === 'fillRect')
+        .map((c) => (c.name === 'fillText' ? c.args[2] : c.args[1] + c.args[3]));
+    assert.ok(Math.max(...ys) <= 768, `画面下端(768)を超えて描いている: ${Math.max(...ys)}`);
 });
