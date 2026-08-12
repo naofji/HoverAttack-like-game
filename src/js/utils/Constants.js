@@ -58,8 +58,14 @@ export const THRUSTER_FLAME_LEN_MIN = 6;     // px: power=0（燃料切れ間際
 export const THRUSTER_FLAME_LEN_MAX = 14;    // px: power=1 の長さ。置き換え前の実質 5px の約3倍
 export const THRUSTER_FLAME_CORE_RATIO = 0.55; // 芯の長さ（外炎に対する比）
 export const THRUSTER_FLAME_CORE_WHITE = 0.7;  // 芯を白へ寄せる量（0=機体色のまま, 1=真っ白）
-export const THRUSTER_FLAME_FLICKER = 0.15;    // 先端の伸び縮み幅（±15%）。置き換え前の
-                                               // 完全ランダムは形が定まらず逆に目に入らなかった
+export const THRUSTER_FLAME_GAP = 3;           // px: ノズル下端から炎の根元までの隙間。
+                                               // 0 だと炎が機体にめり込んで見えた（実機判断）
+export const THRUSTER_FLAME_FLICKER = 0.35;    // 先端の伸び縮み幅（±35%）。置き換え前の
+                                               // 完全ランダムは形が定まらず逆に目に入らなかったので
+                                               // 一度 0.15 まで落としたが、今度は大人しすぎたので戻した
+export const THRUSTER_FLAME_SWAY = 1.5;        // px: 先端の左右の振れ幅。根元は 0 で、
+                                               // 先端へ行くほど比例して振れる。長さの伸び縮みだけだと
+                                               // 「息をしている」だけで、噴き出す勢いに見えなかった
 export const THRUSTER_FLAME_ALPHA = 0.75;      // 外炎の不透明度
 export const THRUSTER_FLAME_CORE_ALPHA = 0.9;  // 芯の不透明度。外炎より濃く出して芯を立てる
 
@@ -270,6 +276,13 @@ export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement ra
 
 // --- Enemy Attacker (Humanoid) ---
 // 生成数はマップ面積で決まるので Map.js のコンストラクタが持つ（ここには置かない）
+//
+// exhaustColor と flameColor は別物。exhaustColor は機体側の部品の色（standard の
+// ノズル矩形、artillery のアンテナ）で機体色に馴染ませてある。flameColor は噴射炎だけの色で、
+// 機体色の補色寄りに振ってある（standard 水色の機体に赤い炎、heavy 緑にオレンジ、
+// rival 赤に水色、artillery 黄にピンク）。炎を機体色にすると機体に溶けて見分けが
+// つかなかったため、実機判断で分離した。
+
 export const ENEMY_ATTACKER_TYPES = {
     standard: {
         name: 'standard',
@@ -290,6 +303,7 @@ export const ENEMY_ATTACKER_TYPES = {
         visorColor: '#FFFFFF',
         backpackColor: '#338899',
         exhaustColor: '#33DDEE',
+        flameColor: '#FF4433',   // 赤（機体は水色）
     },
     heavy: {
         name: 'heavy',
@@ -312,6 +326,7 @@ export const ENEMY_ATTACKER_TYPES = {
         visorColor: '#FFFF66',
         backpackColor: '#226622',
         exhaustColor: '#66FF66',
+        flameColor: '#FF9922',   // オレンジ（機体は緑）
     },
     rival: {
         name: 'rival',
@@ -335,6 +350,7 @@ export const ENEMY_ATTACKER_TYPES = {
         visorColor: '#FFCC00',
         backpackColor: '#882222',
         exhaustColor: '#FF6644',
+        flameColor: '#33DDFF',   // 水色（機体は赤）
     },
     artillery: {
         name: 'artillery',
@@ -357,6 +373,7 @@ export const ENEMY_ATTACKER_TYPES = {
         visorColor: '#FF0000', // Red eye
         backpackColor: '#996600',
         exhaustColor: '#FFEE44',
+        flameColor: '#FF44BB',   // ピンク（機体は黄）
     },
 };
 

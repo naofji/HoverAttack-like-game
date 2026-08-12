@@ -30,9 +30,20 @@ for (let i = 0; i < 3; i++) {
 
 - **炎そのものを強くする**。噴射痕を空中に残す案・加算合成のグローを足す案は採らない
   （前者は画面が煙で混む、後者はドット絵の質感から離れる）
-- 形は **2 層の台形＋先端のゆらぎ**。外炎（機体色）の中に白い芯を重ねる
+- 形は **2 層の台形＋先端のゆらぎ**。外炎の中に白い芯を重ねる
 - 炎の長さは **推力に連動**させる
-- 敵の炎は **型ごとの `exhaustColor`** にする
+- 敵の炎は **型ごとの色**にする
+
+### 実機確認を受けた変更（2026-08-12、初回の見た目確認のあと）
+
+1. **炎を機体から離す** — 根元がノズルに接していて機体にめり込んで見えた。`THRUSTER_FLAME_GAP`(3px) を空ける
+2. **敵の炎の色を機体色から分離** — 当初は `exhaustColor`（機体側の部品の色）をそのまま使ったが、
+   炎が機体に溶けて見分けがつかなかった。**炎専用の `flameColor` を型ごとに持たせ、機体色の
+   補色寄りに振る**（standard 水色の機体に赤／heavy 緑にオレンジ／rival 赤に水色／artillery 黄にピンク）。
+   `exhaustColor` は機体側の部品（standard のノズル矩形、artillery のアンテナ）の色として残す
+3. **揺らぎを強くする** — 大人しすぎて勢いが出ていなかった。`THRUSTER_FLAME_FLICKER` を 0.15→0.35 に上げ、
+   さらに**先端の左右の振れ**（`THRUSTER_FLAME_SWAY`）を足した。長さの伸び縮みだけだと
+   「息をしている」だけで、噴き出している感じにならなかったため
 
 ## 設計
 
@@ -42,22 +53,27 @@ for (let i = 0; i < 3; i++) {
 先に 1 本にまとめてから太らせる。`smokeSprites.js` と同じ立ち位置（entities/ 直下の描画ヘルパ）。
 
 ```js
-drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random() });
+drawThrusterFlame(ctx, nozzleX, nozzleY,
+                  { color, power, flicker = Math.random(), sway = Math.random() });
 ```
 
 | 引数 | 意味 |
 |---|---|
 | `nozzleX` | ノズルの**中心** x 座標。呼び出し側の座標系のまま渡す |
-| `nozzleY` | ノズルの**上端** y 座標。呼び出し側の座標系のまま渡す |
+| `nozzleY` | ノズルの**下端** y 座標。炎の根元はここから `GAP` ぶん下 |
 | `color` | 外炎の色（`#rrggbb`） |
 | `power` | 0〜1。炎の長さ |
 | `flicker` | 0〜1。先端の伸び縮み。既定は `Math.random()` |
+| `sway` | 0〜1。先端の左右の振れ。0.5 で振れなし。既定は `Math.random()` |
 
-炎はノズル中心に左右対称なので、自機のワールド座標でも、敵の `scale(-1, 1)` 済みの
-ローカル座標でも、そのまま呼べる（呼び出し側で向きを場合分けしなくていい）。
+炎はノズル中心に左右対称なので（`sway` を中央に固定したとき）、自機のワールド座標でも、
+敵の `scale(-1, 1)` 済みのローカル座標でも、そのまま呼べる（呼び出し側で向きを場合分け
+しなくていい）。`sway` は根元を動かさず先端だけを寄せるので、向きを反転しても
+「ノズルから生えている」関係は崩れない。
 
-`flicker` を引数にしたのは**テストのため**。既定値を `Math.random()` にしてあるので
+`flicker` / `sway` を引数にしたのは**テストのため**。既定値を `Math.random()` にしてあるので
 実装側は何も渡さず、テストだけが固定値を渡して幾何を決定的に検証できる。
+**乱数に依存する不等式のテストを書かないこと**（一度それで約4%の確率で落ちるテストを作った）。
 
 ### 形
 
@@ -88,7 +104,9 @@ drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random()
 | `THRUSTER_FLAME_LEN_MAX` | 14 | `power = 1` のときの長さ（現状の実質 5px の約 3 倍） |
 | `THRUSTER_FLAME_CORE_RATIO` | 0.55 | 芯の長さ比 |
 | `THRUSTER_FLAME_CORE_WHITE` | 0.7 | 芯を白へ寄せる量 |
-| `THRUSTER_FLAME_FLICKER` | 0.15 | 先端の伸び縮み幅 |
+| `THRUSTER_FLAME_GAP` | 3 | ノズル下端から炎の根元までの隙間 |
+| `THRUSTER_FLAME_FLICKER` | 0.35 | 先端の伸び縮み幅 |
+| `THRUSTER_FLAME_SWAY` | 1.5 | 先端の左右の振れ幅（px） |
 | `THRUSTER_FLAME_ALPHA` | 0.75 | 外炎の不透明度 |
 | `THRUSTER_FLAME_CORE_ALPHA` | 0.9 | 芯の不透明度。外炎より濃くして芯を立てる |
 
@@ -147,8 +165,11 @@ CLAUDE.md の方針どおり、ソース文字列の grep はしない（実際�
 | 燃料が減ったときに炎が寂しい | `THRUSTER_FLAME_LEN_MIN` |
 | 炎が太すぎる／細すぎる | `THRUSTER_FLAME_WIDTH` |
 | 芯の白さ | `THRUSTER_FLAME_CORE_WHITE` / `THRUSTER_FLAME_CORE_RATIO` |
-| 先端の揺れがうるさい／足りない | `THRUSTER_FLAME_FLICKER` |
-| 敵 heavy の炎が弱い | `power` の下限 0.6 |
+| 先端の伸び縮みがうるさい／足りない | `THRUSTER_FLAME_FLICKER` |
+| 先端の左右の揺れがうるさい／足りない | `THRUSTER_FLAME_SWAY` |
+| 炎が機体に近すぎる／離れすぎ | `THRUSTER_FLAME_GAP` |
+| 敵の炎の色 | `ENEMY_ATTACKER_TYPES[型].flameColor` |
+| 敵 heavy の炎が弱い | `ATTACKER_FLAME_POWER_MIN` |
 
 ## やらないこと
 

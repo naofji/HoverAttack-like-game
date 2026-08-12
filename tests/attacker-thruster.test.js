@@ -33,21 +33,34 @@ function makeAttacker(typeKey, overrides = {}) {
 }
 
 /**
- * 炎の段だけを取り出す。standard は胴体にも exhaustColor のノズル
- * (2, 12, 4, 2) を描くので、色だけでは分けられない。炎の段は必ず
- * 高さ 1px なので、そこで切り分ける。
+ * 炎の段だけを取り出す。炎の段は必ず高さ 1px なので、そこで切り分ける
+ * （機体側の部品と色が衝突しても混ざらないようにするため。実際 standard は
+ * 胴体に exhaustColor のノズル (2, 12, 4, 2) を描く）。
  */
 function flameRects(typeKey, overrides = {}) {
   const ctx = makeFakeCtx();
   makeAttacker(typeKey, overrides).draw(ctx);
-  const color = ENEMY_ATTACKER_TYPES[typeKey].exhaustColor;
+  const color = ENEMY_ATTACKER_TYPES[typeKey].flameColor;
   return extractFillRectsWithColor(ctx.calls).filter((r) => r.color === color && r.h === 1);
 }
 
-test('4型それぞれの炎が型ごとの exhaustColor で描かれる', () => {
+test('4型それぞれの炎が型ごとの flameColor で描かれる', () => {
   for (const typeKey of ['standard', 'heavy', 'rival', 'artillery']) {
     const rects = flameRects(typeKey);
-    assert.ok(rects.length > 0, `${typeKey} の炎が exhaustColor で描かれていない`);
+    assert.ok(rects.length > 0, `${typeKey} の炎が flameColor で描かれていない`);
+  }
+});
+
+// 機体に溶けて見えたので炎の色を機体色から離した。うっかり cfg.exhaustColor へ
+// 戻すと（元の実装がそうだった）機体側の部品と同じ色に戻ってしまう。
+test('炎が機体側の部品の色（exhaustColor）で描かれていない', () => {
+  for (const typeKey of ['standard', 'heavy', 'rival', 'artillery']) {
+    const ctx = makeFakeCtx();
+    makeAttacker(typeKey).draw(ctx);
+    const exhaust = ENEMY_ATTACKER_TYPES[typeKey].exhaustColor;
+    const asFlame = extractFillRectsWithColor(ctx.calls)
+      .filter((r) => r.color === exhaust && r.h === 1);
+    assert.equal(asFlame.length, 0, `${typeKey} の炎が exhaustColor のまま`);
   }
 });
 
@@ -85,11 +98,13 @@ test('power の差は炎の実際の長さにも反映される（flicker を固
   const bottom = (rects) => Math.max(...rects.map((r) => r.y + r.h));
   const drawFixed = (typeKey) => {
     const ctx = makeFakeCtx();
-    const color = ENEMY_ATTACKER_TYPES[typeKey].exhaustColor;
+    const color = ENEMY_ATTACKER_TYPES[typeKey].flameColor;
     drawThrusterFlame(ctx, 4, 14, {
       color,
       power: attackerFlamePower(ENEMY_ATTACKER_TYPES[typeKey].climbThrust),
-      flicker: 0.5, // 揺らぎをゼロにして幾何だけを比較する
+      // 伸び縮みも横揺れもゼロに固定して幾何だけを比較する
+      flicker: 0.5,
+      sway: 0.5,
     });
     return extractFillRectsWithColor(ctx.calls).filter((r) => r.color === color && r.h === 1);
   };

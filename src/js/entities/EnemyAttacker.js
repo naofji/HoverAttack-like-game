@@ -1191,7 +1191,9 @@ export class EnemyAttacker {
             // artillery のバースト中（isCrouching）は実際には炎が胴体から 4px 離れる。
             // 見た目としてこれで良いかはユーザーの実機確認に委ねる（不具合ではない）
             drawThrusterFlame(ctx, 4, 14 - crouchOffset, {
-                color: cfg.exhaustColor,
+                // 機体側の部品の色（exhaustColor）ではなく炎専用の flameColor。
+                // 機体色に馴染む色だと炎が機体に溶けて見分けがつかなかった
+                color: cfg.flameColor,
                 power: attackerFlamePower(cfg.climbThrust),
             });
         }

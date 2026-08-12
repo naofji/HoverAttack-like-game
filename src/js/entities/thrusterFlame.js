@@ -16,6 +16,7 @@ import {
     THRUSTER_FLAME_WIDTH, THRUSTER_FLAME_LEN_MIN, THRUSTER_FLAME_LEN_MAX,
     THRUSTER_FLAME_CORE_RATIO, THRUSTER_FLAME_CORE_WHITE, THRUSTER_FLAME_FLICKER,
     THRUSTER_FLAME_ALPHA, THRUSTER_FLAME_CORE_ALPHA,
+    THRUSTER_FLAME_GAP, THRUSTER_FLAME_SWAY,
     ATTACKER_CLIMB_THRUST_MIN, ATTACKER_CLIMB_THRUST_MAX, ATTACKER_FLAME_POWER_MIN,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
@@ -29,43 +30,52 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  * @param {number} topY 根元の y
  * @param {number} topW 根元の幅
  * @param {number} length 段数（= 炎の長さ px）
+ * @param {number} swayPx 先端での横のずれ px。根元は 0 で、先端へ比例して寄る
  */
-function _drawTaper(ctx, cx, topY, topW, length) {
+function _drawTaper(ctx, cx, topY, topW, length, swayPx) {
     for (let i = 0; i < length; i++) {
         const t = length > 1 ? i / (length - 1) : 1; // 0=根元, 1=先端
         const w = Math.max(1, Math.round(topW - (topW - 1) * t));
-        ctx.fillRect(Math.round(cx - w / 2), topY + i, w, 1);
+        // 根元を動かさないのが肝。根元ごと振ると炎がノズルから外れて見える
+        const x = cx + swayPx * t;
+        ctx.fillRect(Math.round(x - w / 2), topY + i, w, 1);
     }
 }
 
 /**
- * ノズルから下へ伸びる炎を1つ描く。外炎（機体色）の中に白寄りの芯を重ねる。
+ * ノズルから下へ伸びる炎を1つ描く。外炎（噴射色）の中に白寄りの芯を重ねる。
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} nozzleX ノズルの中心 x
- * @param {number} nozzleY ノズルの上端 y
- * @param {{color: string, power: number, flicker?: number}} opts
+ * @param {number} nozzleY ノズルの下端 y（炎の根元はここから GAP ぶん下）
+ * @param {{color: string, power: number, flicker?: number, sway?: number}} opts
  *   color   外炎の色（#rrggbb）
  *   power   0〜1。1 で LEN_MAX、0 で LEN_MIN
  *   flicker 0〜1。先端の伸び縮み。既定は Math.random()（テストは固定値を渡す）
+ *   sway    0〜1。先端の左右の振れ。0.5 で振れなし。既定は Math.random()
  */
-export function drawThrusterFlame(ctx, nozzleX, nozzleY, { color, power, flicker = Math.random() }) {
+export function drawThrusterFlame(ctx, nozzleX, nozzleY,
+                                  { color, power, flicker = Math.random(), sway = Math.random() }) {
     const p = clamp01(power);
     const base = THRUSTER_FLAME_LEN_MIN + (THRUSTER_FLAME_LEN_MAX - THRUSTER_FLAME_LEN_MIN) * p;
-    // flicker 0〜1 を -1〜+1 に写して ±FLICKER ぶん伸び縮みさせる
+    // flicker / sway とも 0〜1 を -1〜+1 に写して振れ幅を掛ける
     const swing = 1 + (clamp01(flicker) * 2 - 1) * THRUSTER_FLAME_FLICKER;
+    const swayPx = (clamp01(sway) * 2 - 1) * THRUSTER_FLAME_SWAY;
     const outerLen = Math.max(1, Math.round(base * swing));
     const coreLen = Math.max(1, Math.round(outerLen * THRUSTER_FLAME_CORE_RATIO));
 
     const cx = Math.round(nozzleX);
-    const top = Math.round(nozzleY);
+    // 機体にめり込んで見えないよう、ノズル下端から GAP ぶん空けて根元を置く
+    const top = Math.round(nozzleY) + THRUSTER_FLAME_GAP;
 
     ctx.fillStyle = color;
     ctx.globalAlpha = THRUSTER_FLAME_ALPHA;
-    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH, outerLen);
+    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH, outerLen, swayPx);
 
+    // 芯の振れは長さの比で割り戻す。_drawTaper の t は「その炎自身の先端まで」の比なので、
+    // 同じ swayPx を渡すと短い芯のほうが急に傾き、途中で外炎からはみ出す
     ctx.fillStyle = lerpColor(color, '#FFFFFF', THRUSTER_FLAME_CORE_WHITE);
     ctx.globalAlpha = THRUSTER_FLAME_CORE_ALPHA;
-    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH - 2, coreLen);
+    _drawTaper(ctx, cx, top, THRUSTER_FLAME_WIDTH - 2, coreLen, swayPx * (coreLen / outerLen));
 
     ctx.globalAlpha = 1.0;
 }

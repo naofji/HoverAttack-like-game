@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { makeFakeCtx, extractFillRects } from './helpers/fake-ctx.js';
-import { HOVER_MAX_FUEL, PLAYER_WIDTH } from '../src/js/utils/Constants.js';
+import { HOVER_MAX_FUEL, PLAYER_WIDTH, THRUSTER_FLAME_GAP } from '../src/js/utils/Constants.js';
 
 /** コンストラクタを通さずに _drawHoverExhaust() だけ呼べる最小インスタンス。 */
 function makePlayer(overrides = {}) {
@@ -15,9 +15,20 @@ function makePlayer(overrides = {}) {
   return Object.assign(p, overrides);
 }
 
+/**
+ * _drawHoverExhaust() は drawThrusterFlame() に flicker / sway を渡さないので、
+ * 描画は Math.random() に依存する。長さを比較するテストが確率で落ちないよう、
+ * 揺らぎの中央値（0.5 = 伸び縮みも横揺れもゼロ）に固定して描く。
+ */
 function drawExhaust(overrides) {
   const ctx = makeFakeCtx();
-  makePlayer(overrides)._drawHoverExhaust(ctx);
+  const realRandom = Math.random;
+  Math.random = () => 0.5;
+  try {
+    makePlayer(overrides)._drawHoverExhaust(ctx);
+  } finally {
+    Math.random = realRandom;
+  }
   return extractFillRects(ctx.calls);
 }
 
@@ -35,9 +46,9 @@ test('燃料が多いほど炎が長い', () => {
 test('炎はノズル（バックパック直下）から下へ伸びる', () => {
   const rects = drawExhaust({});
   const top = Math.min(...rects.map((r) => r.y));
-  // _drawBody() のノズル矩形 fillRect(2, 12, 4, 2) の下端 (12+2=14) が根元。
-  // this.y(50) + 14 = 64
-  assert.equal(top, 64, 'this.y(50) + 14 が根元');
+  // _drawBody() のノズル矩形 fillRect(2, 12, 4, 2) の下端 (12+2=14) にノズルを合わせ、
+  // そこから THRUSTER_FLAME_GAP ぶん離した位置が炎の根元（機体にめり込ませないため）
+  assert.equal(top, 50 + 14 + THRUSTER_FLAME_GAP, 'this.y + 14 + GAP が根元');
   assert.ok(Math.max(...rects.map((r) => r.y + r.h)) > top, '下へ伸びていない');
 });
 
