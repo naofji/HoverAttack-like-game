@@ -91,8 +91,8 @@
 音量 HUD（`volumeHudTimer` で数フレーム出る表示）も全体音量を映すようにする。
 `ranking_entry` を除外する現行の扱いはそのまま（`-` は名前に使える文字なので）。
 
-**刻みは役割で分ける。** `-`/`+` は 10%（`BGM_VOLUME_STEP` を流用。素早く粗く下げる用）、
-設定画面は 5%（`SETTINGS_VOLUME_STEP`。数字を見ながら合わせる用）。
+**刻みは役割で分ける。** `-`/`+` は 10%（`VOLUME_STEP_COARSE`。素早く粗く下げる用）、
+設定画面は 5%（`VOLUME_STEP_FINE`。数字を見ながら合わせる用）。
 `Input.isCharPressed()` は押した瞬間しか拾わず**押しっぱなしで連射しない**ので、
 `-`/`+` を 5% にすると最大から最小まで 20 回押すことになる。それを避けるための使い分け。
 
@@ -142,9 +142,12 @@ stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 - **既存の `hoverAttack.bgmVolume` からの移行**: 新キーが無く旧キーがあれば、その値を
   BGM 音量の初期値として取り込む。旧キーは消さない（書き戻しもしない）ので、
   この変更を戻しても以前の音量が残る
-- `utils/bgmVolume.js` の `clampVolume` / `stepVolume` / `volumePercent` は再利用する。
-  刻みは音量が 5%（現行の `BGM_VOLUME_STEP` は 0.1 = 10%。設定画面では細かく合わせたいので
-  `SETTINGS_VOLUME_STEP = 0.05` を新設する）
+- `utils/bgmVolume.js` の `clampVolume` / `stepVolume` / `volumePercent` は再利用する
+  （`stepVolume` は刻みを引数で受けるようにする。今は `BGM_VOLUME_STEP` を直接読んでいる）
+- **定数名を実態に合わせる**: `BGM_VOLUME_STEP`(0.1) は付け替え後「全体音量を `-`/`+` で動かす刻み」に
+  なり、名前が指すものとずれる。`VOLUME_STEP_COARSE = 0.1`（`-`/`+` 用）と
+  `VOLUME_STEP_FINE = 0.05`（設定画面用）に改名する。`BGM_VOLUME_DEFAULT` /
+  `BGM_VOLUME_STORAGE_KEY` は BGM のままなので触らない
 
 ### 項目を足しやすくする
 
@@ -221,8 +224,8 @@ CLAUDE.md の方針どおり、ソース文字列を grep するテストは書�
 | `P` でポーズが開く／`Escape` は全画面を挟む挙動になるか | — |
 | ポーズ中に BGM が続き、ホバー音が止まるか | — |
 | ポーズしてもミッションタイムが増えていないか | — |
-| 設定画面の音量の刻みが細かすぎ／粗すぎ | `SETTINGS_VOLUME_STEP`（5%） |
-| `-`/`+` の刻みが細かすぎ／粗すぎ | `BGM_VOLUME_STEP`（10%） |
+| 設定画面の音量の刻みが細かすぎ／粗すぎ | `VOLUME_STEP_FINE`（5%） |
+| `-`/`+` の刻みが細かすぎ／粗すぎ | `VOLUME_STEP_COARSE`（10%） |
 | `-`/`+` で全体音量が動き、HUD に出るか | — |
 | SE 音量 100 が今までと同じ大きさか | — |
 | 全体音量 100 が今までと同じ大きさか（掛け算で目減りしていないか） | — |
