@@ -46,9 +46,20 @@ test('解除中の照準は通常色に戻る', () => {
   assert.ok(strokes.includes(COLOR_CROSSHAIR), '通常色になっていない');
 });
 
-// 不変条件（解除中なら必ず残り時間 > 0）が崩れても、表示だけは破綻させない。
+// Auto Aim をそもそも持っていない（拾っていない）ときの表示。
 test('Auto Aim を持っていなければ何のラベルも出ない', () => {
   const { texts } = draw({ autoAimTimer: 0 });
+  assert.equal(texts.includes('AUTO'), false);
+  assert.equal(texts.includes('AUTO OFF'), false);
+});
+
+// 不変条件（解除中なら必ず残り時間 > 0）が崩れても、表示だけは破綻させない。
+// Crosshair.js の autoAimPaused は `player.autoAimPaused && player.autoAimTimer > 0`
+// の両方を見ており、後半の `autoAimTimer > 0` はこの不変条件が別の場所で壊れても
+// 表示側だけは巻き込まれないための防御。ここでは意図的に不変条件を破った
+// 入力（timer 0 なのに paused true）を渡し、その防御が実際に効いていることを確かめる。
+test('不変条件が崩れて残り時間 0 なのに解除中フラグが立っていても、AUTO も AUTO OFF も出ない', () => {
+  const { texts } = draw({ autoAimTimer: 0, autoAimPaused: true });
   assert.equal(texts.includes('AUTO'), false);
   assert.equal(texts.includes('AUTO OFF'), false);
 });

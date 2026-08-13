@@ -34,7 +34,9 @@ export function stepHoldKey(state, down, deltaMs, thresholdMs) {
         return { state: initialHoldState(), tap: prev.heldMs > 0 && !prev.fired, hold: false };
     }
 
-    // タブを切り替えて戻ると deltaMs が跳ねる。負の値だけ弾いておけば十分で、
+    // ここは utils の純ロジックで、呼び出し側が deltaMs をクランプしてくる保証はない
+    // （現状の main.js の loop() は 50ms で上限を切っているが、それはこの関数の
+    // 契約ではない）。自分の入力は自分で守る。負の値だけ弾いておけば十分で、
     // 上限を設けると「長押ししたのに反応しない」ほうの事故になる
     const heldMs = prev.heldMs + Math.max(0, deltaMs);
     // 発火は跨いだ1フレームだけ。毎フレーム発火させると、しきい値ごとに
