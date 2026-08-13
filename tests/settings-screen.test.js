@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
-import { SETTINGS_ITEMS, visibleSettingsItems } from '../src/js/ui/settingsItems.js';
+import { SETTINGS_ITEMS, visibleSettingsItems, settingValueText } from '../src/js/ui/settingsItems.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
+import { UI } from '../src/js/ui/theme.js';
 
 function draw(state = {}) {
   const ctx = makeFakeCtx();
@@ -42,10 +43,40 @@ test('音量はパーセントで出る', () => {
 });
 
 test('ON/OFF が文字で出る', () => {
-  const on = draw({ settings: { ...DEFAULT_SETTINGS, mgAutoReload: true } });
-  const off = draw({ settings: { ...DEFAULT_SETTINGS, mgAutoReload: false } });
+  const on = draw({ settings: { ...DEFAULT_SETTINGS, autoFullscreen: true } });
+  const off = draw({ settings: { ...DEFAULT_SETTINGS, autoFullscreen: false } });
   assert.ok(on.texts.includes('ON'));
   assert.ok(off.texts.includes('OFF'));
+});
+
+test('3択は選択肢のラベルが出る', () => {
+  const item = SETTINGS_ITEMS.find((i) => i.key === 'mgAutoReloadMode');
+  for (const mode of ['off', 'onSwitch', 'always']) {
+    const { texts } = draw({ settings: { ...DEFAULT_SETTINGS, mgAutoReloadMode: mode } });
+    assert.ok(texts.includes(item.labels[mode]), `${mode} のラベルが描かれていない`);
+  }
+});
+
+test('整数は単位付きで出る', () => {
+  const { texts } = draw({ settings: { ...DEFAULT_SETTINGS, mgReloadThreshold: 5 } });
+  assert.ok(texts.includes('5 ROUNDS'), `5 ROUNDS が無い: ${texts.join(' / ')}`);
+});
+
+test('単位の無い整数は数字だけで出る', () => {
+  const { texts } = draw({ settings: { ...DEFAULT_SETTINGS, autoAimRelease: 12 } });
+  assert.ok(texts.includes('12'), `12 が無い: ${texts.join(' / ')}`);
+});
+
+// 効いていない項目は淡色にする。行を消すと下の項目の位置が動いてカーソルが飛ぶので、
+// 消さずに色だけで伝える。
+test('MG AUTO-RELOAD が OFF だとしきい値の行が淡色になる', () => {
+  const styles = (s) => draw({ settings: s, index: 0 }).ctx.calls
+    .filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  const off = styles({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'off' });
+  const on = styles({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'always' });
+  assert.notDeepEqual(off, on, 'OFF でも描き方が変わっていない');
+  assert.ok(off.includes(UI.faint), `淡色 ${UI.faint} が使われていない`);
+  assert.equal(on.includes(UI.faint), false, 'ALWAYS なのに淡色が出ている');
 });
 
 // 選択位置が分からないと操作できない。色でも位置でもいいので、必ず差が出ること。
@@ -95,4 +126,16 @@ test('表の設定キーはすべて DEFAULT_SETTINGS に存在する', () => {
     if (item.type === 'action') continue;
     assert.ok(Object.hasOwn(DEFAULT_SETTINGS, item.key), `${item.key} が DEFAULT_SETTINGS に無い`);
   }
+});
+
+test('settingValueText: 型ごとの文字列', () => {
+  const byKey = (k) => SETTINGS_ITEMS.find((i) => i.key === k);
+  const s = { ...DEFAULT_SETTINGS, masterVolume: 0.45, autoFullscreen: false,
+    mgAutoReloadMode: 'onSwitch', mgReloadThreshold: 5, autoAimRelease: 12 };
+  assert.equal(settingValueText(byKey('masterVolume'), s), '45%');
+  assert.equal(settingValueText(byKey('autoFullscreen'), s), 'OFF');
+  assert.equal(settingValueText(byKey('mgAutoReloadMode'), s), 'ON WEAPON SWITCH');
+  assert.equal(settingValueText(byKey('mgReloadThreshold'), s), '5 ROUNDS');
+  assert.equal(settingValueText(byKey('autoAimRelease'), s), '12');
+  assert.equal(settingValueText(byKey('fullscreen'), s), null, 'action は値を持たない');
 });

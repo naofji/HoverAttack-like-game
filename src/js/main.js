@@ -24,7 +24,7 @@ import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     STAGE_PALETTES, DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
-    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD,
+    AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD_DEFAULT,
     AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
     AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
     MISSILE_SPEED, PLAYER_MG_SPEED,
@@ -1002,7 +1002,7 @@ export const Game = {
         player.autoAimTimer--;
 
         // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）
-        if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD) {
+        if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD_DEFAULT) {
             this.autoAimLockedEnemy = null;
             this.aimLead.reset();
             return;

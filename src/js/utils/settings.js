@@ -12,6 +12,8 @@
 import {
     SETTINGS_STORAGE_KEY, BGM_VOLUME_STORAGE_KEY,
     BGM_VOLUME_DEFAULT, VOLUME_STEP_FINE,
+    MG_RELOAD_THRESHOLD_DEFAULT, MG_RELOAD_THRESHOLD_MIN, MG_RELOAD_THRESHOLD_MAX,
+    AUTO_AIM_CANCEL_THRESHOLD_DEFAULT, AUTO_AIM_RELEASE_MIN, AUTO_AIM_RELEASE_MAX,
 } from './Constants.js';
 import { clampVolume } from './bgmVolume.js';
 
@@ -20,23 +22,46 @@ import { clampVolume } from './bgmVolume.js';
  * この変更が何も変わらないようにするため。
  * - masterVolume / seVolume 1.0 … 今は音量を絞る手段が無い
  * - autoSwitchMissile false  … 今はドッキングで持ち替えない
- * - mgAutoReload true        … 今は残弾50%以下＋引き金を離すと自動装填する
+ * - mgAutoReloadMode always  … 今は残弾がしきい値以下＋引き金を離すと自動装填する
+ * - mgReloadThreshold 8      … 従来の「弾倉 16 発の 50%」と同じ
+ * - autoAimRelease 4         … 従来の AUTO_AIM_CANCEL_THRESHOLD と同じ
+ * - autoFullscreen true      … 今もゲーム開始時に全画面へ入る
  */
 export const DEFAULT_SETTINGS = Object.freeze({
     masterVolume: 1.0,
     bgmVolume: BGM_VOLUME_DEFAULT,
     seVolume: 1.0,
     autoSwitchMissile: false,
-    mgAutoReload: true,
+    mgAutoReloadMode: 'always',
+    mgReloadThreshold: MG_RELOAD_THRESHOLD_DEFAULT,
+    autoAimRelease: AUTO_AIM_CANCEL_THRESHOLD_DEFAULT,
+    autoFullscreen: true,
 });
 
-/** 値の型。読み込みのときの検証と、A/D の扱いの両方がこれを見る。 */
+/**
+ * オートリロードの発動条件。
+ * - off      … 弾が尽きたときだけ装填する
+ * - onSwitch … F でミサイルからマシンガンに持ち替えたときだけ装填する
+ * - always   … 残弾がしきい値以下で引き金を離すと装填する（従来の ON）
+ *
+ * 並びは「装填が少ない順」。A/D で左右に動かしたとき、右へ行くほど手厚くなる。
+ */
+export const MG_AUTO_RELOAD_MODES = Object.freeze(['off', 'onSwitch', 'always']);
+
+/**
+ * 値の型。読み込みの検証と A/D の扱いの両方がこれを見る。
+ * `choice` は選択肢の並びを、`int` は上下限を持つので、文字列ではなく
+ * 記述子オブジェクトにしてある（設定を足すのは行を1つ足すだけで済む）。
+ */
 const KINDS = {
-    masterVolume: 'volume',
-    bgmVolume: 'volume',
-    seVolume: 'volume',
-    autoSwitchMissile: 'flag',
-    mgAutoReload: 'flag',
+    masterVolume:      { kind: 'volume' },
+    bgmVolume:         { kind: 'volume' },
+    seVolume:          { kind: 'volume' },
+    autoSwitchMissile: { kind: 'flag' },
+    autoFullscreen:    { kind: 'flag' },
+    mgAutoReloadMode:  { kind: 'choice', values: MG_AUTO_RELOAD_MODES },
+    mgReloadThreshold: { kind: 'int', min: MG_RELOAD_THRESHOLD_MIN, max: MG_RELOAD_THRESHOLD_MAX },
+    autoAimRelease:    { kind: 'int', min: AUTO_AIM_RELEASE_MIN, max: AUTO_AIM_RELEASE_MAX },
 };
 
 /** 掛け算の丸め。0.3*0.3 が 0.09000000000000001 になるのを避ける。 */
@@ -46,14 +71,24 @@ function round3(v) {
 
 /** 1項目ぶんの検証。壊れていれば既定値を返す（例外は投げない）。 */
 function coerce(key, value) {
-    const kind = KINDS[key];
-    if (kind === 'volume') {
-        return Number.isFinite(value) ? clampVolume(value) : DEFAULT_SETTINGS[key];
+    const spec = KINDS[key];
+    if (!spec) return DEFAULT_SETTINGS[key];
+    switch (spec.kind) {
+        case 'volume':
+            return Number.isFinite(value) ? clampVolume(value) : DEFAULT_SETTINGS[key];
+        case 'flag':
+            return typeof value === 'boolean' ? value : DEFAULT_SETTINGS[key];
+        case 'choice':
+            return spec.values.includes(value) ? value : DEFAULT_SETTINGS[key];
+        case 'int':
+            // 範囲外はクランプせず既定値に落とす。保存値が範囲外になるのは
+            // 「範囲の定義を変えた」か「壊れた」かのどちらかで、近い値を推測するより
+            // 既定へ戻すほうが安全。音量は連続量なのでクランプが自然、という違い
+            if (!Number.isInteger(value)) return DEFAULT_SETTINGS[key];
+            return (value < spec.min || value > spec.max) ? DEFAULT_SETTINGS[key] : value;
+        default:
+            return DEFAULT_SETTINGS[key];
     }
-    if (kind === 'flag') {
-        return typeof value === 'boolean' ? value : DEFAULT_SETTINGS[key];
-    }
-    return DEFAULT_SETTINGS[key];
 }
 
 /**
@@ -92,6 +127,13 @@ export function loadSettings(storage = globalThis.localStorage) {
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
         if (Object.hasOwn(parsed, key)) out[key] = coerce(key, parsed[key]);
     }
+
+    // 旧 mgAutoReload（真偽値）からの移行。既に設定を触った人の選択を捨てないため。
+    // 消す処理は要らない — saveSettings は DEFAULT_SETTINGS のキーだけ書き出すので、
+    // 次に保存した時点で自然に消える
+    if (!Object.hasOwn(parsed, 'mgAutoReloadMode') && typeof parsed.mgAutoReload === 'boolean') {
+        out.mgAutoReloadMode = parsed.mgAutoReload ? 'always' : 'off';
+    }
     return out;
 }
 
@@ -129,19 +171,35 @@ export function effectiveVolumes(settings) {
 /**
  * 1項目を1段動かした設定を返す（元は書き換えない）。
  *
- * ON/OFF は「反転」ではなく**向きで決める**（A で OFF、D で ON）。反転にすると
- * 連打したときにどちらになるか画面を見ないと分からない。
+ * ON/OFF も3択も「反転」ではなく**向きで決める**（A で左、D で右）。反転や循環に
+ * すると、連打したときにどこへ着くか画面を見ないと分からない。
  * @param {object} settings
  * @param {string} key
  * @param {number} direction +1 / -1
- * @param {number} [step] 音量の刻み。既定は設定画面用の細かいほう
+ * @param {number} [step] 音量の刻み。既定は設定画面用の細かいほう。volume 以外では使わない
  */
 export function stepSetting(settings, key, direction, step = VOLUME_STEP_FINE) {
-    const kind = KINDS[key];
-    if (!kind) return settings;
-    if (kind === 'volume') {
-        const next = clampVolume(clampVolume(settings[key]) + Math.sign(direction) * step);
-        return { ...settings, [key]: next };
+    const spec = KINDS[key];
+    if (!spec) return settings;
+    const dir = Math.sign(direction);
+    switch (spec.kind) {
+        case 'volume': {
+            const next = clampVolume(clampVolume(settings[key]) + dir * step);
+            return { ...settings, [key]: next };
+        }
+        case 'flag':
+            return { ...settings, [key]: dir > 0 };
+        case 'choice': {
+            // 起点に coerce を通すのは、壊れた値から始めても動けるようにするため
+            const cur = spec.values.indexOf(coerce(key, settings[key]));
+            const next = Math.min(spec.values.length - 1, Math.max(0, cur + dir));
+            return { ...settings, [key]: spec.values[next] };
+        }
+        case 'int': {
+            const cur = coerce(key, settings[key]);
+            return { ...settings, [key]: Math.min(spec.max, Math.max(spec.min, cur + dir)) };
+        }
+        default:
+            return settings;
     }
-    return { ...settings, [key]: direction > 0 };
 }

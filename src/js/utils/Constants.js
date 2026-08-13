@@ -175,6 +175,14 @@ export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
 export const PLAYER_MG_RELOAD_THRESHOLD = 0.5; // Reload only when ammo <= 50% of the magazine
 export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 degrees)
 
+// オートリロードが発動する残弾（発）。既定 8 は従来の PLAYER_MG_RELOAD_THRESHOLD 0.5
+// ×弾倉 16 発と同じ値で、設定を触らない人の挙動を変えないため。
+// 両端を落として 1〜15 にしてあるのは、0 が「空になるまで装填しない」＝モード OFF と
+// 完全に重複し、16 が「満タンでも常に装填」で意味を持たないため。
+export const MG_RELOAD_THRESHOLD_DEFAULT = 8;
+export const MG_RELOAD_THRESHOLD_MIN = 1;
+export const MG_RELOAD_THRESHOLD_MAX = 15;
+
 // --- Carrier ---
 export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
@@ -500,7 +508,11 @@ export const AUTO_AIM_SNAP_RADIUS = 120;      // スナップ判定半径 (world
 // 小さくすれば逆に緩くなる）。値はあえてそのままにしてある — 実機で感触を
 // 見てから決める、という判断（低リスクな数値調整を後回しにしただけで、
 // スケール補正を入れていないのは意図的）。
-export const AUTO_AIM_CANCEL_THRESHOLD = 4;
+export const AUTO_AIM_CANCEL_THRESHOLD_DEFAULT = 4;
+// 設定で動かせる幅。1 は「わずかでも動かせば外れる」、20 は「振り回さないと外れない」。
+// 上限を 20 で止めているのは、これ以上は事実上「外れない」と変わらないため。
+export const AUTO_AIM_RELEASE_MIN = 1;
+export const AUTO_AIM_RELEASE_MAX = 20;
 
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.

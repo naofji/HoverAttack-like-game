@@ -159,8 +159,9 @@ export class Player {
     _updateMGReload(input) {
         if (this.currentWeapon !== 'mg' || this.mgReloadTimer > 0) return;
         const fireHeld = input.mouse.left || input.isKeyDown('Space');
-        // 設定がまだ無い経路（テストの最小インスタンスなど）では現行どおり自動装填する
-        const autoReload = this.game?.settings?.mgAutoReload ?? true;
+        // 設定がまだ無い経路（テストの最小インスタンスなど）では現行どおり自動装填する。
+        // onSwitch はまだ「切り替えたか」を知らないので always と同じ扱い（Task 2 で分ける）
+        const autoReload = (this.game?.settings?.mgAutoReloadMode ?? 'always') !== 'off';
         if (shouldStartMGReload(this.mgBurstLeft, PLAYER_MG_BURST_SIZE, fireHeld, autoReload)) {
             this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
         }

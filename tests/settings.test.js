@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_SETTINGS, loadSettings, saveSettings, effectiveVolumes, stepSetting,
+  DEFAULT_SETTINGS, MG_AUTO_RELOAD_MODES, loadSettings, saveSettings, effectiveVolumes, stepSetting,
 } from '../src/js/utils/settings.js';
 import {
   SETTINGS_STORAGE_KEY, BGM_VOLUME_STORAGE_KEY,
   VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
+  MG_RELOAD_THRESHOLD_DEFAULT, MG_RELOAD_THRESHOLD_MIN, MG_RELOAD_THRESHOLD_MAX,
+  AUTO_AIM_CANCEL_THRESHOLD_DEFAULT, AUTO_AIM_RELEASE_MIN, AUTO_AIM_RELEASE_MAX,
 } from '../src/js/utils/Constants.js';
 
 /** localStorage の代わり。key -> value の Map。 */
@@ -32,12 +34,15 @@ test('既定値は「今の挙動」に一致する（触らない人には何�
   assert.equal(DEFAULT_SETTINGS.masterVolume, 1.0);
   assert.equal(DEFAULT_SETTINGS.seVolume, 1.0);
   assert.equal(DEFAULT_SETTINGS.autoSwitchMissile, false, '今はドッキングで持ち替えない');
-  assert.equal(DEFAULT_SETTINGS.mgAutoReload, true, '今は自動装填する');
+  assert.equal(DEFAULT_SETTINGS.mgAutoReloadMode, 'always', '今は自動装填する');
+  assert.equal(DEFAULT_SETTINGS.mgReloadThreshold, MG_RELOAD_THRESHOLD_DEFAULT);
+  assert.equal(DEFAULT_SETTINGS.autoAimRelease, AUTO_AIM_CANCEL_THRESHOLD_DEFAULT);
+  assert.equal(DEFAULT_SETTINGS.autoFullscreen, true, '今は開始時に全画面へ入る');
 });
 
 test('保存して読み直すと同じ値', () => {
   const s = fakeStorage();
-  const saved = { ...DEFAULT_SETTINGS, masterVolume: 0.5, mgAutoReload: false };
+  const saved = { ...DEFAULT_SETTINGS, masterVolume: 0.5, mgAutoReloadMode: 'onSwitch', mgReloadThreshold: 3 };
   saveSettings(saved, s);
   assert.deepEqual(loadSettings(s), saved);
 });
@@ -62,12 +67,17 @@ test('未知のキーは捨て、欠けたキーは既定値で埋める', () =>
 });
 
 test('範囲外・型違いの値は既定値に落とす', () => {
-  const raw = JSON.stringify({ masterVolume: 99, bgmVolume: -5, seVolume: 'loud', mgAutoReload: 'yes' });
+  const raw = JSON.stringify({
+    masterVolume: 99, bgmVolume: -5, seVolume: 'loud',
+    autoFullscreen: 'yes', mgAutoReloadMode: 'sometimes', mgReloadThreshold: 'lots',
+  });
   const got = loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw }));
   assert.equal(got.masterVolume, 1, '上限に丸める');
   assert.equal(got.bgmVolume, 0, '下限に丸める');
   assert.equal(got.seVolume, DEFAULT_SETTINGS.seVolume, '数値でないものは既定値');
-  assert.equal(got.mgAutoReload, DEFAULT_SETTINGS.mgAutoReload, '真偽値でないものは既定値');
+  assert.equal(got.autoFullscreen, DEFAULT_SETTINGS.autoFullscreen, '真偽値でないものは既定値');
+  assert.equal(got.mgAutoReloadMode, DEFAULT_SETTINGS.mgAutoReloadMode, '知らない選択肢は既定値');
+  assert.equal(got.mgReloadThreshold, DEFAULT_SETTINGS.mgReloadThreshold, '整数でないものは既定値');
 });
 
 test('localStorage が例外を投げても落ちない', () => {
@@ -137,12 +147,12 @@ test('stepSetting: 刻みが効く', () => {
 
 // A で OFF、D で ON。反転にすると、連打したときにどちらになるか画面を見ないと分からない。
 test('stepSetting: ON/OFF は向きで決まる（反転ではない）', () => {
-  const off = { ...DEFAULT_SETTINGS, mgAutoReload: false };
-  assert.equal(stepSetting(off, 'mgAutoReload', +1).mgAutoReload, true);
-  assert.equal(stepSetting(off, 'mgAutoReload', -1).mgAutoReload, false, '既に OFF なら OFF のまま');
-  const on = { ...DEFAULT_SETTINGS, mgAutoReload: true };
-  assert.equal(stepSetting(on, 'mgAutoReload', -1).mgAutoReload, false);
-  assert.equal(stepSetting(on, 'mgAutoReload', +1).mgAutoReload, true, '既に ON なら ON のまま');
+  const off = { ...DEFAULT_SETTINGS, autoFullscreen: false };
+  assert.equal(stepSetting(off, 'autoFullscreen', +1).autoFullscreen, true);
+  assert.equal(stepSetting(off, 'autoFullscreen', -1).autoFullscreen, false, '既に OFF なら OFF のまま');
+  const on = { ...DEFAULT_SETTINGS, autoFullscreen: true };
+  assert.equal(stepSetting(on, 'autoFullscreen', -1).autoFullscreen, false);
+  assert.equal(stepSetting(on, 'autoFullscreen', +1).autoFullscreen, true, '既に ON なら ON のまま');
 });
 
 test('stepSetting: 元のオブジェクトを書き換えない', () => {
@@ -154,4 +164,103 @@ test('stepSetting: 元のオブジェクトを書き換えない', () => {
 test('stepSetting: 知らないキーは何も変えない', () => {
   const base = { ...DEFAULT_SETTINGS };
   assert.deepEqual(stepSetting(base, 'nope', +1), base);
+});
+
+// --- choice（3択） ---
+
+test('coerce: choice は選択肢に無い値を既定値へ落とす', () => {
+  for (const mode of MG_AUTO_RELOAD_MODES) {
+    const raw = JSON.stringify({ mgAutoReloadMode: mode });
+    assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).mgAutoReloadMode, mode);
+  }
+  const bad = JSON.stringify({ mgAutoReloadMode: true });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: bad })).mgAutoReloadMode,
+    DEFAULT_SETTINGS.mgAutoReloadMode);
+});
+
+// ON/OFF と同じ「向きで決める」規則。循環させると連打でどこに着くか画面を見ないと分からない。
+test('stepSetting: choice は向きで動き、端で止まる（循環しない）', () => {
+  let s = { ...DEFAULT_SETTINGS, mgAutoReloadMode: 'off' };
+  s = stepSetting(s, 'mgAutoReloadMode', +1);
+  assert.equal(s.mgAutoReloadMode, 'onSwitch');
+  s = stepSetting(s, 'mgAutoReloadMode', +1);
+  assert.equal(s.mgAutoReloadMode, 'always');
+  s = stepSetting(s, 'mgAutoReloadMode', +1);
+  assert.equal(s.mgAutoReloadMode, 'always', '右端で循環している');
+  s = stepSetting(s, 'mgAutoReloadMode', -1);
+  assert.equal(s.mgAutoReloadMode, 'onSwitch');
+  s = stepSetting(s, 'mgAutoReloadMode', -1);
+  assert.equal(s.mgAutoReloadMode, 'off');
+  s = stepSetting(s, 'mgAutoReloadMode', -1);
+  assert.equal(s.mgAutoReloadMode, 'off', '左端で循環している');
+});
+
+test('stepSetting: 壊れた choice からでも動く（既定値を起点にする）', () => {
+  const s = stepSetting({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'nonsense' }, 'mgAutoReloadMode', -1);
+  assert.equal(s.mgAutoReloadMode, 'onSwitch', '既定 always の1つ左になっていない');
+});
+
+// --- int（整数） ---
+
+test('stepSetting: int は 1 ずつ動き、上下限で止まる', () => {
+  let s = { ...DEFAULT_SETTINGS, mgReloadThreshold: MG_RELOAD_THRESHOLD_MAX };
+  s = stepSetting(s, 'mgReloadThreshold', +1);
+  assert.equal(s.mgReloadThreshold, MG_RELOAD_THRESHOLD_MAX, '上限を超えている');
+  s = stepSetting(s, 'mgReloadThreshold', -1);
+  assert.equal(s.mgReloadThreshold, MG_RELOAD_THRESHOLD_MAX - 1);
+
+  let t = { ...DEFAULT_SETTINGS, autoAimRelease: AUTO_AIM_RELEASE_MIN };
+  t = stepSetting(t, 'autoAimRelease', -1);
+  assert.equal(t.autoAimRelease, AUTO_AIM_RELEASE_MIN, '下限を割っている');
+  t = stepSetting(t, 'autoAimRelease', +1);
+  assert.equal(t.autoAimRelease, AUTO_AIM_RELEASE_MIN + 1);
+});
+
+test('stepSetting: int は音量の刻みを受け取っても 1 ずつ動く', () => {
+  const s = stepSetting({ ...DEFAULT_SETTINGS, mgReloadThreshold: 8 },
+    'mgReloadThreshold', +1, VOLUME_STEP_COARSE);
+  assert.equal(s.mgReloadThreshold, 9);
+});
+
+// 保存値が範囲外になるのは「範囲の定義を変えた」か「壊れた」かのどちらか。
+// 近い値を推測するより既定へ戻すほうが安全（音量は連続量なのでクランプが自然、という違い）。
+test('coerce: int の範囲外はクランプではなく既定値に落とす', () => {
+  const over = JSON.stringify({ mgReloadThreshold: MG_RELOAD_THRESHOLD_MAX + 1 });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: over })).mgReloadThreshold,
+    MG_RELOAD_THRESHOLD_DEFAULT, 'クランプしてしまっている');
+  const under = JSON.stringify({ autoAimRelease: 0 });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: under })).autoAimRelease,
+    AUTO_AIM_CANCEL_THRESHOLD_DEFAULT);
+});
+
+test('coerce: int は小数を受け付けない', () => {
+  const raw = JSON.stringify({ mgReloadThreshold: 8.5 });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).mgReloadThreshold,
+    MG_RELOAD_THRESHOLD_DEFAULT);
+});
+
+// --- 旧 mgAutoReload からの移行。既に設定を触った人の選択を捨てない ---
+
+test('旧 mgAutoReload: true を always に読み替える', () => {
+  const raw = JSON.stringify({ masterVolume: 0.5, mgAutoReload: true });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).mgAutoReloadMode, 'always');
+});
+
+test('旧 mgAutoReload: false を off に読み替える', () => {
+  const raw = JSON.stringify({ masterVolume: 0.5, mgAutoReload: false });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).mgAutoReloadMode, 'off');
+});
+
+test('新しいキーがあれば旧 mgAutoReload は無視する', () => {
+  const raw = JSON.stringify({ mgAutoReload: false, mgAutoReloadMode: 'onSwitch' });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).mgAutoReloadMode, 'onSwitch');
+});
+
+test('旧 mgAutoReload は保存し直すと消える', () => {
+  const s = fakeStorage({ [SETTINGS_STORAGE_KEY]: JSON.stringify({ mgAutoReload: false }) });
+  const loaded = loadSettings(s);
+  saveSettings(loaded, s);
+  const written = JSON.parse(s.dump()[SETTINGS_STORAGE_KEY]);
+  assert.equal(Object.hasOwn(written, 'mgAutoReload'), false, '旧キーが残っている');
+  assert.equal(written.mgAutoReloadMode, 'off');
 });

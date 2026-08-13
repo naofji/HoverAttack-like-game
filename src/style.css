@@ -30,7 +30,7 @@ canvas {
        幅と高さの両方に min() を掛けると、横長の画面では高さが、
        縦長の画面では幅が制約になり、どちらでも比率が崩れない。
        内部解像度を変えなければ CANVAS_WIDTH に紐づく索敵距離・音のパン・
-       UI レイアウトは無変更で済む。ただし AUTO_AIM_CANCEL_THRESHOLD
+       UI レイアウトは無変更で済む。ただし AUTO_AIM_CANCEL_THRESHOLD_DEFAULT
        （Constants.js）は input.mouse.x/y という canvas px の差分で判定しているため、
        ここでの拡大率がそのまま「キャンセルに要る物理的なマウスの動き」に効く。
        完全に無変更というわけではないので、そちらのコメントも参照。 */

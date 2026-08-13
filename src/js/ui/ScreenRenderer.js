@@ -12,7 +12,7 @@ import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
-import { visibleSettingsItems } from './settingsItems.js';
+import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
@@ -348,24 +348,24 @@ export class ScreenRenderer {
             const y = rowsTop + i * rowH + Math.round(rowH / 2);
             const selected = i === index;
 
+            const dimmed = typeof item.dimWhen === 'function' && item.dimWhen(settings);
+
             ctx.textAlign = 'left';
             // カーソルは矢印だけ独立した fillText として立てる（モード選択の ◀/▶ と
             // 同じ作り。ラベル文字列に接頭辞を混ぜると「表の項目が全部描かれるか」の
-            // 完全一致テストと噛み合わない上、Task 5 のキー操作カーソルの土台としても
+            // 完全一致テストと噛み合わない上、キー操作カーソルの土台としても
             // 位置の手掛かりが色だけでは弱い）。色と太字はそのまま選択の手掛かりに残す。
-            ctx.fillStyle = selected ? UI.ok : UI.dim;
+            //
+            // 選択色は淡色より優先する。効いていない行でもカーソルは見えないと動かせない
+            ctx.fillStyle = selected ? UI.ok : (dimmed ? UI.faint : UI.dim);
             ctx.font = font('body', selected);
             if (selected) ctx.fillText('▶', cx - 312, y);
             ctx.fillText(item.label, cx - 290, y);
 
-            if (item.type === 'action') return;
+            const value = settingValueText(item, settings);
+            if (value === null) return;
             ctx.textAlign = 'right';
-            ctx.fillStyle = selected ? UI.ink : UI.dim;
-            // すぐ上の音量 HUD が `${pct}%` と描いているのに、こちらだけ数字だけ
-            // だと同じ画面内で不揃いに見えるため合わせる
-            const value = item.type === 'volume'
-                ? `${volumePercent(settings[item.key])}%`
-                : (settings[item.key] ? 'ON' : 'OFF');
+            ctx.fillStyle = dimmed ? UI.faint : (selected ? UI.ink : UI.dim);
             ctx.fillText(value, cx + 290, y);
         });
 
