@@ -1061,6 +1061,10 @@ export const Game = {
             player.vx = 0;
             player.vy = 0;
             player.resupply();
+            // 設定が ON のときだけミサイルへ持ち替える。既定は OFF＝現行どおり
+            // 持ち替えない（リスポーン時に missile へ戻すのは respawn() の仕事で、
+            // こちらはプレイ中のドッキング）
+            if (this.settings?.autoSwitchMissile) player.currentWeapon = 'missile';
             player.x = carrier.x + carrier.width / 2 - player.width / 2;
             player.y = carrier.y - player.height;
 
