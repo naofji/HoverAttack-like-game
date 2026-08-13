@@ -39,7 +39,7 @@
 - Produces: `initialHoldState() → {heldMs: 0, fired: false}`
 - Produces: `stepHoldKey(state, down, deltaMs, thresholdMs) → {state, tap, hold}`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `tests/hold-key.test.js` を新規作成:
 
@@ -126,12 +126,12 @@ test('state を渡さなくても初期状態として扱う', () => {
 });
 ```
 
-- [ ] **Step 2: テストが失敗することを確認する**
+- [x] **Step 2: テストが失敗することを確認する**
 
 Run: `npm test -- tests/hold-key.test.js`
 Expected: FAIL。モジュールが存在しない。
 
-- [ ] **Step 3: `src/js/utils/holdKey.js` を実装する**
+- [x] **Step 3: `src/js/utils/holdKey.js` を実装する**
 
 ```js
 // ============================================
@@ -180,17 +180,17 @@ export function stepHoldKey(state, down, deltaMs, thresholdMs) {
 }
 ```
 
-- [ ] **Step 4: テストが通ることを確認する**
+- [x] **Step 4: テストが通ることを確認する**
 
 Run: `npm test -- tests/hold-key.test.js`
 Expected: PASS
 
-- [ ] **Step 5: 全テストを走らせる**
+- [x] **Step 5: 全テストを走らせる**
 
 Run: `npm test`
 Expected: PASS。983 + 10 前後。
 
-- [ ] **Step 6: コミット**
+- [x] **Step 6: コミット**
 
 ```bash
 git add src/js/utils/holdKey.js tests/hold-key.test.js
@@ -216,7 +216,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Produces: `DEFAULT_SETTINGS.autoAimHoldTenths` (3)、`DEFAULT_SETTINGS.autoAimResumeOnPickup` (true)
 - Produces: `SETTINGS_ITEMS` の行に任意の `format(v) → string`。`settingValueText()` が `int` のときだけ使う
 
-- [ ] **Step 1: 定数を足す**
+- [x] **Step 1: 定数を足す**
 
 `src/js/utils/Constants.js` の `AUTO_AIM_RELEASE_MAX` の下に:
 
@@ -231,7 +231,7 @@ export const AUTO_AIM_HOLD_TENTHS_MIN = 1;
 export const AUTO_AIM_HOLD_TENTHS_MAX = 20;
 ```
 
-- [ ] **Step 2: 失敗するテストを書く**
+- [x] **Step 2: 失敗するテストを書く**
 
 `tests/settings.test.js` の import に定数を足す:
 
@@ -295,12 +295,12 @@ test('新しい2項目が設定画面に描かれる', () => {
 });
 ```
 
-- [ ] **Step 3: テストが失敗することを確認する**
+- [x] **Step 3: テストが失敗することを確認する**
 
 Run: `npm test -- tests/settings.test.js tests/settings-screen.test.js`
 Expected: FAIL。`DEFAULT_SETTINGS.autoAimHoldTenths` が undefined、表に行が無い。
 
-- [ ] **Step 4: `utils/settings.js` に2つ足す**
+- [x] **Step 4: `utils/settings.js` に2つ足す**
 
 import に定数を足す:
 
@@ -329,7 +329,7 @@ import に定数を足す:
     autoAimHoldTenths: { kind: 'int', min: AUTO_AIM_HOLD_TENTHS_MIN, max: AUTO_AIM_HOLD_TENTHS_MAX },
 ```
 
-- [ ] **Step 5: `ui/settingsItems.js` に2行足し、`format` を通す**
+- [x] **Step 5: `ui/settingsItems.js` に2行足し、`format` を通す**
 
 `autoAimRelease` の行の下に:
 
@@ -355,17 +355,17 @@ import に定数を足す:
         case 'int': return item.format ? item.format(v) : `${v}${item.suffix ?? ''}`;
 ```
 
-- [ ] **Step 6: テストが通ることを確認する**
+- [x] **Step 6: テストが通ることを確認する**
 
 Run: `npm test -- tests/settings.test.js tests/settings-screen.test.js`
 Expected: PASS
 
-- [ ] **Step 7: 全テストを走らせる**
+- [x] **Step 7: 全テストを走らせる**
 
 Run: `npm test`
 Expected: PASS。設定画面の行が2つ増えるが、`tests/settings-pause.test.js` は `findIndex` と index 0 で位置を取っているので通る。落ちた場合は行数に依存したテストを探すこと。
 
-- [ ] **Step 8: コミット**
+- [x] **Step 8: コミット**
 
 ```bash
 git add src/js/utils/Constants.js src/js/utils/settings.js src/js/ui/settingsItems.js \
@@ -391,7 +391,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `DEFAULT_SETTINGS.autoAimResumeOnPickup`（Task 2）
 - Produces: `Player#autoAimPaused: boolean`。真なら必ず `autoAimTimer > 0`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `tests/auto-aim-pause.test.js` を新規作成:
 
@@ -568,12 +568,12 @@ test('RESUME OFF: ゲージが尽きたあとに拾えば ON で始まる', () =
 });
 ```
 
-- [ ] **Step 2: テストが失敗することを確認する**
+- [x] **Step 2: テストが失敗することを確認する**
 
 Run: `npm test -- tests/auto-aim-pause.test.js`
 Expected: FAIL。「ドック中も残り時間が減る」「解除中も…」「残り時間が 0 になった時点で…」「RESUME …」が落ちる。
 
-- [ ] **Step 3: `Player` にフィールドを足す**
+- [x] **Step 3: `Player` にフィールドを足す**
 
 コンストラクタの `this.autoAimTimer = 0;` の直後（72行付近）:
 
@@ -591,7 +591,7 @@ Expected: FAIL。「ドック中も残り時間が減る」「解除中も…」
         this.autoAimPaused = false;
 ```
 
-- [ ] **Step 4: `_updateAutoAim()` の減算を前へ出す**
+- [x] **Step 4: `_updateAutoAim()` の減算を前へ出す**
 
 `src/js/main.js`。現行の
 
@@ -641,7 +641,7 @@ Expected: FAIL。「ドック中も残り時間が減る」「解除中も…」
         }
 ```
 
-- [ ] **Step 5: `AutoAimUnit#onPickup` に再開を足す**
+- [x] **Step 5: `AutoAimUnit#onPickup` に再開を足す**
 
 ```js
     onPickup(player) {
@@ -656,17 +656,17 @@ Expected: FAIL。「ドック中も残り時間が減る」「解除中も…」
     }
 ```
 
-- [ ] **Step 6: テストが通ることを確認する**
+- [x] **Step 6: テストが通ることを確認する**
 
 Run: `npm test -- tests/auto-aim-pause.test.js`
 Expected: PASS
 
-- [ ] **Step 7: 全テストを走らせる**
+- [x] **Step 7: 全テストを走らせる**
 
 Run: `npm test`
 Expected: PASS。`tests/auto-aim-release.test.js` と `tests/lead-marker.test.js` は既定値のままなので通る。ドック中のタイマーに触れる既存テストがあれば、**期待値を新しい仕様に直す**（挙動変更が意図されている）。
 
-- [ ] **Step 8: コミット**
+- [x] **Step 8: コミット**
 
 `main.js` を含むので、`debugStartMission` を 0 に戻してから add、6 に戻してからコミットする。
 
@@ -690,7 +690,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `stepHoldKey` / `initialHoldState`（Task 1）、`Player#autoAimPaused`（Task 3）、`DEFAULT_SETTINGS.autoAimHoldTenths`（Task 2）
 - Produces: `Game#shiftHold`（`holdKey` の状態）、`Game#_updateShiftKey(deltaTime)`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `tests/shift-hold.test.js` を新規作成:
 
@@ -854,12 +854,12 @@ test('設定画面を開くと長押しの計測が初期化される', () => {
 });
 ```
 
-- [ ] **Step 2: テストが失敗することを確認する**
+- [x] **Step 2: テストが失敗することを確認する**
 
 Run: `npm test -- tests/shift-hold.test.js`
 Expected: FAIL。`_updateShiftKey` が無く、`_updatePlaying()` は Shift を見ていない。
 
-- [ ] **Step 3: `main.js` の import とフィールドを足す**
+- [x] **Step 3: `main.js` の import とフィールドを足す**
 
 import に足す:
 
@@ -875,7 +875,7 @@ import { AUTO_AIM_HOLD_TENTHS_DEFAULT } from './utils/Constants.js';   // 既存
     shiftHold: initialHoldState(),
 ```
 
-- [ ] **Step 4: `update()` から Shift ブロックを削除する**
+- [x] **Step 4: `update()` から Shift ブロックを削除する**
 
 `// Lock-on toggle works in all states` のコメントごと、次のブロックを丸ごと消す:
 
@@ -890,7 +890,7 @@ import { AUTO_AIM_HOLD_TENTHS_DEFAULT } from './utils/Constants.js';   // 既存
         }
 ```
 
-- [ ] **Step 5: `_updateShiftKey()` を足す**
+- [x] **Step 5: `_updateShiftKey()` を足す**
 
 `_updatePlaying()` の直前に置く:
 
@@ -931,7 +931,7 @@ import { AUTO_AIM_HOLD_TENTHS_DEFAULT } from './utils/Constants.js';   // 既存
     },
 ```
 
-- [ ] **Step 6: `_updatePlaying()` から呼ぶ**
+- [x] **Step 6: `_updatePlaying()` から呼ぶ**
 
 `this._updateMiniMap();` の直前に足す（`F` キーの処理と同じ並び）:
 
@@ -939,7 +939,7 @@ import { AUTO_AIM_HOLD_TENTHS_DEFAULT } from './utils/Constants.js';   // 既存
         this._updateShiftKey(deltaTime);
 ```
 
-- [ ] **Step 7: `_openSettings()` でリセットする**
+- [x] **Step 7: `_openSettings()` でリセットする**（実際にはここでは実装せず、下記のとおり `update()` 側の1箇所に置き換えた）
 
 `audioManager.stopLoopingSe();` の直前に足す:
 
@@ -948,17 +948,25 @@ import { AUTO_AIM_HOLD_TENTHS_DEFAULT } from './utils/Constants.js';   // 既存
         this.shiftHold = initialHoldState();
 ```
 
-- [ ] **Step 8: テストが通ることを確認する**
+**実装との差分:** `_openSettings()` にリセットを置くと、設定画面を経由しない離脱経路
+（ミッションクリア・ゲームオーバー・ランキング入力など）でリセットが漏れ、
+次のミッションに持ち越した `shiftHold` が原因で意図しないクロスヘアロック切り替えが
+起きた。出口ごとに書き足す代わりに `update()` に
+`if (this.gameState !== 'playing') this.shiftHold = initialHoldState();` という
+1箇所の受け皿を置き、`_openSettings()` 側のリセットは削除した（`src/js/main.js` の
+`update()`、`_openSettings()` の実装を参照）。
+
+- [x] **Step 8: テストが通ることを確認する**
 
 Run: `npm test -- tests/shift-hold.test.js`
 Expected: PASS
 
-- [ ] **Step 9: 全テストを走らせる**
+- [x] **Step 9: 全テストを走らせる**
 
 Run: `npm test`
 Expected: PASS。`Shift` の扱いが変わるので、既存テストで `ShiftLeft`/`ShiftRight` を `isKeyPressed` で送っているものがあれば**新しい仕様（離したときに確定）に直す**。
 
-- [ ] **Step 10: コミット**
+- [x] **Step 10: コミット**
 
 `main.js` を含むので `debugStartMission` の手順を踏む。
 
@@ -982,7 +990,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `Player#autoAimPaused`（Task 3）
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `tests/crosshair-auto-off.test.js` を新規作成。scene の形は `tests/lead-marker.test.js` に倣う:
 
@@ -1059,12 +1067,12 @@ test('AUTO OFF はクロスヘアの右下に出る', () => {
       'SHIFT の説明が更新されていない');
 ```
 
-- [ ] **Step 2: テストが失敗することを確認する**
+- [x] **Step 2: テストが失敗することを確認する**
 
 Run: `npm test -- tests/crosshair-auto-off.test.js tests/demo-screens.test.js`
 Expected: FAIL。`AUTO OFF` が描かれず、解除中も赤い。
 
-- [ ] **Step 3: `Crosshair.js` を直す**
+- [x] **Step 3: `Crosshair.js` を直す**
 
 import に `UI` を足す:
 
@@ -1105,7 +1113,7 @@ import { UI } from './theme.js';
         }
 ```
 
-- [ ] **Step 4: HOW TO PLAY の `SHIFT` を直す**
+- [x] **Step 4: HOW TO PLAY の `SHIFT` を直す**
 
 `src/js/ui/ScreenRenderer.js:280`:
 
@@ -1113,17 +1121,17 @@ import { UI } from './theme.js';
                 { key: 'SHIFT', action: 'LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)' },
 ```
 
-- [ ] **Step 5: テストが通ることを確認する**
+- [x] **Step 5: テストが通ることを確認する**
 
 Run: `npm test -- tests/crosshair-auto-off.test.js tests/demo-screens.test.js`
 Expected: PASS。CONTROLS の行が長くなるので「パネルが画面に収まっている」テストも通ること。落ちたら文言を `LOCK-ON (TAP) / AUTO-AIM (HOLD)` まで詰める。
 
-- [ ] **Step 6: 全テストを走らせる**
+- [x] **Step 6: 全テストを走らせる**
 
 Run: `npm test`
 Expected: PASS
 
-- [ ] **Step 7: コミット**
+- [x] **Step 7: コミット**
 
 ```bash
 git add src/js/ui/Crosshair.js src/js/ui/ScreenRenderer.js \
@@ -1141,17 +1149,17 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/specs/2026-08-14-auto-aim-hold-toggle-design.md`
 - Modify: `docs/superpowers/specs/2026-08-13-settings-screen-design.md`（操作表の `SHIFT`／設定項目の一覧に触れている箇所があれば）
 
-- [ ] **Step 1: 設計書を実装に合わせる**
+- [x] **Step 1: 設計書を実装に合わせる**（このタスクは他タスクと異なり事前に brief が切り出されておらず、要件はこのステップの本文に直接書かれていた）
 
 実装中に決めた細部を反映する。少なくとも:
 - `stepHoldKey()` / `initialHoldState()` の実際の名前と戻り値の形
-- `Game#shiftHold` というフィールド名と、`_openSettings()` でリセットしていること
+- `Game#shiftHold` というフィールド名と、`_openSettings()` でリセットしていること（**この箇条書き自体が Task 4 Step 7 の時点でのプランを指しており、実装後に stale。設計書には反映時点で正しい形——`update()` 側の1箇所リセット——が書かれている）
 - `settingValueText()` が `int` のときだけ `item.format` を使うこと（他の型は従来どおり）
 - `Crosshair` が `AUTO` と `AUTO OFF` を排他で出すこと（解除中は `AUTO` を出さない）
 
 実装中に設計と食い違ったことがあれば、**設計書のほうを実装に合わせる**（変更履歴は作らない）。
 
-- [ ] **Step 2: コミット**
+- [x] **Step 2: コミット**
 
 ```bash
 git add docs/superpowers/specs/2026-08-14-auto-aim-hold-toggle-design.md
@@ -1160,7 +1168,7 @@ git commit -m "docs: Auto Aim 一時解除の設計書を実装に合わせる
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 3: ユーザーに引き渡す**
+- [x] **Step 3: ユーザーに引き渡す**
 
 以下を伝える。
 
