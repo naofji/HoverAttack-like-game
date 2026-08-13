@@ -13,6 +13,7 @@ import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
 import { visibleSettingsItems, settingValueText } from './settingsItems.js';
+import { CONTROLS_ROWS } from './controlsList.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
@@ -274,20 +275,9 @@ export class ScreenRenderer {
 
         } else {
             // ---- PAGE 2: CONTROLS ----
-            const controls = [
-                { key: 'A / D', action: 'MOVE LEFT / RIGHT' },
-                { key: 'W', action: 'BURST JUMP (GROUND) / HOVER (HOLD) / UNDOCK' },
-                { key: 'SHIFT', action: 'LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)' },
-                { key: 'L-CLICK', action: 'FIRE MISSILE OR MACHINE GUN' },
-                { key: 'R-CLICK', action: 'THROW GRENADE (TAP: THROW / HOLD + L-CLICK)' },
-                { key: 'F', action: 'SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)' },
-                { key: 'S', action: 'DOCK WITH CARRIER / HOLD FOR FAST FUEL CHARGE' },
-                { key: 'R', action: 'TOGGLE MINI-MAP OVERLAY' },
-                // 表示系なので操作キーの後ろ。ゲーム開始時に自動で全画面へ入るので
-                // 普段は押さずに済むが、抜けたい／戻したいときの手段として要る
-                { key: 'M', action: 'TOGGLE FULLSCREEN' },
-                { key: 'P', action: 'SETTINGS / PAUSE' },
-            ];
+            // 表は controlsList.js に置いてある。設定画面のオーバーレイと同じものを
+            // 読むので、キーを足したときにここだけ古くなることがない
+            const controls = CONTROLS_ROWS;
 
             // 行の高さから必要なパネル高を求め、余りを上下に均等に配る。
             // 以前は高さ450固定で、最終行の下に75px・パネルの下に208px空いていた。
@@ -297,17 +287,20 @@ export class ScreenRenderer {
             const areaBottom = H - SPACE.xl;
             const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
 
-            drawPanel(ctx, cx - 350, panelY, 700, panelH, 'CONTROLS', UI.accent);
+            // 幅は 700 では足りない。16px 等幅で 51 文字の行（S のしゃがみ＋補給）が
+            // 右端ちょうどに達して余白が無くなっていた。1ページ目のパネルと同じ 800 に
+            // 揃え、キーキャップと説明も 50px 左へずらして左右の余白を保つ
+            drawPanel(ctx, cx - 400, panelY, 800, panelH, 'CONTROLS', UI.accent);
 
             const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
             ctx.textAlign = 'left';
             controls.forEach((c, i) => {
                 const y = rowsTop + i * rowH + Math.round(rowH / 2);
-                drawKeyCap(ctx, cx - 180, y, c.key);
+                drawKeyCap(ctx, cx - 230, y, c.key);
                 ctx.fillStyle = UI.ink;
                 ctx.font = font('body');
                 ctx.textBaseline = 'middle';
-                ctx.fillText(c.action, cx - 140, y);
+                ctx.fillText(c.action, cx - 190, y);
             });
             ctx.textBaseline = 'alphabetic'; // reset
         }
@@ -327,7 +320,7 @@ export class ScreenRenderer {
      * @param {{settings: object, index: number, fromPlaying: boolean, confirmingQuit: boolean}} state
      */
     drawSettings(ctx, state) {
-        const { settings, index, fromPlaying, confirmingQuit, quitChoiceYes } = state;
+        const { settings, index, fromPlaying, confirmingQuit, quitChoiceYes, showingControls } = state;
         const W = this.game.canvas.width;
         const H = this.game.canvas.height;
         const cx = Math.floor(W / 2);
@@ -393,9 +386,53 @@ export class ScreenRenderer {
         // quitChoiceYes 未指定（undefined）は NO 扱い。押し間違いで進行を
         // 捨てないよう、既定は常に安全側（NO）に倒す
         if (confirmingQuit) this._drawQuitConfirm(ctx, cx, H, quitChoiceYes === true);
+        if (showingControls) this._drawControlsOverlay(ctx, cx, H);
 
         ctx.textBaseline = 'alphabetic';
         drawScanlines(ctx, W, H);
+    }
+
+    /**
+     * 操作一覧。設定画面のパネルの上に重ねる。中身は HOW TO PLAY の2ページ目と
+     * 同じ表（controlsList.js）で、行の描き方（キーキャップ＋説明）も揃えてある。
+     * 同じものが2通りの見た目で出ると、別の一覧だと思われるため。
+     *
+     * 設定パネル（幅 640）より広く取る。行の説明が長く、640 では折り返さずに
+     * はみ出す行があった。
+     */
+    _drawControlsOverlay(ctx, cx, H) {
+        const rowH = 34;
+        const panelW = 720;
+        const panelH = ScreenRenderer.panelHeight(rowH * CONTROLS_ROWS.length + rowH);
+        const panelY = Math.floor((H - panelH) / 2);
+
+        // 背後の設定パネルを一段沈める。重なった2枚のうちどちらが手前かを
+        // 枠線だけで判断させると、行が同じ色で並んでいるぶん読み取りにくい
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, this.game.canvas.width, H);
+
+        drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
+
+        const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
+        ctx.textBaseline = 'middle';
+        CONTROLS_ROWS.forEach((c, i) => {
+            const y = rowsTop + i * rowH + Math.round(rowH / 2);
+            ctx.textAlign = 'left';
+            // drawKeyCap は渡した x に**右揃え**で描く。キャップの左端はキー名の
+            // 長さぶん伸びるので、左枠から 170px 空けた位置を右端にする
+            // （HOW TO PLAY の2ページ目と同じ余白の取り方）
+            drawKeyCap(ctx, cx - panelW / 2 + 170, y, c.key);
+            ctx.fillStyle = UI.ink;
+            ctx.font = font('small');
+            ctx.fillText(c.action, cx - panelW / 2 + 210, y);
+        });
+
+        // 閉じ方の案内。設定画面の最下段の案内と同じ位置関係にする
+        ctx.textAlign = 'center';
+        ctx.fillStyle = UI.dim;
+        ctx.font = font('small');
+        ctx.fillText('ENTER / P : CLOSE',
+            cx, rowsTop + CONTROLS_ROWS.length * rowH + Math.round(rowH / 2));
     }
 
     /** 途中終了の確認。押し間違いで進行を捨てないよう1段挟む。 */

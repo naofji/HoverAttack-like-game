@@ -9,17 +9,20 @@ const METHODS = [
 ];
 
 /** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */
-const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha'];
+// font を含めているのは、fillText の**文字幅**を後から復元するため。文字の
+// 右端がパネルに収まっているかを見るには、その fillText の時点のフォントが要る
+// （extractTextsWithFont を参照）。
+const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'font'];
 
 /** @returns {object} calls 配列を持つ疑似 ctx */
 export function makeFakeCtx() {
   const calls = [];
   const ctx = {
     calls,
-    font: '', textAlign: '',
+    textAlign: '',
   };
   const values = {
-    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1,
+    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1, font: '',
   };
   for (const prop of TRACKED_PROPS) {
     Object.defineProperty(ctx, prop, {
@@ -109,6 +112,26 @@ export function extractFillRectsWithColor(calls) {
       color = c.args[0];
     } else if (c.name === 'fillRect') {
       out.push({ x: c.args[0], y: c.args[1], w: c.args[2], h: c.args[3], color });
+    }
+  }
+  return out;
+}
+
+/**
+ * fillText 呼び出しを、その時点のフォントから求めた概算幅つきで取り出す
+ * ({text, x, y, size, width})。文字がパネルからはみ出していないかを見るためのもの。
+ * 幅の係数は measureText と同じ 0.6（等幅フォント前提）。
+ */
+export function extractTextsWithFont(calls) {
+  const out = [];
+  let size = 16;
+  for (const c of calls) {
+    if (c.name === 'set:font') {
+      const px = /(\d+(?:\.\d+)?)px/.exec(String(c.args[0]));
+      if (px) size = parseFloat(px[1]);
+    } else if (c.name === 'fillText') {
+      const text = String(c.args[0]);
+      out.push({ text, x: c.args[1], y: c.args[2], size, width: text.length * size * 0.6 });
     }
   }
   return out;

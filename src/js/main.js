@@ -178,6 +178,7 @@ export const Game = {
     settingsReturnTo: null,  // 設定画面を閉じたときに戻る状態
     confirmingQuit: false,   // 途中終了の確認中か
     quitChoiceYes: false,    // 確認中のカーソル。既定は NO（押し間違いで進行を捨てない）
+    showingControls: false,  // 設定画面に操作一覧を重ねているか
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
@@ -271,6 +272,12 @@ export const Game = {
         // 全画面を保ったまま開ける P を主の操作として案内する。
         const wantsMenu = this.input.isKeyPressed('Escape') || this.input.isKeyPressed('KeyP');
         if (wantsMenu) {
+            // 操作一覧を重ねている間は、まずそれを閉じる。ここを飛ばすと
+            // Escape / P で設定画面ごと閉じてしまい、戻り先を1段間違える
+            if (this.gameState === 'settings' && this.showingControls) {
+                this.showingControls = false;
+                return;
+            }
             if (this.gameState === 'settings') {
                 this._closeSettings();
                 return;
@@ -440,6 +447,7 @@ export const Game = {
         this.gameState = 'settings';
         this.settingsIndex = 0;
         this.confirmingQuit = false;
+        this.showingControls = false;
         // 自機が止まっているのに噴射音が鳴り続けるのは不自然なので、
         // ループする音だけ止める。BGM と単発の効果音はそのまま
         audioManager.stopLoopingSe();
@@ -450,6 +458,7 @@ export const Game = {
         this.gameState = this.settingsReturnTo || 'title';
         this.settingsReturnTo = null;
         this.confirmingQuit = false;
+        this.showingControls = false;
         // 設定画面で AUTO FULLSCREEN を ON にしてそのまま閉じれば即座に効く。
         // Escape で閉じた場合はブラウザが全画面を解除しているので、ここで戻る
         this._restoreFullscreen();
@@ -470,6 +479,14 @@ export const Game = {
         // ←/→ はデモ画面送り（_handleDemoJump）でも使うが、設定画面は
         // _updateGameState() の別の分岐で、そちらを通らないので衝突しない
         const nav = (key, arrow) => this.input.isKeyPressed(key) || this.input.isKeyPressed(arrow);
+
+        // 操作一覧を読んでいる間は裏の設定を動かさない。カーソルや値が動くと、
+        // 閉じたときに知らぬ間に設定が変わっていることになる。
+        // Escape / P で閉じる経路は update() 側にある（設定画面ごと閉じないため）
+        if (this.showingControls) {
+            if (this.input.isKeyPressed('Enter')) this.showingControls = false;
+            return;
+        }
 
         if (this.confirmingQuit) {
             // 確認中は A/D（←/→）で YES/NO を選び、Enter で決める。既定は NO
@@ -538,6 +555,7 @@ export const Game = {
             fromPlaying: this.settingsReturnTo === 'playing',
             confirmingQuit: this.confirmingQuit,
             quitChoiceYes: this.quitChoiceYes,
+            showingControls: this.showingControls,
         };
     },
 

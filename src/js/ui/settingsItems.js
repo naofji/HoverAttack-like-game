@@ -47,6 +47,10 @@ export const SETTINGS_ITEMS = [
     // 矛盾になるので廃止した。窓に戻したいときは M キー（HOW TO PLAY に記載）が
     // そのまま使える。ON にした瞬間に全画面へ入る配線は main.js の _updateSettings() 側
     { key: 'autoFullscreen', label: 'AUTO FULLSCREEN', type: 'toggle' },
+    // 値を持たない読み物の行。ゲーム中は HOW TO PLAY をタイトルまで戻らないと
+    // 見られなかったので、ポーズしたその場で操作を確かめられるようにする。
+    // 表の中身は controlsList.js と共有（HOW TO PLAY と同じ表を読む）
+    { key: 'viewControls', label: 'VIEW CONTROLS', type: 'action', run: (game) => { game.showingControls = true; } },
     // 唯一「設定を変える」ではなく進行を捨てる行。同じ色で並んでいると設定項目だと
     // 思って Enter を押しかねないので、確認ダイアログと同じ警告色で異質さを見せる
     { key: 'quit', label: 'QUIT MISSION', type: 'action', onlyWhenPlaying: true, confirm: true, danger: true },
