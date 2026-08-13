@@ -56,7 +56,7 @@
 |---|---|
 | `W` / `S` | 項目を上下に移動（端で止める。巻き戻さない） |
 | `A` / `D` | 値を増減、ON/OFF を切り替え |
-| `Enter` | 実行（全画面・途中終了） |
+| `Enter` | 実行（途中終了） |
 | `Escape` / `P` | 閉じて戻る |
 
 `A`/`D` を選んだのは、タイトルのモード選択が既に `A`/`D` で、手なりが揃うため。
@@ -71,8 +71,9 @@
 | SE 音量 | 0〜100（5刻み） | 100 | 今は調整手段が無く常に最大 |
 | ドッキング時にミサイルへ持ち替え | ON/OFF | **OFF** | 今は持ち替えない（`respawn()` だけが `currentWeapon='missile'` にする） |
 | MG オートリロード | ON/OFF | **ON** | 今は残弾50%以下＋引き金を離すと自動装填する |
-| 全画面 | 実行 | — | `M` と同じ `toggleFullscreen()` |
 | 途中終了 | 実行 | — | 現行の `Escape` の動作。**確認を1段挟む** |
+
+**（注） FULLSCREEN 行について**: 初期設計に `全画面` という実行型の項目があったが、後続の設計（`2026-08-13-reload-fullscreen-autoaim-settings-design.md`）で AUTO FULLSCREEN トグル を追加した際に、この行は削除された。理由は、`M` キー と重複し、AUTO FULLSCREEN が ON の既定値では「FULLSCREEN 行で全画面を抜けても、設定画面を閉じると自動復帰する」という矛盾が生じるため。`M` キー でのトグルで十分に対応でき、設定画面からは不要と判定された。
 
 **全体音量は「掛け算」で実装する。** BGM と効果音は別々の経路で出ている
 （効果音は `seFade → seMaster → コンプレッサ`、BGM は `BGMManager` が自前の音量を持つ）ので、
@@ -184,7 +185,6 @@ stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 { key: 'masterVolume', label: 'MASTER VOLUME', type: 'volume' }
 { key: 'bgmVolume', label: 'BGM VOLUME', type: 'volume' }
 { key: 'mgAutoReload', label: 'MG AUTO-RELOAD', type: 'toggle' }
-{ key: 'fullscreen', label: 'FULLSCREEN', type: 'action', run: (game) => toggleFullscreen() }
 ```
 
 `type` は `volume` / `toggle` / `action` の3つ。描画も入力処理も `type` で分岐するので、
