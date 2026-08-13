@@ -339,17 +339,24 @@ export class HUD {
         const barH = 5;
         const rowY = y + 11; // row2Y の直下
 
+        // Shift 長押しで解除している間はグレーで出す。**バーは消さないし止めない** —
+        // 解除しても残り時間は減り続けるので、消すと「あと何秒あるか」が分からなくなる。
+        // グレーにするのは、この HUD が既に武器セレクタで「有効＝色つき／無効＝グレー」
+        // という語彙を使っているため（非選択の武器が #444444 / #666666）。そこへ揃える
+        const paused = !!player.autoAimPaused;
+        const fg = paused ? '#666666' : '#FF6600';
+
         ctx.font = 'bold 10px "Space Mono", monospace';
-        ctx.fillStyle = '#FF6600';
+        ctx.fillStyle = fg;
         ctx.fillText('A-AIM', labelX, rowY);
 
-        ctx.fillStyle = 'rgba(80,20,0,0.8)';
+        ctx.fillStyle = paused ? 'rgba(40,40,40,0.8)' : 'rgba(80,20,0,0.8)';
         ctx.fillRect(barX, rowY - barH + 2, barW, barH);
 
-        ctx.fillStyle = '#FF6600';
+        ctx.fillStyle = fg;
         ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
 
-        ctx.strokeStyle = '#663300';
+        ctx.strokeStyle = paused ? '#444444' : '#663300';
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
 

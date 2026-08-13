@@ -40,7 +40,7 @@ SE VOLUME                         100%
 AUTO-SWITCH TO MISSILE ON DOCK     OFF
 MG AUTO-RELOAD                  ALWAYS      ← 3段階に変更
 RELOAD AT AMMO                8 ROUNDS      ← 新規
-AUTO-AIM RELEASE                     4      ← 新規
+AUTO-AIM RELEASE THRESHOLD           4      ← 新規
 AUTO FULLSCREEN                     ON      ← 新規
 QUIT MISSION                                ← プレイ中のみ
 ```
@@ -277,7 +277,7 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。こ�
   labels: { off: 'OFF', onSwitch: 'ON WEAPON SWITCH', always: 'ALWAYS' } },
 { key: 'mgReloadThreshold', label: 'RELOAD AT AMMO', type: 'int', suffix: ' ROUNDS',
   dimWhen: (s) => s.mgAutoReloadMode === 'off' },
-{ key: 'autoAimRelease', label: 'AUTO-AIM RELEASE', type: 'int' },
+{ key: 'autoAimRelease', label: 'AUTO-AIM RELEASE THRESHOLD', type: 'int' },
 { key: 'autoFullscreen', label: 'AUTO FULLSCREEN', type: 'toggle' },
 ```
 

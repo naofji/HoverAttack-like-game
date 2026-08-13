@@ -14,6 +14,7 @@
 //
 // onlyWhenPlaying: プレイ中に開いたときだけ出す（タイトルには「途中終了」が要らない）
 // dimWhen: 真を返すとその行を淡色で描く（効いていないことを色で伝える）
+// danger: 進行を捨てる操作。警告色で描いて、設定を変える行と取り違えないようにする
 
 import { volumePercent } from '../utils/bgmVolume.js';
 
@@ -32,7 +33,8 @@ export const SETTINGS_ITEMS = [
         // カーソルが飛ぶので、色だけで伝える
         dimWhen: (s) => s.mgAutoReloadMode === 'off',
     },
-    { key: 'autoAimRelease', label: 'AUTO-AIM RELEASE', type: 'int' },
+    // 「RELEASE」だけだと何の解除か読めない。ロックが外れる境界値だと分かる名前にする
+    { key: 'autoAimRelease', label: 'AUTO-AIM RELEASE THRESHOLD', type: 'int' },
     {
         key: 'autoAimHoldTenths', label: 'AUTO-AIM HOLD TO TOGGLE', type: 'int',
         // int は整数しか刻めないので 1/10 秒で持ち、表示だけ秒に直す。
@@ -45,7 +47,9 @@ export const SETTINGS_ITEMS = [
     // 矛盾になるので廃止した。窓に戻したいときは M キー（HOW TO PLAY に記載）が
     // そのまま使える。ON にした瞬間に全画面へ入る配線は main.js の _updateSettings() 側
     { key: 'autoFullscreen', label: 'AUTO FULLSCREEN', type: 'toggle' },
-    { key: 'quit', label: 'QUIT MISSION', type: 'action', onlyWhenPlaying: true, confirm: true },
+    // 唯一「設定を変える」ではなく進行を捨てる行。同じ色で並んでいると設定項目だと
+    // 思って Enter を押しかねないので、確認ダイアログと同じ警告色で異質さを見せる
+    { key: 'quit', label: 'QUIT MISSION', type: 'action', onlyWhenPlaying: true, confirm: true, danger: true },
 ];
 
 /**

@@ -167,3 +167,31 @@ test('新しい2項目が設定画面に描かれる', () => {
   assert.ok(texts.includes('RESUME AUTO-AIM ON PICKUP'), '拾ったら再開の行が無い');
   assert.ok(texts.includes('0.3 SEC'), `既定の 0.3 SEC が出ていない: ${texts.join(' / ')}`);
 });
+
+// 「AUTO-AIM RELEASE」だけでは何のしきい値か読めない。ロックが外れる条件だと分かる名前にする。
+test('Auto Aim 解除のしきい値の項目名に THRESHOLD が付いている', () => {
+  const item = SETTINGS_ITEMS.find((i) => i.key === 'autoAimRelease');
+  assert.equal(item.label, 'AUTO-AIM RELEASE THRESHOLD');
+  const { texts } = draw({ fromPlaying: true });
+  assert.ok(texts.includes('AUTO-AIM RELEASE THRESHOLD'), '新しい項目名が描かれていない');
+});
+
+// QUIT MISSION だけは進行を捨てる操作で、他の項目と性質が違う。同じ色で並んでいると
+// 「設定を変える」ものだと思って Enter を押してしまう。警告色で異質さを見せる。
+test('QUIT MISSION は他の項目と違う色で描かれる', () => {
+  const quitIndex = visibleSettingsItems(true).findIndex((i) => i.key === 'quit');
+  const fills = (index) => draw({ fromPlaying: true, index }).ctx.calls
+    .filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+
+  // 選んでいなくても警告色で出ている（並んだ時点で異質だと分かる）
+  assert.ok(fills(0).includes(UI.warn), `非選択時に警告色が使われていない: ${fills(0).join(' / ')}`);
+  // 選んでいるときも警告色のまま。ここで通常の選択色に戻ると、
+  // Enter を押す直前に危険であることの手掛かりが消える
+  assert.ok(fills(quitIndex).includes(UI.warn), '選択時に警告色が消えている');
+});
+
+test('QUIT MISSION 以外の項目は警告色を使わない', () => {
+  const { ctx } = draw({ fromPlaying: false });   // タイトルからは QUIT が出ない
+  const fills = ctx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  assert.equal(fills.includes(UI.warn), false, `QUIT が無いのに警告色が出ている: ${fills.join(' / ')}`);
+});

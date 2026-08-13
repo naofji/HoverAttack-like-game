@@ -356,8 +356,13 @@ export class ScreenRenderer {
             // 完全一致テストと噛み合わない上、キー操作カーソルの土台としても
             // 位置の手掛かりが色だけでは弱い）。色と太字はそのまま選択の手掛かりに残す。
             //
-            // 選択色は淡色より優先する。効いていない行でもカーソルは見えないと動かせない
-            ctx.fillStyle = selected ? UI.ok : (dimmed ? UI.faint : UI.dim);
+            // 選択色は淡色より優先する。効いていない行でもカーソルは見えないと動かせない。
+            //
+            // 危険な行（進行を捨てる QUIT MISSION）だけは選択色よりさらに優先して
+            // 警告色のままにする。選ぶと通常の選択色に変わる作りだと、**Enter を押す
+            // 直前にだけ危険の手掛かりが消える**という逆の挙動になるため。選んでいる
+            // ことは ▶ カーソルと太字が示すので、色を選択に使わなくても伝わる
+            ctx.fillStyle = item.danger ? UI.warn : (selected ? UI.ok : (dimmed ? UI.faint : UI.dim));
             ctx.font = font('body', selected);
             if (selected) ctx.fillText('▶', cx - 312, y);
             ctx.fillText(item.label, cx - 290, y);
