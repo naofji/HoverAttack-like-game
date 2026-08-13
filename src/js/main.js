@@ -310,13 +310,6 @@ export const Game = {
         // 分かれるはず（同時に両方起きるわけではない）。ただし未確認 — 実機で確かめること。
         if (this.gameState !== 'ranking_entry' && this.input.isKeyPressed('KeyM')) toggleFullscreen();
 
-        // F: 武器切り替え／手動リロード。プレイ中の1回だけの入力なので、他の
-        // one-shot 入力（Shift のロックオン、M の全画面）と同じくここで拾う。
-        // player.alive && !docked がガードなので、プレイ中以外では自然に無視される。
-        if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
-            this.player.pressWeaponKey();
-        }
-
         this._updateGameState(deltaTime);
     },
 
@@ -763,6 +756,9 @@ export const Game = {
             this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
         }
         this._updateMiniMap();
+        if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
+            this.player.pressWeaponKey();
+        }
         this._handleDocking();
         this._handleShooting();
 

@@ -235,7 +235,7 @@ test('F: モード off・しきい値より多い残弾でも装填が始まる'
   assert.equal(p.mgManualReload, false, '要求フラグが消えていない');
 });
 
-/** update() の F キー処理だけを通せる最小の game。 */
+/** F キー処理だけを通せる最小の game。 */
 function makeFKeyScene(missiles) {
   const player = {
     alive: true, docked: false, currentWeapon: 'mg', missiles,
@@ -268,10 +268,29 @@ function makeFKeyScene(missiles) {
 }
 
 // main.js は分岐を持たず Player に委ねる。規則が2箇所に分かれないようにするため。
+// F の読み取りは _updatePlaying() の中にある（update() 直下ではない）。update() 直下に
+// 置くと Shift/M と同じ「どの画面でも効く」入力になってしまい、後述の一時停止テストが
+// 示すとおり設定画面でも武器が切り替わる回帰を生む。ここでは _updatePlaying() の
+// 重い共同作業者（ミニマップ・ドッキング・射撃・物理ティック）だけ潰して直接呼ぶ。
 test('main.js: F は pressWeaponKey() に委ねる（switchWeapon を直接呼ばない）', () => {
   const { g, player } = makeFKeyScene(0);
-  g._updatePlaying = () => {};
-  g.update(16);
+  g._updateMiniMap = () => {};
+  g._handleDocking = () => {};
+  g._handleShooting = () => {};
+  g._simulationTick = () => {};
+  g._updatePlaying(16);
   assert.equal(player.pressed, 1, 'pressWeaponKey が呼ばれていない');
   assert.equal(player.switched, undefined, 'switchWeapon を直接呼んでいる');
+});
+
+// F の読み取りが _updatePlaying() の外（update() 直下）に漏れ出すと、ポーズ中の
+// 設定画面でも player.alive && !docked が真である限り武器が切り替わってしまう。
+// 設定画面に武器の行は無いので、プレイヤーには「何も押していないのに次に
+// プレイへ戻ったら武器が変わっていた」という説明の付かない現象に見える。
+test('F: 設定画面（ポーズ中）では pressWeaponKey が呼ばれない', () => {
+  const { g, player } = makeFKeyScene(3);
+  g.gameState = 'settings';
+  g._updateSettings = () => {};
+  g.update(16);
+  assert.equal(player.pressed, 0, 'ポーズ中なのに F が武器処理まで届いている');
 });
