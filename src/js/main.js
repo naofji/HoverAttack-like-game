@@ -30,7 +30,9 @@ import {
     MISSILE_SPEED, PLAYER_MG_SPEED,
     LEADERBOARD_URL,
     VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
+    AUTO_AIM_HOLD_TENTHS_DEFAULT,
 } from './utils/Constants.js';
+import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
 import { visibleSettingsItems } from './ui/settingsItems.js';
 import { SeededRNG } from './utils/SeededRNG.js';
@@ -131,6 +133,8 @@ export const Game = {
     camera: null,
     hud: null,
     crosshair: null,
+    // Shift のタップ／長押しを見分けるための計測。utils/holdKey.js が進める
+    shiftHold: initialHoldState(),
 
     // Managers
     collisionManager: null,
@@ -288,16 +292,6 @@ export const Game = {
         // 8箇所あるので、個別に呼ばずここでまとめて面倒を見る。
         if (this.gameState === 'playing') audioManager.resumeSe();
 
-        // Lock-on toggle works in all states
-        if (this.input.isKeyPressed('ShiftLeft') || this.input.isKeyPressed('ShiftRight')) {
-            this.input.crosshairLocked = !this.input.crosshairLocked;
-            if (this.input.crosshairLocked) {
-                const world = this.input.getMouseWorld(this.camera);
-                this.input.lockedWorldX = world.x;
-                this.input.lockedWorldY = world.y;
-            }
-        }
-
         // M で全画面を切り替える。カーソルが canvas の外に出やすいのが
         // 元々の不満だったので、画面いっぱいに広げて外に出る余地を減らす狙い。
         // ranking_entry だけは除外する。名前入力中の M キー押下は
@@ -441,6 +435,8 @@ export const Game = {
         this.gameState = 'settings';
         this.settingsIndex = 0;
         this.confirmingQuit = false;
+        // Shift を押したまま開いて閉じると、たまった時間で即座に長押しが発火する
+        this.shiftHold = initialHoldState();
         // 自機が止まっているのに噴射音が鳴り続けるのは不自然なので、
         // ループする音だけ止める。BGM と単発の効果音はそのまま
         audioManager.stopLoopingSe();
@@ -779,6 +775,41 @@ export const Game = {
         }
     },
 
+    /**
+     * `Shift` のタップと長押しを振り分ける。
+     *
+     * タップ（しきい値未満で離す）＝クロスヘアロック、長押し＝Auto Aim の解除／再開。
+     * 押した瞬間にロックを切り替える作りだと、長押しのたびにロックが道連れになるので、
+     * **タップは離したときに確定させる**（判定は utils/holdKey.js）。
+     *
+     * プレイ中だけに閉じてあるのは `F` キーと同じ理由 — `this.player` は
+     * `'settings'`（ポーズ中）や `'mission_clear'` でも alive かつ未ドックのまま残るので、
+     * 自機の状態を見るだけでは「プレイ中限定」にならない。撃てるのはプレイ中だけなので、
+     * プレイ外でロックしても使い道がない。
+     */
+    _updateShiftKey(deltaTime) {
+        const down = this.input.isKeyDown('ShiftLeft') || this.input.isKeyDown('ShiftRight');
+        // 設定は 1/10 秒で持っているのでミリ秒に直す
+        const tenths = this.settings?.autoAimHoldTenths ?? AUTO_AIM_HOLD_TENTHS_DEFAULT;
+        const { state, tap, hold } = stepHoldKey(this.shiftHold, down, deltaTime, tenths * 100);
+        this.shiftHold = state;
+
+        if (tap) {
+            this.input.crosshairLocked = !this.input.crosshairLocked;
+            if (this.input.crosshairLocked) {
+                const world = this.input.getMouseWorld(this.camera);
+                this.input.lockedWorldX = world.x;
+                this.input.lockedWorldY = world.y;
+            }
+        }
+
+        // 長押しが効くのは Auto Aim を持っているときだけ。持っていない間に反転できると、
+        // 次に拾ったときの状態が「いつ長押ししたか」で決まってしまう
+        if (hold && this.player && this.player.autoAimTimer > 0) {
+            this.player.autoAimPaused = !this.player.autoAimPaused;
+        }
+    },
+
     // ==========================================
     // PLAYING STATE UPDATE
     // ==========================================
@@ -793,6 +824,7 @@ export const Game = {
             this.input.mouse.x = this.input.lockedWorldX - this.camera.x;
             this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
         }
+        this._updateShiftKey(deltaTime);
         this._updateMiniMap();
         if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
             this.player.pressWeaponKey();
