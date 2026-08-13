@@ -180,10 +180,6 @@ Auto Aim を持っていないときは「解除中」という状態そのも�
 重なって読みにくく、狙っている相手も隠す。文字はごく小さく、`UI.dim` 相当の落ち着いた色で
 （警告ではなく状態表示なので、赤や点滅は使わない）。
 
-残り時間が 0 になれば `AUTO OFF` は消え、ただのクロスヘアに戻る。文字を出す条件に
-残り時間を含めるのはそのため — 解除フラグは残り続けるので、フラグだけを見ると
-Auto Aim を持っていないのに `AUTO OFF` が出続ける。
-
 `Crosshair` 側では `autoAimPaused`（残り時間つきの判定）と `autoAimActive`
 （`autoAimTimer > 0` かつ非解除）の2つの真偽値を先に作り、`AUTO` / `AUTO OFF` は
 `if (autoAimActive) … else if (autoAimPaused) …` の1本の分岐にする。**両方を同時に
