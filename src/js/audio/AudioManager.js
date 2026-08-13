@@ -1,5 +1,6 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
+import { effectiveVolumes } from '../utils/settings.js';
 import {
     ENEMY_HOVER_MAX_GAIN, PLAYER_HOVER_MAX_FREQ,
     ENEMY_HOVER_NOISE_FREQ, ENEMY_HOVER_NOISE_Q,
@@ -31,6 +32,8 @@ export class AudioManager {
         this.ctx = null;
         this.seFaded = false;    // 効果音を引いた状態か
         this.seFade = null;      // 効果音だけを引くための段（ゲームオーバー用）
+        this.seUserGain = null;  // ユーザー設定の効果音音量（seFade とは別の段）
+        this.seUserVolume = 1.0; // AudioContext がまだ無い段階でも覚えておく
         this.seMaster = null;    // 効果音の底上げ（BGM は通さない）
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
         this.listenerView = null;// いま映っている矩形（位置による音量の基準）
@@ -249,7 +252,12 @@ export class AudioManager {
         this.seMaster.gain.value = SE_MASTER_GAIN;
         this.seFade = this.ctx.createGain();
         this.seFade.gain.value = 1;
-        this.seFade.connect(this.seMaster);
+        // ユーザー設定の音量は seFade とは別の段にする。同じ段を使うと、
+        // ゲームオーバーのフェードとユーザー設定が互いを上書きしてしまう
+        this.seUserGain = this.ctx.createGain();
+        this.seUserGain.gain.value = this.seUserVolume;
+        this.seFade.connect(this.seUserGain);
+        this.seUserGain.connect(this.seMaster);
 
         if (typeof this.ctx.createDynamicsCompressor === 'function') {
             const comp = this.ctx.createDynamicsCompressor();
@@ -402,6 +410,23 @@ export class AudioManager {
      */
     adjustBgmVolume(direction) {
         return this.setBgmVolume(stepVolume(this.bgmVolume, direction));
+    }
+
+    /**
+     * ユーザー設定を音に反映する。値が変わるたびに呼んでよい。
+     *
+     * BGM と効果音は別々の経路なので、マスターを掛けた実効値をそれぞれに配る
+     * （utils/settings.js の effectiveVolumes がその計算を持つ）。
+     * @param {object} [settings]
+     */
+    applySettings(settings) {
+        if (!settings) return;
+        const { bgm, se } = effectiveVolumes(settings);
+        this.setBgmVolume(bgm);
+        this.seUserVolume = se;
+        // AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
+        // init() でノードを作るときに反映する
+        if (this.seUserGain) this.seUserGain.gain.value = se;
     }
 
     /**

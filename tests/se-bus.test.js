@@ -20,16 +20,19 @@ function reaches(node, dst, seen = new Set()) {
 
 // --- バスの組み立て -----------------------------------------------------------
 
-test('効果音は フェード段 → 底上げ → リミッタ → 出力 の順に通る', () => {
+test('効果音は フェード段 → ユーザー音量 → 底上げ → リミッタ → 出力 の順に通る', () => {
   const ctx = fakeAudioCtx();
   withCtx(ctx, () => {
     audioManager._createSeBus();
     const fade = audioManager.seFade;
+    const userGain = audioManager.seUserGain;
     const master = audioManager.seMaster;
 
     assert.equal(fade.gain.value, 1, 'フェード段は素通しで始まる');
+    assert.equal(userGain.gain.value, 1.0, 'ユーザー音量は既定で素通し');
     assert.equal(master.gain.value, SE_MASTER_GAIN);
-    assert.equal(fade.outputs[0], master, 'フェード段が底上げに繋がっていない');
+    assert.equal(fade.outputs[0], userGain, 'フェード段がユーザー音量に繋がっていない');
+    assert.equal(userGain.outputs[0], master, 'ユーザー音量が底上げに繋がっていない');
 
     const comp = master.outputs[0];
     assert.equal(comp.name, 'compressor', 'リミッタを通さずに出力へ繋いでいる');
