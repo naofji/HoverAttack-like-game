@@ -326,7 +326,7 @@ export class ScreenRenderer {
      * @param {{settings: object, index: number, fromPlaying: boolean, confirmingQuit: boolean}} state
      */
     drawSettings(ctx, state) {
-        const { settings, index, fromPlaying, confirmingQuit } = state;
+        const { settings, index, fromPlaying, confirmingQuit, quitChoiceYes } = state;
         const W = this.game.canvas.width;
         const H = this.game.canvas.height;
         const cx = Math.floor(W / 2);
@@ -348,10 +348,13 @@ export class ScreenRenderer {
             const selected = i === index;
 
             ctx.textAlign = 'left';
+            // カーソルは矢印だけ独立した fillText として立てる（モード選択の ◀/▶ と
+            // 同じ作り。ラベル文字列に接頭辞を混ぜると「表の項目が全部描かれるか」の
+            // 完全一致テストと噛み合わない上、Task 5 のキー操作カーソルの土台としても
+            // 位置の手掛かりが色だけでは弱い）。色と太字はそのまま選択の手掛かりに残す。
             ctx.fillStyle = selected ? UI.ok : UI.dim;
             ctx.font = font('body', selected);
-            // 選択中かどうかは色と太字で示す（テキストに矢印を足すと、選択中の行だけ
-            // ラベル文字列が変わってしまい「全項目のラベルが出る」判定と噛み合わない）
+            if (selected) ctx.fillText('▶', cx - 312, y);
             ctx.fillText(item.label, cx - 290, y);
 
             if (item.type === 'action') return;
@@ -372,14 +375,16 @@ export class ScreenRenderer {
             : 'W / S : MOVE      A / D : CHANGE      ENTER : RUN      P : CLOSE';
         ctx.fillText(hint, cx, rowsTop + items.length * rowH + Math.round(rowH / 2));
 
-        if (confirmingQuit) this._drawQuitConfirm(ctx, cx, H);
+        // quitChoiceYes 未指定（undefined）は NO 扱い。押し間違いで進行を
+        // 捨てないよう、既定は常に安全側（NO）に倒す
+        if (confirmingQuit) this._drawQuitConfirm(ctx, cx, H, quitChoiceYes === true);
 
         ctx.textBaseline = 'alphabetic';
         drawScanlines(ctx, W, H);
     }
 
     /** 途中終了の確認。押し間違いで進行を捨てないよう1段挟む。 */
-    _drawQuitConfirm(ctx, cx, H) {
+    _drawQuitConfirm(ctx, cx, H, yesSelected) {
         const boxW = 420;
         const boxH = 140;
         const y = Math.floor((H - boxH) / 2);
@@ -390,9 +395,14 @@ export class ScreenRenderer {
         ctx.fillStyle = UI.ink;
         ctx.font = font('body');
         ctx.fillText('QUIT THIS MISSION?', cx, y + 74);
-        ctx.fillStyle = UI.warn;
+
+        // 選ばれている方だけ強調する（色＋太字）。カーソルが動いても画面が
+        // 変わらないと A/D の反応が見えないため、行リストと同じ考え方を適用
+        ctx.font = font('body', yesSelected);
+        ctx.fillStyle = yesSelected ? UI.warn : UI.dim;
         ctx.fillText('YES', cx - 70, y + 110);
-        ctx.fillStyle = UI.dim;
+        ctx.font = font('body', !yesSelected);
+        ctx.fillStyle = !yesSelected ? UI.warn : UI.dim;
         ctx.fillText('NO', cx + 70, y + 110);
     }
 

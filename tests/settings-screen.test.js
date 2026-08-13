@@ -65,6 +65,17 @@ test('途中終了の確認中は YES / NO が出る', () => {
   assert.ok(texts.includes('NO'));
 });
 
+// カーソルが動いても画面が変わらないと A/D の反応が見えない。
+test('YES/NO の選択状態で描き方が変わる', () => {
+  const yes = draw({ confirmingQuit: true, quitChoiceYes: true });
+  const no = draw({ confirmingQuit: true, quitChoiceYes: false });
+  assert.notDeepEqual(
+    yes.ctx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]),
+    no.ctx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]),
+    'YES/NO を切り替えても描画が同じ',
+  );
+});
+
 test('画面からはみ出さない', () => {
   const { ctx } = draw();
   const ys = ctx.calls
