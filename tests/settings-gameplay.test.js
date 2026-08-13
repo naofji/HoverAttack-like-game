@@ -75,6 +75,41 @@ test('設定が無くても落ちない（現行どおり自動装填する）',
   assert.ok(p.mgReloadTimer > 0);
 });
 
+// 早期 return する2経路（武器違い／装填中）でもフラグは消える、という分担を直接縛る。
+// _updateMGReload は「読んだら必ず消す」ブロックを早期 return より前に置いているが、
+// これはコメントだけが守る規約なので、リファクタで早期 return の後ろに動かされても
+// テストが無ければ気づけない。動かすと「次に mg へ戻った瞬間に古い『切り替えた』が
+// 効いてしまう」（ブリーフの言葉どおり）という再発防止のためのテスト。
+// mgManualReload も同じ1本のブロックで一緒に消えるので、ここでまとめて縛る
+// （手動フラグだけ別経路で消すような分岐は無いため、専用テストを分ける必要はない）。
+test('武器がmg以外: 呼ばれた時点でフラグが消え、次にmgへ戻ってもリロードを引きずらない', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'onSwitch' });
+  p.currentWeapon = 'missile';
+  p.mgSwitchedToMG = true;
+  p.mgManualReload = true;
+
+  p._updateMGReload(input);
+  assert.equal(p.mgSwitchedToMG, false, '武器違いで早期returnしてもフラグが消えていない');
+  assert.equal(p.mgManualReload, false, '武器違いで早期returnしても手動フラグが消えていない');
+
+  // mg に戻っても、さっきの「切り替えた」は使い回されないはず
+  p.currentWeapon = 'mg';
+  p._updateMGReload(input);
+  assert.equal(p.mgReloadTimer, 0, '前回のフラグが生き残り、切り替えていないのに装填している');
+});
+
+test('装填中: 呼ばれた時点でフラグが消え、リロードは再始動しない', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'onSwitch' });
+  p.mgReloadTimer = 30;
+  p.mgSwitchedToMG = true;
+  p.mgManualReload = true;
+
+  p._updateMGReload(input);
+  assert.equal(p.mgSwitchedToMG, false, '装填中で早期returnしてもフラグが消えていない');
+  assert.equal(p.mgManualReload, false, '装填中で早期returnしても手動フラグが消えていない');
+  assert.equal(p.mgReloadTimer, 30, '装填中なのにタイマーが再始動している');
+});
+
 import { Game } from '../src/js/main.js';
 
 /** _handleDocking() だけを呼べる最小の game。 */
