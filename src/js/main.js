@@ -1031,13 +1031,37 @@ export const Game = {
         this._prevMouseX = mx;
         this._prevMouseY = my;
 
-        if (!player || !player.alive || player.docked || player.autoAimTimer <= 0) {
+        if (!player || !player.alive || player.autoAimTimer <= 0) {
             this.autoAimLockedEnemy = null;
             this.aimLead.reset();
             return;
         }
 
+        // 残り時間は「実際に効いているか」と無関係に減る。ドック中も Shift で
+        // 解除している間も減らすのは、Auto Aim を温存して使い回す立ち回りを
+        // 作らないため（解除は節約手段ではなく「今は手動で狙いたい」ための操作）。
+        //
+        // **この減算が _simulationTick() の内側にあることが要件。** 設定画面を
+        // 開いている間にタイマーが止まるのは、gameState === 'settings' の間
+        // _updatePlaying() ごと呼ばれず、ここに到達しないため。update() 直下など
+        // 外へ出すとポーズ中も減り始める
         player.autoAimTimer--;
+
+        // 尽きた時点で解除状態も消す。通常状態に戻ったのに「解除中」が残ると、
+        // 次に拾ったときの挙動が「いつ切ったか」で決まってしまう
+        if (player.autoAimTimer <= 0) {
+            player.autoAimPaused = false;
+            this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
+            return;
+        }
+
+        // ドック中と解除中は吸い付かない（タイマーは上で減らし済み）
+        if (player.docked || player.autoAimPaused) {
+            this.autoAimLockedEnemy = null;
+            this.aimLead.reset();
+            return;
+        }
 
         // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）。
         // しきい値を設定から取るのは、canvas の拡大率で物理的なマウスの体感が

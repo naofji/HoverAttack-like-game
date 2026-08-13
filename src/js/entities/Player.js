@@ -71,6 +71,11 @@ export class Player {
         this.repairKits = 0;
         this.autoAimTimer = 0;
         this.autoAimMaxTimer = 0;
+        // Shift 長押しで立てる一時解除。**真なら必ず autoAimTimer > 0** という
+        // 不変条件を _updateAutoAim() が守る（「解除中」は Auto Aim を持っている
+        // 間だけ存在する状態で、通常状態に戻ったのに残っていると、次に拾った
+        // ときの挙動が「いつ切ったか」で決まってしまう）
+        this.autoAimPaused = false;
 
         // Docking
         this.docked = false;
@@ -527,6 +532,7 @@ export class Player {
         this.repairKits = 0;
         this.autoAimTimer = 0;
         this.autoAimMaxTimer = 0;
+        this.autoAimPaused = false;
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;

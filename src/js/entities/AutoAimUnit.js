@@ -7,6 +7,11 @@ export class AutoAimUnit extends PickupItem {
         // 重ね取りで延長できるが、上限は超えない
         player.autoAimTimer = Math.min(player.autoAimTimer + AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION);
         player.autoAimMaxTimer = AUTO_AIM_MAX_DURATION;
+        // 既定では拾った時点で解除を解く。拾って何も起きないと壊れて見えるため。
+        // OFF を選んだ人は「自分で切ったなら切れたまま」を望んでいる
+        if (player.game?.settings?.autoAimResumeOnPickup ?? true) {
+            player.autoAimPaused = false;
+        }
     }
 
     // 他の2種より少し速く脈打たせて、時間もので急ぐ感じを出す
