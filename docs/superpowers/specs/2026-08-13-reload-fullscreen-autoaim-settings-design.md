@@ -41,10 +41,20 @@ AUTO-SWITCH TO MISSILE ON DOCK     OFF
 MG AUTO-RELOAD                  ALWAYS      ← 3段階に変更
 RELOAD AT AMMO                8 ROUNDS      ← 新規
 AUTO-AIM RELEASE                     4      ← 新規
-FULLSCREEN
 AUTO FULLSCREEN                     ON      ← 新規
 QUIT MISSION                                ← プレイ中のみ
 ```
+
+**FULLSCREEN 行（その場で切り替える action）は当初この直前に置く案だったが、
+実装後の判断で削除した。** 理由は次節「全画面の自動復帰」に書いたとおり、
+AUTO FULLSCREEN が ON（既定）のとき、FULLSCREEN 行で窓に戻して設定画面を
+閉じると `_closeSettings()` の `_restoreFullscreen()` が即座に全画面へ押し戻す —
+2つの行が互いを打ち消す矛盾になる。窓に戻る手段は `M` キーが既に持っている
+（HOW TO PLAY に記載済み）ので、FULLSCREEN 行が無くてもプレイヤーは窓表示に
+戻れる。ユーザーの決定は「AUTO FULLSCREEN を ON にしたらその時点から全画面。
+スイッチを触らなければ ON のまま次の画面遷移で全画面に戻す」で、前半は
+`_updateSettings()` で OFF→ON の遷移を検知して `enterFullscreen()` を直接呼び、
+後半は既存の `_restoreFullscreen()` がそのまま担う。
 
 | キー | 型 | 値 | 既定 |
 |---|---|---|---|
@@ -232,7 +242,8 @@ _restoreFullscreen() {
 | `_startGameIfRequested()` | 任意キー／クリック | 既存の `enterFullscreen()` をこれに置き換え |
 | `_updateMissionClear()` の次面へ進むところ | `W`／クリック／文字キー | 新規 |
 | `_updateRankingEntry()` の `Enter` 確定 | `Enter` | 新規 |
-| `_closeSettings()` | `Escape`／`P` | 新規。設定画面で ON にしてそのまま閉じれば即座に効く |
+| `_closeSettings()` | `Escape`／`P` | 新規。**スイッチを触らず** ON のまま閉じたときの節目 |
+| `_updateSettings()` の A/D 処理 | `D`（AUTO FULLSCREEN を OFF→ON へ動かした瞬間） | 後日追加。**その場で** ON にした体験を作る。節目まで待たず、D キー押下自体の transient activation を使う |
 
 **入れない場所:**
 
@@ -261,8 +272,8 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。こ�
 { key: 'autoFullscreen', label: 'AUTO FULLSCREEN', type: 'toggle' },
 ```
 
-`FULLSCREEN`（その場で切り替える `action`）と `AUTO FULLSCREEN`（`toggle`）は役割が違うので
-**2行に分ける**。並びは隣同士に置く。
+当初は `FULLSCREEN`（その場で切り替える `action`）を隣に置く2行構成を考えていたが、
+上の「設定項目の最終形」の直後に書いたとおり後日削除した。`AUTO FULLSCREEN` の1行だけが残る。
 
 値を文字列にする処理は `settingValueText(item, settings)` として `ui/settingsItems.js` 側に
 切り出し、`ScreenRenderer.drawSettings()` はそれを呼ぶだけにする。**描画（ctx）と値の
@@ -301,6 +312,7 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。こ�
 | ↑同上・注記 | ロック維持パスは `_lockOnEnemy()` → `_leadPointFor()` を経て `aimLead.measure()` を読むため、`aimLead` はスタブでなく本物の `AimLeadTracker`（単体テスト済みの純粋ユーティリティ）を使う。モックにする理由が無いので実物のほうが正直 |
 | `main.js` 配線 | `_restoreFullscreen()` が設定 ON/OFF で `enterFullscreen` を呼ぶ／呼ばないこと |
 | `main.js` 配線 | 4つの節目で呼ばれ、時間駆動の2つでは呼ばれないこと |
+| `main.js` 配線 | AUTO FULLSCREEN を D で OFF→ON に動かした瞬間だけ `enterFullscreen()` を呼び、既に ON のまま連打・OFF へ動かしたときは呼ばないこと（後日追加） |
 | 描画 | `choice` / `int` の値の文字列、`OFF` のときの淡色 |
 | `demo-screens` | `F` の説明が `SWITCH WEAPON / RELOAD` であること |
 

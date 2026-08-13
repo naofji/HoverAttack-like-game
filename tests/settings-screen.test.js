@@ -137,5 +137,7 @@ test('settingValueText: 型ごとの文字列', () => {
   assert.equal(settingValueText(byKey('mgAutoReloadMode'), s), 'ON WEAPON SWITCH');
   assert.equal(settingValueText(byKey('mgReloadThreshold'), s), '5 ROUNDS');
   assert.equal(settingValueText(byKey('autoAimRelease'), s), '12');
-  assert.equal(settingValueText(byKey('fullscreen'), s), null, 'action は値を持たない');
+  // fullscreen 行は廃止済み。action 型の値なしはいまや quit だけが持つので、
+  // action 型自体のカバレッジはこちらに付け替える
+  assert.equal(settingValueText(byKey('quit'), s), null, 'action は値を持たない');
 });

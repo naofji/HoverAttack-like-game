@@ -15,7 +15,6 @@
 // onlyWhenPlaying: プレイ中に開いたときだけ出す（タイトルには「途中終了」が要らない）
 // dimWhen: 真を返すとその行を淡色で描く（効いていないことを色で伝える）
 
-import { toggleFullscreen } from '../utils/fullscreen.js';
 import { volumePercent } from '../utils/bgmVolume.js';
 
 export const SETTINGS_ITEMS = [
@@ -34,9 +33,10 @@ export const SETTINGS_ITEMS = [
         dimWhen: (s) => s.mgAutoReloadMode === 'off',
     },
     { key: 'autoAimRelease', label: 'AUTO-AIM RELEASE', type: 'int' },
-    // その場で切り替える action と、節目で戻すかどうかの toggle は役割が違うので
-    // 2行に分ける。並びは隣同士に置く
-    { key: 'fullscreen', label: 'FULLSCREEN', type: 'action', run: () => toggleFullscreen() },
+    // その場で切り替える action の行はかつてここにあったが、AUTO FULLSCREEN が ON の
+    // ときに使うと「今は窓にしたのに、設定画面を閉じた瞬間また全画面に戻る」という
+    // 矛盾になるので廃止した。窓に戻したいときは M キー（HOW TO PLAY に記載）が
+    // そのまま使える。ON にした瞬間に全画面へ入る配線は main.js の _updateSettings() 側
     { key: 'autoFullscreen', label: 'AUTO FULLSCREEN', type: 'toggle' },
     { key: 'quit', label: 'QUIT MISSION', type: 'action', onlyWhenPlaying: true, confirm: true },
 ];

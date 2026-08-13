@@ -509,8 +509,18 @@ export const Game = {
         if (this.input.isKeyPressed('KeyD')) direction = +1;
         else if (this.input.isKeyPressed('KeyA')) direction = -1;
         if (direction !== 0) {
+            const wasAutoFullscreen = this.settings.autoFullscreen;
             this.settings = stepSetting(this.settings, item.key, direction, VOLUME_STEP_FINE);
             this._saveSettings();
+            // AUTO FULLSCREEN を OFF→ON へ動かした瞬間だけ、その場で全画面へ入る
+            // （ユーザーの決定：スイッチをいじらなければ次の画面遷移まで待つが、
+            // 触った瞬間は「その時点から全画面」という体験にする）。この D キー押下の
+            // ユーザー操作（transient activation）がまだ生きているので requestFullscreen が
+            // 許可される — _restoreFullscreen() の4箇所と同じ制約。既に ON のまま
+            // 連打したときや OFF へ動かしたときには呼ばない
+            if (item.key === 'autoFullscreen' && !wasAutoFullscreen && this.settings.autoFullscreen) {
+                enterFullscreen();
+            }
         }
     },
 

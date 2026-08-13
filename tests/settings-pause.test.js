@@ -119,6 +119,74 @@ test('-/+ は全体音量を動かす（BGM 音量ではない）', () => {
   assert.equal(g.settings.bgmVolume, 0.5, 'BGM 音量が動いてしまっている');
 });
 
+// ============================================
+// AUTO FULLSCREEN の D キー即時反映
+// ============================================
+//
+// FULLSCREEN 行（その場で切り替える action）を廃止したユーザー決定に伴い、
+// AUTO FULLSCREEN を OFF→ON へ D キーで動かした瞬間にその場で全画面へ入る。
+// 「スイッチを触らずに ON のままなら次の画面遷移（設定を閉じる等）で戻す」の
+// 半分は _closeSettings() の _restoreFullscreen() が既に担っている。
+//
+// enterFullscreen() は main.js から直接 import されているので差し込む継ぎ目が無い。
+// tests/auto-fullscreen.test.js と同じく、偽の document を差し込んで
+// requestFullscreen の呼び出しを観測する。
+function withFakeDocument(fn) {
+  const calls = [];
+  globalThis.document = {
+    fullscreenElement: null,
+    documentElement: {
+      requestFullscreen: () => { calls.push('request'); return Promise.resolve(); },
+    },
+  };
+  try { fn(calls); } finally { delete globalThis.document; }
+}
+
+test('AUTO FULLSCREEN: OFF→ON に D で動かした瞬間、その場で全画面に入る', () => {
+  const autoFsIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'autoFullscreen');
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: autoFsIndex,
+    settings: { ...DEFAULT_SETTINGS, autoFullscreen: false },
+  });
+  g._saveSettings = () => {};
+  g.input = fakeInput(['KeyD']);
+  withFakeDocument((calls) => {
+    g.update(16);
+    assert.equal(g.settings.autoFullscreen, true, 'ON へ動いていない');
+    assert.deepEqual(calls, ['request'], 'OFF→ON の瞬間に全画面へ入っていない');
+  });
+});
+
+test('AUTO FULLSCREEN: 既に ON のまま D を連打しても呼ばない', () => {
+  const autoFsIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'autoFullscreen');
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: autoFsIndex,
+    settings: { ...DEFAULT_SETTINGS, autoFullscreen: true },
+  });
+  g._saveSettings = () => {};
+  g.input = fakeInput(['KeyD']);
+  withFakeDocument((calls) => {
+    g.update(16);
+    assert.equal(g.settings.autoFullscreen, true);
+    assert.deepEqual(calls, [], '遷移していないのに全画面へ入ろうとしている');
+  });
+});
+
+test('AUTO FULLSCREEN: ON→OFF に A で動かしても呼ばない', () => {
+  const autoFsIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'autoFullscreen');
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: autoFsIndex,
+    settings: { ...DEFAULT_SETTINGS, autoFullscreen: true },
+  });
+  g._saveSettings = () => {};
+  g.input = fakeInput(['KeyA']);
+  withFakeDocument((calls) => {
+    g.update(16);
+    assert.equal(g.settings.autoFullscreen, false, 'OFF へ動いていない');
+    assert.deepEqual(calls, [], 'OFF へ動かしたのに全画面へ入ろうとしている');
+  });
+});
+
 test('-/+ は名前入力中は効かない（現行の扱いの回帰防止）', () => {
   const g = makeGame({ gameState: 'ranking_entry', settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 } });
   g._saveSettings = () => {};
