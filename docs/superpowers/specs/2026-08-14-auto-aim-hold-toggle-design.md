@@ -44,6 +44,9 @@ Auto Aim を温存したまま補給に戻る立ち回りが成立してしま�
 （`mgReload.js` / `aimLead.js` と同じ立ち位置）。
 
 ```js
+/** 押していない状態。呼び出し側の初期値。 */
+export function initialHoldState() // => { heldMs: 0, fired: false }
+
 /**
  * 長押しとタップを1つのキーで見分ける。
  * @param {object} state 呼び出し側が持つ状態（{heldMs, fired}）
@@ -54,6 +57,8 @@ Auto Aim を温存したまま補給に戻る立ち回りが成立してしま�
  */
 export function stepHoldKey(state, down, deltaMs, thresholdMs)
 ```
+
+呼び出し側の状態は `Game#shiftHold` に持たせる（初期値は `initialHoldState()`）。
 
 - `hold` は**しきい値を跨いだ1回だけ**真になる（`fired` で二度目を止める）。押しっぱなしで
   連続発火すると、0.3 秒ごとに解除と再開を往復してしまう
@@ -77,8 +82,33 @@ export function stepHoldKey(state, down, deltaMs, thresholdMs)
 見た目が変わるだけで何にも使えない。既存コメントの「全状態で効く」は意図というより
 置き場所の結果に見える。
 
+`_updatePlaying()` の中では、`_updateShiftKey()` を**クロスヘアロックのマウス座標
+ミラーリング（`if (this.input.crosshairLocked) { … }`）より前**に呼ぶ。タップでロックが
+その場で反転することがあるので、後ろにすると「反転した瞬間はまだ古いロック状態で
+描画される」1フレーム遅れが生まれる。旧実装はトグルが `_updatePlaying()` に入るより
+前（`update()` 直下）で走っていたので、この順序を守ることで挙動を変えない。
+
 **プレイ状態を離れるときに長押しの計測をリセットする。** `Shift` を押したまま設定画面を
-開いて閉じると、たまった時間で即座に発火してしまうため。`_openSettings()` で落とす。
+開いて閉じると、たまった時間で即座に発火してしまうため。
+
+素直に置くなら `_openSettings()` の中だが、**それでは足りない。** `'playing'` を離れる
+経路は設定画面だけでなく、ミッションクリア・ゲームオーバーもあり、そこからタイトル
+経由で次のミッションの `'playing'` に再入場する。`_openSettings()` にしか置かないと、
+それ以外の出口では計測が生き残ったまま次のミッションへ持ち越され、たまっていた時間が
+そのままクロスヘアロックの誤発火として次のミッションの1フレーム目に漏れる
+（実装時にこの経路で実際に踏んだ）。
+
+そこで、出口ごとに書かず `update()` に**1本の共通の見張り**を置く。
+
+```js
+// プレイ中以外では長押しの計測を寝かせる。抜ける経路は設定画面・ミッションクリア・
+// ゲームオーバーと複数あるので、出口ごとに書かず「プレイ中でなければ常に初期化」で受ける
+if (this.gameState !== 'playing') this.shiftHold = initialHoldState();
+```
+
+`gameState` が `'playing'` でなければ毎フレーム初期化し続けるだけなので、今ある出口
+だけでなく、**将来増える出口にも自動的に効く。** 個々の遷移先を列挙する保守を続けなくて
+よくなるのが狙い。
 
 ### 3. 残り時間の減り方
 
@@ -154,6 +184,16 @@ Auto Aim を持っていないときは「解除中」という状態そのも�
 残り時間を含めるのはそのため — 解除フラグは残り続けるので、フラグだけを見ると
 Auto Aim を持っていないのに `AUTO OFF` が出続ける。
 
+`Crosshair` 側では `autoAimPaused`（残り時間つきの判定）と `autoAimActive`
+（`autoAimTimer > 0` かつ非解除）の2つの真偽値を先に作り、`AUTO` / `AUTO OFF` は
+`if (autoAimActive) … else if (autoAimPaused) …` の1本の分岐にする。**両方を同時に
+出せない形を構造で保証する**ためで、片方だけ条件を書き換えて両方が真になる、という
+種類の表示バグを構造の外から起こせなくする。`autoAimPaused` の算出に
+`player.autoAimPaused && player.autoAimTimer > 0` と残り時間を重ねて見るのは、
+4節の不変条件からは冗長（`autoAimPaused` が真なら `autoAimTimer > 0` のはず）だが、
+**あえて残す。** 不変条件側に将来バグが入っても、表示側の防御が独立して効くようにする
+ための保険で、値を計算し直すだけなので実測コストは無い。
+
 ### 6. 設定を2つ足す
 
 ```
@@ -178,7 +218,10 @@ RESUME AUTO-AIM ON PICKUP           ON   ← 新規
 ```
 
 `settingValueText()` は `item.format` があればそれを使い、無ければ従来どおり
-`${v}${suffix ?? ''}` を返す。
+`${v}${suffix ?? ''}` を返す。**この分岐は `int` の case にだけ足す。** `format` は
+「整数を別表現で見せる」ためのものなので、`volume` / `toggle` / `choice` は今までの
+書式（`%` / `ON`・`OFF` / `labels`）のまま変えない。型を増やさずに済ませる分、
+既存の型の見せ方には触れないのが筋。
 
 上限 2.0 秒で止めるのは、これ以上は「押し間違いを防ぐ」域を超えて操作として重くなるため。
 下限 0.1 秒は、タップと区別できる最小。
@@ -197,7 +240,8 @@ RESUME AUTO-AIM ON PICKUP           ON   ← 新規
 | `main.js` 配線 | `Shift` 長押しで `autoAimPaused` が反転し、短押しで `crosshairLocked` が反転する |
 | `main.js` 配線 | Auto Aim を持っていない（`autoAimTimer === 0`）ときの長押しは何も起こさない |
 | `main.js` 配線 | **ポーズ中（`gameState === 'settings'`）に `Shift` を押しても何も起きない** |
-| `main.js` 配線 | 設定画面を開くと長押しの計測が落ちる（閉じた直後に誤発火しない） |
+| `main.js` 配線 | 設定画面を開くと、次のフレームで長押しの計測が落ちる（閉じた直後に誤発火しない） |
+| `main.js` 配線 | **ミッションクリアをまたいで再びプレイ中に戻っても、たまっていた計測が次のミッションへ漏れない**（`_openSettings()` 限定のリセットでは拾えなかった経路） |
 | `_updateAutoAim` | **ドック中もタイマーが減る**（回帰。現行は減らない） |
 | `_updateAutoAim` | **解除中もタイマーが減り、スナップはしない** |
 | `_updateAutoAim` | 死亡中は減らない |
