@@ -2,33 +2,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/js/main.js';
 
-test('Escape key returns to title screen when playing', () => {
-  const audioCalls = [];
-  const fakeAudio = {
-    playTitleBGM: () => audioCalls.push('playTitleBGM')
-  };
-
+// 設定画面ができたことで、プレイ中の Escape は直接タイトルへ戻るのではなく
+// 設定画面を開く（そこから QUIT MISSION → 確認 で初めてタイトルへ戻る）。
+// ポーズ中に途中終了ボタンを押し間違えて進行を失う事故を防ぐための変更。
+// タイトルへ戻る経路自体は tests/settings-pause.test.js の確認ダイアログの
+// テストでカバーされている。
+test('Escape key opens the settings screen when playing', () => {
   const game = Object.create(Game);
   game.gameState = 'playing';
   game.stateTimer = 100;
+  game.settings = { masterVolume: 1, bgmVolume: 1, seVolume: 1 };
   game.input = {
     isKeyPressed: (code) => code === 'Escape',
     getMouseWorld: () => ({ x: 0, y: 0 }),
     crosshairLocked: false
   };
 
-  // Mock audioManager by overriding global or calling _enterDemoState with custom handler
-  game._enterDemoState = function(state) {
-    this.gameState = state;
-    this.stateTimer = 0;
-    if (state === 'title') {
-      fakeAudio.playTitleBGM();
-    }
-  };
-
   game.update(16);
 
-  assert.equal(game.gameState, 'title');
-  assert.equal(game.stateTimer, 0);
-  assert.deepEqual(audioCalls, ['playTitleBGM']);
+  assert.equal(game.gameState, 'settings');
+  assert.equal(game.settingsReturnTo, 'playing');
 });

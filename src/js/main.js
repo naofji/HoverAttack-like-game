@@ -29,7 +29,10 @@ import {
     AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
     MISSILE_SPEED, PLAYER_MG_SPEED,
     LEADERBOARD_URL,
+    VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
 } from './utils/Constants.js';
+import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
+import { visibleSettingsItems } from './ui/settingsItems.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { toggleFullscreen, enterFullscreen } from './utils/fullscreen.js';
@@ -165,7 +168,12 @@ export const Game = {
     gameSpeed: MODES.normal.gameSpeed,
     simAccumulator: 0,
     simAlpha: 1,
-    gameState: 'title', // 'title' | 'playing' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display'
+    gameState: 'title', // 'title' | 'playing' | 'settings' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display'
+    settings: null,          // init() で loadSettings() が入れる
+    settingsIndex: 0,        // 設定画面で選択中の行
+    settingsReturnTo: null,  // 設定画面を閉じたときに戻る状態
+    confirmingQuit: false,   // 途中終了の確認中か
+    quitChoiceYes: false,    // 確認中のカーソル。既定は NO（押し間違いで進行を捨てない）
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
@@ -198,6 +206,11 @@ export const Game = {
         this.ctx = this.canvas.getContext('2d');
         this.canvas.width = CANVAS_WIDTH;
         this.canvas.height = CANVAS_HEIGHT;
+
+        // 設定は音より先に読む。AudioContext がまだ無くても applySettings() は
+        // 値を覚えておき、音を作るときに反映される
+        this.settings = loadSettings();
+        audioManager.applySettings(this.settings);
 
         console.log('Hover Attack v1.0 Initializing...');
 
@@ -246,10 +259,27 @@ export const Game = {
     // UPDATE
     // ==========================================
     update(deltaTime) {
-        // Press Escape to return to the title screen from playing or other sub-states
-        if (this.input.isKeyPressed('Escape') && this.gameState !== 'title') {
-            this._enterDemoState('title');
-            return;
+        // Escape / P で設定画面を開閉する。
+        //
+        // 全画面中の Escape はブラウザが全画面解除に使い、そのときの keydown は
+        // ページへ渡ってこないと見られる（下の M キーのコメント参照）。つまり
+        // 全画面では「1回目で全画面解除、2回目でメニュー」になりうるので、
+        // 全画面を保ったまま開ける P を主の操作として案内する。
+        const wantsMenu = this.input.isKeyPressed('Escape') || this.input.isKeyPressed('KeyP');
+        if (wantsMenu) {
+            if (this.gameState === 'settings') {
+                this._closeSettings();
+                return;
+            }
+            if (this.gameState === 'playing' || this.gameState === 'title') {
+                this._openSettings(this.gameState);
+                return;
+            }
+            // それ以外の画面（ランキング等）は従来どおり Escape でタイトルへ
+            if (this.input.isKeyPressed('Escape')) {
+                this._enterDemoState('title');
+                return;
+            }
         }
 
         this._tickVolumeHud();
@@ -299,7 +329,11 @@ export const Game = {
         else if (this.input.isCharPressed('-', '_')) direction = -1;
         if (direction === 0) return;
 
-        this.bgmVolume = audioManager.adjustBgmVolume(direction);
+        // 付け替え前は BGM 音量を直接動かしていた。設定画面ができた今は
+        // 「全体音量」を動かす。プレイ中にポーズを挟まず片手で下げられる
+        // ほうが速いので、-/+ は残してある。刻みは粗いほう（10%）
+        this.settings = stepSetting(this.settings, 'masterVolume', direction, VOLUME_STEP_COARSE);
+        this._saveSettings();
         this.volumeHudTimer = VOLUME_HUD_FRAMES;
     },
 
@@ -323,6 +357,7 @@ export const Game = {
             case 'gameover': return this._updateGameOver(deltaTime);
             case 'game_clear': return this._updateGameClear(deltaTime);
             case 'mission_clear': return this._updateMissionClear();
+            case 'settings': return this._updateSettings();
             case 'playing': return this._updatePlaying(deltaTime);
         }
     },
@@ -393,6 +428,98 @@ export const Game = {
         } else if (state === 'title') {
             audioManager.playTitleBGM();
         }
+    },
+
+    /**
+     * 設定画面を開く。プレイ中に開いた場合はここでゲーム時間が止まる
+     * （_updatePlaying() を呼ばなくなるだけ。タイマーもアキュムレータも
+     * その中で進むので、止めるための特別な処理は要らない）。
+     * @param {string} from 戻り先の状態名
+     */
+    _openSettings(from) {
+        this.settingsReturnTo = from;
+        this.gameState = 'settings';
+        this.settingsIndex = 0;
+        this.confirmingQuit = false;
+        // 自機が止まっているのに噴射音が鳴り続けるのは不自然なので、
+        // ループする音だけ止める。BGM と単発の効果音はそのまま
+        audioManager.stopLoopingSe();
+    },
+
+    /** 設定画面を閉じて元の状態へ戻る。 */
+    _closeSettings() {
+        this.gameState = this.settingsReturnTo || 'title';
+        this.settingsReturnTo = null;
+        this.confirmingQuit = false;
+    },
+
+    /** 設定を保存し、音へ反映する。値を変えるたびに呼ぶ。 */
+    _saveSettings() {
+        saveSettings(this.settings);
+        audioManager.applySettings(this.settings);
+    },
+
+    _updateSettings() {
+        const items = visibleSettingsItems(this.settingsReturnTo === 'playing');
+
+        if (this.confirmingQuit) {
+            // 確認中は A/D で YES/NO を選び、Enter で決める。既定は NO
+            if (this.input.isKeyPressed('KeyA')) this.quitChoiceYes = true;
+            if (this.input.isKeyPressed('KeyD')) this.quitChoiceYes = false;
+            if (this.input.isKeyPressed('Enter')) {
+                if (this.quitChoiceYes) {
+                    this.confirmingQuit = false;
+                    this.settingsReturnTo = null;
+                    this._enterDemoState('title');
+                } else {
+                    this.confirmingQuit = false;
+                }
+            }
+            return;
+        }
+
+        if (this.input.isKeyPressed('KeyW')) {
+            this.settingsIndex = Math.max(0, this.settingsIndex - 1);
+        }
+        if (this.input.isKeyPressed('KeyS')) {
+            this.settingsIndex = Math.min(items.length - 1, this.settingsIndex + 1);
+        }
+
+        // item は W/S を処理した**後**に取る。先に取ると、同じフレームで
+        // 行を移動しつつ A/D を押したときに移動前の項目を動かしてしまう
+        const item = items[this.settingsIndex];
+        if (!item) return;
+
+        if (item.type === 'action') {
+            if (this.input.isKeyPressed('Enter')) {
+                if (item.confirm) {
+                    this.confirmingQuit = true;
+                    this.quitChoiceYes = false;   // 既定は NO。押し間違いで捨てない
+                } else if (item.run) {
+                    item.run(this);
+                }
+            }
+            return;
+        }
+
+        let direction = 0;
+        if (this.input.isKeyPressed('KeyD')) direction = +1;
+        else if (this.input.isKeyPressed('KeyA')) direction = -1;
+        if (direction !== 0) {
+            this.settings = stepSetting(this.settings, item.key, direction, VOLUME_STEP_FINE);
+            this._saveSettings();
+        }
+    },
+
+    /** 設定画面の描画に渡す状態をまとめる。 */
+    _settingsViewState() {
+        return {
+            settings: this.settings,
+            index: this.settingsIndex,
+            fromPlaying: this.settingsReturnTo === 'playing',
+            confirmingQuit: this.confirmingQuit,
+            quitChoiceYes: this.quitChoiceYes,
+        };
     },
 
     /**
@@ -1249,10 +1376,22 @@ export const Game = {
             return;
         }
 
+        // 設定画面は背後を残して重ねる。プレイ中なら止まった戦場の上、
+        // タイトルなら（上の表で描かれた）タイトル画面の上に出る
+        if (this.gameState === 'settings' && this.settingsReturnTo !== 'playing') {
+            this.screenRenderer.drawTitleScreen(ctx);
+            this.screenRenderer.drawSettings(ctx, this._settingsViewState());
+            return;
+        }
+
         this._drawWorld(ctx);
         this.hud.draw(ctx);
         this.crosshair.draw(ctx);
         this._drawOverlays(ctx);
+
+        if (this.gameState === 'settings') {
+            this.screenRenderer.drawSettings(ctx, this._settingsViewState());
+        }
     },
 
     _drawWorld(ctx) {
@@ -1678,8 +1817,9 @@ export const Game = {
         this.update(deltaTime);
         this.draw();
         // draw() は画面ごとに早期 return するので、その外側で最後に重ねる
+        // -/+ が動かすのは全体音量なので、HUD もそれを映す
         this.screenRenderer.drawVolumeIndicator(
-            this.ctx, audioManager.bgmVolume, this.volumeHudTimer,
+            this.ctx, this.settings ? this.settings.masterVolume : 1, this.volumeHudTimer,
         );
 
         this.input.endFrame();

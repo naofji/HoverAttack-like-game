@@ -45,14 +45,22 @@ const NO_INPUT = {
 /** Escape だけが押されている入力。 */
 const ESCAPE = { ...NO_INPUT, isKeyPressed: (code) => code === 'Escape' };
 
-test('Escape でミッションを抜けると効果音が落ちる', () => {
+// 設定画面ができてからは、プレイ中の Escape は直接タイトルへ戻るのではなく
+// 設定画面（ポーズ）を開く。自機が止まっているのに鳴り続ける音（ホバー音など）
+// だけを止め、BGM やクリアのファンファーレを巻き込むバスの fadeOutSe は使わない
+// （tests/settings-pause.test.js の「ループする効果音だけ止める」と対）。
+test('Escape でミッションを抜けるとポーズし、鳴り続ける音が落ちる', () => {
     spyAudio((calls) => {
-        Object.assign(Game, { gameState: 'playing', input: ESCAPE, stateTimer: 0 });
+        Object.assign(Game, {
+            gameState: 'playing', input: ESCAPE, stateTimer: 0,
+            settings: { masterVolume: 1, bgmVolume: 1, seVolume: 1 },
+        });
         Game.update(16);
 
-        assert.equal(Game.gameState, 'title', 'タイトルに戻っていない');
-        assert.ok(calls.includes('fadeOutSe'),
-            `効果音が落ちていない: ${calls.join(',') || '（呼び出しなし）'}`);
+        assert.equal(Game.gameState, 'settings', '設定画面（ポーズ）に入っていない');
+        assert.equal(Game.settingsReturnTo, 'playing');
+        assert.ok(calls.includes('stopLoopingSe'),
+            `鳴り続ける音が止まっていない: ${calls.join(',') || '（呼び出しなし）'}`);
     });
 });
 
