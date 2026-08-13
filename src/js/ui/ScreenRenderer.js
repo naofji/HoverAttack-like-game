@@ -277,7 +277,7 @@ export class ScreenRenderer {
             const controls = [
                 { key: 'A / D', action: 'MOVE LEFT / RIGHT' },
                 { key: 'W', action: 'BURST JUMP (GROUND) / HOVER (HOLD) / UNDOCK' },
-                { key: 'SHIFT', action: 'LOCK-ON AIM (TAP)' },
+                { key: 'SHIFT', action: 'LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)' },
                 { key: 'L-CLICK', action: 'FIRE MISSILE OR MACHINE GUN' },
                 { key: 'R-CLICK', action: 'THROW GRENADE (TAP: THROW / HOLD + L-CLICK)' },
                 { key: 'F', action: 'SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)' },

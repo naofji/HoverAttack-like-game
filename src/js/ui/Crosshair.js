@@ -6,6 +6,7 @@ import {
     COLOR_CROSSHAIR, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     LEAD_MARKER_MIN_OFFSET, LEAD_MARKER_RADIUS, LEAD_MARKER_DASH,
 } from '../utils/Constants.js';
+import { UI } from './theme.js';
 
 export class Crosshair {
     constructor(game) {
@@ -17,7 +18,9 @@ export class Crosshair {
         const camera = this.game.camera;
         const autoAimTarget = this.game.autoAimTarget;
         const player = this.game.player;
-        const autoAimActive = !!(player && player.autoAimTimer > 0);
+        // 解除中は「効いていない」ので、赤い照準にも AUTO ラベルにもしない
+        const autoAimPaused = !!(player && player.autoAimPaused && player.autoAimTimer > 0);
+        const autoAimActive = !!(player && player.autoAimTimer > 0) && !autoAimPaused;
 
         let mx, my;
         if (autoAimTarget) {
@@ -103,7 +106,7 @@ export class Crosshair {
         // リードマーカー（照準は敵に据えたまま、着弾予定地点だけを別に示す）
         this._drawLeadMarker(ctx, mx, my, color);
 
-        // AUTO ラベル（オートエイム有効中のみ）
+        // AUTO ラベル（オートエイム有効中のみ）／解除中は AUTO OFF
         if (autoAimActive) {
             ctx.save();
             ctx.font = 'bold 8px "Space Mono", monospace';
@@ -111,6 +114,16 @@ export class Crosshair {
             ctx.textAlign = 'left';
             ctx.textBaseline = 'bottom';
             ctx.fillText('AUTO', mx + size + 2, my - size + 2);
+            ctx.restore();
+        } else if (autoAimPaused) {
+            // 右下に置くのは、真上・真横だと照準の線と重なって読みにくく、
+            // 狙っている相手も隠すため。警告ではなく状態表示なので赤や点滅は使わない
+            ctx.save();
+            ctx.font = 'bold 8px "Space Mono", monospace';
+            ctx.fillStyle = UI.dim;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('AUTO OFF', mx + size + 2, my + size - 2);
             ctx.restore();
         }
 

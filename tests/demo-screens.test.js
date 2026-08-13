@@ -114,6 +114,8 @@ test('HOW TO PLAY の CONTROLS に主要キーが載っている', () => {
     assert.ok(texts.includes('TOGGLE FULLSCREEN'), 'M キーの説明が無い');
     assert.ok(texts.includes('SETTINGS / PAUSE'), 'P キーの説明が無い');
     assert.ok(texts.includes('SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)'), 'F キーの説明が更新されていない');
+    assert.ok(texts.includes('LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)'),
+      'SHIFT の説明が更新されていない');
 
     // 行が増えてもパネルが画面に収まっていること
     const ys = ctx.calls
