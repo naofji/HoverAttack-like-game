@@ -12,6 +12,7 @@ import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
+import { visibleSettingsItems } from './settingsItems.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
@@ -313,6 +314,86 @@ export class ScreenRenderer {
         drawScanlines(ctx, W, H);
 
         this._drawStartHint(ctx, 600);
+    }
+
+    /**
+     * 設定画面。プレイ中（ポーズ）とタイトルの両方から同じものを出す。
+     *
+     * 背後は消さずにパネルを重ねる。プレイ中なら止まった戦場の上に、
+     * タイトルならタイトル画面の上に出て、どこから開いたかが分かる。
+     *
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {{settings: object, index: number, fromPlaying: boolean, confirmingQuit: boolean}} state
+     */
+    drawSettings(ctx, state) {
+        const { settings, index, fromPlaying, confirmingQuit } = state;
+        const W = this.game.canvas.width;
+        const H = this.game.canvas.height;
+        const cx = Math.floor(W / 2);
+        const items = visibleSettingsItems(fromPlaying);
+
+        // 背後を暗く沈める（消さない）。設定を見ている間も戦況が見えるように
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.fillRect(0, 0, W, H);
+
+        const rowH = 44;
+        const panelH = ScreenRenderer.panelHeight(rowH * items.length + rowH);
+        const panelY = Math.floor((H - panelH) / 2);
+        drawPanel(ctx, cx - 320, panelY, 640, panelH, 'SETTINGS', UI.accent);
+
+        const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
+        ctx.textBaseline = 'middle';
+        items.forEach((item, i) => {
+            const y = rowsTop + i * rowH + Math.round(rowH / 2);
+            const selected = i === index;
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = selected ? UI.ok : UI.dim;
+            ctx.font = font('body', selected);
+            // 選択中かどうかは色と太字で示す（テキストに矢印を足すと、選択中の行だけ
+            // ラベル文字列が変わってしまい「全項目のラベルが出る」判定と噛み合わない）
+            ctx.fillText(item.label, cx - 290, y);
+
+            if (item.type === 'action') return;
+            ctx.textAlign = 'right';
+            ctx.fillStyle = selected ? UI.ink : UI.dim;
+            const value = item.type === 'volume'
+                ? `${volumePercent(settings[item.key])}`
+                : (settings[item.key] ? 'ON' : 'OFF');
+            ctx.fillText(value, cx + 290, y);
+        });
+
+        // 操作の案内。最下段に1行
+        ctx.textAlign = 'center';
+        ctx.fillStyle = UI.dim;
+        ctx.font = font('small');
+        const hint = confirmingQuit
+            ? 'A / D : SELECT      ENTER : CONFIRM'
+            : 'W / S : MOVE      A / D : CHANGE      ENTER : RUN      P : CLOSE';
+        ctx.fillText(hint, cx, rowsTop + items.length * rowH + Math.round(rowH / 2));
+
+        if (confirmingQuit) this._drawQuitConfirm(ctx, cx, H);
+
+        ctx.textBaseline = 'alphabetic';
+        drawScanlines(ctx, W, H);
+    }
+
+    /** 途中終了の確認。押し間違いで進行を捨てないよう1段挟む。 */
+    _drawQuitConfirm(ctx, cx, H) {
+        const boxW = 420;
+        const boxH = 140;
+        const y = Math.floor((H - boxH) / 2);
+        drawPanel(ctx, cx - boxW / 2, y, boxW, boxH, 'CONFIRM', UI.warn);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = UI.ink;
+        ctx.font = font('body');
+        ctx.fillText('QUIT THIS MISSION?', cx, y + 74);
+        ctx.fillStyle = UI.warn;
+        ctx.fillText('YES', cx - 70, y + 110);
+        ctx.fillStyle = UI.dim;
+        ctx.fillText('NO', cx + 70, y + 110);
     }
 
     /**
