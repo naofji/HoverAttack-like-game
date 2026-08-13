@@ -361,8 +361,10 @@ export class ScreenRenderer {
             if (item.type === 'action') return;
             ctx.textAlign = 'right';
             ctx.fillStyle = selected ? UI.ink : UI.dim;
+            // すぐ上の音量 HUD が `${pct}%` と描いているのに、こちらだけ数字だけ
+            // だと同じ画面内で不揃いに見えるため合わせる
             const value = item.type === 'volume'
-                ? `${volumePercent(settings[item.key])}`
+                ? `${volumePercent(settings[item.key])}%`
                 : (settings[item.key] ? 'ON' : 'OFF');
             ctx.fillText(value, cx + 290, y);
         });
