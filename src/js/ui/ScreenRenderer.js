@@ -286,6 +286,7 @@ export class ScreenRenderer {
                 // 表示系なので操作キーの後ろ。ゲーム開始時に自動で全画面へ入るので
                 // 普段は押さずに済むが、抜けたい／戻したいときの手段として要る
                 { key: 'M', action: 'TOGGLE FULLSCREEN' },
+                { key: 'P', action: 'SETTINGS / PAUSE' },
             ];
 
             // 行の高さから必要なパネル高を求め、余りを上下に均等に配る。

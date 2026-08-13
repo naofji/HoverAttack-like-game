@@ -108,6 +108,8 @@ OFF は「**弾が尽きたときだけ装填する**」とする。`shouldStart
 
 **「途中終了」の確認**: `Enter` で「本当に終了しますか？ YES / NO」に変わり、
 もう一度選んで決める。現行の `Escape` 即離脱より安全側に倒す。
+**確認ダイアログの既定は NO。** 押し間違いで進行を捨てないよう、`quitChoiceYes` が未指定
+（undefined）のときは NO 扱いにして、常に安全側に倒す。
 
 ### ポーズの意味
 
@@ -121,6 +123,30 @@ OFF は「**弾が尽きたときだけ装填する**」とする。`shouldStart
 | 単発の効果音 | 鳴り終わるまで自然に減衰（バスは引かない） |
 
 タイマーが止まることはタイムボーナスに直結するので、**テストで縛る**。
+
+### 描画の状態オブジェクト
+
+`ScreenRenderer.drawSettings(ctx, state)` の `state` は以下の構造を持つ:
+
+```js
+{
+    settings: {masterVolume, bgmVolume, seVolume, autoSwitchMissile, mgAutoReload, ...},
+    index: number,           // 選択中の項目インデックス
+    fromPlaying: boolean,    // プレイ中から開いたか（true ならタイトルからは false）
+    confirmingQuit: boolean, // 途中終了確認画面を出しているか
+    quitChoiceYes: undefined | boolean // 確認ダイアログの選択（undefined = NO 扱い）
+}
+```
+
+`fromPlaying` が false ならば「途中終了」項目は出ない。`confirmingQuit` が true なら
+確認パネルを重ねる（`_drawQuitConfirm()`）。
+
+### デモループに含めない
+
+`DEMO_SCREEN_DRAWERS` に `'settings'` は **入れてはいけない**。設定画面はデモループの一員ではなく、
+遊びの途中またはタイトルから開く個別の手段なので、表の全キーが `DEMO_CYCLE_STATES` に
+揃っていなければ例外になる（`tests/demo-screens.test.js` が監視している）。
+デモループを抜けると、自動的に設定画面も消える。
 
 ### 保存
 
@@ -176,8 +202,10 @@ stepSetting(settings, key, direction) -> settings   // A/D 用。純関数
 - `AudioManager.js` — SE 音量用のゲイン段を1つ足す。既存の `seFade`（ゲームオーバーで引く段）
   とは別に、`seMaster` の手前に**ユーザー音量の段**を置く。2つを分けるのは、
   ゲームオーバーのフェードとユーザー設定が互いを上書きしないようにするため
-- `ui/ScreenRenderer.js` — `drawSettings(ctx, state)` を追加
-- `ui/HUD.js` — 音量 HUD の表示を BGM 音量から全体音量に付け替える（表示そのものは残す）
+- `ui/ScreenRenderer.js` — `drawSettings(ctx, state)` を追加。`drawVolumeIndicator()` メソッドも
+  追加し、音量 HUD（`-`/`+` で調整したときに数フレーム出る）を**全体音量**に付け替える
+- `main.js` の `loop()` — `draw()` が画面ごとに早期 return するため、その外側で音量 HUD を描く。
+  `screenRenderer.drawVolumeIndicator()` を呼ぶ
 
 ## フェーズ
 
@@ -226,7 +254,7 @@ CLAUDE.md の方針どおり、ソース文字列を grep するテストは書�
 | ポーズしてもミッションタイムが増えていないか | — |
 | 設定画面の音量の刻みが細かすぎ／粗すぎ | `VOLUME_STEP_FINE`（5%） |
 | `-`/`+` の刻みが細かすぎ／粗すぎ | `VOLUME_STEP_COARSE`（10%） |
-| `-`/`+` で全体音量が動き、HUD に出るか | — |
+| `-`/`+` で全体音量（MASTER）が動き、HUD に出るか | — |
 | SE 音量 100 が今までと同じ大きさか | — |
 | 全体音量 100 が今までと同じ大きさか（掛け算で目減りしていないか） | — |
 | 項目の並び順・文言 | `ui/settingsItems.js` の表 |

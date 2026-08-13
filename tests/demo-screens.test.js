@@ -108,10 +108,11 @@ test('HOW TO PLAY の CONTROLS に主要キーが載っている', () => {
     renderer.drawHowToPlay(ctx, 1);
 
     const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
-    for (const key of ['A / D', 'W', 'SHIFT', 'L-CLICK', 'R-CLICK', 'F', 'S', 'R', 'M']) {
+    for (const key of ['A / D', 'W', 'SHIFT', 'L-CLICK', 'R-CLICK', 'F', 'S', 'R', 'M', 'P']) {
         assert.ok(texts.includes(key), `CONTROLS に ${key} のキーキャップが無い`);
     }
     assert.ok(texts.includes('TOGGLE FULLSCREEN'), 'M キーの説明が無い');
+    assert.ok(texts.includes('SETTINGS / PAUSE'), 'P キーの説明が無い');
 
     // 行が増えてもパネルが画面に収まっていること
     const ys = ctx.calls
