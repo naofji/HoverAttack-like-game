@@ -7,6 +7,7 @@ import {
   SE_FADE_OUT_SECONDS,
 } from '../src/js/utils/Constants.js';
 import { fakeAudioCtx, withCtx } from './helpers/fake-audio-ctx.js';
+import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 
 const SOURCE = readFileSync(new URL('../src/js/audio/AudioManager.js', import.meta.url), 'utf8');
 
@@ -201,6 +202,50 @@ test('効果音の実装が出力へ直結していない', () => {
     .filter((l) => !allowed.includes(l.text));
   assert.deepEqual(lines, [],
     `効果音がバスを通らず出力へ直結している:\n${lines.map((l) => `  ${l.n}: ${l.text}`).join('\n')}`);
+});
+
+// --- ゲームオーバーのジングルが全体音量に従うこと ---------------------------
+//
+// playGameOver() は _stingDest()（seFade より後ろ）に繋がるので SE 音量には
+// 従わない（意図的、上のテストどおり）。だが「全体音量」は文字どおり全部を
+// 指すはずで、これまでは全体音量 0 で死んでも満音量で鳴っていた不具合があった。
+// applySettings() が覚えておく stingMasterVolume を、鳴らす瞬間に一度だけ
+// 掛けているかをここで確かめる。
+
+// fnMaster は playGameOver() の中で最初に作る createGain()。_createSeBus() が
+// 先に3つゲインノードを作っているので、その後にできた最初の gain ノードを探す。
+function findFnMaster(ctx) {
+  const before = ctx.created.length;
+  audioManager.playGameOver();
+  return ctx.created.slice(before).find((n) => n.name === 'gain');
+}
+
+test('全体音量 0 でゲームオーバーのジングルのゲインが 0 になる', () => {
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager._createSeBus();
+    audioManager.stingMasterVolume = 0;
+    const fnMaster = findFnMaster(ctx);
+    assert.ok(fnMaster, 'ジングルのマスターゲインが見当たらない');
+    assert.equal(fnMaster.gain.value, 0, '全体音量 0 なのにゲインが 0 でない');
+  });
+});
+
+test('全体音量 1 ならゲームオーバーのジングルは従来と同じゲイン（0.4）', () => {
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager._createSeBus();
+    audioManager.stingMasterVolume = 1;
+    const fnMaster = findFnMaster(ctx);
+    assert.equal(fnMaster.gain.value, 0.4, '既存の音量バランスが変わっている');
+  });
+});
+
+// stingMasterVolume は applySettings() が覚える。SE 音量には従わないので
+// seUserVolume とは別に扱われていること（(2) の実装が正しい段に効くこと）を確かめる。
+test('applySettings がマスター単体を stingMasterVolume に覚える', () => {
+  audioManager.applySettings({ ...DEFAULT_SETTINGS, masterVolume: 0.3, seVolume: 1, bgmVolume: 1 });
+  assert.equal(audioManager.stingMasterVolume, 0.3);
 });
 
 test('BGM は効果音のバスを通さない（BGM 音量と独立させるため）', () => {
