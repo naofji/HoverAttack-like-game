@@ -1001,8 +1001,11 @@ export const Game = {
 
         player.autoAimTimer--;
 
-        // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）
-        if (dx + dy > AUTO_AIM_CANCEL_THRESHOLD_DEFAULT) {
+        // マウスを動かしている間はスナップを抑制してロックも解除（タイマーは継続）。
+        // しきい値を設定から取るのは、canvas の拡大率で物理的なマウスの体感が
+        // 変わるため（Constants 側のコメント参照）。環境ごとの正解が1つに決まらない
+        const releaseThreshold = this.settings?.autoAimRelease ?? AUTO_AIM_CANCEL_THRESHOLD_DEFAULT;
+        if (dx + dy > releaseThreshold) {
             this.autoAimLockedEnemy = null;
             this.aimLead.reset();
             return;
