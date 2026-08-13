@@ -159,6 +159,16 @@ export function weaponKeyAction(missiles) {
 ミサイルが0のとき `currentWeapon` は `_fireMissile()` が必ず `'mg'` に戻しているので、
 武器の判定は要らない。
 
+**`F` の読み取りは `_updatePlaying()` の内側に留める。** `update()` 直下（一見グローバルな
+一回きりの入力を集めている場所）に上げたい誘惑があるが、`this.player` は `'settings'`
+（ポーズ中）・`'mission_clear'`・`'ranking_entry'` の画面でも `alive` かつ未ドックのまま
+残るため、`player.alive && !player.docked` だけでは「プレイ中限定」にならない。`update()`
+直下に置くと、設定画面を開いたまま `F` を押しただけで裏で武器が切り替わる、説明のつかない
+現象になる。対照的に `M`（全画面）は `update()` 直下でよい — 本当にどの画面でも意味を持つ
+操作で、かつ `gameState !== 'ranking_entry'` という明示ガードを自前で持っているため。
+「プレイ中だけの入力かどうか」は画面の中に置くか、自分でガードを書くかのどちらかで
+確保するもので、`player` の生死だけでは代用できない、という線引きをここに残す。
+
 **音。** いまはミサイル0で `F` を押すと（意味のない切り替えでも）`playSwitch()` が鳴っている。
 無音になると「キーが死んだ」と感じるので、**手動リロードが受け付けられたときだけ
 既存の `playSwitch()` を鳴らす**。満タン／リロード中は無音（＝受け付けなかったことが分かる）。
@@ -181,6 +191,13 @@ export function weaponKeyAction(missiles) {
 `mgManualReload` も同じく、`_updateMGReload()` が読んだら消す。
 
 `_resetMGState()`（工場出荷状態へ戻す処理）で両方のフラグも落とす。
+
+**`_updateMGReload()` はフラグを、武器判定・装填中判定より前——メソッドに入った直後に
+読んで即クリアする。** 「武器が mg 以外」「装填中」で早期 return する経路も含めて、
+呼ばれた時点で必ず両方 false に戻す。ここを早期 return の**後**に置くと、ミサイルを
+握っている間や別のリロードが進行中に立ったフラグが生き残り、次に mg へ戻った瞬間に
+古い「切り替えた」「手動リロード要求」が誤発火する。位置を後の実装が動かしても検出できる
+よう、早期 return する2経路それぞれを直接縛る回帰テストを置いてある。
 
 ### 6. Auto Aim 解除しきい値の配線
 
@@ -226,7 +243,10 @@ _restoreFullscreen() {
 **理由をコメントに残す** — 一見すると拾い漏らしに見えるため。
 
 `M` の手動トグルは従来どおり。**その画面にいる間は窓のままでいられる**（次の節目まで戻されない）。
-ON にした人が一時的に窓にしたいときの逃げ道になる。
+ON にした人が一時的に窓にしたいときの逃げ道になる。これは `enterFullscreen()` 自体が
+**冪等**（既に全画面なら何もしない）だから成り立つ。`_restoreFullscreen()` を4箇所に
+埋め込んだことで、この事実がどこにも書かれていないと「なぜ M で入れた全画面を
+壊さないのか」が読み取れなくなるため、`_restoreFullscreen()` の docblock に明記する。
 
 ### 8. 設定画面の描画
 
@@ -244,18 +264,26 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。
 `FULLSCREEN`（その場で切り替える `action`）と `AUTO FULLSCREEN`（`toggle`）は役割が違うので
 **2行に分ける**。並びは隣同士に置く。
 
-`ScreenRenderer.drawSettings()` に値の描き方を2つ足す:
+値を文字列にする処理は `settingValueText(item, settings)` として `ui/settingsItems.js` 側に
+切り出し、`ScreenRenderer.drawSettings()` はそれを呼ぶだけにする。**描画（ctx）と値の
+組み立てを分ける** — こうすると `choice` / `int` の文字列が正しいかを、canvas の ctx を
+一切作らずに素の関数呼び出しで検証できる。
 
-- `choice` … `labels[value]` を描く
+- `choice` … `labels[value]` を描く（無ければ `String(value)` に落とす）
 - `int` … `String(value) + (suffix ?? '')` を描く
 
 **`dimWhen` が真の行は淡色で描く。** `MG AUTO-RELOAD` が `OFF` のとき `RELOAD AT AMMO` は
 効かないが、**行を消さない** — 消すと下の項目の位置が動いてカーソルが飛ぶ。
-選択も移動もできるままにして、色だけで「効いていない」ことを伝える。
+選択も移動もできるままにして、色だけで「効いていない」ことを伝える。淡色は新しい色を
+足さず、既存の `ui/theme.js` の `UI.faint`（「補助・非選択」用に既にあった色）をそのまま使う。
+**選択色（カーソルが乗っている行の色）は淡色より優先する** — 効いていない行でも、
+カーソル自体が見えなければ動かせないため。
 
 ### 9. HOW TO PLAY
 
-`F` の説明を `SWITCH WEAPON` → `SWITCH WEAPON / RELOAD` に変える。
+`F` の説明を `SWITCH WEAPON` → `SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)` に変える。
+パネル幅に収まったので、当初考えていた `SWITCH WEAPON / RELOAD` への短縮は不要だった —
+どちらの武器に切り替わるかまで書けたほうが、二役になったキーの説明として親切なため。
 
 ## テスト
 
@@ -270,6 +298,7 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。
 | `Player` | 手動リロードが満タン／リロード中は受け付けられず、音も鳴らないこと |
 | `main.js` 配線 | ミサイル0で `F` がリロード要求になり、武器が切り替わらないこと |
 | `main.js` 配線 | `autoAimRelease` を上げるとマウスを振ってもロックが外れないこと |
+| ↑同上・注記 | ロック維持パスは `_lockOnEnemy()` → `_leadPointFor()` を経て `aimLead.measure()` を読むため、`aimLead` はスタブでなく本物の `AimLeadTracker`（単体テスト済みの純粋ユーティリティ）を使う。モックにする理由が無いので実物のほうが正直 |
 | `main.js` 配線 | `_restoreFullscreen()` が設定 ON/OFF で `enterFullscreen` を呼ぶ／呼ばないこと |
 | `main.js` 配線 | 4つの節目で呼ばれ、時間駆動の2つでは呼ばれないこと |
 | 描画 | `choice` / `int` の値の文字列、`OFF` のときの淡色 |
