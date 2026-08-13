@@ -465,10 +465,17 @@ export const Game = {
     _updateSettings() {
         const items = visibleSettingsItems(this.settingsReturnTo === 'playing');
 
+        // WASD とカーソルキーを等価に受ける。ゲーム中の移動は既に A/D と ←/→ の
+        // どちらでも動く（Player._updateHorizontal / Carrier）ので、設定画面だけ
+        // WASD 限定なのが揃っていなかった。
+        // ←/→ はデモ画面送り（_handleDemoJump）でも使うが、設定画面は
+        // _updateGameState() の別の分岐で、そちらを通らないので衝突しない
+        const nav = (key, arrow) => this.input.isKeyPressed(key) || this.input.isKeyPressed(arrow);
+
         if (this.confirmingQuit) {
-            // 確認中は A/D で YES/NO を選び、Enter で決める。既定は NO
-            if (this.input.isKeyPressed('KeyA')) this.quitChoiceYes = true;
-            if (this.input.isKeyPressed('KeyD')) this.quitChoiceYes = false;
+            // 確認中は A/D（←/→）で YES/NO を選び、Enter で決める。既定は NO
+            if (nav('KeyA', 'ArrowLeft')) this.quitChoiceYes = true;
+            if (nav('KeyD', 'ArrowRight')) this.quitChoiceYes = false;
             if (this.input.isKeyPressed('Enter')) {
                 if (this.quitChoiceYes) {
                     this.confirmingQuit = false;
@@ -481,10 +488,10 @@ export const Game = {
             return;
         }
 
-        if (this.input.isKeyPressed('KeyW')) {
+        if (nav('KeyW', 'ArrowUp')) {
             this.settingsIndex = Math.max(0, this.settingsIndex - 1);
         }
-        if (this.input.isKeyPressed('KeyS')) {
+        if (nav('KeyS', 'ArrowDown')) {
             this.settingsIndex = Math.min(items.length - 1, this.settingsIndex + 1);
         }
 
@@ -506,8 +513,8 @@ export const Game = {
         }
 
         let direction = 0;
-        if (this.input.isKeyPressed('KeyD')) direction = +1;
-        else if (this.input.isKeyPressed('KeyA')) direction = -1;
+        if (nav('KeyD', 'ArrowRight')) direction = +1;
+        else if (nav('KeyA', 'ArrowLeft')) direction = -1;
         if (direction !== 0) {
             const wasAutoFullscreen = this.settings.autoFullscreen;
             this.settings = stepSetting(this.settings, item.key, direction, VOLUME_STEP_FINE);

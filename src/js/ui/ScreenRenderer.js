@@ -377,9 +377,12 @@ export class ScreenRenderer {
         ctx.textAlign = 'center';
         ctx.fillStyle = UI.dim;
         ctx.font = font('small');
+        // カーソルキーでも動くので併記する。案内に載せないと、WASD しか効かないと
+        // 思われて片手で操作できることに気づかれない。パネル幅 640 に収めるため
+        // 「W / S」ではなく「WS」と詰め、矢印は記号1つぶんで済ませている
         const hint = confirmingQuit
-            ? 'A / D : SELECT      ENTER : CONFIRM'
-            : 'W / S : MOVE      A / D : CHANGE      ENTER : RUN      P : CLOSE';
+            ? 'AD ←→ : SELECT      ENTER : CONFIRM'
+            : 'WS ↑↓ : MOVE    AD ←→ : CHANGE    ENTER : RUN    P : CLOSE';
         ctx.fillText(hint, cx, rowsTop + items.length * rowH + Math.round(rowH / 2));
 
         // quitChoiceYes 未指定（undefined）は NO 扱い。押し間違いで進行を

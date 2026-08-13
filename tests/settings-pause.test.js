@@ -315,3 +315,68 @@ test('A/D で音量を変えると、本物の _saveSettings → applySettings �
     globalThis.localStorage = origLocalStorage;
   }
 });
+
+// --- カーソルキー ---
+//
+// 設定画面だけは WASD とカーソルキーを等価に受ける。ゲーム中の移動が既に
+// A/D と ←/→ を等価に扱っている（Player._updateHorizontal / Carrier）ので、
+// 設定画面だけ WASD 限定なのは統一されていなかった。
+//
+// ←/→ はデモ画面送り（_handleDemoJump）でも使うが、設定画面は
+// _updateGameState() の別の分岐なのでそちらを通らない。衝突しないことを
+// 「gameState が動いていない」で見る。
+
+test('↑/↓ は W/S と同じく選択を動かし、端で止まる', () => {
+  const g = makeGame({ gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0 });
+  g.input = fakeInput(['ArrowUp']);
+  g.update(16);
+  assert.equal(g.settingsIndex, 0, '先頭より上へ行っている');
+  g.input = fakeInput(['ArrowDown']);
+  g.update(16);
+  assert.equal(g.settingsIndex, 1, '↓ で下へ動いていない');
+  g.input = fakeInput(['ArrowUp']);
+  g.update(16);
+  assert.equal(g.settingsIndex, 0, '↑ で戻っていない');
+});
+
+test('→/← は D/A と同じく値を動かし、保存される', () => {
+  const saved = [];
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0,
+    settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 },
+    _saveSettings() { saved.push(this.settings.masterVolume); },
+  });
+  g.input = fakeInput(['ArrowRight']);
+  g.update(16);
+  assert.equal(g.settings.masterVolume, 0.55, '→ で増えていない');
+  g.input = fakeInput(['ArrowLeft']);
+  g.update(16);
+  assert.equal(g.settings.masterVolume, 0.5, '← で減っていない');
+  assert.deepEqual(saved, [0.55, 0.5], '保存が呼ばれていない');
+});
+
+// ←/→ がデモ画面送りに吸われていたら gameState が変わってしまう。
+test('設定画面の ←/→ はデモ画面送りに吸われない', () => {
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0,
+    settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 },
+  });
+  g._saveSettings = () => {};
+  g.input = fakeInput(['ArrowLeft']);
+  g.update(16);
+  assert.equal(g.gameState, 'settings', '別の画面へ飛んでいる');
+});
+
+test('確認ダイアログでも ←/→ で YES/NO を選べる', () => {
+  const quitIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'quit');
+  const g = makeGame({
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: quitIndex,
+    confirmingQuit: true, quitChoiceYes: false,
+  });
+  g.input = fakeInput(['ArrowLeft']);
+  g.update(16);
+  assert.equal(g.quitChoiceYes, true, '← で YES を選べていない');
+  g.input = fakeInput(['ArrowRight']);
+  g.update(16);
+  assert.equal(g.quitChoiceYes, false, '→ で NO を選べていない');
+});
