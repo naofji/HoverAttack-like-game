@@ -14,6 +14,7 @@ import {
     BGM_VOLUME_DEFAULT, VOLUME_STEP_FINE,
     MG_RELOAD_THRESHOLD_DEFAULT, MG_RELOAD_THRESHOLD_MIN, MG_RELOAD_THRESHOLD_MAX,
     AUTO_AIM_CANCEL_THRESHOLD_DEFAULT, AUTO_AIM_RELEASE_MIN, AUTO_AIM_RELEASE_MAX,
+    AUTO_AIM_HOLD_TENTHS_DEFAULT, AUTO_AIM_HOLD_TENTHS_MIN, AUTO_AIM_HOLD_TENTHS_MAX,
 } from './Constants.js';
 import { clampVolume } from './bgmVolume.js';
 
@@ -26,6 +27,8 @@ import { clampVolume } from './bgmVolume.js';
  * - mgReloadThreshold 8      … 従来の「弾倉 16 発の 50%」と同じ
  * - autoAimRelease 4         … 従来の AUTO_AIM_CANCEL_THRESHOLD_DEFAULT と同じ
  * - autoFullscreen true      … 今もゲーム開始時に全画面へ入る
+ * - autoAimHoldTenths 3      … 0.3 秒。長押しは新機能なので「取り違えない最短」を既定に
+ * - autoAimResumeOnPickup true … 拾って何も起きないと壊れて見えるため
  */
 export const DEFAULT_SETTINGS = Object.freeze({
     masterVolume: 1.0,
@@ -36,6 +39,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
     mgReloadThreshold: MG_RELOAD_THRESHOLD_DEFAULT,
     autoAimRelease: AUTO_AIM_CANCEL_THRESHOLD_DEFAULT,
     autoFullscreen: true,
+    autoAimHoldTenths: AUTO_AIM_HOLD_TENTHS_DEFAULT,
+    autoAimResumeOnPickup: true,
 });
 
 /**
@@ -62,6 +67,8 @@ const KINDS = {
     mgAutoReloadMode:  { kind: 'choice', values: MG_AUTO_RELOAD_MODES },
     mgReloadThreshold: { kind: 'int', min: MG_RELOAD_THRESHOLD_MIN, max: MG_RELOAD_THRESHOLD_MAX },
     autoAimRelease:    { kind: 'int', min: AUTO_AIM_RELEASE_MIN, max: AUTO_AIM_RELEASE_MAX },
+    autoAimResumeOnPickup: { kind: 'flag' },
+    autoAimHoldTenths: { kind: 'int', min: AUTO_AIM_HOLD_TENTHS_MIN, max: AUTO_AIM_HOLD_TENTHS_MAX },
 };
 
 /** 掛け算の丸め。0.3*0.3 が 0.09000000000000001 になるのを避ける。 */

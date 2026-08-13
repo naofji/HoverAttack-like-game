@@ -9,7 +9,7 @@
 //   volume … 0〜1 の値。A/D で増減し、パーセントで表示する
 //   toggle … 真偽値。A で OFF、D で ON
 //   choice … 決まった選択肢。A/D で左右に動く（labels に表示名）
-//   int    … 整数。A/D で 1 ずつ動く（suffix に単位）
+//   int    … 整数。A/D で 1 ずつ動く（suffix に単位、format があれば表示を任せる）
 //   action … 値を持たない。Enter で run(game) を呼ぶ
 //
 // onlyWhenPlaying: プレイ中に開いたときだけ出す（タイトルには「途中終了」が要らない）
@@ -33,6 +33,13 @@ export const SETTINGS_ITEMS = [
         dimWhen: (s) => s.mgAutoReloadMode === 'off',
     },
     { key: 'autoAimRelease', label: 'AUTO-AIM RELEASE', type: 'int' },
+    {
+        key: 'autoAimHoldTenths', label: 'AUTO-AIM HOLD TO TOGGLE', type: 'int',
+        // int は整数しか刻めないので 1/10 秒で持ち、表示だけ秒に直す。
+        // 「3」と出しても何の単位か読めないため
+        format: (v) => `${(v / 10).toFixed(1)} SEC`,
+    },
+    { key: 'autoAimResumeOnPickup', label: 'RESUME AUTO-AIM ON PICKUP', type: 'toggle' },
     // その場で切り替える action の行はかつてここにあったが、AUTO FULLSCREEN が ON の
     // ときに使うと「今は窓にしたのに、設定画面を閉じた瞬間また全画面に戻る」という
     // 矛盾になるので廃止した。窓に戻したいときは M キー（HOW TO PLAY に記載）が
@@ -62,7 +69,7 @@ export function settingValueText(item, settings) {
         case 'volume': return `${volumePercent(v)}%`;
         case 'toggle': return v ? 'ON' : 'OFF';
         case 'choice': return item.labels[v] ?? String(v);
-        case 'int': return `${v}${item.suffix ?? ''}`;
+        case 'int': return item.format ? item.format(v) : `${v}${item.suffix ?? ''}`;
         default: return null;
     }
 }

@@ -147,3 +147,23 @@ test('settingValueText: 型ごとの文字列', () => {
   // action 型自体のカバレッジはこちらに付け替える
   assert.equal(settingValueText(byKey('quit'), s), null, 'action は値を持たない');
 });
+
+// int の表示を行ごとに整えられること。1/10 秒で持っている値を「0.3 SEC」と出す。
+test('長押しの時間は秒で表示される', () => {
+  const item = SETTINGS_ITEMS.find((i) => i.key === 'autoAimHoldTenths');
+  assert.ok(item, '表に autoAimHoldTenths が無い');
+  assert.equal(settingValueText(item, { ...DEFAULT_SETTINGS, autoAimHoldTenths: 3 }), '0.3 SEC');
+  assert.equal(settingValueText(item, { ...DEFAULT_SETTINGS, autoAimHoldTenths: 20 }), '2.0 SEC');
+});
+
+test('format を持たない int は今までどおり数字だけ', () => {
+  const item = SETTINGS_ITEMS.find((i) => i.key === 'autoAimRelease');
+  assert.equal(settingValueText(item, { ...DEFAULT_SETTINGS, autoAimRelease: 12 }), '12');
+});
+
+test('新しい2項目が設定画面に描かれる', () => {
+  const { texts } = draw({ fromPlaying: true });
+  assert.ok(texts.includes('AUTO-AIM HOLD TO TOGGLE'), '長押しの時間の行が無い');
+  assert.ok(texts.includes('RESUME AUTO-AIM ON PICKUP'), '拾ったら再開の行が無い');
+  assert.ok(texts.includes('0.3 SEC'), `既定の 0.3 SEC が出ていない: ${texts.join(' / ')}`);
+});

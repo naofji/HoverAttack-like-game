@@ -8,6 +8,7 @@ import {
   VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
   MG_RELOAD_THRESHOLD_DEFAULT, MG_RELOAD_THRESHOLD_MIN, MG_RELOAD_THRESHOLD_MAX,
   AUTO_AIM_CANCEL_THRESHOLD_DEFAULT, AUTO_AIM_RELEASE_MIN, AUTO_AIM_RELEASE_MAX,
+  AUTO_AIM_HOLD_TENTHS_DEFAULT, AUTO_AIM_HOLD_TENTHS_MIN, AUTO_AIM_HOLD_TENTHS_MAX,
 } from '../src/js/utils/Constants.js';
 
 /** localStorage の代わり。key -> value の Map。 */
@@ -38,6 +39,8 @@ test('既定値は「今の挙動」に一致する（触らない人には何�
   assert.equal(DEFAULT_SETTINGS.mgReloadThreshold, MG_RELOAD_THRESHOLD_DEFAULT);
   assert.equal(DEFAULT_SETTINGS.autoAimRelease, AUTO_AIM_CANCEL_THRESHOLD_DEFAULT);
   assert.equal(DEFAULT_SETTINGS.autoFullscreen, true, '今は開始時に全画面へ入る');
+  assert.equal(DEFAULT_SETTINGS.autoAimHoldTenths, AUTO_AIM_HOLD_TENTHS_DEFAULT);
+  assert.equal(DEFAULT_SETTINGS.autoAimResumeOnPickup, true, '拾ったら再開するのが既定');
 });
 
 test('保存して読み直すと同じ値', () => {
@@ -263,4 +266,27 @@ test('旧 mgAutoReload は保存し直すと消える', () => {
   const written = JSON.parse(s.dump()[SETTINGS_STORAGE_KEY]);
   assert.equal(Object.hasOwn(written, 'mgAutoReload'), false, '旧キーが残っている');
   assert.equal(written.mgAutoReloadMode, 'off');
+});
+
+// --- Auto Aim 長押しトグルの2設定 ---
+
+test('stepSetting: 長押しの時間は 1〜20 で止まる', () => {
+  let s = { ...DEFAULT_SETTINGS, autoAimHoldTenths: AUTO_AIM_HOLD_TENTHS_MAX };
+  s = stepSetting(s, 'autoAimHoldTenths', +1);
+  assert.equal(s.autoAimHoldTenths, AUTO_AIM_HOLD_TENTHS_MAX, '上限を超えている');
+  s = { ...DEFAULT_SETTINGS, autoAimHoldTenths: AUTO_AIM_HOLD_TENTHS_MIN };
+  s = stepSetting(s, 'autoAimHoldTenths', -1);
+  assert.equal(s.autoAimHoldTenths, AUTO_AIM_HOLD_TENTHS_MIN, '下限を割っている');
+});
+
+test('coerce: 長押しの時間の範囲外は既定値に落とす', () => {
+  const raw = JSON.stringify({ autoAimHoldTenths: AUTO_AIM_HOLD_TENTHS_MAX + 1 });
+  assert.equal(loadSettings(fakeStorage({ [SETTINGS_STORAGE_KEY]: raw })).autoAimHoldTenths,
+    AUTO_AIM_HOLD_TENTHS_DEFAULT);
+});
+
+test('stepSetting: 拾ったら再開は向きで決まる', () => {
+  const off = { ...DEFAULT_SETTINGS, autoAimResumeOnPickup: false };
+  assert.equal(stepSetting(off, 'autoAimResumeOnPickup', +1).autoAimResumeOnPickup, true);
+  assert.equal(stepSetting(off, 'autoAimResumeOnPickup', -1).autoAimResumeOnPickup, false);
 });

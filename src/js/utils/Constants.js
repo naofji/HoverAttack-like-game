@@ -513,6 +513,15 @@ export const AUTO_AIM_CANCEL_THRESHOLD_DEFAULT = 4;
 export const AUTO_AIM_RELEASE_MIN = 1;
 export const AUTO_AIM_RELEASE_MAX = 20;
 
+// Auto Aim の解除／再開を切り替える Shift 長押しの時間（1/10 秒単位で持つ）。
+// 設定の int 型は整数しか刻めないので 1/10 秒で保存し、表示だけ「0.3 SEC」に直す。
+// 既定 3（0.3秒）は、タップと取り違えない最短で、かつ待たされる感じもしない長さ。
+// 下限 0.1 秒はタップと区別できる最小、上限 2.0 秒は「押し間違い防止」を超えて
+// 操作として重くなる手前で止めた。
+export const AUTO_AIM_HOLD_TENTHS_DEFAULT = 3;
+export const AUTO_AIM_HOLD_TENTHS_MIN = 1;
+export const AUTO_AIM_HOLD_TENTHS_MAX = 20;
+
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
