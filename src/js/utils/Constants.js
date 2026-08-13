@@ -172,7 +172,6 @@ export const PLAYER_MG_LIFETIME = 180; // 80% of original 240 (192 * 3 = 576px)
 export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
-export const PLAYER_MG_RELOAD_THRESHOLD = 0.5; // Reload only when ammo <= 50% of the magazine
 export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 degrees)
 
 // オートリロードが発動する残弾（発）。既定 8 は従来の PLAYER_MG_RELOAD_THRESHOLD 0.5

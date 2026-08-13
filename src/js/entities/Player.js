@@ -15,10 +15,10 @@ import {
     
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
-    PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME,
+    PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE
 } from '../utils/Constants.js';
-import { shouldStartMGReload } from '../utils/mgReload.js';
+import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -94,6 +94,11 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+        // 「立てる」のは入力処理、「消す」のは読んだ側（シミュレーションティック）。
+        // gameSpeed 0.8 では 1 フレームに 0 ティックのことがあるので、立てた
+        // フレームで消すとティックに届かないことがある
+        this.mgSwitchedToMG = false;
+        this.mgManualReload = false;
 
         // Current weapon ('missile' or 'mg')
         this.currentWeapon = 'missile';
@@ -155,16 +160,27 @@ export class Player {
         }
     }
 
-    /** Start an MG reload when the magazine is low and the trigger allows it. */
+    /** Start an MG reload when the settings and magazine state allow it. */
     _updateMGReload(input) {
+        // フラグはこのメソッドが読んだ時点で必ず消す。武器が違う・装填中で
+        // 早期 return する経路でも消さないと、次に mg へ戻った瞬間に古い
+        // 「切り替えた」が効いてしまう
+        const switchedToMG = this.mgSwitchedToMG;
+        const manual = this.mgManualReload;
+        this.mgSwitchedToMG = false;
+        this.mgManualReload = false;
+
         if (this.currentWeapon !== 'mg' || this.mgReloadTimer > 0) return;
         const fireHeld = input.mouse.left || input.isKeyDown('Space');
-        // 設定がまだ無い経路（テストの最小インスタンスなど）では現行どおり自動装填する。
-        // onSwitch はまだ「切り替えたか」を知らないので always と同じ扱い（Task 2 で分ける）
-        const autoReload = (this.game?.settings?.mgAutoReloadMode ?? 'always') !== 'off';
-        if (shouldStartMGReload(this.mgBurstLeft, PLAYER_MG_BURST_SIZE, fireHeld, autoReload)) {
-            this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
-        }
+        // 設定がまだ無い経路（テストの最小インスタンスなど）では現行どおり自動装填する
+        const settings = this.game?.settings;
+        const started = shouldStartMGReload(this.mgBurstLeft, PLAYER_MG_BURST_SIZE, fireHeld, {
+            mode: settings?.mgAutoReloadMode ?? 'always',
+            threshold: settings?.mgReloadThreshold ?? MG_RELOAD_THRESHOLD_DEFAULT,
+            switchedToMG,
+            manual,
+        });
+        if (started) this.mgReloadTimer = PLAYER_MG_RELOAD_TIME;
     }
 
     /** Update crouching/stun state. */
@@ -535,6 +551,9 @@ export class Player {
     switchWeapon() {
         if (this.currentWeapon === 'missile') {
             this.currentWeapon = 'mg';
+            // 「武器切り替え時」の装填はここが起点。_fireMissile() がミサイル切れで
+            // 勝手に mg へ戻す経路では立てない — ゲーム側が戻したのは切り替えではない
+            this.mgSwitchedToMG = true;
         } else {
             this.currentWeapon = 'missile';
         }
@@ -603,6 +622,8 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+        this.mgSwitchedToMG = false;
+        this.mgManualReload = false;
     }
 
     /** 破壊時の破片パーツ。静的部位に、死亡時のポーズを焼き込んだ脚と武装を足す。 */

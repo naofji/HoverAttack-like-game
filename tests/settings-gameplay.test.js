@@ -1,39 +1,78 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldStartMGReload } from '../src/js/utils/mgReload.js';
-import { PLAYER_MG_BURST_SIZE } from '../src/js/utils/Constants.js';
+import { Player } from '../src/js/entities/Player.js';
+import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
+import { PLAYER_MG_BURST_SIZE, MG_RELOAD_THRESHOLD_DEFAULT } from '../src/js/utils/Constants.js';
 
 const SIZE = PLAYER_MG_BURST_SIZE;
-const HALF = Math.floor(SIZE / 2);
 
-test('オートリロード ON: 残弾が半分以下で引き金を離すと装填する（現行の挙動）', () => {
-  assert.equal(shouldStartMGReload(HALF, SIZE, false, true), true);
+/** _updateMGReload / switchWeapon だけを呼べる最小の Player。 */
+function makePlayer(settings, burstLeft = MG_RELOAD_THRESHOLD_DEFAULT) {
+  const input = { mouse: { left: false }, isKeyDown: () => false };
+  const p = Object.create(Player.prototype);
+  p.game = { input, settings };
+  p.currentWeapon = 'mg';
+  p.missiles = 5;
+  p.mgReloadTimer = 0;
+  p.mgFireTimer = 0;
+  p.mgBurstLeft = burstLeft;
+  p.mgSwitchedToMG = false;
+  p.mgManualReload = false;
+  return { p, input };
+}
+
+test('always: しきい値以下で引き金を離すと装填が始まる（従来の挙動）', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'always' });
+  p._updateMGReload(input);
+  assert.ok(p.mgReloadTimer > 0);
 });
 
-test('オートリロード ON: 撃ち切ったら引き金を握っていても装填する', () => {
-  assert.equal(shouldStartMGReload(0, SIZE, true, true), true);
+test('off: しきい値以下でも装填が始まらない', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'off' });
+  p._updateMGReload(input);
+  assert.equal(p.mgReloadTimer, 0);
 });
 
-test('オートリロード ON: 残弾が十分なら装填しない', () => {
-  assert.equal(shouldStartMGReload(SIZE, SIZE, false, true), false);
+test('しきい値の設定が効く', () => {
+  const s = { ...DEFAULT_SETTINGS, mgAutoReloadMode: 'always', mgReloadThreshold: 2 };
+  const { p, input } = makePlayer(s, 3);
+  p._updateMGReload(input);
+  assert.equal(p.mgReloadTimer, 0, 'しきい値 2 なのに残弾 3 で装填している');
+
+  const { p: q, input: qi } = makePlayer(s, 2);
+  q._updateMGReload(qi);
+  assert.ok(q.mgReloadTimer > 0, 'しきい値ちょうどで装填していない');
 });
 
-// OFF は「弾が尽きたときだけ」。手動リロードのキーは作らない（R はミニマップで埋まっている）。
-test('オートリロード OFF: 残弾が半分以下で引き金を離しても装填しない', () => {
-  assert.equal(shouldStartMGReload(HALF, SIZE, false, false), false);
+// フラグは立てっぱなしにしない。gameSpeed 0.8 では 1 フレームに 0 ティックのことがあるので、
+// 「立てる」のは入力処理、「消す」のは読んだ側（ティック）という分担にしてある。
+test('onSwitch: F で mg に持ち替えたときだけ装填し、フラグは1回で消える', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'onSwitch' });
+  p._updateMGReload(input);
+  assert.equal(p.mgReloadTimer, 0, '切り替えていないのに装填している');
+
+  p.currentWeapon = 'missile';
+  p.switchWeapon();
+  assert.equal(p.currentWeapon, 'mg');
+  assert.equal(p.mgSwitchedToMG, true, '切り替えフラグが立っていない');
+
+  p._updateMGReload(input);
+  assert.ok(p.mgReloadTimer > 0, '切り替えたのに装填していない');
+  assert.equal(p.mgSwitchedToMG, false, 'フラグが消えていない');
 });
 
-test('オートリロード OFF: 残弾が 1 でも装填しない', () => {
-  assert.equal(shouldStartMGReload(1, SIZE, false, false), false);
+test('onSwitch: mg から missile への切り替えではフラグが立たない', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'onSwitch' });
+  p.currentWeapon = 'mg';
+  p.switchWeapon();
+  assert.equal(p.currentWeapon, 'missile');
+  assert.equal(p.mgSwitchedToMG, false);
 });
 
-test('オートリロード OFF: 撃ち切ったら装填する（撃てなくなっては困る）', () => {
-  assert.equal(shouldStartMGReload(0, SIZE, false, false), true);
-  assert.equal(shouldStartMGReload(0, SIZE, true, false), true);
-});
-
-test('第4引数を省略すると ON 扱い（既存の呼び出しが壊れない）', () => {
-  assert.equal(shouldStartMGReload(HALF, SIZE, false), true);
+test('設定が無くても落ちない（現行どおり自動装填する）', () => {
+  const { p, input } = makePlayer(undefined);
+  assert.doesNotThrow(() => p._updateMGReload(input));
+  assert.ok(p.mgReloadTimer > 0);
 });
 
 import { Game } from '../src/js/main.js';
