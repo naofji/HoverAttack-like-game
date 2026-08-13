@@ -146,12 +146,36 @@ test('ポーズ中（設定画面）に Shift を押しても何も起きない'
   assert.equal(g.input.crosshairLocked, false, 'ポーズ中の Shift でロックが切り替わっている');
 });
 
-// Shift を押したまま設定画面を開いて閉じると、たまった時間で即発火してしまう。
-test('設定画面を開くと長押しの計測が初期化される', () => {
+// リセットは _openSettings() 個別ではなく update() の「プレイ中でなければ常に初期化」という
+// 共通のシームで行っている（フラッグ奪取やゲームオーバーなど他の退出経路も同じシームで拾うため）。
+// _openSettings() 自体は同フレーム内で return するので、シームが効くのは次フレームになる。
+test('設定画面を開くと、次のフレームで長押しの計測が初期化される', () => {
   const g = makeGame();
   g.input.setDown(['ShiftLeft']);
   g._updatePlaying(200);                 // しきい値 300ms 未満まで貯める
   assert.ok(g.shiftHold.heldMs > 0, 'そもそも貯まっていない');
   g._openSettings('playing');
+  g._updateSettings = () => {};          // update() の settings 分岐を通すためのスタブ
+  g.update(16);                          // gameState が 'playing' でなくなった次のフレーム
   assert.deepEqual(g.shiftHold, initialHoldState(), '計測が残っている');
+});
+
+// _openSettings() だけをリセット箇所にすると、フラッグ奪取やゲームオーバーなど
+// 他の退出経路が素通りしてしまう。ミッションクリアをまたいで Shift を押しっぱなしにした場合、
+// 次のミッションの1フレーム目に前のミッションの押しかけ分がタップとして漏れて
+// クロスヘアロックが勝手に切り替わる、という実プレイで起きうる事故を防げているか確かめる。
+test('ミッションクリアをまたぐと長押しの計測が初期化され、次のミッションでタップが漏れない', () => {
+  const g = makeGame();
+  g.input.setDown(['ShiftLeft']);
+  g._updatePlaying(200);                 // しきい値 300ms 未満まで貯める（保持中のまま画面が変わる）
+  assert.ok(g.shiftHold.heldMs > 0, 'そもそも貯まっていない');
+
+  g.gameState = 'mission_clear';
+  g.update(16);                          // update() の共通シームがここで効くはず
+  assert.deepEqual(g.shiftHold, initialHoldState(), 'ミッションクリア中も計測が残っている');
+
+  g.input.setDown([]);                   // ミッションクリア画面の間に離した
+  g.gameState = 'playing';
+  g._updatePlaying(16);
+  assert.equal(g.input.crosshairLocked, false, '前のミッションの押しかけがタップとして漏れている');
 });

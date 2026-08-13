@@ -304,6 +304,11 @@ export const Game = {
         // 分かれるはず（同時に両方起きるわけではない）。ただし未確認 — 実機で確かめること。
         if (this.gameState !== 'ranking_entry' && this.input.isKeyPressed('KeyM')) toggleFullscreen();
 
+        // プレイ中以外では長押しの計測を寝かせる。押したまま画面が変わって戻ってきたときに、
+        // たまった時間で即発火するのを防ぐ。抜ける経路は設定画面・ミッションクリア・
+        // ゲームオーバーと複数あるので、出口ごとに書かず「プレイ中でなければ常に初期化」で受ける
+        if (this.gameState !== 'playing') this.shiftHold = initialHoldState();
+
         this._updateGameState(deltaTime);
     },
 
@@ -435,8 +440,6 @@ export const Game = {
         this.gameState = 'settings';
         this.settingsIndex = 0;
         this.confirmingQuit = false;
-        // Shift を押したまま開いて閉じると、たまった時間で即座に長押しが発火する
-        this.shiftHold = initialHoldState();
         // 自機が止まっているのに噴射音が鳴り続けるのは不自然なので、
         // ループする音だけ止める。BGM と単発の効果音はそのまま
         audioManager.stopLoopingSe();
@@ -819,12 +822,14 @@ export const Game = {
         this.missionTimer += deltaTime;
 
         // Per-frame input / one-shots (run once regardless of tick count).
+        // タップでロックが今フレーム切り替わることがあるので、ミラーリングより先に判定する。
+        // 後ろにすると「押した瞬間はまだ古いロック状態で描画される」1フレーム遅れが生まれる
+        this._updateShiftKey(deltaTime);
         // ロック中: 内部マウス座標をクロスヘアのスクリーン位置に固定
         if (this.input.crosshairLocked) {
             this.input.mouse.x = this.input.lockedWorldX - this.camera.x;
             this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
         }
-        this._updateShiftKey(deltaTime);
         this._updateMiniMap();
         if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
             this.player.pressWeaponKey();
