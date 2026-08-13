@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 import { PLAYER_MG_BURST_SIZE, MG_RELOAD_THRESHOLD_DEFAULT } from '../src/js/utils/Constants.js';
+import { audioManager } from '../src/js/audio/AudioManager.js';
 
 const SIZE = PLAYER_MG_BURST_SIZE;
 
@@ -152,4 +153,125 @@ test('設定が無くても落ちない（現行の挙動のまま）', () => {
   const { game, player } = makeDockScene(undefined);
   assert.doesNotThrow(() => game._handleDocking());
   assert.equal(player.currentWeapon, 'mg');
+});
+
+/** playSwitch の呼び出しを記録し、必ず元に戻す。 */
+function withSwitchSpy(fn) {
+  const calls = [];
+  const orig = audioManager.playSwitch;
+  audioManager.playSwitch = () => calls.push('playSwitch');
+  try { fn(calls); } finally { audioManager.playSwitch = orig; }
+}
+
+test('F: ミサイルが残っていれば武器を切り替える', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS });
+  p.missiles = 3;
+  p.currentWeapon = 'mg';
+  withSwitchSpy((calls) => {
+    p.pressWeaponKey();
+    assert.equal(p.currentWeapon, 'missile');
+    assert.equal(p.mgManualReload, false, '切り替えなのにリロードを要求している');
+    assert.deepEqual(calls, ['playSwitch']);
+  });
+});
+
+// ミサイルが尽きると切り替え先が無くなるので、そのときだけ F の意味が変わる。
+test('F: ミサイルが尽きていればリロードを要求し、武器は切り替えない', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS });
+  p.missiles = 0;
+  p.currentWeapon = 'mg';
+  p.mgBurstLeft = 4;
+  withSwitchSpy((calls) => {
+    p.pressWeaponKey();
+    assert.equal(p.currentWeapon, 'mg', '切り替わってしまっている');
+    assert.equal(p.mgManualReload, true, 'リロードを要求していない');
+    assert.deepEqual(calls, ['playSwitch'], '押した手応えの音が鳴っていない');
+  });
+});
+
+test('F: ミサイルの端数（0.5 発）は尽きている扱い', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS });
+  p.missiles = 0.5;
+  p.currentWeapon = 'mg';
+  p.mgBurstLeft = 4;
+  withSwitchSpy(() => {
+    p.pressWeaponKey();
+    assert.equal(p.mgManualReload, true);
+  });
+});
+
+// 受け付けなかったことが分かるように無音にする。新しい音は作らない。
+test('F: 満タンでは要求も音も出ない', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS }, SIZE);
+  p.missiles = 0;
+  p.currentWeapon = 'mg';
+  withSwitchSpy((calls) => {
+    p.pressWeaponKey();
+    assert.equal(p.mgManualReload, false);
+    assert.deepEqual(calls, [], '受け付けていないのに音が鳴っている');
+  });
+});
+
+test('F: 装填中は要求も音も出ない', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS }, 4);
+  p.missiles = 0;
+  p.currentWeapon = 'mg';
+  p.mgReloadTimer = 30;
+  withSwitchSpy((calls) => {
+    p.pressWeaponKey();
+    assert.equal(p.mgManualReload, false);
+    assert.deepEqual(calls, []);
+  });
+});
+
+// 手動はしきい値もモードも無視する。オフを選んだ人の唯一の装填手段なので。
+test('F: モード off・しきい値より多い残弾でも装填が始まる', () => {
+  const { p, input } = makePlayer({ ...DEFAULT_SETTINGS, mgAutoReloadMode: 'off' }, SIZE - 1);
+  p.missiles = 0;
+  p.currentWeapon = 'mg';
+  withSwitchSpy(() => { p.pressWeaponKey(); });
+  p._updateMGReload(input);
+  assert.ok(p.mgReloadTimer > 0, '手動要求が装填に繋がっていない');
+  assert.equal(p.mgManualReload, false, '要求フラグが消えていない');
+});
+
+/** update() の F キー処理だけを通せる最小の game。 */
+function makeFKeyScene(missiles) {
+  const player = {
+    alive: true, docked: false, currentWeapon: 'mg', missiles,
+    pressed: 0,
+    pressWeaponKey() { this.pressed++; },
+    switchWeapon() { this.switched = true; },
+  };
+  const g = Object.create(Game);
+  g.player = player;
+  g.gameState = 'playing';
+  g.settings = { ...DEFAULT_SETTINGS };
+  g.missionTimer = 0;
+  g.totalTime = 0;
+  g.simAccumulator = 0;
+  g.gameSpeed = 1;
+  g.camera = { x: 0, y: 0 };
+  g.enemies = [];
+  g.input = {
+    isKeyPressed: (code) => code === 'KeyF',
+    isKeyDown: () => false,
+    isCharPressed: () => false,
+    isLeftClickPressed: () => false,
+    isRightClickPressed: () => false,
+    getTypedChars: () => [],
+    crosshairLocked: false,
+    mouse: { x: 0, y: 0, left: false },
+    endFrame() {},
+  };
+  return { g, player };
+}
+
+// main.js は分岐を持たず Player に委ねる。規則が2箇所に分かれないようにするため。
+test('main.js: F は pressWeaponKey() に委ねる（switchWeapon を直接呼ばない）', () => {
+  const { g, player } = makeFKeyScene(0);
+  g._updatePlaying = () => {};
+  g.update(16);
+  assert.equal(player.pressed, 1, 'pressWeaponKey が呼ばれていない');
+  assert.equal(player.switched, undefined, 'switchWeapon を直接呼んでいる');
 });

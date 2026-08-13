@@ -280,7 +280,7 @@ export class ScreenRenderer {
                 { key: 'SHIFT', action: 'LOCK-ON AIM (TAP)' },
                 { key: 'L-CLICK', action: 'FIRE MISSILE OR MACHINE GUN' },
                 { key: 'R-CLICK', action: 'THROW GRENADE (TAP: THROW / HOLD + L-CLICK)' },
-                { key: 'F', action: 'SWITCH WEAPON (MISSILE ↔ M-GUN)' },
+                { key: 'F', action: 'SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)' },
                 { key: 'S', action: 'DOCK WITH CARRIER / HOLD FOR FAST FUEL CHARGE' },
                 { key: 'R', action: 'TOGGLE MINI-MAP OVERLAY' },
                 // 表示系なので操作キーの後ろ。ゲーム開始時に自動で全画面へ入るので

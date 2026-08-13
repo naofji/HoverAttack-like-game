@@ -547,6 +547,24 @@ export class Player {
         this.currentWeapon = 'missile';
     }
 
+    /**
+     * `F` を押した1フレームの処理。**規則は utils/mgReload.js の weaponKeyAction に
+     * 置いてある** — main.js に分岐を書くと、切り替えとリロードの境目が2箇所に散る。
+     *
+     * 手動リロードを受け付けたときだけ playSwitch() を鳴らす。従来もミサイル 0 で F を
+     * 押せば（意味のない切り替えでも）この音が鳴っていたので、押した手応えが変わらない。
+     * 受け付けないとき（満タン・装填中）は無音にして、効かなかったことを耳で伝える。
+     */
+    pressWeaponKey() {
+        if (weaponKeyAction(this.missiles) === 'switch') {
+            this.switchWeapon();
+            return;
+        }
+        if (this.mgReloadTimer > 0 || this.mgBurstLeft >= PLAYER_MG_BURST_SIZE) return;
+        this.mgManualReload = true;
+        audioManager.playSwitch();
+    }
+
     /** Toggles between Missile and Machine Gun */
     switchWeapon() {
         if (this.currentWeapon === 'missile') {
