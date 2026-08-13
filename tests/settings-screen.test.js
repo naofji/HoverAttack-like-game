@@ -42,9 +42,15 @@ test('音量はパーセントで出る', () => {
   assert.ok(texts.some((t) => String(t).includes('45')), '45 が見当たらない');
 });
 
+// autoSwitchMissile（既定 OFF）の 'OFF' が拾えてしまうと、autoFullscreen の
+// 値を見ずに通ってしまう。行を byKey で名指しして、その値だけを見る
 test('ON/OFF が文字で出る', () => {
+  const byKey = (k) => SETTINGS_ITEMS.find((i) => i.key === k);
+  const item = byKey('autoFullscreen');
   const on = draw({ settings: { ...DEFAULT_SETTINGS, autoFullscreen: true } });
   const off = draw({ settings: { ...DEFAULT_SETTINGS, autoFullscreen: false } });
+  assert.equal(settingValueText(item, { ...DEFAULT_SETTINGS, autoFullscreen: true }), 'ON');
+  assert.equal(settingValueText(item, { ...DEFAULT_SETTINGS, autoFullscreen: false }), 'OFF');
   assert.ok(on.texts.includes('ON'));
   assert.ok(off.texts.includes('OFF'));
 });

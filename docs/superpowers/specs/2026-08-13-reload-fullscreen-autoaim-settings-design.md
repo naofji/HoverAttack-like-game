@@ -18,7 +18,7 @@ OFF なら弾が尽きたときだけ装填する。だが実際に欲しかっ�
 手動（`M`）で戻すしかない。節目ごとに戻してほしい。ただし窓のまま遊びたい人もいるので
 切れる必要がある。
 
-**③ Auto Aim の解除しきい値。** `Constants.js` の `AUTO_AIM_CANCEL_THRESHOLD = 4` には
+**③ Auto Aim の解除しきい値。** `Constants.js` の `AUTO_AIM_CANCEL_THRESHOLD_DEFAULT = 4` には
 「表示倍率でマウスの体感が変わるので、実機で感触を見てから決める」というコメントが
 残ったままになっている。スケール補正を入れるより、**設定で吸収するほうが正しい** —
 どの倍率で遊ぶかは環境によって違い、正解が1つに決まらないため。
@@ -63,7 +63,7 @@ AUTO FULLSCREEN が ON（既定）のとき、FULLSCREEN 行で窓に戻して�
 | `autoAimRelease` | `int` | 1〜20 | `4` |
 | `autoFullscreen` | `flag` | 真偽値 | `true` |
 
-既定値は順に「残弾50%以下で自動装填」「16発×0.5＝8発」「`AUTO_AIM_CANCEL_THRESHOLD` の現行値」
+既定値は順に「残弾50%以下で自動装填」「16発×0.5＝8発」「`AUTO_AIM_CANCEL_THRESHOLD_DEFAULT` の現行値」
 「開始時に全画面へ入る現行の挙動」に対応する。
 
 ## 設計
@@ -166,8 +166,17 @@ export function weaponKeyAction(missiles) {
 - `'switch'` → 従来どおり `switchWeapon()`
 - `'reload'` → `this.mgManualReload = true` を立てるだけ
 
-ミサイルが0のとき `currentWeapon` は `_fireMissile()` が必ず `'mg'` に戻しているので、
-武器の判定は要らない。
+**訂正（実装後のレビューで発覚）。** 当初は「ミサイルが0のとき `currentWeapon` は
+`_fireMissile()` が必ず `'mg'` に戻しているので、武器の判定は要らない」と考えていたが、
+これは自力で撃ち切った経路にしか成り立たない。`autoSwitchMissile` 設定 ON でドックすると
+`main.js`（`_handleDocking()`）が `currentWeapon` を `'missile'` に固定し、`missiles` は
+`_updateDockedResupply()` で1フレームごとに少しずつ補充される。補充が終わる前に undock すると
+`currentWeapon === 'missile'` かつ `missiles === 0` のまま残ってしまい、`weaponKeyAction(0)` は
+`'reload'` を返す。ミサイル発射機を持ったまま `mgReload` の武器ガード（mg 以外は早期 return）に
+落ちて、要求は無音のまま捨てられる — `F` が反応しなくなる（実際には resupply が続いているので
+無音バグには見えず、ただ「持ち替わらない」だけに見える）。`pressWeaponKey()` は
+`this.currentWeapon === 'missile' || weaponKeyAction(this.missiles) === 'switch'` を見て、
+「ミサイルを持っている限りは（残弾がいくつでも）まず mg へ切り替える」よう直してある。
 
 **`F` の読み取りは `_updatePlaying()` の内側に留める。** `update()` 直下（一見グローバルな
 一回きりの入力を集めている場所）に上げたい誘惑があるが、`this.player` は `'settings'`
@@ -324,5 +333,5 @@ ON にした人が一時的に窓にしたいときの逃げ道になる。こ�
 
 - **専用のリロードキーを足さない。** ミサイルを持っている間は手動リロードできないままにする。
   覚えるキーを増やさない判断（`HOW TO PLAY` の一覧を膨らませない）
-- **`AUTO_AIM_CANCEL_THRESHOLD` の表示倍率スケール補正。** 設定で吸収する
+- **`AUTO_AIM_CANCEL_THRESHOLD_DEFAULT` の表示倍率スケール補正。** 設定で吸収する
 - **リロード開始の新しい効果音。** 既存の `playSwitch()` を手応えとして流用する

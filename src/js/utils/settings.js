@@ -24,7 +24,7 @@ import { clampVolume } from './bgmVolume.js';
  * - autoSwitchMissile false  … 今はドッキングで持ち替えない
  * - mgAutoReloadMode always  … 今は残弾がしきい値以下＋引き金を離すと自動装填する
  * - mgReloadThreshold 8      … 従来の「弾倉 16 発の 50%」と同じ
- * - autoAimRelease 4         … 従来の AUTO_AIM_CANCEL_THRESHOLD と同じ
+ * - autoAimRelease 4         … 従来の AUTO_AIM_CANCEL_THRESHOLD_DEFAULT と同じ
  * - autoFullscreen true      … 今もゲーム開始時に全画面へ入る
  */
 export const DEFAULT_SETTINGS = Object.freeze({

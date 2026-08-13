@@ -175,6 +175,25 @@ test('F: ミサイルが残っていれば武器を切り替える', () => {
   });
 });
 
+// autoSwitchMissile ON でドックすると main.js が currentWeapon を 'missile' に固定するが、
+// missiles は _updateDockedResupply() で少しずつしか補充されない。補充が終わる前に undock
+// すると currentWeapon === 'missile' かつ missiles === 0 のまま取り残る。旧コードは
+// weaponKeyAction(missiles) だけを見て 'reload' と判定し、mg の武器ガードに落ちて F が
+// 無反応になっていた（サイレントな回帰）。currentWeapon === 'missile' を先に見ることで
+// 「ミサイルを持っている限りはまず mg へ切り替える」よう直した
+test('F: ドックで自動でミサイルへ持ち替えた直後（残弾0）に undock すると、F で mg へ切り替わる', () => {
+  const { p } = makePlayer({ ...DEFAULT_SETTINGS });
+  p.currentWeapon = 'missile';   // _handleDocking() の autoSwitchMissile が固定した状態
+  p.missiles = 0;                // resupply() の途中、まだ補充されていない
+  p.mgBurstLeft = PLAYER_MG_BURST_SIZE;   // resupply() 直後は mg も満タン
+  withSwitchSpy((calls) => {
+    p.pressWeaponKey();
+    assert.equal(p.currentWeapon, 'mg', 'ミサイル発射機に取り残されている（F が無反応の再発）');
+    assert.equal(p.mgManualReload, false, '切り替えのはずがリロードを要求している');
+    assert.deepEqual(calls, ['playSwitch'], '切り替えの音が鳴っていない');
+  });
+});
+
 // ミサイルが尽きると切り替え先が無くなるので、そのときだけ F の意味が変わる。
 test('F: ミサイルが尽きていればリロードを要求し、武器は切り替えない', () => {
   const { p } = makePlayer({ ...DEFAULT_SETTINGS });
@@ -293,4 +312,43 @@ test('F: 設定画面（ポーズ中）では pressWeaponKey が呼ばれない'
   g._updateSettings = () => {};
   g.update(16);
   assert.equal(player.pressed, 0, 'ポーズ中なのに F が武器処理まで届いている');
+});
+
+// ============================================
+// _fireMissile() のミサイル切れ自動復帰では mgSwitchedToMG を立てない
+// ============================================
+//
+// switchWeapon() の missile→mg 分岐の中身（currentWeapon = 'mg'; playSwitch()）を
+// _fireMissile() の2箇所（既に0発／撃った結果0発になった）がそのまま複製している。
+// 「DRY にしよう」と後で switchWeapon() 呼び出しに置き換えると、テストは全部通る
+// ように見えて、onSwitch モードでミサイルが尽きるたびに mg リロードが誤発火する
+// （設計の言葉で言う「ゲーム側が勝手に戻したのは切り替えではない」を壊す）。
+// 実測ではなくコード複製そのものが罠なので、両方の分岐を直接縛る。
+function makeMissileFireScene(missiles) {
+  const player = {
+    currentWeapon: 'missile', missiles, missileCooldown: 0,
+    mgSwitchedToMG: false,
+  };
+  const g = Object.create(Game);
+  g.projectiles = [];
+  return { g, player };
+}
+
+test('_fireMissile: 既に0発のとき、mg へ戻るが mgSwitchedToMG は立たない', () => {
+  const { g, player } = makeMissileFireScene(0);
+  withSwitchSpy(() => {
+    g._fireMissile(player, 0, 0, 0);
+  });
+  assert.equal(player.currentWeapon, 'mg', 'mg へ戻っていない');
+  assert.equal(player.mgSwitchedToMG, false, 'ミサイル切れの自動復帰なのに切り替えフラグが立っている');
+});
+
+test('_fireMissile: 発射した結果ちょうど0発になったとき、mg へ戻るが mgSwitchedToMG は立たない', () => {
+  const { g, player } = makeMissileFireScene(1);
+  withSwitchSpy(() => {
+    g._fireMissile(player, 0, 0, 0);
+  });
+  assert.equal(player.missiles, 0, 'ミサイルが減っていない');
+  assert.equal(player.currentWeapon, 'mg', 'mg へ戻っていない');
+  assert.equal(player.mgSwitchedToMG, false, 'ミサイル切れの自動復帰なのに切り替えフラグが立っている');
 });

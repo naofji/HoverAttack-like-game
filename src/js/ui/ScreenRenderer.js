@@ -365,6 +365,10 @@ export class ScreenRenderer {
             const value = settingValueText(item, settings);
             if (value === null) return;
             ctx.textAlign = 'right';
+            // こちらはラベルと逆に淡色を優先する。カーソル（ラベル側の選択色）さえ
+            // 見えれば行を操作できるので、値のほうは効いていないことを色で伝える
+            // 役目を選択色より優先させる。値まで選択色にすると「効いていない行に
+            // カーソルが乗っている」ことが伝わらなくなるため
             ctx.fillStyle = dimmed ? UI.faint : (selected ? UI.ink : UI.dim);
             ctx.fillText(value, cx + 290, y);
         });

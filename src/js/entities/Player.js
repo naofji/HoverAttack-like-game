@@ -556,7 +556,16 @@ export class Player {
      * 受け付けないとき（満タン・装填中）は無音にして、効かなかったことを耳で伝える。
      */
     pressWeaponKey() {
-        if (weaponKeyAction(this.missiles) === 'switch') {
+        // currentWeapon === 'missile' を先に見るのが要点。設計時は「ミサイルが 0 のとき
+        // currentWeapon は _fireMissile() が必ず 'mg' に戻す」という前提で
+        // weaponKeyAction(this.missiles) だけを見ていたが、それは自力で撃ち切った経路
+        // にしか成り立たない。autoSwitchMissile 設定 ON でドックすると main.js が
+        // currentWeapon を 'missile' に固定し、missiles はゆっくり補充されるので、
+        // 補充が終わる前に undock すると currentWeapon === 'missile' かつ missiles === 0
+        // のまま取り残る。この状態で weaponKeyAction(0) は 'reload' を返し、
+        // F がミサイル発射機を持ったまま無反応（reload 要求は mg の武器ガードで
+        // 無音のまま捨てられる）になっていた
+        if (this.currentWeapon === 'missile' || weaponKeyAction(this.missiles) === 'switch') {
             this.switchWeapon();
             return;
         }
