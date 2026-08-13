@@ -615,11 +615,16 @@ export const SE_COMP_RELEASE = 0.18;
 export const SE_FADE_OUT_SECONDS = 0.5;
 
 // --- BGM の音量調節 ---
-// 「+」で上げ「-」で下げる。0〜100% を10%刻み（11段）にしてあるので、
-// 端から端まで10回。刻みを細かくすると押す回数が増えて煩わしい。
-export const BGM_VOLUME_STEP = 0.1;
+// 音量の刻み。役割で2段に分ける。
+// 粗いほう（-/+ キー用）が 10% なのは、Input.isCharPressed() が押した瞬間しか拾わず
+// 押しっぱなしで連射しないため。5% にすると最大から最小まで20回押すことになる。
+// 細かいほう（設定画面用）は数字を見ながら合わせるので 5%。
+export const VOLUME_STEP_COARSE = 0.1;
+export const VOLUME_STEP_FINE = 0.05;
 export const BGM_VOLUME_DEFAULT = 1.0;
 export const BGM_VOLUME_STORAGE_KEY = 'hoverAttack.bgmVolume';
+// 設定はまとめて1キーに入れる。項目を足すたびにキーが増えるのを避けるため。
+export const SETTINGS_STORAGE_KEY = 'hoverattack.settings';
 // 変更した瞬間だけ表示する。常時出しているとプレイの邪魔になる。
 export const VOLUME_HUD_FRAMES = 120;      // 約2秒
 export const VOLUME_HUD_FADE_FRAMES = 30;  // 最後の0.5秒で消える

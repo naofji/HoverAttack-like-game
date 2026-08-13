@@ -5,7 +5,7 @@
  * DOM もオーディオも要らないので、ここだけを単体で試せるようにするため。
  */
 import {
-    BGM_VOLUME_STEP, BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
+    VOLUME_STEP_COARSE, BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
 } from './Constants.js';
 
 /** 0〜1 に丸める。段の境界で 0.30000000000000004 にならないよう桁も落とす。 */
@@ -18,9 +18,10 @@ export function clampVolume(v) {
  * 1段上げ下げした音量を返す。
  * @param {number} current 現在の音量（0〜1）
  * @param {number} direction +1 で上げ、-1 で下げ
+ * @param {number} [step] 1段の幅。既定は -/+ キー用の粗いほう
  */
-export function stepVolume(current, direction) {
-    return clampVolume(clampVolume(current) + Math.sign(direction) * BGM_VOLUME_STEP);
+export function stepVolume(current, direction, step = VOLUME_STEP_COARSE) {
+    return clampVolume(clampVolume(current) + Math.sign(direction) * step);
 }
 
 /** 表示用のパーセント（0〜100の整数）。 */

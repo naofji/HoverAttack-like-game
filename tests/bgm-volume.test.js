@@ -4,7 +4,7 @@ import {
   clampVolume, stepVolume, volumePercent, loadBgmVolume, saveBgmVolume,
 } from '../src/js/utils/bgmVolume.js';
 import {
-  BGM_VOLUME_STEP, BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
+  VOLUME_STEP_COARSE, BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
 } from '../src/js/utils/Constants.js';
 
 /** localStorage の代役。 */
@@ -35,7 +35,7 @@ test('端から端まで10回で届く（刻みが細かすぎない）', () => 
   while (v < 1 && presses < 100) { v = stepVolume(v, +1); presses++; }
   assert.equal(v, 1);
   assert.equal(presses, 10, `100%まで${presses}回かかる`);
-  assert.equal(presses, Math.round(1 / BGM_VOLUME_STEP));
+  assert.equal(presses, Math.round(1 / VOLUME_STEP_COARSE));
 });
 
 test('上げ下げを繰り返しても誤差が溜まらない', () => {
