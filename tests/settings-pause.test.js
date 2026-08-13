@@ -4,6 +4,17 @@ import { Game, DEMO_SCREEN_DRAWERS } from '../src/js/main.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 import { visibleSettingsItems } from '../src/js/ui/settingsItems.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
+import { SETTINGS_STORAGE_KEY, BGM_VOLUME_STORAGE_KEY } from '../src/js/utils/Constants.js';
+
+/** localStorage の代わり。key -> value の Map。 */
+function fakeStorage(initial = {}) {
+  const m = new Map(Object.entries(initial));
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    dump: () => Object.fromEntries(m),
+  };
+}
 
 /** キーを押した/押していないを差し替えられる入力のふり。 */
 function fakeInput(pressed = []) {
@@ -186,4 +197,53 @@ test('QUIT MISSION → NO（既定）で確認を閉じるだけで、設定画�
   assert.equal(g.confirmingQuit, false, '確認が閉じていない');
   assert.equal(g.gameState, 'settings', '設定画面に留まっていない');
   assert.equal(g.settingsReturnTo, 'playing', '戻り先を失っている');
+});
+
+// ここから (3): これまでの A/D テストはどれも _saveSettings を差し替えて
+// 潰していたので、実際の中身（saveSettings() ＋ audioManager.applySettings()）が
+// 一度も実行されていなかった。applySettings() の呼び出しを消しても
+// 全テストが通ってしまう状態だったので、本物の _saveSettings() を通す。
+//
+// これは (1) の回帰テストも兼ねる。本物の経路（_saveSettings → applySettings →
+// _applyBgmVolume）を通すので、旧キー hoverAttack.bgmVolume に実効値
+// （マスター×BGM）が書き込まれていないことも一緒に確かめられる。
+test('A/D で音量を変えると、本物の _saveSettings → applySettings を通して音に届く（(1)(3) の回帰）', () => {
+  const storage = fakeStorage({ [BGM_VOLUME_STORAGE_KEY]: '0.4' }); // 旧キーの既存値
+  const origLocalStorage = globalThis.localStorage;
+  globalThis.localStorage = storage;
+
+  // applySettings 自体はモックしない（本物を通す）。その内部が保存する版
+  // setBgmVolume を呼んでいないことだけを見張る。呼んでいれば旧キーが
+  // 実効値で上書きされる（(1) の不具合そのもの）。
+  const savingCalls = [];
+  const origSetBgmVolume = audioManager.setBgmVolume;
+  audioManager.setBgmVolume = (v) => { savingCalls.push(v); return origSetBgmVolume.call(audioManager, v); };
+
+  try {
+    const masterIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'masterVolume');
+    const g = makeGame({
+      gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: masterIndex,
+      settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5, bgmVolume: 0.8 },
+    });
+    g.input = fakeInput(['KeyD']);
+    g.update(16);
+
+    // (3): 実際に音へ反映されたことを確かめる。applySettings() の呼び出しを
+    // 消すとここが唯一気づける場所（今までのテストは _saveSettings を丸ごと
+    // 差し替えていたので、消えても 920/920 のまま通っていた）。
+    // masterVolume 0.55 × bgmVolume 0.8 = 0.44 が実効値として届く
+    assert.equal(audioManager.bgmVolume, 0.44, 'BGM の実効値が音に反映されていない');
+
+    // localStorage の新しいキーに変更後の値が保存されていること
+    const stored = JSON.parse(storage.dump()[SETTINGS_STORAGE_KEY]);
+    assert.equal(stored.masterVolume, 0.55, '変更後の値で保存されていない');
+
+    // (1) の回帰: 保存する版の setBgmVolume が呼ばれていない＝旧キーは無傷
+    assert.deepEqual(savingCalls, [], '保存する版の setBgmVolume が呼ばれている（旧キーが上書きされる）');
+    assert.equal(storage.dump()[BGM_VOLUME_STORAGE_KEY], '0.4',
+      '旧キーが実効値で上書きされている（(1) の再発）');
+  } finally {
+    audioManager.setBgmVolume = origSetBgmVolume;
+    globalThis.localStorage = origLocalStorage;
+  }
 });

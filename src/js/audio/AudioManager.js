@@ -25,7 +25,7 @@ import {
 } from '../utils/Constants.js';
 import { stereoPan, positionalVolume } from '../utils/audioFalloff.js';
 import { WEAPON_SOUNDS, renderWeaponSound } from './weaponSounds.js';
-import { stepVolume, clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
+import { clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
 
 export class AudioManager {
     constructor() {
@@ -34,10 +34,15 @@ export class AudioManager {
         this.seFade = null;      // 効果音だけを引くための段（ゲームオーバー用）
         this.seUserGain = null;  // ユーザー設定の効果音音量（seFade とは別の段）
         this.seUserVolume = 1.0; // AudioContext がまだ無い段階でも覚えておく
+        this.stingMasterVolume = 1.0; // 状態を告げる曲（ゲームオーバー等）に掛ける全体音量。applySettings() 未実行時は素通し
         this.seMaster = null;    // 効果音の底上げ（BGM は通さない）
         this.listenerX = null;   // 画面中心のワールドX（左右の振り分けの基準）
         this.listenerView = null;// いま映っている矩形（位置による音量の基準）
-        this.bgmVolume = loadBgmVolume();   // 0〜1。前回の設定を引き継ぐ
+        // 0〜1。「実効値」＝ 設定画面の マスター音量 × BGM 音量 の積。
+        // BGM 個別の値ではないので、旧キー（hoverAttack.bgmVolume）へ書き戻すのに
+        // このフィールドを使ってはいけない（それをやって旧キーの意味が壊れたのが
+        // 今回の不具合。詳しくは setBgmVolume() / _applyBgmVolume() のコメント）
+        this.bgmVolume = loadBgmVolume();   // 前回の設定を引き継ぐ（起動直後のみ旧キーの生値）
         this.hoverOsc = null;
         this.hoverNoise = null;
         this.hoverGain = null;
@@ -391,25 +396,39 @@ export class AudioManager {
     }
 
     /**
-     * BGM の音量を設定して保存する。
-     * AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
-     * init() で BGM を作るときに反映する。
-     * @param {number} v 0〜1
+     * BGM の音量を音に反映するだけ（保存はしない）。
+     *
+     * 設定画面の applySettings() 専用。ここで渡される v は「マスター×BGM」の
+     * 実効値であって、ユーザーが設定した BGM 個別の値ではない。保存まで
+     * やってしまうと、旧キー（hoverAttack.bgmVolume＝ -/+ の時代からある値）に
+     * 実効値が書き込まれてしまい、「旧キーは書き換えない（設定画面を戻したときに
+     * 前の音量が残るように）」という設計を壊す。実際に、マスター 50%・BGM 100%
+     * にすると旧キーへ 0.5 が保存される不具合になっていた。保存が要る場面は
+     * setBgmVolume() を使うこと。
+     * @param {number} v 0〜1（実効値）
      */
-    setBgmVolume(v) {
+    _applyBgmVolume(v) {
         this.bgmVolume = clampVolume(v);
         if (this.bgm) this.bgm.setVolume(this.bgmVolume);
-        saveBgmVolume(this.bgmVolume);
-        return this.bgmVolume;
     }
 
     /**
-     * BGM の音量を1段上げ下げする。
-     * @param {number} direction +1 で上げ、-1 で下げ
-     * @returns {number} 変更後の音量
+     * BGM の音量を設定して保存する。
+     * AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
+     * init() で BGM を作るときに反映する。
+     *
+     * 現在の呼び出し元は無い（設定画面は _applyBgmVolume() を使う）。それでも
+     * 残しているのは、「保存もする BGM 単体の入り口」が要る場面（例えば将来
+     * 設定画面を経ない直接操作を足すとき）のための公開 API として。
+     * ここで保存する v は実効値ではなく BGM 単体の値である前提。実効値を渡すと
+     * 旧キーの意味が壊れるので、呼ぶ側は effectiveVolumes() を通した後の値を
+     * 渡さないこと。
+     * @param {number} v 0〜1
      */
-    adjustBgmVolume(direction) {
-        return this.setBgmVolume(stepVolume(this.bgmVolume, direction));
+    setBgmVolume(v) {
+        this._applyBgmVolume(v);
+        saveBgmVolume(this.bgmVolume);
+        return this.bgmVolume;
     }
 
     /**
@@ -417,13 +436,22 @@ export class AudioManager {
      *
      * BGM と効果音は別々の経路なので、マスターを掛けた実効値をそれぞれに配る
      * （utils/settings.js の effectiveVolumes がその計算を持つ）。
+     * BGM 側は _applyBgmVolume()（保存しない）を使う。保存は saveSettings() が
+     * settings 全体をまとめて1キーに書くので、ここで setBgmVolume() を呼んで
+     * 旧キーに実効値を書き込んでしまうと二重保存になり、旧キーの意味も壊れる。
+     *
+     * ゲームオーバーのファンファーレ（playGameOver）は SE バスを通らず
+     * 「全体音量」だけに従う設計なので、実効値とは別にマスター単体も覚えておく。
      * @param {object} [settings]
      */
     applySettings(settings) {
         if (!settings) return;
         const { bgm, se } = effectiveVolumes(settings);
-        this.setBgmVolume(bgm);
+        this._applyBgmVolume(bgm);
         this.seUserVolume = se;
+        // ワンショットの「状態を告げる曲」用。SE バスを迂回するため、
+        // マスター単体をここで覚えておいて、鳴らす瞬間に掛ける
+        this.stingMasterVolume = clampVolume(settings.masterVolume);
         // AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
         // init() でノードを作るときに反映する
         if (this.seUserGain) this.seUserGain.gain.value = se;
@@ -1407,8 +1435,16 @@ export class AudioManager {
         const leadNotes = [523.25, 493.88, 415.30, 392.00]; // C5, B4, Ab4, G4
 
         // Master FX for the fanfare
+        //
+        // _stingDest() は seFade（効果音の引き）より後ろに繋がっているので
+        // SE 音量には従わない（意図的。既存の設計）。だが「全体音量」は
+        // 文字どおり全部を指すはずなのに、この曲だけ従わないのは筋が悪い
+        // （全体音量 0 で死んでも満音量で鳴っていた不具合）。ワンショットで
+        // 鳴っている最中の変更に追従する必要は無いので、鳴らす瞬間の
+        // stingMasterVolume（applySettings() が覚えておいたマスター単体の値）を
+        // ここで一度だけ掛ける。SE 音量には掛けない＝この曲の従来の位置づけのまま
         const fnMaster = this.ctx.createGain();
-        fnMaster.gain.value = volume;
+        fnMaster.gain.value = volume * this.stingMasterVolume;
         fnMaster.connect(this._stingDest());
 
         // Lowpass filter for a muffled, distant sad sound
