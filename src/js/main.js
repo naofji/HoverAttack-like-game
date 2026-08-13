@@ -451,6 +451,9 @@ export const Game = {
         this.gameState = this.settingsReturnTo || 'title';
         this.settingsReturnTo = null;
         this.confirmingQuit = false;
+        // 設定画面で AUTO FULLSCREEN を ON にしてそのまま閉じれば即座に効く。
+        // Escape で閉じた場合はブラウザが全画面を解除しているので、ここで戻る
+        this._restoreFullscreen();
     },
 
     /** 設定を保存し、音へ反映する。値を変えるたびに呼ぶ。 */
@@ -523,6 +526,22 @@ export const Game = {
     },
 
     /**
+     * 画面遷移の節目で全画面へ戻す。設定が OFF なら何もしない。
+     *
+     * **呼べる場所はブラウザの制約で決まる。** requestFullscreen はユーザー操作の
+     * 直後（transient activation が生きている間）でないと拒否されるので、
+     * キーやクリックを受けたその回の更新からしか呼べない。時間で進む遷移
+     * （ゲームオーバー4秒・全クリア7秒の自動遷移）に入れていないのはそのため。
+     * その場合は次に入力を伴う節目で戻る。
+     *
+     * 規則をこの1メソッドに集約しているのは、enterFullscreen() を main.js に
+     * 散らすと「どこで戻るのか」が追えなくなるため。
+     */
+    _restoreFullscreen() {
+        if (this.settings?.autoFullscreen) enterFullscreen();
+    },
+
+    /**
      * デモループの各画面から「ゲームを始める入力」を拾う。
      * タイトルもランキングも、どの画面から始めても手順は同じなので
      * ここ1箇所にまとめる（以前は6画面に同じ4行が写されていた）。
@@ -531,12 +550,9 @@ export const Game = {
     _startGameIfRequested() {
         if (!this._anyKeyOrClick()) return false;
         // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
-        // 実機の要望。requestFullscreen はユーザー操作の直後でないと拒否されるが、
-        // ここは _anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった場合
-        // しか通らないので、transient activation が生きている（M キーが
-        // ゲームループから呼んでも効いているのと同じ理屈）。
-        // 既に全画面なら enterFullscreen は何もしない＝M で入れた状態を壊さない。
-        enterFullscreen();
+        // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
+        // 場合しか通らないので、transient activation が生きている
+        this._restoreFullscreen();
         this.stateManager.restart();
         this.gameState = 'playing';
         audioManager.startBGM(this.missionsCompleted);
@@ -712,6 +728,7 @@ export const Game = {
                         stages: this.stageResults.map((r) => ({ stage: r.stage, timeMs: r.timeMs, score: r.score })),
                     });
                 }
+                this._restoreFullscreen();
                 this.gameState = 'local_ranking_display';
                 this.stateTimer = 0;
                 audioManager.playTitleBGM();
@@ -735,6 +752,7 @@ export const Game = {
     _updateMissionClear() {
         if (this._updateTimeBonusSlot(false)) return;
         if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
+            this._restoreFullscreen();
             this.gameState = 'playing';
             this.stateManager.nextMission();
             audioManager.startBGM(this.missionsCompleted);
