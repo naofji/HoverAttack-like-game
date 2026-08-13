@@ -1111,7 +1111,11 @@ export class ScreenRenderer {
         ctx.font = font('small', true);
         ctx.textAlign = 'left';
         ctx.fillStyle = UI.dim;
-        ctx.fillText('BGM', x + SPACE.md, y + SPACE.md + 2);
+        // 設定画面ができてから -/+ が動かすのは BGM 単体ではなく全体音量
+        // （settings.masterVolume）。ラベルを実態に合わせないと、この HUD だけ
+        // 「BGM 40%」と出るのに設定画面の BGM VOLUME は 100% のまま、という
+        // 食い違いが起きる
+        ctx.fillText('MASTER', x + SPACE.md, y + SPACE.md + 2);
 
         ctx.textAlign = 'right';
         ctx.fillStyle = accent;

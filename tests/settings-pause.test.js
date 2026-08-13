@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, DEMO_SCREEN_DRAWERS } from '../src/js/main.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
+import { visibleSettingsItems } from '../src/js/ui/settingsItems.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 
 /** キーを押した/押していないを差し替えられる入力のふり。 */
@@ -135,4 +136,54 @@ test('設定画面を開くとループする効果音だけ止める', () => {
 // tests/demo-screens.test.js の「余計な画面が入っていない」が落ちる。
 test('settings は DEMO_SCREEN_DRAWERS に入っていない', () => {
   assert.equal(Object.hasOwn(DEMO_SCREEN_DRAWERS, 'settings'), false);
+});
+
+// QUIT MISSION は「設定画面を経由してタイトルへ戻る」唯一の経路。
+// 途中終了は取り返しがつかないので、確認ダイアログを挟んだ全体を通しで確かめる。
+// escape-title.test.js / se-silence-on-exit.test.js の Escape のテストが
+// 参照している「タイトルへ戻る経路」の実体はここ。
+test('QUIT MISSION → YES で確認するとタイトルへ戻り、効果音を落とす', () => {
+  const calls = [];
+  const orig = audioManager.fadeOutSe;
+  audioManager.fadeOutSe = () => calls.push('fadeOutSe');
+  try {
+    const quitIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'quit');
+    const g = makeGame({ gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: quitIndex });
+
+    g.input = fakeInput(['Enter']);
+    g.update(16);   // QUIT MISSION の行で Enter → 確認に入る
+    assert.equal(g.confirmingQuit, true, '確認に入っていない');
+    assert.equal(g.quitChoiceYes, false, '既定は NO のはず');
+
+    g.input = fakeInput(['KeyA']);
+    g.update(16);   // A で YES を選ぶ（まだ決定していない）
+    assert.equal(g.quitChoiceYes, true);
+    assert.equal(g.gameState, 'settings', 'A だけではまだ決定しない');
+
+    g.input = fakeInput(['Enter']);
+    g.update(16);   // Enter で決定
+    assert.equal(g.gameState, 'title', 'タイトルへ戻っていない');
+    assert.equal(g.confirmingQuit, false);
+    assert.ok(calls.includes('fadeOutSe'), '効果音が落ちていない');
+  } finally {
+    audioManager.fadeOutSe = orig;
+  }
+});
+
+// 押し間違いで進行を捨てないための作り。既定の NO のまま Enter を押しても
+// 何も失わず、設定画面に留まることを縛る。
+test('QUIT MISSION → NO（既定）で確認を閉じるだけで、設定画面に留まる', () => {
+  const quitIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'quit');
+  const g = makeGame({ gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: quitIndex });
+
+  g.input = fakeInput(['Enter']);
+  g.update(16);   // QUIT MISSION の行で Enter → 確認に入る
+  assert.equal(g.confirmingQuit, true);
+  assert.equal(g.quitChoiceYes, false);
+
+  g.input = fakeInput(['Enter']);
+  g.update(16);   // 何も押し変えずに Enter → NO のまま決定
+  assert.equal(g.confirmingQuit, false, '確認が閉じていない');
+  assert.equal(g.gameState, 'settings', '設定画面に留まっていない');
+  assert.equal(g.settingsReturnTo, 'playing', '戻り先を失っている');
 });

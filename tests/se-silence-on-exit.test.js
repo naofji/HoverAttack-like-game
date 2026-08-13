@@ -48,7 +48,9 @@ const ESCAPE = { ...NO_INPUT, isKeyPressed: (code) => code === 'Escape' };
 // 設定画面ができてからは、プレイ中の Escape は直接タイトルへ戻るのではなく
 // 設定画面（ポーズ）を開く。自機が止まっているのに鳴り続ける音（ホバー音など）
 // だけを止め、BGM やクリアのファンファーレを巻き込むバスの fadeOutSe は使わない
-// （tests/settings-pause.test.js の「ループする効果音だけ止める」と対）。
+// （tests/settings-pause.test.js の「設定画面を開くとループする効果音だけ止める」と対）。
+// QUIT MISSION → YES で初めてタイトルへ戻り、そこで fadeOutSe が呼ばれる経路は
+// 同ファイルの「QUIT MISSION → YES で確認するとタイトルへ戻り、効果音を落とす」でカバー。
 test('Escape でミッションを抜けるとポーズし、鳴り続ける音が落ちる', () => {
     spyAudio((calls) => {
         Object.assign(Game, {

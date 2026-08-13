@@ -53,7 +53,8 @@ test('消音は「0%」ではなく MUTE と出す', () => {
 });
 
 test('何の音量かが分かる', () => {
-  assert.ok(texts(draw(0.5, VOLUME_HUD_FRAMES)).includes('BGM'));
+  // -/+ が動かすのは全体音量（settings.masterVolume）。BGM 単体ではない
+  assert.ok(texts(draw(0.5, VOLUME_HUD_FRAMES)).includes('MASTER'));
 });
 
 test('目盛りは10個で、点灯数が音量に対応する', () => {
