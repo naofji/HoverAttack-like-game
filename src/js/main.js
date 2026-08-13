@@ -536,6 +536,9 @@ export const Game = {
      *
      * 規則をこの1メソッドに集約しているのは、enterFullscreen() を main.js に
      * 散らすと「どこで戻るのか」が追えなくなるため。
+     *
+     * enterFullscreen() は既に全画面なら何もしない（冪等）。M キーで入れた
+     * 全画面をここが壊すことはない。
      */
     _restoreFullscreen() {
         if (this.settings?.autoFullscreen) enterFullscreen();
