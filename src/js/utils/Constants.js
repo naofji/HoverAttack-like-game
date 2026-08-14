@@ -460,16 +460,29 @@ export const BASE_LASER_DAMAGE = 50;
 // --- 反射ビームキャノン（7面。タレットの半分を差し替える） ---
 // 母艦レーザー（BASE_LASER_*）とは別物。あちらは速度12の直線で地形を貫通する。
 // こちらは遅く跳ね返るのが主眼で、見てから避けられる速さにしてある。
-export const REFLECT_BEAM_SPEED = 4;            // ホーミングミサイル(3)より少し速い
-export const REFLECT_BEAM_TAIL_SEGMENTS = 8;    // 帯を何節に等分するか
-// 帯の長さ。当たり判定が帯全体なので、これが通路を塞ぐ時間を決める。
-// **難しすぎたときに最初に下げる値**
-export const REFLECT_BEAM_TAIL_LENGTH = 160;    // 8節 × 20px
+
+// 実機で「遅い」と言われて 4 → 5。タイル16px に対して3.2倍の余裕があるので
+// 1フレームで壁を飛び越すことはない
+export const REFLECT_BEAM_SPEED = 5;
+
+// 帯は「節を積み上げ、節ごとに寿命で消える」形にしてある。固定長で切り出す
+// 方式だと、節が反射の折れ点をまたいだときに角をショートカットする直線になり、
+// 反射のたびに帯が角でがたついて見えた（実機で指摘された）
+export const REFLECT_BEAM_SEGMENT_FRAMES = 2;  // 1節を閉じるまでのフレーム数。速度5なので1節=10px
+export const REFLECT_BEAM_SEGMENT_LIFE = 16;   // 1節の寿命。80px(8節)ぶん生きる
+
+// 1発を扇型に分ける。一方向だけだと動いている自機には当たらず緊張感が無い、
+// という実機の指摘。総量は変えていない（80px × 2本 = 従来の160px 1本ぶん）
+export const REFLECT_BEAM_SHOT_COUNT = 2;
+export const REFLECT_BEAM_SPREAD = 15 * Math.PI / 180;  // 照準を中心に左右へ開く角度（±15度）
+
 export const REFLECT_BEAM_WIDTH = 5;            // 母艦レーザーは6
 export const REFLECT_BEAM_MAX_BOUNCES = 4;
-export const REFLECT_BEAM_MAX_DISTANCE = 1200;  // 速度4で300フレーム=5秒
+export const REFLECT_BEAM_MAX_DISTANCE = 1200;  // 速度5で240フレーム=4秒
 export const REFLECT_BEAM_DAMAGE = 20;          // 敵弾10・ホーミング20。自機HP100で5発
 export const REFLECT_BEAM_MUZZLE_FLASH_FRAMES = 12; // 0.2秒
+// 砲身の先端から広がる光の半径。ビームの根元に隠れない大きさが要る
+export const REFLECT_BEAM_MUZZLE_FLASH_RADIUS = 18;
 
 // 芯が白っぽい紫、外へ向かって暗紫。母艦レーザー（エメラルド #00FFAA）と
 // 一目で区別できるようにする。**hex で書くこと**（lerpColor が parseInt する）
