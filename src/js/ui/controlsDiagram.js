@@ -54,11 +54,17 @@ const RIGHT_COL_X = 322;
 /** 左の列（キーボード）に出す行。並びは絵の上から下へ。 */
 const LEFT_LIST = ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R'];
 
+// 一覧の開始位置は**左右で同じ**にする。絵の高さは左右で違う（キーボードは4段、
+// マウスは1つ）ので、それに合わせて一覧の高さをずらすと視線が段差を跨ぐことに
+// なり読みにくい、というのが実機での指摘。背の高いほう（キーボード）に合わせ、
+// マウスの絵はその上の余白の縦中央へ置く
+const LIST_TOP = CLUSTER_H + 12 + 10;
+
 /** 図の高さ。パネルの高さを決めるために描く前に呼ぶ。 */
 export function controlsDiagramHeight() {
-    const leftH = CLUSTER_H + 12 + LEFT_LIST.length * LIST_LINE;
-    // 右の列は マウス＋その説明＋（区切り）＋どちらの手でもないキーの説明
-    const rightH = MOUSE_H + 12 + MOUSE_BUTTONS.length * LIST_LINE
+    const leftH = LIST_TOP + LEFT_LIST.length * LIST_LINE;
+    // 右の列は マウスの説明＋（区切り）＋どちらの手でもないキーの説明
+    const rightH = LIST_TOP + MOUSE_BUTTONS.length * LIST_LINE
         + 24 + OFF_MOUSE_KEYS.length * LIST_LINE;
     return HEAD_H + Math.max(leftH, rightH);
 }
@@ -143,15 +149,15 @@ export function drawControlsDiagram(ctx, x, y, w) {
             k.w * PITCH - GAP, k.cap, DIAGRAM_COLORS.leftHand);
     }
     LEFT_LIST.forEach((rowKey, i) => {
-        drawListLine(ctx, x, top + CLUSTER_H + 12 + 10 + i * LIST_LINE,
-            rowKey, DIAGRAM_COLORS.leftHand);
+        drawListLine(ctx, x, top + LIST_TOP + i * LIST_LINE, rowKey, DIAGRAM_COLORS.leftHand);
     });
 
     // ---- 右の列: マウス ----
     drawColumnHead(ctx, rightX, y, '■ RIGHT HAND', DIAGRAM_COLORS.rightHand);
-    // マウスは列の左端に置く。説明の左端と揃えると、絵と一覧が1つの塊に見える
-    drawMouse(ctx, rightX, top, DIAGRAM_COLORS.rightHand);
-    const rightListTop = top + MOUSE_H + 12 + 10;
+    // マウスは列の左端に置く。説明の左端と揃えると、絵と一覧が1つの塊に見える。
+    // 縦はキーボードに対して中央（一覧の開始が左右で揃うぶん、上に余白ができる）
+    drawMouse(ctx, rightX, top + Math.round((CLUSTER_H - MOUSE_H) / 2), DIAGRAM_COLORS.rightHand);
+    const rightListTop = top + LIST_TOP;
     MOUSE_BUTTONS.forEach((b, i) => {
         drawListLine(ctx, rightX, rightListTop + i * LIST_LINE,
             b.rowKey, DIAGRAM_COLORS.rightHand);

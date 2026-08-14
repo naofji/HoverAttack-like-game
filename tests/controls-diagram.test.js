@@ -207,6 +207,26 @@ test('一覧のキー名が群ごとの色で描かれる', () => {
     }
 });
 
+// 左右の一覧が違う高さから始まっていると、視線が段差を跨いで読みにくい
+// （実機での指摘）。絵の高さは左右で違う（キーボード4段 対 マウス1つ）ので、
+// 一覧の開始位置のほうを揃え、マウスの絵はその上の余白の中央に置く
+test('左右の一覧が同じ高さから始まる', () => {
+    const { texts } = drawDiagram();
+    const at = (t) => texts.find((x) => x.text === t);
+    assert.equal(at(rowFor('W').label).y, at(rowFor('L-CLICK').label).y);
+});
+
+test('マウスの絵はキーボードに対して縦の中央にある', () => {
+    const { texts } = drawDiagram();
+    const at = (t) => texts.find((x) => x.text === t);
+    const capsY = LEFT_HAND_KEYS.map((k) => at(k.cap).y);
+    const clusterMid = (Math.min(...capsY) + Math.max(...capsY)) / 2;
+    const mouseMid = MOUSE_BUTTONS.map((b) => at(b.cap).y)[0];
+    // マウスのボタンの文字はマウスの上寄り（ボタン部）にあるので、そのぶんを見込む
+    assert.ok(Math.abs(mouseMid - clusterMid) <= 40,
+        `マウスがキーボードの縦中央から離れすぎ: ${Math.round(mouseMid - clusterMid)}px`);
+});
+
 // 列が近すぎると、どちらの手の話なのか目が迷う（実機での指摘）。左の列の
 // いちばん長い説明の右端と、右の列の左端が十分に離れていること
 test('左右の列が離れている', () => {
