@@ -4,7 +4,7 @@
 
 import { Missile } from '../entities/Missile.js';
 import { PlayerBullet } from '../entities/PlayerBullet.js';
-import { pointInRect } from '../utils/Physics.js';
+import { pointInRect, segmentIntersectsRect } from '../utils/Physics.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { applyRecoil } from '../utils/Recoil.js';
 import {
@@ -14,6 +14,7 @@ import {
     DAMAGE_ENEMY_MISSILE_PLAYER, DAMAGE_ENEMY_MISSILE_CARRIER,
     HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
     SCORE_HOMING_INTERCEPT, SCORE_CRUISE_DESTROY,
+    REFLECT_BEAM_DAMAGE,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
@@ -43,18 +44,34 @@ export class CollisionManager {
                 const playerVulnerable = game.player && game.player.alive
                     && !game.player.docked && game.player.invincibleTimer <= 0;
 
-                if (playerVulnerable && pointInRect(bullet.x, bullet.y, game.player)) {
+                if (playerVulnerable && this._bulletTouches(bullet, game.player)) {
                     this._applyBulletHit(bullet, game.player);
                 }
 
                 if (game.carrier && game.carrier.alive && bullet.alive
-                    && pointInRect(bullet.x, bullet.y, game.carrier)) {
+                    && this._bulletTouches(bullet, game.carrier)) {
                     this._applyBulletHit(bullet, game.carrier);
                 }
             }
 
             if (!bullet.alive) game.enemyBullets.splice(i, 1);
         }
+    }
+
+    /**
+     * 弾が対象に触れているか。
+     *
+     * 反射ビームだけは**帯全体**が当たるので、先端の1点ではなく節ごとの線分で見る。
+     * 判定に使う帯は描画と同じ segments() の戻り値で、ここが食い違うと
+     * 「見えているのに当たらない／見えていないのに当たる」になる。
+     */
+    _bulletTouches(bullet, target) {
+        if (typeof bullet.segments === 'function') {
+            return bullet.segments().some(
+                (s) => segmentIntersectsRect(s.x1, s.y1, s.x2, s.y2, target),
+            );
+        }
+        return pointInRect(bullet.x, bullet.y, target);
     }
 
     /**
@@ -67,6 +84,8 @@ export class CollisionManager {
 
         if (bullet.isBaseLaser) {
             damage = BASE_LASER_DAMAGE;
+        } else if (bullet.isReflectBeam) {
+            damage = REFLECT_BEAM_DAMAGE;
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = DAMAGE_CRUISE_MISSILE;
             bullet._explode();
