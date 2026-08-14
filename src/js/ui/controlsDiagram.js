@@ -7,10 +7,15 @@
 // 伝えるが、「左手はここに固定、右手はマウス」という体で覚える部分をまったく
 // 伝えない。そこで左手のキーを**実際の配列のまま**描き、隣にマウスを置く。
 //
-// 構成は「左＝絵、右＝一覧」の2列だけ。**説明はキーにつき1行**しか出さない。
-// 最初は絵に短い語を添えたうえで下に詳細も並べていたが、同じキーの説明が
-// 2箇所に出るぶん「ごちゃごちゃする」と指摘されて1本にまとめた。
-// 絵と一覧は**色**で結びつける（左手＝シアン／右手＝琥珀／どちらでもない＝淡色）。
+// 構成は**手ごとの2列**。左の列がキーボードとその説明、右の列がマウスとその説明。
+// 説明を絵の横にまとめて置いていたときは、どちらの手の話なのか目で追えなかった。
+// 絵のすぐ下にその手の説明だけを置けば、列を見るだけで片手ぶんが読める。
+//
+// 説明は**キーにつき1行**しか出さない。最初は絵に短い語を添えたうえで下に詳細も
+// 並べていたが、同じキーの説明が2箇所に出るぶん「ごちゃごちゃする」と指摘された。
+//
+// 色は左手＝シアン／右手＝琥珀／どちらの手でもない＝淡色。キー名だけを染めて
+// 説明は本文色に統一する（説明まで染めると色数が増えて読みにくい）。
 //
 // HOW TO PLAY の2ページ目と設定画面のオーバーレイが**この1つの関数**を呼ぶので、
 // 2画面で見た目がずれない。パネル幅は画面ごとに違う（800 / 720）ため、
@@ -26,43 +31,35 @@ export const DIAGRAM_COLORS = {
     offMouse: UI.dim,      // どちらの手でもない＝控えめに
 };
 
-// キーの升目。実際のキーボードは1段ごとに横へずれるので、その量も持つ。
-// ずれが無いと格子に見えてしまい、配列を写した図に見えない
 const KEY = 30;
 const GAP = 4;
 const PITCH = KEY + GAP;
-const ROW_OFFSET = [0, 0.25, 0.5, 0.75];
 
 const CLUSTER_W = 5 * PITCH;
 const CLUSTER_H = 4 * PITCH;
 const MOUSE_W = 54;
 const MOUSE_H = 76;
 
-// 一覧の組み立て。絵と高さを揃えたいので、行送りは絵の高さから決めずに固定する
-const LEGEND_H = 26;   // 凡例の下まで
+const HEAD_H = 24;      // 列の見出しの下まで
 const LIST_LINE = 20;
-const LIST_X = CLUSTER_W + 24 + MOUSE_W + 28; // 絵（キーボード＋マウス）の右
-const LIST_LABEL_X = 84;                      // 一覧の中で説明が始まる位置
+const LIST_KEY_W = 72;  // 説明が始まるまでのキー名の欄
 
-/** 一覧に出す順。群ごとにまとめる（手の単位で読めるように）。 */
-const LIST_ORDER = [
-    ...['W', 'A / D', 'S', 'F', 'SHIFT', 'R'],
-    ...MOUSE_BUTTONS.map((b) => b.rowKey),
-    ...OFF_MOUSE_KEYS,
-];
+// 右の列の左端。左の列のいちばん長い説明（MOVE LEFT / RIGHT…で 72+218=290px）
+// が届かない位置に置きつつ、右の列のいちばん長い説明（GRENADE…で 72+250=322px）
+// が幅 640 でも収まるところ。両側が同時にぎりぎりなので、文言を伸ばすと
+// どちらかがはみ出す（テストが落ちる）
+const RIGHT_COL_X = 308;
 
-/** 一覧の各行を何色で描くか。キーがどの群のものかで決まる。 */
-function groupColorOf(rowKey) {
-    if (MOUSE_BUTTONS.some((b) => b.rowKey === rowKey)) return DIAGRAM_COLORS.rightHand;
-    if (OFF_MOUSE_KEYS.includes(rowKey)) return DIAGRAM_COLORS.offMouse;
-    return DIAGRAM_COLORS.leftHand;
-}
+/** 左の列（キーボード）に出す行。並びは絵の上から下へ。 */
+const LEFT_LIST = ['W', 'A / D', 'S', 'F', 'SHIFT', 'R'];
 
 /** 図の高さ。パネルの高さを決めるために描く前に呼ぶ。 */
 export function controlsDiagramHeight() {
-    // 絵と一覧の高い方。行が増えれば一覧が伸びる
-    const listH = LIST_ORDER.length * LIST_LINE;
-    return LEGEND_H + Math.max(CLUSTER_H, listH);
+    const leftH = CLUSTER_H + 12 + LEFT_LIST.length * LIST_LINE;
+    // 右の列は マウス＋その説明＋（区切り）＋どちらの手でもないキーの説明
+    const rightH = MOUSE_H + 12 + MOUSE_BUTTONS.length * LIST_LINE
+        + 24 + OFF_MOUSE_KEYS.length * LIST_LINE;
+    return HEAD_H + Math.max(leftH, rightH);
 }
 
 /** キー1つ。幅を指定したいので theme のキーキャップは使わない。 */
@@ -78,7 +75,6 @@ function drawKey(ctx, x, y, w, label, color) {
 /**
  * マウス。左右のボタンだけを塗り分けた輪郭。ホイールは使わないので描かない
  * （使わないものを描くと、押すものだと思われる）。
- * キーボードのすぐ右に置く＝実際の机の上と同じ位置関係にする。
  */
 function drawMouse(ctx, x, y, color) {
     drawFrame(ctx, x, y, MOUSE_W, MOUSE_H, color, { fill: UI.panelFill, radius: 18 });
@@ -102,6 +98,29 @@ function drawMouse(ctx, x, y, color) {
     });
 }
 
+/** 説明の1行。キー名だけを群の色にして、絵のどのキーの話かを結びつける。 */
+function drawListLine(ctx, x, y, rowKey, color) {
+    const row = CONTROLS_ROWS.find((r) => r.key === rowKey);
+    if (!row) return;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = font('small', true);
+    ctx.fillStyle = color;
+    ctx.fillText(row.key, x, y);
+    ctx.font = font('small');
+    ctx.fillStyle = UI.ink;
+    ctx.fillText(row.label, x + LIST_KEY_W, y);
+}
+
+/** 列の見出し。 */
+function drawColumnHead(ctx, x, y, text, color) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = font('small', true);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+}
+
 /**
  * 操作の図を描く。
  * @param {CanvasRenderingContext2D} ctx
@@ -113,52 +132,42 @@ function drawMouse(ctx, x, y, color) {
 export function drawControlsDiagram(ctx, x, y, w) {
     ctx.save();
 
-    // ---- 凡例 ----
+    const rightX = x + RIGHT_COL_X;
+    const top = y + HEAD_H;
+
+    // ---- 左の列: キーボード ----
+    drawColumnHead(ctx, x, y, '■ LEFT HAND', DIAGRAM_COLORS.leftHand);
+    for (const k of LEFT_HAND_KEYS) {
+        drawKey(ctx, x + k.ux * PITCH, top + k.gy * PITCH,
+            k.w * PITCH - GAP, k.cap, DIAGRAM_COLORS.leftHand);
+    }
+    LEFT_LIST.forEach((rowKey, i) => {
+        drawListLine(ctx, x, top + CLUSTER_H + 12 + 10 + i * LIST_LINE,
+            rowKey, DIAGRAM_COLORS.leftHand);
+    });
+
+    // ---- 右の列: マウス ----
+    drawColumnHead(ctx, rightX, y, '■ RIGHT HAND', DIAGRAM_COLORS.rightHand);
+    // マウスは列の左端に置く。説明の左端と揃えると、絵と一覧が1つの塊に見える
+    drawMouse(ctx, rightX, top, DIAGRAM_COLORS.rightHand);
+    const rightListTop = top + MOUSE_H + 12 + 10;
+    MOUSE_BUTTONS.forEach((b, i) => {
+        drawListLine(ctx, rightX, rightListTop + i * LIST_LINE,
+            b.rowKey, DIAGRAM_COLORS.rightHand);
+    });
+
+    // ---- 右の列の続き: どちらの手でもないキー ----
+    // マウスの下に続けるが、色と小見出しで「マウスの操作ではない」ことを示す。
+    // 押すときはマウスから手を離す＝戦闘中に押すキーではない、が伝わる
+    const offTop = rightListTop + MOUSE_BUTTONS.length * LIST_LINE + 12;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = font('small', true);
-    ctx.fillStyle = DIAGRAM_COLORS.leftHand;
-    ctx.fillText('■ LEFT HAND', x, y);
-    ctx.fillStyle = DIAGRAM_COLORS.rightHand;
-    ctx.fillText('■ RIGHT HAND', x + 150, y);
-    // 「どちらの手でもない」は、押すときにマウスから手を離すという意味。
-    // 戦闘中に押すキーではないことがこれで分かる
-    ctx.fillStyle = DIAGRAM_COLORS.offMouse;
     ctx.font = font('micro', true);
-    ctx.fillText('□ OFF-MOUSE', x + 310, y);
-
-    const top = y + LEGEND_H;
-
-    // ---- 左手のキークラスタ ----
-    for (const k of LEFT_HAND_KEYS) {
-        const kx = x + (k.gx + ROW_OFFSET[k.gy]) * PITCH;
-        const ky = top + k.gy * PITCH;
-        drawKey(ctx, kx, ky, k.w * PITCH - GAP, k.cap, DIAGRAM_COLORS.leftHand);
-    }
-
-    // ---- マウス ----
-    // キーボードのすぐ右。机の上の位置関係をそのまま見せることで、
-    // どちらの手のものかを説明せずに伝える
-    drawMouse(ctx, x + CLUSTER_W + 24, top + PITCH, DIAGRAM_COLORS.rightHand);
-
-    // ---- 一覧（キーにつき1行だけ） ----
-    LIST_ORDER.forEach((rowKey, i) => {
-        const row = CONTROLS_ROWS.find((r) => r.key === rowKey);
-        if (!row) return;
-        const ly = top + 10 + i * LIST_LINE;
-        const color = groupColorOf(rowKey);
-
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.font = font('small', true);
-        ctx.fillStyle = color;
-        ctx.fillText(row.key, x + LIST_X, ly);
-
-        ctx.font = font('small');
-        // 説明は本文の色。キー名だけを群の色にすることで、色が「どの手か」
-        // だけを意味する（説明まで染めると色数が増えて読みにくい）
-        ctx.fillStyle = UI.ink;
-        ctx.fillText(row.label, x + LIST_X + LIST_LABEL_X, ly);
+    ctx.fillStyle = DIAGRAM_COLORS.offMouse;
+    ctx.fillText('□ OFF-MOUSE — TAKE YOUR HAND OFF', rightX, offTop);
+    OFF_MOUSE_KEYS.forEach((rowKey, i) => {
+        drawListLine(ctx, rightX, offTop + 18 + i * LIST_LINE,
+            rowKey, DIAGRAM_COLORS.offMouse);
     });
 
     ctx.restore();

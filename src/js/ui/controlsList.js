@@ -56,23 +56,29 @@ export const CONTROLS_ROWS = [
 // 実機での指摘を受けて図を足した。要点は**実際のキーボードの相対位置のまま
 // 描く**こと。並べ替えると図にした意味（体で覚えている位置と一致する）が消える。
 //
-// gx/gy はキーの升目。gy=0 が QWERTY 段（W R）、1 がホームポジション（A S D F）、
-// 2 が Shift の段、3 がスペースの段。w は升目いくつぶんの幅か。
-// 段ごとの横ずれ（実物のキーボードは1段ごとに少しずれている）は描画側で付ける。
+// gy は段（0 = QWERTY 段の W R、1 = ホームポジション、2 = Shift の段、
+// 3 = スペースの段）。ux は**その段の中での位置ではなく、クラスタ左端からの
+// 絶対位置**をキー1つぶんを1として表す。w は幅。
+//
+// 段ごとに一律の横ずれを足す方式（段が下がるほど右へ）を最初に採ったが、
+// **それだと Shift が A より右から始まって実物と逆になる**（実機で指摘を受けた）。
+// 本物のキーボードは Shift・Caps・Ctrl が左端で揃っていて、字のキーのほうが
+// 右へ寄っている。1キーずつ絶対位置を持たせればその関係をそのまま書ける。
 //
 // rowKey は CONTROLS_ROWS の key。図とリストが同じ文言を使うための紐づけで、
 // 「表にあるのに図のどこにも無い」「図にあるのに表に無い」はテストで落ちる。
 export const LEFT_HAND_KEYS = [
-    { cap: 'W', gx: 1, gy: 0, w: 1, rowKey: 'W' },
+    { cap: 'W', ux: 1.75, gy: 0, w: 1, rowKey: 'W' },
     // R はミニマップ。W と同じ段の右にあり、左手のまま押せることが図から読める
-    { cap: 'R', gx: 3, gy: 0, w: 1, rowKey: 'R' },
-    { cap: 'A', gx: 0, gy: 1, w: 1, rowKey: 'A / D' },
-    { cap: 'S', gx: 1, gy: 1, w: 1, rowKey: 'S' },
-    { cap: 'D', gx: 2, gy: 1, w: 1, rowKey: 'A / D' },
-    { cap: 'F', gx: 3, gy: 1, w: 1, rowKey: 'F' },
-    { cap: 'SHIFT', gx: 0, gy: 2, w: 2, rowKey: 'SHIFT' },
+    { cap: 'R', ux: 3.75, gy: 0, w: 1, rowKey: 'R' },
+    { cap: 'A', ux: 0.75, gy: 1, w: 1, rowKey: 'A / D' },
+    { cap: 'S', ux: 1.75, gy: 1, w: 1, rowKey: 'S' },
+    { cap: 'D', ux: 2.75, gy: 1, w: 1, rowKey: 'A / D' },
+    { cap: 'F', ux: 3.75, gy: 1, w: 1, rowKey: 'F' },
+    // A の左下。左端は Shift が担う
+    { cap: 'SHIFT', ux: 0, gy: 2, w: 2, rowKey: 'SHIFT' },
     // 左手の親指で届く位置にある＝左クリックの代わりになる理由がここで分かる
-    { cap: 'SPACE', gx: 1, gy: 3, w: 2.5, rowKey: 'L-CLICK' },
+    { cap: 'SPACE', ux: 1.5, gy: 3, w: 2.5, rowKey: 'L-CLICK' },
 ];
 
 /** マウスの左右ボタン。右手側の群。 */

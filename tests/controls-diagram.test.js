@@ -62,7 +62,7 @@ test('全行に1つだけ説明があり、1行に収まる長さである', () 
 // ここがずれると、図にした意味（手の置き場所が分かる）が失われる
 
 test('W は S の真上にある', () => {
-    assert.equal(capAt('W').gx, capAt('S').gx);
+    assert.equal(capAt('W').ux, capAt('S').ux);
     assert.equal(capAt('W').gy, capAt('S').gy - 1);
 });
 
@@ -70,7 +70,7 @@ test('ホームポジションは A S D F の順に並ぶ', () => {
     const home = ['A', 'S', 'D', 'F'].map(capAt);
     for (const k of home) assert.equal(k.gy, home[0].gy, 'A S D F が同じ段にない');
     for (let i = 1; i < home.length; i++) {
-        assert.equal(home[i].gx, home[i - 1].gx + 1, `${home[i].cap} の位置が隣ではない`);
+        assert.equal(home[i].ux, home[i - 1].ux + 1, `${home[i].cap} の位置が隣ではない`);
     }
 });
 
@@ -78,13 +78,22 @@ test('ホームポジションは A S D F の順に並ぶ', () => {
 // 図から読めるようにする
 test('R は W と同じ段の右側にある', () => {
     assert.equal(capAt('R').gy, capAt('W').gy);
-    assert.ok(capAt('R').gx > capAt('W').gx);
+    assert.ok(capAt('R').ux > capAt('W').ux);
 });
 
-test('SHIFT はホームポジションの下の段の左端にある', () => {
+// 実機の指摘: Shift は A の**左下**にある。段が下がるほど右へずれる格子として
+// 描くと A より右から始まってしまい、実物と逆になる（Shift・Caps・Ctrl は
+// キーボードの左端で揃っていて、字のキーのほうが右へ寄っている）
+test('SHIFT は A の左下から始まる', () => {
     assert.equal(capAt('SHIFT').gy, capAt('A').gy + 1);
-    assert.equal(capAt('SHIFT').gx, 0);
+    assert.ok(capAt('SHIFT').ux < capAt('A').ux,
+        `SHIFT(${capAt('SHIFT').ux}) が A(${capAt('A').ux}) より左から始まっていない`);
     assert.ok(capAt('SHIFT').w >= 2, 'SHIFT が長いキーとして描かれていない');
+});
+
+// 左端は Shift。ここより左に出るキーがあると、左端が揃って見えない
+test('SHIFT がクラスタの左端にある', () => {
+    assert.equal(Math.min(...LEFT_HAND_KEYS.map((k) => k.ux)), capAt('SHIFT').ux);
 });
 
 // Space が左手の親指で届く位置にあることが、これが左クリックの代わりになる理由
@@ -119,6 +128,27 @@ test('全行が一覧に1行ずつ出る', () => {
     for (const row of CONTROLS_ROWS) {
         assert.equal(drawn.filter((t) => t === row.label).length, 1,
             `${row.key} の説明が1回だけ出ていない`);
+    }
+});
+
+// 説明は、その手の絵の**下**に置く。左手の説明が右のマウスの横に並んでいると
+// どちらの手の話か目で追えない、というのが実機での指摘だった
+test('左手の説明はキーボードの下、右手と OFF-MOUSE の説明はマウスの下に出る', () => {
+    const { texts } = drawDiagram();
+    const at = (t) => texts.find((x) => x.text === t);
+    const clusterBottom = Math.max(...LEFT_HAND_KEYS.map((k) => at(k.cap).y));
+    const mouseBottom = Math.max(...MOUSE_BUTTONS.map((b) => at(b.cap).y));
+
+    for (const key of ['W', 'A / D', 'S', 'F', 'SHIFT', 'R']) {
+        const line = at(rowFor(key).label);
+        assert.ok(line.y > clusterBottom, `${key} の説明がキーボードの下に無い`);
+        // 左手の説明はキーボードと同じ列（マウスの列へ流れていない）
+        assert.ok(line.x < at(rowFor('L-CLICK').label).x,
+            `${key} の説明が右の列に入っている`);
+    }
+    for (const key of ['L-CLICK', 'R-CLICK', 'M', 'P', '- / +']) {
+        const line = at(rowFor(key).label);
+        assert.ok(line.y > mouseBottom, `${key} の説明がマウスの下に無い`);
     }
 });
 
