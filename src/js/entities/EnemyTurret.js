@@ -7,9 +7,10 @@ import {
     ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
     ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
     REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_COOLDOWN, REFLECT_BEAM_CANNON_SCORE,
-    REFLECT_BEAM_MUZZLE_FLASH_FRAMES,
+    REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_SPREAD,
+    REFLECT_BEAM_MUZZLE_FLASH_RADIUS,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
-    COLOR_REFLECT_BEAM_CORE, COLOR_REFLECT_BEAM_EDGE,
+    COLOR_REFLECT_BEAM_CORE,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -17,6 +18,11 @@ import { ReflectBeam } from './ReflectBeam.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
 import { playDestruction } from './destruction.js';
 import { applyDamage } from '../utils/damage.js';
+
+// 砲身の見た目。描画専用のパラメータなので Constants ではなくここに置く
+// （EnemyAttacker.js の LEG_STYLES と同じ扱い）
+const BARREL_BASE = 4;    // 砲身が始まる位置（中心から）
+const BARREL_LENGTH = 14; // 砲身の長さ
 
 // 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
 // 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
@@ -36,7 +42,10 @@ const TURRET_TYPES = {
         hp: REFLECT_BEAM_CANNON_HP,
         score: REFLECT_BEAM_CANNON_SCORE,
         cooldown: REFLECT_BEAM_CANNON_COOLDOWN,
-        burst: 1,  // 単発。連射すると帯が重なって逃げ場が無くなる
+        // 遮蔽に隠れても撃つ。反射する武器なので、壁越しに撃って跳ね返らせるのが
+        // この砲台の見せ場になる。隠れているだけで安全だと緊張感が出ない
+        ignoresLineOfSight: true,
+        burst: 1,  // 1回の攻撃。ただし1回で SHOT_COUNT 本を扇型に撃つ
         colors: {
             base: COLOR_BEAM_CANNON_BASE,
             barrel: COLOR_BEAM_CANNON_BARREL,
@@ -149,7 +158,8 @@ export class EnemyTurret {
             const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < ENEMY_TURRET_SIGHT_RANGE && this._hasLineOfSight(target)) {
+            if (dist < ENEMY_TURRET_SIGHT_RANGE
+                && (this.spec.ignoresLineOfSight || this._hasLineOfSight(target))) {
                 return target;
             }
         }
@@ -164,21 +174,45 @@ export class EnemyTurret {
         );
     }
 
+    /**
+     * 砲口（砲身の先端）の中心からの距離。
+     *
+     * **発射位置と砲口の放射光は必ずこれを使う。** 以前は発射が `12 - recoil`、
+     * 放射光が `4 + (14 - recoil)` と食い違っていて、ビームが放射光より6px手前
+     * ＝砲身の中から湧いていた。そのせいで光がビームの根元に隠れ、実機で
+     * 「放射光が全く目立たない・ビームが回転軸の中心から出ている」と指摘された
+     */
+    _muzzleOffset() {
+        return BARREL_BASE + BARREL_LENGTH - this.recoil;
+    }
+
     _executeAttack() {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
 
+        // 発射位置を計算する前に反動をかける。反動は「撃った瞬間に砲身が
+        // 引っ込む」演出なので、_muzzleOffset() を発射直後に読んだときも
+        // 弾を出した位置と同じ値になる（以前は発射後に recoil を立てていたため、
+        // 発射に使った距離と発射直後に _muzzleOffset() で読める距離がずれていた）
+        this.recoil = 4; // Visual recoil kickback
+
         // Muzzle position offset by barrel length and recoil
-        const barrelLength = 12 - this.recoil;
-        const muzzleX = cx + Math.cos(this.currentAngle) * barrelLength;
-        const muzzleY = cy + Math.sin(this.currentAngle) * barrelLength;
+        const off = this._muzzleOffset();
+        const muzzleX = cx + Math.cos(this.currentAngle) * off;
+        const muzzleY = cy + Math.sin(this.currentAngle) * off;
 
         if (this.type === 'beam') {
-            // ビームはばらつかせない。反射先が読めることが遊びの中身なので、
-            // 撃つたびに散らすとその読みが成立しない
-            this.game.enemyBullets.push(
-                new ReflectBeam(this.game, muzzleX, muzzleY, this.currentAngle),
-            );
+            // 照準を中心に左右へ均等に開く。**乱数は使わない**（週次の決定性を
+            // 壊さないため。スポーンと違い発射は rng を引かない作りを保つ）
+            for (let i = 0; i < REFLECT_BEAM_SHOT_COUNT; i++) {
+                const t = REFLECT_BEAM_SHOT_COUNT === 1
+                    ? 0
+                    : (i / (REFLECT_BEAM_SHOT_COUNT - 1)) * 2 - 1;  // -1..+1
+                const angle = this.currentAngle + t * REFLECT_BEAM_SPREAD;
+                this.game.enemyBullets.push(
+                    new ReflectBeam(this.game, muzzleX, muzzleY, angle),
+                );
+            }
             this.muzzleFlash = REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
         } else {
             // Inaccuracy
@@ -188,8 +222,6 @@ export class EnemyTurret {
             const bullet = new EnemyBullet(this.game, muzzleX, muzzleY, finalAngle);
             this.game.enemyBullets.push(bullet);
         }
-
-        this.recoil = 4; // Visual recoil kickback
     }
 
     takeDamage(amount) {
@@ -244,9 +276,9 @@ export class EnemyTurret {
 
         // Barrel
         ctx.fillStyle = colors.barrel;
-        const barrelLength = 14 - this.recoil;
-        ctx.fillRect(4, -2, barrelLength, 4);
-        ctx.strokeRect(4, -2, barrelLength, 4);
+        const barrelLength = BARREL_LENGTH - this.recoil;
+        ctx.fillRect(BARREL_BASE, -2, barrelLength, 4);
+        ctx.strokeRect(BARREL_BASE, -2, barrelLength, 4);
 
         // Main pivot body (Circle)
         ctx.beginPath();
@@ -265,11 +297,13 @@ export class EnemyTurret {
         // 出どころを見失わないようにする役目。**予告ではない**
         if (this.muzzleFlash > 0) {
             const t = this.muzzleFlash / REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
-            const r = 14 * t;
-            const gx = 4 + barrelLength;
+            const r = REFLECT_BEAM_MUZZLE_FLASH_RADIUS * t;
+            const gx = this._muzzleOffset();
             const grad = ctx.createRadialGradient(gx, 0, 0, gx, 0, Math.max(0.1, r));
             grad.addColorStop(0, COLOR_REFLECT_BEAM_CORE);
-            grad.addColorStop(1, COLOR_REFLECT_BEAM_EDGE);
+            // 外周は透明。不透明な暗紫のままだと「暗い円板の縁」に見えてしまう。
+            // グラデーションのストップに rgba を直接書くのは BaseLaser に前例がある
+            grad.addColorStop(1, 'rgba(59, 15, 107, 0)');
             ctx.globalAlpha = t;
             ctx.fillStyle = grad;
             ctx.beginPath();
