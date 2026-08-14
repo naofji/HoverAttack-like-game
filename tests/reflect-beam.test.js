@@ -5,7 +5,7 @@ import { makeMap } from './helpers/enemy-world.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
   REFLECT_BEAM_SPEED, REFLECT_BEAM_MAX_BOUNCES, REFLECT_BEAM_MAX_DISTANCE,
-  REFLECT_BEAM_TAIL_SEGMENTS, COLOR_REFLECT_BEAM_CORE,
+  REFLECT_BEAM_SEGMENT_FRAMES, REFLECT_BEAM_SEGMENT_LIFE, COLOR_REFLECT_BEAM_CORE,
 } from '../src/js/utils/Constants.js';
 
 // 横に長い部屋。左右の壁で跳ね返る
@@ -77,10 +77,104 @@ test('反射しなくても距離を使い切れば消える', () => {
     `距離の上限より手前で消えた: ${beam.distance}`);
 });
 
-test('帯は設定した節の数になる', () => {
+// 1節は SEGMENT_FRAMES フレームぶん。速度5・2フレームなので10px
+test('節は SEGMENT_FRAMES ごとに増える', () => {
   const { beam } = makeBeam();
-  for (let i = 0; i < 60; i++) beam.update();
-  assert.equal(beam.segments().length, REFLECT_BEAM_TAIL_SEGMENTS);
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_FRAMES * 3; i++) beam.update();
+  assert.equal(beam.segments().length, 3, '3節ぶん進んだのに節が3つない');
+});
+
+// 反射で節を閉じないと、節が折れ点をまたいで角をショートカットする直線になり、
+// 反射のたびに帯が角でがたついて見える（実機で指摘された）
+//
+// 元の案（angle:0 で縦の壁に当てる）は誤検出だった: angle:0 の反射は
+// vx の符号だけが反転し vy は 0 のままなので、節を閉じても閉じなくても
+// 前後とも水平のまま＝「節が斜めになっているか」では閉じ忘れを検出できない
+// （閉じる処理を丸ごと外してもこのテストは通ってしまうことを確認した）。
+// 斜め角で撃って上下の壁に当てれば、反射前後で傾きが変わる（vy の符号が
+// 反転し vx はそのまま）ので、閉じ忘れると反射点をまたいだ直線になる。
+// それを「反射点がどこかの節の境界（始点か終点）に一致しているか」で直接見る。
+//
+// y:40 だと反射までのフレーム数がたまたま SEGMENT_FRAMES(2) の倍数と重なり、
+// 閉じる処理を丸ごと外しても「たまたま」定期クローズが反射点と一致してしまい
+// テストが検出に失敗した（実際に試して確認した）。y:36 は反射まで12フレームで
+// 定期クローズの周期とズレる（シミュレーションで確認済み）ので、閉じ忘れを
+// 確実に検出できる
+test('反射した瞬間に節が閉じる', () => {
+  const { beam } = makeBeam({ x: 140, y: 36, angle: 0.5 });
+  let cornerX = null;
+  let cornerY = null;
+  for (let i = 0; i < 60; i++) {
+    const before = beam.bounces;
+    const prevX = beam.x;
+    const prevY = beam.y;
+    beam.update();
+    if (beam.bounces > before) { cornerX = prevX; cornerY = prevY; break; }
+  }
+  assert.ok(cornerX !== null, '反射していない');
+
+  // 反射点（stepBeam が跳ね返りの起点にする「元の位置」）がどこかの節の
+  // 端点になっているはず。なっていなければ、節が反射点をまたいで
+  // 一直線に描かれている（角のショートカット）
+  const touchesCorner = beam.segments().some((s) => (
+    (Math.abs(s.x1 - cornerX) < 1e-9 && Math.abs(s.y1 - cornerY) < 1e-9)
+    || (Math.abs(s.x2 - cornerX) < 1e-9 && Math.abs(s.y2 - cornerY) < 1e-9)
+  ));
+  assert.ok(touchesCorner, `反射点が節の境界になっていない（角をまたいでいる）: corner=(${cornerX},${cornerY})`);
+});
+
+test('古い節から順に消える', () => {
+  const { beam } = makeBeam();
+  // 帯がいっぱいになるまで進める
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_LIFE * 2; i++) beam.update();
+  const full = beam.segments().length;
+  assert.ok(full > 1, '節が増えていない');
+  // 帯の長さは寿命で決まるので、これ以上は増えない
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_FRAMES * 3; i++) beam.update();
+  assert.equal(beam.segments().length, full, '節が寿命を超えて増えている');
+});
+
+test('新しい節ほど寿命が残っている', () => {
+  const { beam } = makeBeam();
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_LIFE; i++) beam.update();
+  const lives = beam.segments().map((s) => s.life);
+  // segments() は先端が先（[0] が新しい）
+  for (let i = 1; i < lives.length; i++) {
+    assert.ok(lives[i] < lives[i - 1], `寿命の並びが古い順になっていない: ${lives}`);
+  }
+});
+
+// 上限に達した瞬間に帯ごと消えると唐突に見える。先端だけ止めて、
+// 残った節が後ろから薄れて消えていく
+test('上限に達しても節が残る間は生きている', () => {
+  const { beam } = makeBeam();
+  let steps = 0;
+  while (!beam.spent && steps < 5000) { beam.update(); steps++; }
+  assert.ok(beam.spent, '先端が止まっていない');
+  assert.equal(beam.alive, true, '節が残っているのに消えている');
+  assert.ok(beam.segments().length > 0, '節が残っていない');
+
+  const headX = beam.x;
+  const headY = beam.y;
+  beam.update();
+  assert.equal(beam.x, headX, '先端が止まっていない');
+  assert.equal(beam.y, headY, '先端が止まっていない');
+
+  // 節が全部消えたら初めて alive が false になる
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_LIFE + 2; i++) beam.update();
+  assert.equal(beam.segments().length, 0);
+  assert.equal(beam.alive, false, '節が尽きたのに消えていない');
+});
+
+// 古い節ほど薄く描く（ぼやけながら消える）
+test('古い節ほど薄く描かれる', () => {
+  const { beam } = makeBeam();
+  for (let i = 0; i < REFLECT_BEAM_SEGMENT_LIFE; i++) beam.update();
+  const ctx = makeFakeCtx();
+  beam.draw(ctx);
+  const alphas = ctx.calls.filter((c) => c.name === 'set:globalAlpha').map((c) => c.args[0]);
+  assert.ok(alphas.length > 1, '節ごとに濃さを変えていない');
+  assert.ok(Math.max(...alphas) > Math.min(...alphas), '全部同じ濃さで描いている');
 });
 
 // 地形を壊すと跳ね返り方がその場の破壊状況しだいになって読めなくなる
