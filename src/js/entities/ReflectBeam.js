@@ -15,6 +15,7 @@ import {
     COLOR_REFLECT_BEAM_CORE, COLOR_REFLECT_BEAM_MID, COLOR_REFLECT_BEAM_EDGE,
 } from '../utils/Constants.js';
 import { beamSegments, stepBeam } from '../utils/beamPath.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class ReflectBeam {
     constructor(game, x, y, angle) {
@@ -33,6 +34,8 @@ export class ReflectBeam {
         this.maxNodes = Math.ceil(REFLECT_BEAM_TAIL_LENGTH / REFLECT_BEAM_SPEED) + 2;
         // CollisionManager が「点ではなく帯で見る」相手だと見分けるための印
         this.isReflectBeam = true;
+
+        audioManager.playWeapon('reflectBeam', x, y);
     }
 
     update() {
