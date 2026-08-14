@@ -500,6 +500,9 @@ export const REFLECT_BEAM_CANNON_SCORE = 350;    // タレット200より高い
 export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
 export const COLOR_BEAM_CANNON_BARREL = '#D8DEE4';
 export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
+// 砲身より一段暗くして、線として見えるようにする。冷却フィン（ラジエーター）で
+// 輪郭に凹凸を出し、既存のタレットと形でも見分けられるようにするためのもの
+export const COLOR_BEAM_CANNON_FIN = '#8A939C';
 
 // --- Enemy Base Additional Weapons ---
 export const ENEMY_BASE_TURRET_COOLDOWN = 120;

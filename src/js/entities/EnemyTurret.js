@@ -10,6 +10,7 @@ import {
     REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_SPREAD,
     REFLECT_BEAM_MUZZLE_FLASH_RADIUS,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
+    COLOR_BEAM_CANNON_FIN,
     COLOR_REFLECT_BEAM_CORE,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
@@ -51,6 +52,9 @@ const TURRET_TYPES = {
             barrel: COLOR_BEAM_CANNON_BARREL,
             pivot: COLOR_BEAM_CANNON_PIVOT,
         },
+        // 冷却フィン。砲身に直交する直線を等間隔に引く。型ごとの違いは表の1行に
+        // 出す方針なので、draw() に型の分岐を増やさずここから引く（gun は持たない）
+        fins: { count: 4, halfHeight: 4, color: COLOR_BEAM_CANNON_FIN },
     },
 };
 
@@ -286,6 +290,23 @@ export class EnemyTurret {
         const barrelLength = BARREL_LENGTH - this.recoil;
         ctx.fillRect(BARREL_BASE, -2, barrelLength, 4);
         ctx.strokeRect(BARREL_BASE, -2, barrelLength, 4);
+
+        // 冷却フィン（beam 型のみ）。砲身に直交する線を等間隔に引き、輪郭に
+        // 凹凸を出す。色だけで区別していた既存タレットとの差別化のため
+        const fins = this.spec.fins;
+        if (fins) {
+            ctx.strokeStyle = fins.color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < fins.count; i++) {
+                // 砲身を count+1 等分した内側の点に引く。両端（付け根と砲口）を
+                // 空けることで、砲口の放射光とフィンが重ならない
+                const fx = BARREL_BASE + barrelLength * (i + 1) / (fins.count + 1);
+                ctx.moveTo(fx, -fins.halfHeight);
+                ctx.lineTo(fx, fins.halfHeight);
+            }
+            ctx.stroke();
+        }
 
         // Main pivot body (Circle)
         ctx.beginPath();

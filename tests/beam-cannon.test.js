@@ -3,12 +3,18 @@ import assert from 'node:assert/strict';
 import { EnemyTurret } from '../src/js/entities/EnemyTurret.js';
 import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
 import { makeMap } from './helpers/enemy-world.js';
-import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
 import {
   REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_SCORE, ENEMY_TURRET_HP,
   REFLECT_BEAM_MUZZLE_FLASH_FRAMES, COLOR_BEAM_CANNON_BARREL,
   REFLECT_BEAM_SHOT_COUNT,
 } from '../src/js/utils/Constants.js';
+
+// 砲身の見た目パラメータ。draw() 側と同じ値をここでも持つ（描画専用の値は
+// Constants ではなく EnemyTurret.js のモジュールスコープにあるため、テスト側で
+// 別途決め打つ）。BARREL_LENGTH=14, BARREL_BASE=4
+const BARREL_BASE = 4;
+const BARREL_LENGTH = 14;
 
 const ROOM = [
   '####################',
@@ -172,4 +178,47 @@ test('ビームは砲口（砲身の先端）から出る', () => {
     const d = Math.hypot(b.x - cx, b.y - cy);
     assert.ok(Math.abs(d - off) < 1e-6, `砲口(${off})から出ていない: ${d}`);
   }
+});
+
+// 冷却フィン（ラジエーター）。普通のタレットとの見分けが色だけに頼っていたのを、
+// 輪郭の凹凸でも区別できるようにするための追加。beam 型だけが持つ
+test('beam 型は砲身に冷却フィンが立つ', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const barrelLength = BARREL_LENGTH - t.recoil;
+  // フィンは1回の beginPath〜stroke の中で moveTo/lineTo を count 回繰り返す
+  // ため、extractPolylines は全体を1本の折れ線として返す。ここでは points を
+  // moveTo/lineTo の対（2点ずつ）に切り分けて、フィン1本ずつとして扱う
+  const [points] = extractPolylines(ctx.calls);
+  assert.ok(points, 'フィンの線が描かれていない');
+  const finLines = [];
+  for (let i = 0; i + 1 < points.length; i += 2) {
+    finLines.push([points[i], points[i + 1]]);
+  }
+  // x1===x2 の垂直な線分だけを対象にする
+  const verticalFinLines = finLines.filter((l) => l[0].x === l[1].x);
+  assert.equal(verticalFinLines.length, t.spec.fins.count, 'フィンの本数が違う');
+
+  for (const line of verticalFinLines) {
+    const [p0, p1] = line;
+    // 砲身の厚み(±2)より上下へはみ出していること（凹凸として見える条件）
+    assert.ok(Math.abs(p0.y) > 2 && Math.abs(p1.y) > 2, 'フィンが砲身の厚みからはみ出していない');
+    assert.ok(p0.y === -p1.y, 'フィンが砲身の中心線に対して非対称');
+    // 砲身の範囲の内側にあること（付け根と砲口を空ける）
+    assert.ok(p0.x > BARREL_BASE && p0.x < BARREL_BASE + barrelLength, 'フィンが砲身の外にある');
+  }
+});
+
+test('gun 型は冷却フィンを持たない', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'gun');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const lines = extractPolylines(ctx.calls);
+  const finLines = lines.filter((l) => l.length === 2 && l[0].x === l[1].x && Math.abs(l[0].y) > 2);
+  assert.equal(finLines.length, 0, 'gun 型にフィンが出ている');
 });
