@@ -134,9 +134,16 @@ export class SpawnManager {
         }
 
         // Spawn stationary turrets
-        for (const pos of game.map.enemyTurretSpawns) {
-            game.enemies.push(new EnemyTurret(game, pos.x, pos.y, pos.isCeiling));
-        }
+        // 7面（missionsCompleted >= 6）では**並び順の偶数番目**を反射ビームに
+        // 差し替える。この配列は Map._findEnemyTurretPositions() が既に game.rng で
+        // シャッフルして作っているので、偶数番目を取るだけなら**追加の乱数消費が
+        // ゼロ**になる。ここで rng.next() を1回でも呼ぶと、以降の敵の構成が全部
+        // ずれて週次の決定性が壊れる（tests/MapDeterminism.test.js）
+        const beamMission = game.missionsCompleted >= 6;
+        game.map.enemyTurretSpawns.forEach((pos, i) => {
+            const type = (beamMission && i % 2 === 0) ? 'beam' : 'gun';
+            game.enemies.push(new EnemyTurret(game, pos.x, pos.y, pos.isCeiling, type));
+        });
 
         // Spawn Main Base at the very end
         if (game.map.enemyBaseSpawn) {
