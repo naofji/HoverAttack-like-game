@@ -160,3 +160,48 @@ export function distanceBetween(e1, e2) {
     const dy = (e1.y + e1.height / 2) - (e2.y + e2.height / 2);
     return Math.sqrt(dx * dx + dy * dy);
 }
+
+/**
+ * 線分と矩形が交わるか。反射ビームは帯全体が当たるので、点ではなく線分で見る。
+ *
+ * Liang–Barsky のクリッピング。線分を媒介変数 t（0〜1）で表し、矩形の4辺で
+ * t の範囲を削っていく。範囲が残れば交わっている。ループも平方根も無いので、
+ * 帯の節8本 × 対象2つを毎フレーム見ても軽い。
+ *
+ * @param {number} x1 線分の端
+ * @param {number} y1
+ * @param {number} x2 もう一方の端
+ * @param {number} y2
+ * @param {{x:number,y:number,width:number,height:number}} rect
+ * @returns {boolean}
+ */
+export function segmentIntersectsRect(x1, y1, x2, y2, rect) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const left = rect.x;
+    const right = rect.x + rect.width;
+    const top = rect.y;
+    const bottom = rect.y + rect.height;
+
+    let t0 = 0;
+    let t1 = 1;
+
+    // 4辺ぶん、(p, q) の組で範囲を削る
+    const clip = (p, q) => {
+        if (p === 0) return q >= 0;      // 辺と平行。外側なら即座に不成立
+        const r = q / p;
+        if (p < 0) {
+            if (r > t1) return false;
+            if (r > t0) t0 = r;
+        } else {
+            if (r < t0) return false;
+            if (r < t1) t1 = r;
+        }
+        return true;
+    };
+
+    return clip(-dx, x1 - left)
+        && clip(dx, right - x1)
+        && clip(-dy, y1 - top)
+        && clip(dy, bottom - y1);
+}
