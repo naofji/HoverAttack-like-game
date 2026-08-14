@@ -156,7 +156,10 @@ test('beam 型は1回の攻撃で扇型に複数本撃つ', () => {
   assert.ok(spread > 0, '全部同じ向きに撃っている');
 });
 
-// 発射位置が砲身の中だと、放射光がビームの根元に隠れて見えない（実機で指摘）
+// 発射位置が砲身の中だと、放射光がビームの根元に隠れて見えない（実機で指摘）。
+// 発射後は反動で _muzzleOffset() の値が動く（砲身が縮む）ので、ここで比べるのは
+// 発射した瞬間に固定された muzzleFlashOffset。これなら「放射光とビームが
+// 同じ点から出ている」ことを直接縛れる
 test('ビームは砲口（砲身の先端）から出る', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
@@ -164,7 +167,7 @@ test('ビームは砲口（砲身の先端）から出る', () => {
 
   const cx = t.x + t.width / 2;
   const cy = t.y + t.height / 2;
-  const off = t._muzzleOffset();
+  const off = t.muzzleFlashOffset;
   for (const b of game.enemyBullets) {
     const d = Math.hypot(b.x - cx, b.y - cy);
     assert.ok(Math.abs(d - off) < 1e-6, `砲口(${off})から出ていない: ${d}`);

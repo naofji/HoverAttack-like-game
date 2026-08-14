@@ -72,6 +72,10 @@ export class EnemyTurret {
         this.isCeilingMounted = isCeilingMounted;
         // 発射時の砲口の放射光。残りフレーム数。**予告ではない**（撃つ前は 0）
         this.muzzleFlash = 0;
+        // 放射光を描く位置（中心からの距離）。発射した瞬間に _executeAttack() が
+        // 固定する。反動で縮む _muzzleOffset() を毎フレーム引くと光がビームから
+        // 離れて見えるため、光だけは発射時点の値に留める
+        this.muzzleFlashOffset = 0;
 
         // Visual aiming angle
         this.targetAngle = isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
@@ -190,18 +194,19 @@ export class EnemyTurret {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
 
-        // 発射位置を計算する前に反動をかける。反動は「撃った瞬間に砲身が
-        // 引っ込む」演出なので、_muzzleOffset() を発射直後に読んだときも
-        // 弾を出した位置と同じ値になる（以前は発射後に recoil を立てていたため、
-        // 発射に使った距離と発射直後に _muzzleOffset() で読める距離がずれていた）
-        this.recoil = 4; // Visual recoil kickback
-
         // Muzzle position offset by barrel length and recoil
         const off = this._muzzleOffset();
         const muzzleX = cx + Math.cos(this.currentAngle) * off;
         const muzzleY = cy + Math.sin(this.currentAngle) * off;
 
         if (this.type === 'beam') {
+            // 放射光は「弾が出た場所」を示す演出なので、発射した瞬間の砲口の
+            // 位置に留める。反動で砲身が縮んだあとの _muzzleOffset() を毎フレーム
+            // 引くと、発射直後は 18 だったのに次のフレームには 14 へ動いてしまい、
+            // ビーム（発射時点の 18 のまま）から光が離れて見える。撃った位置を
+            // ここで固定しておき、draw() はこの値だけを使う
+            this.muzzleFlashOffset = off;
+
             // 照準を中心に左右へ均等に開く。**乱数は使わない**（週次の決定性を
             // 壊さないため。スポーンと違い発射は rng を引かない作りを保つ）
             for (let i = 0; i < REFLECT_BEAM_SHOT_COUNT; i++) {
@@ -222,6 +227,8 @@ export class EnemyTurret {
             const bullet = new EnemyBullet(this.game, muzzleX, muzzleY, finalAngle);
             this.game.enemyBullets.push(bullet);
         }
+
+        this.recoil = 4; // Visual recoil kickback（gun 型の見た目を変えないため、元どおり末尾で立てる）
     }
 
     takeDamage(amount) {
@@ -298,7 +305,9 @@ export class EnemyTurret {
         if (this.muzzleFlash > 0) {
             const t = this.muzzleFlash / REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
             const r = REFLECT_BEAM_MUZZLE_FLASH_RADIUS * t;
-            const gx = this._muzzleOffset();
+            // 発射時点で固定した位置を使う（_muzzleOffset() だと反動で縮んだ
+            // 砲身に毎フレーム追従してしまい、ビームの発射位置から光が離れる）
+            const gx = this.muzzleFlashOffset;
             const grad = ctx.createRadialGradient(gx, 0, 0, gx, 0, Math.max(0.1, r));
             grad.addColorStop(0, COLOR_REFLECT_BEAM_CORE);
             // 外周は透明。不透明な暗紫のままだと「暗い円板の縁」に見えてしまう。
