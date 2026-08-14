@@ -96,7 +96,17 @@ test('SHIFT がクラスタの左端にある', () => {
     assert.equal(Math.min(...LEFT_HAND_KEYS.map((k) => k.ux)), capAt('SHIFT').ux);
 });
 
-// Space が左手の親指で届く位置にあることが、これが左クリックの代わりになる理由
+// Space は左手の親指で届く位置にある。左手の説明として独立した行を持たせる
+// （L-CLICK の説明に括弧書きで添えていたが、左手の絵にキーがあるのに説明が
+// 右の列にある状態になっていた）
+test('SPACE は左手の行として説明を持つ', () => {
+    const space = capAt('SPACE');
+    assert.equal(space.rowKey, 'SPACE', 'SPACE のキーが自分の行を指していない');
+    const row = rowFor('SPACE');
+    assert.ok(row, '表に SPACE の行が無い');
+    assert.match(row.label, /FIRE|L-CLICK/, 'SPACE が発射だと読めない');
+});
+
 test('SPACE は一番下の段にある長いキー', () => {
     const space = capAt('SPACE');
     assert.equal(space.gy, Math.max(...LEFT_HAND_KEYS.map((k) => k.gy)));
@@ -139,7 +149,7 @@ test('左手の説明はキーボードの下、右手と OFF-MOUSE の説明は
     const clusterBottom = Math.max(...LEFT_HAND_KEYS.map((k) => at(k.cap).y));
     const mouseBottom = Math.max(...MOUSE_BUTTONS.map((b) => at(b.cap).y));
 
-    for (const key of ['W', 'A / D', 'S', 'F', 'SHIFT', 'R']) {
+    for (const key of ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R']) {
         const line = at(rowFor(key).label);
         assert.ok(line.y > clusterBottom, `${key} の説明がキーボードの下に無い`);
         // 左手の説明はキーボードと同じ列（マウスの列へ流れていない）
@@ -176,12 +186,11 @@ test('凡例の見出しが左手と右手それぞれの色で描かれる', ()
 });
 
 // 一覧のキー名は群の色で描く。絵のどのキーの話なのかを色で結びつける。
-// SPACE は左手のキーだが、一覧の行としてはマウスの L-CLICK（発射）に属する
-// ＝キーの色と行の色は別物なので、期待する対応をここに直接書く
+// 期待する対応はここに直接書く（実装から導くと実装を実装で検算することになる）
 test('一覧のキー名が群ごとの色で描かれる', () => {
     const { texts } = drawDiagram();
     const expected = {
-        leftHand: ['W', 'A / D', 'S', 'F', 'SHIFT', 'R'],
+        leftHand: ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R'],
         rightHand: ['L-CLICK', 'R-CLICK'],
         offMouse: ['M', 'P', '- / +'],
     };
@@ -198,16 +207,34 @@ test('一覧のキー名が群ごとの色で描かれる', () => {
     }
 });
 
-// 渡した幅の中に収める。パネルの幅は画面ごとに違う（HOW TO PLAY 800 / 設定 720）
+// 列が近すぎると、どちらの手の話なのか目が迷う（実機での指摘）。左の列の
+// いちばん長い説明の右端と、右の列の左端が十分に離れていること
+test('左右の列が離れている', () => {
+    const { texts } = drawDiagram();
+    const at = (t) => texts.find((x) => x.text === t);
+    const leftRight = Math.max(
+        ...['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R']
+            .map((k) => at(rowFor(k).label))
+            .map((t) => t.x + t.width),
+    );
+    const rightLeft = Math.min(
+        ...['L-CLICK', 'R-CLICK', 'M', 'P', '- / +'].map((k) => at(k).x),
+    );
+    assert.ok(rightLeft - leftRight >= 30,
+        `列の間が狭い: ${Math.round(rightLeft - leftRight)}px`);
+});
+
+// 渡した幅の中に収める。パネルの幅は画面ごとに違う（HOW TO PLAY 800 / 設定 720）。
+// 656 はいちばん狭い実際の値（設定のパネル 720 から左右の余白 32 ずつを引いたもの）
 test('図は渡した幅の内側に収まる', () => {
     const ctx = makeFakeCtx();
-    drawControlsDiagram(ctx, 100, 100, 640);
+    drawControlsDiagram(ctx, 100, 100, 656);
     for (const t of extractTextsWithFont(ctx.calls)) {
         assert.ok(t.x >= 100, `左へはみ出す: ${t.text} (${t.x})`);
-        assert.ok(t.x + t.width <= 100 + 640, `右へはみ出す: ${t.text} (${Math.round(t.x + t.width)})`);
+        assert.ok(t.x + t.width <= 100 + 656, `右へはみ出す: ${t.text} (${Math.round(t.x + t.width)})`);
     }
     for (const c of ctx.calls.filter((c) => c.name === 'fillRect')) {
-        assert.ok(c.args[0] >= 100 && c.args[0] + c.args[2] <= 740,
+        assert.ok(c.args[0] >= 100 && c.args[0] + c.args[2] <= 756,
             `矩形が幅からはみ出す: ${JSON.stringify(c.args)}`);
     }
 });

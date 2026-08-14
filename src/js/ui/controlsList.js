@@ -28,9 +28,11 @@ export const CONTROLS_ROWS = [
     { key: 'A / D', label: 'MOVE LEFT / RIGHT (← → ALSO)' },
     { key: 'W', label: 'BURST JUMP / HOVER / UNDOCK' },
     { key: 'SHIFT', label: 'AIM (TAP) / AUTO-AIM (HOLD)' },
+    { key: 'L-CLICK', label: 'FIRE MISSILE / M-GUN' },
     // Space は Input.js の PREVENT_DEFAULT_KEYS にも入っていて、意図して用意された
-    // 発射キーなのに一覧に無かった。左クリックが主なので括弧で添える
-    { key: 'L-CLICK', label: 'FIRE MISSILE / M-GUN (SPACE)' },
+    // 発射キー。以前は L-CLICK の説明に括弧で添えていたが、**キーは左手の絵に
+    // 描いてあるのに説明は右の列**という食い違いになるので、左手の行として独立させた
+    { key: 'SPACE', label: 'FIRE (SAME AS L-CLICK)' },
     // 長押しの利点は「軌道プレビューを見てから投げられる」こと。以前の
     // 「HOLD + L-CLICK」だけでは、短押しとの使い分けの理由が読めなかった
     { key: 'R-CLICK', label: 'GRENADE (TAP: THROW / HOLD: AIM)' },
@@ -48,6 +50,7 @@ export const CONTROLS_ROWS = [
     { key: '- / +', label: 'MASTER VOLUME DOWN / UP' },
     { key: 'P', label: 'SETTINGS / PAUSE' },
 ];
+
 // ============================================
 // 図（controlsDiagram.js）のための配置
 // ============================================
@@ -78,7 +81,7 @@ export const LEFT_HAND_KEYS = [
     // A の左下。左端は Shift が担う
     { cap: 'SHIFT', ux: 0, gy: 2, w: 2, rowKey: 'SHIFT' },
     // 左手の親指で届く位置にある＝左クリックの代わりになる理由がここで分かる
-    { cap: 'SPACE', ux: 1.5, gy: 3, w: 2.5, rowKey: 'L-CLICK' },
+    { cap: 'SPACE', ux: 1.5, gy: 3, w: 2.5, rowKey: 'SPACE' },
 ];
 
 /** マウスの左右ボタン。右手側の群。 */

@@ -76,10 +76,10 @@ const rowFor = (key) => CONTROLS_ROWS.find((r) => r.key === key);
 // Player.js の fireHeld は `input.mouse.left || input.isKeyDown('Space')` で、
 // Space は Input.js の PREVENT_DEFAULT_KEYS にも入っている＝意図して用意された
 // 代替キーなのに一覧に無かった
-test('発射の行に Space の代替が書いてある', () => {
-    const row = rowFor('L-CLICK');
-    assert.ok(row, 'L-CLICK の行が無い');
-    assert.match(row.label, /SPACE/);
+test('発射の代替として Space の行がある', () => {
+    const row = rowFor('SPACE');
+    assert.ok(row, 'SPACE の行が無い');
+    assert.match(row.label, /FIRE|L-CLICK/);
 });
 
 // Player._updateHorizontal と Carrier が ArrowLeft/ArrowRight も見ている
