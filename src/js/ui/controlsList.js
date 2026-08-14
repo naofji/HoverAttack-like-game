@@ -14,40 +14,40 @@
 // 「1回目で全画面が解けて、2回目でメニュー」という挙動を説明するより、全画面を
 // 保ったまま開ける P だけを案内するほうが混乱が少ない。
 //
-// key の文字列は図のキーキャップとラベルの両方に出るので、幅に収まる長さで。
+// key の文字列は図のキーキャップと一覧の左列の両方に出るので、幅に収まる長さで。
 //
-// short: 図（controlsDiagram.js）に添える短い語。長い説明をそのまま置くと図が
-//   読めなくなる。16文字までに収める（テストで縛っている）
-// detail: 図では表せない差（タップと長押しの違い、1つのキーに2つの意味）がある行。
-//   図の下に action の全文を出す
+// label: そのキーの説明。**キーにつき1つだけ**にしてある。以前は図に短い語、
+//   図の下に全文、と2箇所へ出していたが、同じキーの説明が2回目に入るぶん
+//   「ごちゃごちゃして頭に入らない」と実機で指摘された。1行に収める必要から
+//   32文字までに縛っている（テストあり）。長さの制約と読みやすさが噛み合わない
+//   なら、文言ではなく図（controlsDiagram.js）の列幅を見直すこと
 
 export const CONTROLS_ROWS = [
     // 矢印キーも等価に効く（Player._updateHorizontal / Carrier）。設定画面の
     // 案内が「AD ←→」と併記しているのに、操作一覧だけ A/D しか書いていなかった
-    { key: 'A / D', short: 'MOVE', action: 'MOVE LEFT / RIGHT (← / → ALSO WORK)' },
-    { key: 'W', short: 'BURST / HOVER', detail: true, action: 'BURST JUMP (GROUND) / HOVER (HOLD) / UNDOCK' },
-    { key: 'SHIFT', short: 'AIM', detail: true, action: 'LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)' },
+    { key: 'A / D', label: 'MOVE LEFT / RIGHT (← → ALSO)' },
+    { key: 'W', label: 'BURST JUMP / HOVER / UNDOCK' },
+    { key: 'SHIFT', label: 'AIM (TAP) / AUTO-AIM (HOLD)' },
     // Space は Input.js の PREVENT_DEFAULT_KEYS にも入っていて、意図して用意された
     // 発射キーなのに一覧に無かった。左クリックが主なので括弧で添える
-    { key: 'L-CLICK', short: 'FIRE', action: 'FIRE MISSILE OR MACHINE GUN (SPACE ALSO WORKS)' },
+    { key: 'L-CLICK', label: 'FIRE MISSILE / M-GUN (SPACE)' },
     // 長押しの利点は「軌道プレビューを見てから投げられる」こと。以前の
     // 「HOLD + L-CLICK」だけでは、短押しとの使い分けの理由が読めなかった
-    { key: 'R-CLICK', short: 'GRENADE', detail: true, action: 'GRENADE (TAP: THROW / HOLD: AIM, L-CLICK: FIRE)' },
-    { key: 'F', short: 'SWITCH WEAPON', detail: true, action: 'SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)' },
+    { key: 'R-CLICK', label: 'GRENADE (TAP: THROW / HOLD: AIM)' },
+    { key: 'F', label: 'SWITCH WEAPON / RELOAD' },
     // しゃがみ（接地中の押しっぱなし）は移動もバーストも止める。載せていないと
     // 「S を押すと動けなくなる」という不具合に見える
-    { key: 'S', short: 'DOCK / CROUCH', detail: true, action: 'DOCK WITH CARRIER / HOLD: CROUCH & FAST FUEL CHARGE' },
+    { key: 'S', label: 'DOCK / HOLD: CROUCH & REFUEL' },
     // ここから下は表示・設定。ゲームの操作ではないので後ろにまとめる
-    { key: 'R', short: 'MINI-MAP', action: 'TOGGLE MINI-MAP OVERLAY' },
+    { key: 'R', label: 'TOGGLE MINI-MAP' },
     // ゲーム開始時に自動で全画面へ入るので普段は押さずに済むが、
     // 抜けたい／戻したいときの手段として要る
-    { key: 'M', short: 'FULLSCREEN', action: 'TOGGLE FULLSCREEN' },
+    { key: 'M', label: 'TOGGLE FULLSCREEN' },
     // HUD にインジケータは出るが、キーの存在はどこにも書かれていなかった。
     // 設定画面を開かずに片手で下げられるのがこのキーの役目なので、一覧に要る
-    { key: '- / +', short: 'VOLUME', action: 'MASTER VOLUME DOWN / UP' },
-    { key: 'P', short: 'SETTINGS', action: 'SETTINGS / PAUSE' },
+    { key: '- / +', label: 'MASTER VOLUME DOWN / UP' },
+    { key: 'P', label: 'SETTINGS / PAUSE' },
 ];
-
 // ============================================
 // 図（controlsDiagram.js）のための配置
 // ============================================

@@ -47,11 +47,14 @@ test('図の群が参照する行は必ず表にある', () => {
     }
 });
 
-// 図に添える短い語。長い説明をそのまま置くと図が読めなくなる
-test('全行に図用の短いラベルがある', () => {
+// 説明はキーごとに1行だけ。以前は図の短ラベルと下の詳細で二重に出していて、
+// 同じキーの説明が2箇所にある状態が「ごちゃごちゃする」と指摘された
+test('全行に1つだけ説明があり、1行に収まる長さである', () => {
     for (const row of CONTROLS_ROWS) {
-        assert.ok(row.short, `${row.key} に short が無い`);
-        assert.ok(row.short.length <= 16, `${row.key} の short が長すぎる: ${row.short}`);
+        assert.ok(row.label, `${row.key} に label が無い`);
+        assert.ok(row.label.length <= 32, `${row.key} の label が長すぎる: ${row.label}`);
+        assert.equal(row.short, undefined, `${row.key} に古い short が残っている`);
+        assert.equal(row.action, undefined, `${row.key} に古い action が残っている`);
     }
 });
 
@@ -110,11 +113,12 @@ test('図に左手のキーとマウスのボタンが描かれる', () => {
     for (const b of MOUSE_BUTTONS) assert.ok(drawn.includes(b.cap), `${b.cap} が描かれていない`);
 });
 
-test('図に短いラベルが添えられる', () => {
+test('全行が一覧に1行ずつ出る', () => {
     const { texts } = drawDiagram();
-    const drawn = texts.map((t) => t.text).join('\n');
+    const drawn = texts.map((t) => t.text);
     for (const row of CONTROLS_ROWS) {
-        assert.ok(drawn.includes(row.short), `${row.key} の short「${row.short}」が出ていない`);
+        assert.equal(drawn.filter((t) => t === row.label).length, 1,
+            `${row.key} の説明が1回だけ出ていない`);
     }
 });
 
@@ -141,14 +145,26 @@ test('凡例の見出しが左手と右手それぞれの色で描かれる', ()
     assert.equal(right.color, DIAGRAM_COLORS.rightHand);
 });
 
-// タップ/長押しの違いは図では表せない。図で手の位置を掴み、細部は下で読む
-test('図では表せない差は詳細行として全文が出る', () => {
+// 一覧のキー名は群の色で描く。絵のどのキーの話なのかを色で結びつける。
+// SPACE は左手のキーだが、一覧の行としてはマウスの L-CLICK（発射）に属する
+// ＝キーの色と行の色は別物なので、期待する対応をここに直接書く
+test('一覧のキー名が群ごとの色で描かれる', () => {
     const { texts } = drawDiagram();
-    const drawn = texts.map((t) => t.text);
-    const details = CONTROLS_ROWS.filter((r) => r.detail);
-    assert.ok(details.length > 0, 'detail の行が1つも無い');
-    for (const row of details) {
-        assert.ok(drawn.includes(row.action), `${row.key} の詳細が出ていない`);
+    const expected = {
+        leftHand: ['W', 'A / D', 'S', 'F', 'SHIFT', 'R'],
+        rightHand: ['L-CLICK', 'R-CLICK'],
+        offMouse: ['M', 'P', '- / +'],
+    };
+    // 期待表が表の全行を覆っていること（行を足したらここも直す）
+    assert.deepEqual(
+        new Set(Object.values(expected).flat()),
+        new Set(CONTROLS_ROWS.map((r) => r.key)),
+    );
+    for (const [group, keys] of Object.entries(expected)) {
+        for (const key of keys) {
+            assert.ok(texts.some((t) => t.text === key && t.color === DIAGRAM_COLORS[group]),
+                `${key} が ${group} の色で描かれていない`);
+        }
     }
 });
 
@@ -186,7 +202,7 @@ test('HOW TO PLAY と設定画面のどちらにも同じ図が出る', () => {
         assert.ok(settings.includes(k.cap), `設定画面に ${k.cap} が無い`);
     }
     for (const row of CONTROLS_ROWS) {
-        assert.ok(howTo.includes(row.short), `HOW TO PLAY に ${row.key} のラベルが無い`);
-        assert.ok(settings.includes(row.short), `設定画面に ${row.key} のラベルが無い`);
+        assert.ok(howTo.includes(row.label), `HOW TO PLAY に ${row.key} のラベルが無い`);
+        assert.ok(settings.includes(row.label), `設定画面に ${row.key} のラベルが無い`);
     }
 });

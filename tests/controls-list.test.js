@@ -79,14 +79,14 @@ const rowFor = (key) => CONTROLS_ROWS.find((r) => r.key === key);
 test('発射の行に Space の代替が書いてある', () => {
     const row = rowFor('L-CLICK');
     assert.ok(row, 'L-CLICK の行が無い');
-    assert.match(row.action, /SPACE/);
+    assert.match(row.label, /SPACE/);
 });
 
 // Player._updateHorizontal と Carrier が ArrowLeft/ArrowRight も見ている
 test('移動の行に矢印キーの代替が書いてある', () => {
     const row = rowFor('A / D');
     assert.ok(row, 'A / D の行が無い');
-    assert.match(row.action, /←|→/);
+    assert.match(row.label, /←|→/);
 });
 
 // S 押しっぱなしは crouching を立て、移動もバーストも止める。知らないと
@@ -94,7 +94,7 @@ test('移動の行に矢印キーの代替が書いてある', () => {
 test('S の行にしゃがみが書いてある', () => {
     const row = rowFor('S');
     assert.ok(row, 'S の行が無い');
-    assert.match(row.action, /CROUCH/);
+    assert.match(row.label, /CROUCH/);
 });
 
 // main.js の _updateVolumeControl。HUD にインジケータは出るがキーの案内が
@@ -102,7 +102,7 @@ test('S の行にしゃがみが書いてある', () => {
 test('全体音量の -/+ が載っている', () => {
     const row = CONTROLS_ROWS.find((r) => /-/.test(r.key) && /\+/.test(r.key));
     assert.ok(row, '-/+ の行が無い');
-    assert.match(row.action, /VOLUME/);
+    assert.match(row.label, /VOLUME/);
 });
 
 // 長押しは「軌道プレビューを見てから投げる」のが利点で、そこが読めないと
@@ -110,7 +110,7 @@ test('全体音量の -/+ が載っている', () => {
 test('グレネードの行に長押しで狙えることが書いてある', () => {
     const row = rowFor('R-CLICK');
     assert.ok(row, 'R-CLICK の行が無い');
-    assert.match(row.action, /AIM/);
+    assert.match(row.label, /AIM/);
 });
 
 // 全画面中の Escape はブラウザが全画面解除に使い、keydown がページへ来ない。
@@ -129,14 +129,14 @@ test('表の全行のラベルが両画面に出る', () => {
         ['設定画面', drawSettings({ showingControls: true })],
     ]) {
         for (const row of CONTROLS_ROWS) {
-            assert.ok(texts.includes(row.short), `${name}: ${row.key} のラベルが無い`);
+            assert.ok(texts.includes(row.label), `${name}: ${row.key} のラベルが無い`);
         }
     }
 });
 
 test('操作一覧を開いていない設定画面には出ない', () => {
     const { texts } = drawSettings({ showingControls: false });
-    assert.equal(texts.includes(CONTROLS_ROWS[0].short), false);
+    assert.equal(texts.includes(CONTROLS_ROWS[0].label), false);
 });
 
 /**
@@ -153,18 +153,17 @@ function frontPanel(ctx) {
     return { left: x - 6, right: x + w + 6, afterHead: ctx.calls.slice(i + 1) };
 }
 
-// 図の下に出す詳細（S の「DOCK / CROUCH / FAST FUEL CHARGE」など）はパネルの幅に
-// 収まりきる寸前まで来ている。文言を伸ばしたときに黙って枠から出ないよう、
-// 実際に描かれた文字の右端を測って縛る
+// 説明はキーごとに1行だけ（図と詳細で二重に出していたのをまとめた）。
+// 文言を伸ばしたときに黙って枠から出ないよう、実際に描かれた文字の右端を測って縛る
 test('操作一覧の説明がパネルの内側に収まる', () => {
     for (const [name, { ctx }] of [
         ['HOW TO PLAY', drawHowToPlayControls()],
         ['設定画面', drawSettings({ showingControls: true })],
     ]) {
         const { right } = frontPanel(ctx);
-        const actions = new Set(CONTROLS_ROWS.map((r) => r.action));
+        const labels = new Set(CONTROLS_ROWS.map((r) => r.label));
         for (const t of extractTextsWithFont(ctx.calls)) {
-            if (!actions.has(t.text)) continue;
+            if (!labels.has(t.text)) continue;
             assert.ok(t.x + t.width <= right - 8,
                 `${name}: 「${t.text}」が枠(${right})を超える: ${Math.round(t.x + t.width)}`);
         }

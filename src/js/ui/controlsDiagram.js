@@ -5,10 +5,12 @@
 // 「キー名と説明の対応表」は、実機で試したユーザーから**手をどこに置くのか
 // 分からない・頭に入らない**という指摘を受けた。対応表は「Fが武器切替」までは
 // 伝えるが、「左手はここに固定、右手はマウス」という体で覚える部分をまったく
-// 伝えない。そこで左手のキーを**実際の配列のまま**描き、マウスを並べて置く。
+// 伝えない。そこで左手のキーを**実際の配列のまま**描き、隣にマウスを置く。
 //
-// 図に載せる語は短くする（CONTROLS_ROWS の short）。タップと長押しの違いのように
-// 図では表せないものだけ、下に全文（action）を出す二段構え。
+// 構成は「左＝絵、右＝一覧」の2列だけ。**説明はキーにつき1行**しか出さない。
+// 最初は絵に短い語を添えたうえで下に詳細も並べていたが、同じキーの説明が
+// 2箇所に出るぶん「ごちゃごちゃする」と指摘されて1本にまとめた。
+// 絵と一覧は**色**で結びつける（左手＝シアン／右手＝琥珀／どちらでもない＝淡色）。
 //
 // HOW TO PLAY の2ページ目と設定画面のオーバーレイが**この1つの関数**を呼ぶので、
 // 2画面で見た目がずれない。パネル幅は画面ごとに違う（800 / 720）ため、
@@ -17,7 +19,7 @@
 import { UI, font, drawFrame } from './theme.js';
 import { CONTROLS_ROWS, LEFT_HAND_KEYS, MOUSE_BUTTONS, OFF_MOUSE_KEYS } from './controlsList.js';
 
-/** 群ごとの色。凡例と各キーで同じものを使う（食い違うと群が判断できない）。 */
+/** 群ごとの色。絵と一覧で同じものを使う（食い違うと群が判断できない）。 */
 export const DIAGRAM_COLORS = {
     leftHand: UI.info,     // シアン
     rightHand: UI.accent,  // 琥珀
@@ -31,22 +33,39 @@ const GAP = 4;
 const PITCH = KEY + GAP;
 const ROW_OFFSET = [0, 0.25, 0.5, 0.75];
 
-// 図の縦の組み立て。パネルの高さを**描く前に**決める必要があるので、
-// 描画と同じ式をここ1箇所に置いて両方が使う（別々に持つと必ずずれる）
-const LEGEND_H = 24;          // 凡例の下まで
-const CLUSTER_H = 4 * PITCH;  // キーの段数
-const OTHER_GAP = 14;         // クラスタと OTHER の間
-const OTHER_H = 12 + KEY;     // OTHER の見出し＋キー
-const DETAIL_GAP = 20;
-const DETAIL_LINE = 18;
+const CLUSTER_W = 5 * PITCH;
+const CLUSTER_H = 4 * PITCH;
+const MOUSE_W = 54;
+const MOUSE_H = 76;
+
+// 一覧の組み立て。絵と高さを揃えたいので、行送りは絵の高さから決めずに固定する
+const LEGEND_H = 26;   // 凡例の下まで
+const LIST_LINE = 20;
+const LIST_X = CLUSTER_W + 24 + MOUSE_W + 28; // 絵（キーボード＋マウス）の右
+const LIST_LABEL_X = 84;                      // 一覧の中で説明が始まる位置
+
+/** 一覧に出す順。群ごとにまとめる（手の単位で読めるように）。 */
+const LIST_ORDER = [
+    ...['W', 'A / D', 'S', 'F', 'SHIFT', 'R'],
+    ...MOUSE_BUTTONS.map((b) => b.rowKey),
+    ...OFF_MOUSE_KEYS,
+];
+
+/** 一覧の各行を何色で描くか。キーがどの群のものかで決まる。 */
+function groupColorOf(rowKey) {
+    if (MOUSE_BUTTONS.some((b) => b.rowKey === rowKey)) return DIAGRAM_COLORS.rightHand;
+    if (OFF_MOUSE_KEYS.includes(rowKey)) return DIAGRAM_COLORS.offMouse;
+    return DIAGRAM_COLORS.leftHand;
+}
 
 /** 図の高さ。パネルの高さを決めるために描く前に呼ぶ。 */
 export function controlsDiagramHeight() {
-    const details = CONTROLS_ROWS.filter((r) => r.detail).length;
-    return LEGEND_H + CLUSTER_H + OTHER_GAP + OTHER_H + DETAIL_GAP + 16 + details * DETAIL_LINE;
+    // 絵と一覧の高い方。行が増えれば一覧が伸びる
+    const listH = LIST_ORDER.length * LIST_LINE;
+    return LEGEND_H + Math.max(CLUSTER_H, listH);
 }
 
-/** キー1つ。drawKeyCap（右揃え・幅固定）では図に使えないので、ここで持つ。 */
+/** キー1つ。幅を指定したいので theme のキーキャップは使わない。 */
 function drawKey(ctx, x, y, w, label, color) {
     drawFrame(ctx, x, y, w, KEY, color, { fill: UI.panelHead, radius: 4 });
     ctx.fillStyle = color;
@@ -59,21 +78,19 @@ function drawKey(ctx, x, y, w, label, color) {
 /**
  * マウス。左右のボタンだけを塗り分けた輪郭。ホイールは使わないので描かない
  * （使わないものを描くと、押すものだと思われる）。
- * @returns {number} 描いた高さ
+ * キーボードのすぐ右に置く＝実際の机の上と同じ位置関係にする。
  */
 function drawMouse(ctx, x, y, color) {
-    const w = 54;
-    const h = 76;
-    drawFrame(ctx, x, y, w, h, color, { fill: UI.panelFill, radius: 18 });
+    drawFrame(ctx, x, y, MOUSE_W, MOUSE_H, color, { fill: UI.panelFill, radius: 18 });
     // ボタンの区切り。上から 40% までが左右ボタン
-    const split = Math.round(h * 0.4);
+    const split = Math.round(MOUSE_H * 0.4);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x + w / 2, y);
-    ctx.lineTo(x + w / 2, y + split);
+    ctx.moveTo(x + MOUSE_W / 2, y);
+    ctx.lineTo(x + MOUSE_W / 2, y + split);
     ctx.moveTo(x, y + split);
-    ctx.lineTo(x + w, y + split);
+    ctx.lineTo(x + MOUSE_W, y + split);
     ctx.stroke();
 
     ctx.fillStyle = color;
@@ -81,23 +98,8 @@ function drawMouse(ctx, x, y, color) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     MOUSE_BUTTONS.forEach((b, i) => {
-        ctx.fillText(b.cap, x + w / 4 + (i * w) / 2, y + split / 2);
+        ctx.fillText(b.cap, x + MOUSE_W / 4 + (i * MOUSE_W) / 2, y + split / 2);
     });
-    return h;
-}
-
-/** 「キー名 ラベル」の1行。キー名は群の色、ラベルは本文の色。 */
-function drawLabelLine(ctx, x, y, rowKey, color) {
-    const row = CONTROLS_ROWS.find((r) => r.key === rowKey);
-    if (!row) return;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = font('small', true);
-    ctx.fillStyle = color;
-    ctx.fillText(row.key, x, y);
-    ctx.font = font('small');
-    ctx.fillStyle = UI.ink;
-    ctx.fillText(row.short, x + 76, y);
 }
 
 /**
@@ -118,69 +120,45 @@ export function drawControlsDiagram(ctx, x, y, w) {
     ctx.fillStyle = DIAGRAM_COLORS.leftHand;
     ctx.fillText('■ LEFT HAND', x, y);
     ctx.fillStyle = DIAGRAM_COLORS.rightHand;
-    ctx.fillText('■ RIGHT HAND', x + 160, y);
+    ctx.fillText('■ RIGHT HAND', x + 150, y);
+    // 「どちらの手でもない」は、押すときにマウスから手を離すという意味。
+    // 戦闘中に押すキーではないことがこれで分かる
+    ctx.fillStyle = DIAGRAM_COLORS.offMouse;
+    ctx.font = font('micro', true);
+    ctx.fillText('□ OFF-MOUSE', x + 310, y);
+
+    const top = y + LEGEND_H;
 
     // ---- 左手のキークラスタ ----
-    const clusterTop = y + LEGEND_H;
     for (const k of LEFT_HAND_KEYS) {
         const kx = x + (k.gx + ROW_OFFSET[k.gy]) * PITCH;
-        const ky = clusterTop + k.gy * PITCH;
+        const ky = top + k.gy * PITCH;
         drawKey(ctx, kx, ky, k.w * PITCH - GAP, k.cap, DIAGRAM_COLORS.leftHand);
     }
-    const clusterW = 5 * PITCH;
-
-    // ---- クラスタの右にラベル ----
-    // 図のキーと同じ順（上の段から）で並べると、目が行き来しやすい
-    const labelX = x + clusterW + 16;
-    const labelKeys = ['W', 'A / D', 'S', 'F', 'SHIFT', 'R'];
-    labelKeys.forEach((key, i) => {
-        drawLabelLine(ctx, labelX, clusterTop + 10 + i * 22, key, DIAGRAM_COLORS.leftHand);
-    });
 
     // ---- マウス ----
-    // 右端に寄せる。左手のクラスタと離すことで、両手が別々の場所にあることを見せる。
-    // 220 は「マウス54 ＋ ラベルの字下げ76 ＋ 一番長い短ラベル」がぎりぎり収まる幅
-    const mouseX = x + w - 220;
-    drawMouse(ctx, mouseX, clusterTop + 8, DIAGRAM_COLORS.rightHand);
-    MOUSE_BUTTONS.forEach((b, i) => {
-        drawLabelLine(ctx, mouseX + 70, clusterTop + 26 + i * 22, b.rowKey, DIAGRAM_COLORS.rightHand);
-    });
+    // キーボードのすぐ右。机の上の位置関係をそのまま見せることで、
+    // どちらの手のものかを説明せずに伝える
+    drawMouse(ctx, x + CLUSTER_W + 24, top + PITCH, DIAGRAM_COLORS.rightHand);
 
-    // ---- どちらの手でもないキー ----
-    const otherY = clusterTop + CLUSTER_H + OTHER_GAP;
-    ctx.textAlign = 'left';
-    ctx.font = font('micro', true);
-    ctx.fillStyle = DIAGRAM_COLORS.offMouse;
-    ctx.fillText('OTHER — TAKE YOUR HAND OFF THE MOUSE', x, otherY);
+    // ---- 一覧（キーにつき1行だけ） ----
+    LIST_ORDER.forEach((rowKey, i) => {
+        const row = CONTROLS_ROWS.find((r) => r.key === rowKey);
+        if (!row) return;
+        const ly = top + 10 + i * LIST_LINE;
+        const color = groupColorOf(rowKey);
 
-    let ox = x;
-    for (const key of OFF_MOUSE_KEYS) {
-        const row = CONTROLS_ROWS.find((r) => r.key === key);
-        const capW = Math.max(key.length * 8 + 14, 30);
-        drawKey(ctx, ox, otherY + 12, capW, key, DIAGRAM_COLORS.offMouse);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.font = font('small');
-        ctx.fillStyle = UI.ink;
-        ctx.fillText(row.short, ox + capW + 8, otherY + 12 + KEY / 2);
-        ox += capW + 12 + row.short.length * 8;
-    }
-
-    // ---- 図では表せない差 ----
-    const detailTop = otherY + OTHER_H + DETAIL_GAP;
-    const details = CONTROLS_ROWS.filter((r) => r.detail);
-    ctx.textAlign = 'left';
-    ctx.font = font('micro', true);
-    ctx.fillStyle = DIAGRAM_COLORS.offMouse;
-    ctx.fillText('DETAILS', x, detailTop);
-    details.forEach((row, i) => {
-        const dy = detailTop + 16 + i * DETAIL_LINE;
         ctx.font = font('small', true);
-        ctx.fillStyle = UI.info;
-        ctx.fillText(row.key, x, dy);
+        ctx.fillStyle = color;
+        ctx.fillText(row.key, x + LIST_X, ly);
+
         ctx.font = font('small');
-        ctx.fillStyle = UI.dim;
-        ctx.fillText(row.action, x + 76, dy);
+        // 説明は本文の色。キー名だけを群の色にすることで、色が「どの手か」
+        // だけを意味する（説明まで染めると色数が増えて読みにくい）
+        ctx.fillStyle = UI.ink;
+        ctx.fillText(row.label, x + LIST_X + LIST_LABEL_X, ly);
     });
 
     ctx.restore();
