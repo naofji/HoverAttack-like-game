@@ -38,12 +38,21 @@ test('壁で跳ね返り、反射回数が増える', () => {
   assert.ok(beam.bounces > 0, '一度も跳ね返っていない');
 });
 
+// 「距離を使い切れば消える」テストと対称に、こちらは毎フレーム distance を
+// 0 に戻して距離条件を無効化し、反射回数の分岐だけで消えることを確かめる。
+// そうしないとこの部屋では distance の上限（1200）のほうが先に尽きてしまい、
+// bounces の分岐を一度も踏まないままテストが通ってしまう（実際そうだった）
 test('反射回数を使い切ると消える', () => {
   const { beam } = makeBeam({ x: 40, y: 40, angle: 0 });
-  for (let i = 0; i < 2000; i++) beam.update();
+  let steps = 0;
+  while (beam.alive && steps < 5000) {
+    beam.distance = 0;   // 距離の予算を使い切らせない
+    beam.update();
+    steps++;
+  }
   assert.equal(beam.alive, false, '消えていない');
-  assert.ok(beam.bounces <= REFLECT_BEAM_MAX_BOUNCES + 1,
-    `反射回数の上限を超えている: ${beam.bounces}`);
+  assert.equal(beam.bounces, REFLECT_BEAM_MAX_BOUNCES + 1,
+    `反射回数の上限ちょうどで消えていない: ${beam.bounces}`);
 });
 
 test('距離は速度ぶんずつ増える', () => {
@@ -98,4 +107,25 @@ test('死んだら描かない', () => {
   const ctx = makeFakeCtx();
   beam.draw(ctx);
   assert.equal(ctx.calls.length, 0);
+});
+
+// makeMap() は width/height を持たないので、update() の「マップ外なら消す」
+// 分岐（`map.width !== undefined` のガード）がここまでのテストでは一度も
+// 踏まれていない。tests/helpers/enemy-world.js 自体は共有ヘルパーなので触らず、
+// このテストの中だけで width/height を持つ最小限のマップを組む。
+// ROOM のような四方を壁で囲った部屋だと、外へ抜ける前に必ず壁で跳ね返って
+// しまい、マップ外判定を踏めない。そこで地形が一切ない（常に非固体の）
+// マップにして、まっすぐ境界の外まで飛ばす
+test('マップ外に出ると消える', () => {
+  const map = { isSolidAtPixel: () => false, width: 100, height: 100 };
+  const game = { map, particles: [] };
+  // 下向き(+y)に撃ち、y=90 から速度4で進めば数フレームで height=100 を超える
+  const beam = new ReflectBeam(game, 40, 90, Math.PI / 2);
+  let steps = 0;
+  while (beam.alive && steps < 50) {
+    beam.update();
+    steps++;
+  }
+  assert.equal(beam.alive, false, 'マップ外に出ても消えていない');
+  assert.ok(beam.y > map.height, `マップ外判定より先に別の理由で消えている: y=${beam.y}`);
 });
