@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { Game, DEMO_SCREEN_DRAWERS } from '../src/js/main.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 import { visibleSettingsItems } from '../src/js/ui/settingsItems.js';
+
+/** 音量の行の位置。先頭行は VIEW CONTROLS（値を持たない）なので名前で引く。 */
+const masterIndex = visibleSettingsItems(true).findIndex((i) => i.key === 'masterVolume');
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { SETTINGS_STORAGE_KEY, BGM_VOLUME_STORAGE_KEY } from '../src/js/utils/Constants.js';
 
@@ -86,11 +89,17 @@ test('ポーズ中は敵が動かない', () => {
   assert.equal(enemy.x, 100);
 });
 
-test('W/S で選択が動き、端で止まる', () => {
+// 端で止めると、下のほうの項目（途中終了）へ行くのに毎回上から辿ることになる。
+// 項目が11個あるので、回り込めるほうが速い
+test('W/S で選択が動き、端で反対側へ回り込む', () => {
+  const last = visibleSettingsItems(true).length - 1;
   const g = makeGame({ gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0 });
   g.input = fakeInput(['KeyW']);
   g.update(16);
-  assert.equal(g.settingsIndex, 0, '先頭より上へ行っている');
+  assert.equal(g.settingsIndex, last, '先頭で上を押しても末尾へ回っていない');
+  g.input = fakeInput(['KeyS']);
+  g.update(16);
+  assert.equal(g.settingsIndex, 0, '末尾で下を押しても先頭へ回っていない');
   g.input = fakeInput(['KeyS']);
   g.update(16);
   assert.equal(g.settingsIndex, 1);
@@ -99,7 +108,7 @@ test('W/S で選択が動き、端で止まる', () => {
 test('A/D で値が変わり、保存される', () => {
   const saved = [];
   const g = makeGame({
-    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0,
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: masterIndex,
     settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 },
     _saveSettings() { saved.push(this.settings.masterVolume); },
   });
@@ -326,23 +335,35 @@ test('A/D で音量を変えると、本物の _saveSettings → applySettings �
 // _updateGameState() の別の分岐なのでそちらを通らない。衝突しないことを
 // 「gameState が動いていない」で見る。
 
-test('↑/↓ は W/S と同じく選択を動かし、端で止まる', () => {
+test('↑/↓ は W/S と同じく選択を動かし、端で回り込む', () => {
+  const last = visibleSettingsItems(true).length - 1;
   const g = makeGame({ gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0 });
   g.input = fakeInput(['ArrowUp']);
   g.update(16);
-  assert.equal(g.settingsIndex, 0, '先頭より上へ行っている');
+  assert.equal(g.settingsIndex, last, '↑ で末尾へ回っていない');
+  g.input = fakeInput(['ArrowDown']);
+  g.update(16);
+  assert.equal(g.settingsIndex, 0, '↓ で先頭へ回っていない');
   g.input = fakeInput(['ArrowDown']);
   g.update(16);
   assert.equal(g.settingsIndex, 1, '↓ で下へ動いていない');
-  g.input = fakeInput(['ArrowUp']);
+});
+
+// タイトルから開くと項目が1つ少ない（途中終了が出ない）。回り込む先が
+// 「表の長さ」ではなく「その場面で出ている項目の数」であることを確かめる
+test('タイトルから開いたときも回り込む先はその場面の末尾', () => {
+  const last = visibleSettingsItems(false).length - 1;
+  assert.notEqual(last, visibleSettingsItems(true).length - 1, '項目数が同じでは検証にならない');
+  const g = makeGame({ gameState: 'settings', settingsReturnTo: 'title', settingsIndex: 0 });
+  g.input = fakeInput(['KeyW']);
   g.update(16);
-  assert.equal(g.settingsIndex, 0, '↑ で戻っていない');
+  assert.equal(g.settingsIndex, last);
 });
 
 test('→/← は D/A と同じく値を動かし、保存される', () => {
   const saved = [];
   const g = makeGame({
-    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0,
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: masterIndex,
     settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 },
     _saveSettings() { saved.push(this.settings.masterVolume); },
   });
@@ -358,7 +379,7 @@ test('→/← は D/A と同じく値を動かし、保存される', () => {
 // ←/→ がデモ画面送りに吸われていたら gameState が変わってしまう。
 test('設定画面の ←/→ はデモ画面送りに吸われない', () => {
   const g = makeGame({
-    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: 0,
+    gameState: 'settings', settingsReturnTo: 'playing', settingsIndex: masterIndex,
     settings: { ...DEFAULT_SETTINGS, masterVolume: 0.5 },
   });
   g._saveSettings = () => {};

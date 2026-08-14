@@ -504,11 +504,16 @@ export const Game = {
             return;
         }
 
+        // 端で止めず、反対側へ回り込む。項目が11個あるので、下のほうの行
+        // （途中終了）へ行くのに毎回上から辿るのは遠い。剰余の前に length を
+        // 足しているのは、0 で上を押したときに負にならないようにするため。
+        // 回り込む先は表の長さではなく**その場面で出ている項目の数**
+        // （タイトルからは途中終了が出ないので1つ少ない）
         if (nav('KeyW', 'ArrowUp')) {
-            this.settingsIndex = Math.max(0, this.settingsIndex - 1);
+            this.settingsIndex = (this.settingsIndex - 1 + items.length) % items.length;
         }
         if (nav('KeyS', 'ArrowDown')) {
-            this.settingsIndex = Math.min(items.length - 1, this.settingsIndex + 1);
+            this.settingsIndex = (this.settingsIndex + 1) % items.length;
         }
 
         // item は W/S を処理した**後**に取る。先に取ると、同じフレームで

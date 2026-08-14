@@ -201,6 +201,15 @@ test('操作一覧のパネルが画面に収まる', () => {
 
 // ---- 設定画面からの開き方 ----
 
+// 設定を開いた直後のカーソルは0行目に乗る。操作を確かめたくて開くことが
+// 多いので、そこに VIEW CONTROLS を置く（実機での要望）
+test('VIEW CONTROLS が一番上にある', () => {
+    assert.equal(SETTINGS_ITEMS[0].key, 'viewControls');
+    for (const fromPlaying of [true, false]) {
+        assert.equal(visibleSettingsItems(fromPlaying)[0].key, 'viewControls');
+    }
+});
+
 test('VIEW CONTROLS の行がタイトルからでもプレイ中でも出る', () => {
     const item = SETTINGS_ITEMS.find((i) => i.key === 'viewControls');
     assert.ok(item, '表に viewControls が無い');
