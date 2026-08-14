@@ -477,6 +477,17 @@ export const COLOR_REFLECT_BEAM_CORE = '#F2E6FF';
 export const COLOR_REFLECT_BEAM_MID = '#B266FF';
 export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
 
+// タレットの半分を差し替える反射ビームキャノン本体（EnemyTurret の beam 型）
+export const REFLECT_BEAM_CANNON_HP = 40;        // タレット30より硬い（自機ミサイル3発）
+export const REFLECT_BEAM_CANNON_COOLDOWN = 180; // タレットは120で5連射。単発なので長め
+export const REFLECT_BEAM_CANNON_SCORE = 350;    // タレット200より高い
+
+// 既存のタレット（#555555 / #888888 / #667788）より明るい灰色。並んだときに
+// 新型だと分かるようにする
+export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
+export const COLOR_BEAM_CANNON_BARREL = '#D8DEE4';
+export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
+
 // --- Enemy Base Additional Weapons ---
 export const ENEMY_BASE_TURRET_COOLDOWN = 120;
 export const ENEMY_BASE_TURRET_BURST_COUNT = 5;

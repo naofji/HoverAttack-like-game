@@ -6,24 +6,60 @@ import {
     ENEMY_TURRET_HP, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
     ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
+    REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_COOLDOWN, REFLECT_BEAM_CANNON_SCORE,
+    REFLECT_BEAM_MUZZLE_FLASH_FRAMES,
+    COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
+    COLOR_REFLECT_BEAM_CORE, COLOR_REFLECT_BEAM_EDGE,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
+import { ReflectBeam } from './ReflectBeam.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
 import { playDestruction } from './destruction.js';
 import { applyDamage } from '../utils/damage.js';
 
+// 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
+// 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
+// 型別 config で持っているのと同じ形にした。
+//
+// 色は描画専用のパラメータなので、Constants ではなくここから引く（EnemyAttacker の
+// LEG_STYLES と同じ扱い）。値そのものは Constants にある。
+const TURRET_TYPES = {
+    gun: {
+        hp: ENEMY_TURRET_HP,
+        score: ENEMY_TURRET_SCORE,
+        cooldown: ENEMY_TURRET_COOLDOWN,
+        burst: ENEMY_TURRET_BURST_COUNT,
+        colors: { base: '#555555', barrel: '#888888', pivot: '#667788' },
+    },
+    beam: {
+        hp: REFLECT_BEAM_CANNON_HP,
+        score: REFLECT_BEAM_CANNON_SCORE,
+        cooldown: REFLECT_BEAM_CANNON_COOLDOWN,
+        burst: 1,  // 単発。連射すると帯が重なって逃げ場が無くなる
+        colors: {
+            base: COLOR_BEAM_CANNON_BASE,
+            barrel: COLOR_BEAM_CANNON_BARREL,
+            pivot: COLOR_BEAM_CANNON_PIVOT,
+        },
+    },
+};
+
 export class EnemyTurret {
-    constructor(game, x, y, isCeilingMounted = false) {
+    constructor(game, x, y, isCeilingMounted = false, type = 'gun') {
         this.game = game;
         this.x = x;
         this.y = y;
         this.width = ENEMY_TURRET_WIDTH;
         this.height = ENEMY_TURRET_HEIGHT;
-        this.hp = ENEMY_TURRET_HP;
+        this.type = TURRET_TYPES[type] ? type : 'gun';
+        this.spec = TURRET_TYPES[this.type];
+        this.hp = this.spec.hp;
         this.maxHp = this.hp;
         this.alive = true;
         this.isCeilingMounted = isCeilingMounted;
+        // 発射時の砲口の放射光。残りフレーム数。**予告ではない**（撃つ前は 0）
+        this.muzzleFlash = 0;
 
         // Visual aiming angle
         this.targetAngle = isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
@@ -31,10 +67,13 @@ export class EnemyTurret {
 
         // AI State
         this.state = 'idle'; // 'idle', 'bursting', 'cooldown'
-        this.cooldownTimer = Math.floor(Math.random() * ENEMY_TURRET_COOLDOWN); // Randomize initial offset
+        this.cooldownTimer = Math.floor(Math.random() * this.spec.cooldown); // Randomize initial offset
 
         // Burst scaling: Mission 5 (index 4) and above get 8 rounds
-        this.maxBurstCount = (this.game.missionsCompleted >= 4) ? 8 : ENEMY_TURRET_BURST_COUNT;
+        // （既存のタレットだけ。ビームは常に単発 = spec.burst）
+        this.maxBurstCount = (this.type === 'gun' && this.game.missionsCompleted >= 4)
+            ? 8
+            : this.spec.burst;
 
         this.burstCount = 0;
         this.burstTimer = 0;
@@ -46,6 +85,7 @@ export class EnemyTurret {
     update() {
         if (!this.alive) return;
 
+        if (this.muzzleFlash > 0) this.muzzleFlash--;
         if (this.recoil > 0) this.recoil *= 0.8;
 
         const target = this._findTarget();
@@ -86,7 +126,7 @@ export class EnemyTurret {
                 this.burstTimer = ENEMY_TURRET_BURST_DELAY;
                 if (this.burstCount <= 0) {
                     this.state         = 'cooldown';
-                    this.cooldownTimer = ENEMY_TURRET_COOLDOWN;
+                    this.cooldownTimer = this.spec.cooldown;
                 }
             } else {
                 this.burstTimer--;
@@ -130,12 +170,21 @@ export class EnemyTurret {
         const muzzleX = cx + Math.cos(this.currentAngle) * barrelLength;
         const muzzleY = cy + Math.sin(this.currentAngle) * barrelLength;
 
-        // Inaccuracy
-        const inaccuracy = (Math.random() - 0.5) * 0.1;
-        const finalAngle = this.currentAngle + inaccuracy;
+        if (this.type === 'beam') {
+            // ビームはばらつかせない。反射先が読めることが遊びの中身なので、
+            // 撃つたびに散らすとその読みが成立しない
+            this.game.enemyBullets.push(
+                new ReflectBeam(this.game, muzzleX, muzzleY, this.currentAngle),
+            );
+            this.muzzleFlash = REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
+        } else {
+            // Inaccuracy
+            const inaccuracy = (Math.random() - 0.5) * 0.1;
+            const finalAngle = this.currentAngle + inaccuracy;
 
-        const bullet = new EnemyBullet(this.game, muzzleX, muzzleY, finalAngle);
-        this.game.enemyBullets.push(bullet);
+            const bullet = new EnemyBullet(this.game, muzzleX, muzzleY, finalAngle);
+            this.game.enemyBullets.push(bullet);
+        }
 
         this.recoil = 4; // Visual recoil kickback
     }
@@ -147,7 +196,7 @@ export class EnemyTurret {
     die() {
         this.alive = false;
         playDestruction(this.game, this, 'turret');
-        this.game.addScore(ENEMY_TURRET_SCORE);
+        this.game.addScore(this.spec.score);
     }
 
     /** 破壊時の破片パーツ。設置向きと死亡時の砲塔角度を反映する。 */
@@ -166,8 +215,10 @@ export class EnemyTurret {
         ctx.save();
         ctx.translate(cx, cy);
 
+        const colors = this.spec.colors;
+
         // --- Draw Base ---
-        ctx.fillStyle = '#555555';
+        ctx.fillStyle = colors.base;
         ctx.strokeStyle = '#222222';
         ctx.lineWidth = 2;
 
@@ -189,7 +240,7 @@ export class EnemyTurret {
         ctx.rotate(this.currentAngle);
 
         // Barrel
-        ctx.fillStyle = '#888888';
+        ctx.fillStyle = colors.barrel;
         const barrelLength = 14 - this.recoil;
         ctx.fillRect(4, -2, barrelLength, 4);
         ctx.strokeRect(4, -2, barrelLength, 4);
@@ -197,7 +248,7 @@ export class EnemyTurret {
         // Main pivot body (Circle)
         ctx.beginPath();
         ctx.arc(0, 0, 8, 0, Math.PI * 2);
-        ctx.fillStyle = '#667788';
+        ctx.fillStyle = colors.pivot;
         ctx.fill();
         ctx.stroke();
 
@@ -206,6 +257,23 @@ export class EnemyTurret {
         ctx.beginPath();
         ctx.arc(0, 0, 3, 0, Math.PI * 2);
         ctx.fill();
+
+        // 発射直後の砲口の放射光。撃ったことを伝えるための演出で、遅いビームの
+        // 出どころを見失わないようにする役目。**予告ではない**
+        if (this.muzzleFlash > 0) {
+            const t = this.muzzleFlash / REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
+            const r = 14 * t;
+            const gx = 4 + barrelLength;
+            const grad = ctx.createRadialGradient(gx, 0, 0, gx, 0, Math.max(0.1, r));
+            grad.addColorStop(0, COLOR_REFLECT_BEAM_CORE);
+            grad.addColorStop(1, COLOR_REFLECT_BEAM_EDGE);
+            ctx.globalAlpha = t;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(gx, 0, Math.max(0.1, r), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
 
         ctx.restore();
     }
