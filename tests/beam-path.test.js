@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beamSegments } from '../src/js/utils/beamPath.js';
+import { beamSegments, stepBeam } from '../src/js/utils/beamPath.js';
+import { makeMap } from './helpers/enemy-world.js';
 
 /** 線分の長さ。 */
 const len = (s) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
@@ -64,4 +65,64 @@ test('折れた経路では帯も折れる', () => {
 test('経路が1点以下なら空', () => {
   assert.deepEqual(beamSegments([], 160, 8), []);
   assert.deepEqual(beamSegments([{ x: 0, y: 0 }], 160, 8), []);
+});
+
+// 地形はタイル。TILE_SIZE=16 なので、'#' 1つが 16px 四方
+//   0123456789
+// 0 ##########
+// 1 #........#
+// 2 #........#
+// 3 ##########
+const ROOM = [
+  '##########',
+  '#........#',
+  '#........#',
+  '##########',
+];
+
+test('何も無ければまっすぐ進む', () => {
+  const map = makeMap(ROOM);
+  const r = stepBeam({ x: 40, y: 24, vx: 4, vy: 0 }, map);
+  assert.deepEqual(
+    { x: r.x, y: r.y, vx: r.vx, vy: r.vy, bounced: r.bounced },
+    { x: 44, y: 24, vx: 4, vy: 0, bounced: false },
+  );
+});
+
+test('縦の壁で vx が反転する', () => {
+  const map = makeMap(ROOM);
+  // 右端の壁は c=9（x=144〜159）。x=142 から右へ 4 進むと壁の中
+  const r = stepBeam({ x: 142, y: 24, vx: 4, vy: 0 }, map);
+  assert.equal(r.bounced, true, '跳ね返っていない');
+  assert.equal(r.vx, -4, 'vx が反転していない');
+  assert.equal(r.vy, 0, 'vy まで反転している');
+  assert.equal(map.isSolidAtPixel(r.x, r.y), false, '壁の中に居る');
+});
+
+test('床で vy が反転する', () => {
+  const map = makeMap(ROOM);
+  // 床は r=3（y=48〜63）。y=46 から下へ 4 進むと床の中
+  const r = stepBeam({ x: 40, y: 46, vx: 0, vy: 4 }, map);
+  assert.equal(r.bounced, true);
+  assert.equal(r.vy, -4, 'vy が反転していない');
+  assert.equal(r.vx, 0);
+  assert.equal(map.isSolidAtPixel(r.x, r.y), false, '床の中に居る');
+});
+
+test('角に斜めから入ると両方反転する', () => {
+  const map = makeMap(ROOM);
+  // 右下の内側の角へ斜めに向かう
+  const r = stepBeam({ x: 142, y: 46, vx: 4, vy: 4 }, map);
+  assert.equal(r.bounced, true);
+  assert.equal(r.vx, -4);
+  assert.equal(r.vy, -4);
+  assert.equal(map.isSolidAtPixel(r.x, r.y), false);
+});
+
+// 渡したものを書き換えると、呼び出し側が「反射前の位置」を経路に積めなくなる
+test('引数のオブジェクトを書き換えない', () => {
+  const map = makeMap(ROOM);
+  const beam = { x: 142, y: 24, vx: 4, vy: 0 };
+  stepBeam(beam, map);
+  assert.deepEqual(beam, { x: 142, y: 24, vx: 4, vy: 0 });
 });

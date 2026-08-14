@@ -13,7 +13,7 @@
  *
  * @param {Array<{x:number,y:number}>} path 経路。**[0] が先端（新しい順）**
  * @param {number} tailLength 切り出す長さ(px)
- * @param {number} count 等分する数
+ * @param {number} count 等分する数。整数であること（呼び出し側の契約）
  * @returns {Array<{x1:number,y1:number,x2:number,y2:number}>} 先端から後ろへ並ぶ線分
  */
 export function beamSegments(path, tailLength, count) {
@@ -27,6 +27,7 @@ export function beamSegments(path, tailLength, count) {
         const a = poly[poly.length - 1];
         const b = path[i];
         const d = Math.hypot(b.x - a.x, b.y - a.y);
+        // 経路中に同じ座標が続く場合は読み飛ばす（距離ゼロなので折れ線には寄与しない）
         if (d <= 0) continue;
         if (d >= remain) {
             const t = remain / d;
@@ -75,4 +76,48 @@ export function beamSegments(path, tailLength, count) {
         out.push({ x1, y1, x2: cur.x, y2: cur.y });
     }
     return out;
+}
+
+/**
+ * ビームを1フレーム進める。地形にめり込むなら跳ね返す。
+ *
+ * 反射面の法線は「縦か横か」の2通りしかない（地形が軸並行のタイルだけなので）。
+ * そこで x だけ動かした場合と y だけ動かした場合をそれぞれ試し、どちらが
+ * めり込むかで面を判別する。レイキャストでタイル境界の正確な交点を出す案も
+ * あったが、速度 4px/frame ではズレが目に見えず、コード量が3倍違う。
+ *
+ * 跳ね返るときは**元の位置から新しい速度で**動かす。こうすると壁の中に
+ * 入り込まないうえ、折れ点が「元の位置」になる（呼び出し側はそこを経路に
+ * 積めばよい）。
+ *
+ * @param {{x:number,y:number,vx:number,vy:number}} beam 書き換えない
+ * @param {{isSolidAtPixel:function}} map
+ * @returns {{x:number,y:number,vx:number,vy:number,bounced:boolean}}
+ */
+export function stepBeam(beam, map) {
+    const { x, y, vx, vy } = beam;
+    const nx = x + vx;
+    const ny = y + vy;
+
+    if (!map.isSolidAtPixel(nx, ny)) {
+        return { x: nx, y: ny, vx, vy, bounced: false };
+    }
+
+    const hitX = map.isSolidAtPixel(nx, y);
+    const hitY = map.isSolidAtPixel(x, ny);
+
+    let rvx = hitX ? -vx : vx;
+    let rvy = hitY ? -vy : vy;
+    // どちらの軸も単独ではめり込まない＝角へ斜めから入った。両方を反転する
+    if (!hitX && !hitY) { rvx = -vx; rvy = -vy; }
+
+    const bx = x + rvx;
+    const by = y + rvy;
+    // 反転しても抜けられない（隙間に挟まった）ときは動かさない。速度は反転
+    // したままなので次のフレームで反対側へ抜ける。抜けられないまま回っても、
+    // 反射回数と距離の上限がいずれ尽きて消える
+    if (map.isSolidAtPixel(bx, by)) {
+        return { x, y, vx: rvx, vy: rvy, bounced: true };
+    }
+    return { x: bx, y: by, vx: rvx, vy: rvy, bounced: true };
 }
