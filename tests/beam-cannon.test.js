@@ -180,6 +180,33 @@ test('ビームは砲口（砲身の先端）から出る', () => {
   }
 });
 
+/**
+ * ctx.calls の全ポリラインの中から、「垂直（x1===x2）かつ砲身の厚み(±2)より
+ * 上下へはみ出す」線分を集める。
+ *
+ * フィンは1回の beginPath〜stroke の中で moveTo/lineTo を count 回繰り返して
+ * 描いているため、extractPolylines() は全体を1本の折れ線として返す
+ * （`beginPath`〜`stroke` の間の点をまとめて1本にする仕様）。以前は
+ * 「最初のポリラインを2点ずつに切って垂直線分を数える」実装にしていたが、
+ * これだと①gun 型に誤って fins を足しても「垂直な短い線分が無い」ことしか
+ * 見ておらず素通りする穴があり（レビュー指摘）、②draw() の描画順が変わって
+ * フィンが最初のポリラインでなくなると無関係な線を掴んで壊れる、という
+ * 2つの問題があった。全ポリライン・全線分を対象にすることで両方を塞ぐ。
+ */
+function findFinSegments(calls) {
+  const out = [];
+  for (const line of extractPolylines(calls)) {
+    for (let i = 0; i + 1 < line.length; i++) {
+      const p0 = line[i];
+      const p1 = line[i + 1];
+      if (p0.x === p1.x && Math.abs(p0.y) > 2 && Math.abs(p1.y) > 2) {
+        out.push([p0, p1]);
+      }
+    }
+  }
+  return out;
+}
+
 // 冷却フィン（ラジエーター）。普通のタレットとの見分けが色だけに頼っていたのを、
 // 輪郭の凹凸でも区別できるようにするための追加。beam 型だけが持つ
 test('beam 型は砲身に冷却フィンが立つ', () => {
@@ -189,23 +216,11 @@ test('beam 型は砲身に冷却フィンが立つ', () => {
   t.draw(ctx);
 
   const barrelLength = BARREL_LENGTH - t.recoil;
-  // フィンは1回の beginPath〜stroke の中で moveTo/lineTo を count 回繰り返す
-  // ため、extractPolylines は全体を1本の折れ線として返す。ここでは points を
-  // moveTo/lineTo の対（2点ずつ）に切り分けて、フィン1本ずつとして扱う
-  const [points] = extractPolylines(ctx.calls);
-  assert.ok(points, 'フィンの線が描かれていない');
-  const finLines = [];
-  for (let i = 0; i + 1 < points.length; i += 2) {
-    finLines.push([points[i], points[i + 1]]);
-  }
-  // x1===x2 の垂直な線分だけを対象にする
-  const verticalFinLines = finLines.filter((l) => l[0].x === l[1].x);
-  assert.equal(verticalFinLines.length, t.spec.fins.count, 'フィンの本数が違う');
+  const finLines = findFinSegments(ctx.calls);
+  assert.equal(finLines.length, t.spec.fins.count, 'フィンの本数が違う');
 
-  for (const line of verticalFinLines) {
-    const [p0, p1] = line;
-    // 砲身の厚み(±2)より上下へはみ出していること（凹凸として見える条件）
-    assert.ok(Math.abs(p0.y) > 2 && Math.abs(p1.y) > 2, 'フィンが砲身の厚みからはみ出していない');
+  for (const [p0, p1] of finLines) {
+    // 砲身の中心線に対して上下対称であること
     assert.ok(p0.y === -p1.y, 'フィンが砲身の中心線に対して非対称');
     // 砲身の範囲の内側にあること（付け根と砲口を空ける）
     assert.ok(p0.x > BARREL_BASE && p0.x < BARREL_BASE + barrelLength, 'フィンが砲身の外にある');
@@ -218,7 +233,6 @@ test('gun 型は冷却フィンを持たない', () => {
   const ctx = makeFakeCtx();
   t.draw(ctx);
 
-  const lines = extractPolylines(ctx.calls);
-  const finLines = lines.filter((l) => l.length === 2 && l[0].x === l[1].x && Math.abs(l[0].y) > 2);
+  const finLines = findFinSegments(ctx.calls);
   assert.equal(finLines.length, 0, 'gun 型にフィンが出ている');
 });
