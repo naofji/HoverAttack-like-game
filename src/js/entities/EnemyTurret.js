@@ -218,8 +218,11 @@ export class EnemyTurret {
                     ? 0
                     : (i / (REFLECT_BEAM_SHOT_COUNT - 1)) * 2 - 1;  // -1..+1
                 const angle = this.currentAngle + t * REFLECT_BEAM_SPREAD;
+                // 発射音は1回の攻撃につき1回だけ。2本目以降は silent にしないと
+                // 同一座標・同一フレームで playWeapon が重なり実効+6dBになる
+                // （ReflectBeam のコンストラクタ側コメント参照）
                 this.game.enemyBullets.push(
-                    new ReflectBeam(this.game, muzzleX, muzzleY, angle),
+                    new ReflectBeam(this.game, muzzleX, muzzleY, angle, { silent: i > 0 }),
                 );
             }
             this.muzzleFlash = REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
@@ -306,6 +309,14 @@ export class EnemyTurret {
                 ctx.lineTo(fx, fins.halfHeight);
             }
             ctx.stroke();
+
+            // フィン描画で strokeStyle/lineWidth を上書きしたままにすると、
+            // 直後のピボットの stroke() がフィンの色・太さ（明るい1px）で
+            // 描かれてしまい、draw() 冒頭で設定した本来の輪郭（#222222・2px）が
+            // 薄い縁に化ける。beam 型だけ砲台の輪郭が弱く見える退行になっていたため、
+            // ここで明示的に戻す
+            ctx.strokeStyle = '#222222';
+            ctx.lineWidth = 2;
         }
 
         // Main pivot body (Circle)

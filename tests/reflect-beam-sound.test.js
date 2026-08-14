@@ -4,8 +4,10 @@ import { WEAPON_SOUNDS } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
 import { transientLevel, db } from './helpers/dsp.js';
 import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
+import { EnemyTurret } from '../src/js/entities/EnemyTurret.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { makeMap } from './helpers/enemy-world.js';
+import { REFLECT_BEAM_SHOT_COUNT } from '../src/js/utils/Constants.js';
 
 // 単発の短い音どうしを比べるので transientLevel を使う（tests/weapon-sounds.test.js
 // と同じやり方）。brief 案の aWeightedRms(() => renderWeaponProfile(...)) は
@@ -47,4 +49,40 @@ test('撃つと発射音を鳴らす', () => {
     audioManager.playWeapon = original;
   }
   assert.deepEqual(played, ['reflectBeam']);
+});
+
+// 1発が REFLECT_BEAM_SHOT_COUNT 本の扇型になった際、本ごとに鳴らすと
+// 同一座標・同一フレームで playWeapon が重なりほぼコヒーレントに加算されて
+// 実効+6dB になる（単発の実測が敵マシンガン比+4.99dBで既に上限際のため、
+// 実機では約+11dB相当になっていた）。1回の攻撃につき1回だけ鳴ることを縛る
+test('1回の攻撃につき発射音は1回だけ（扇型の本数ぶん重ならない）', () => {
+  const ROOM = [
+    '####################',
+    '#..................#',
+    '#..................#',
+    '#..................#',
+    '####################',
+  ];
+  const game = {
+    map: makeMap(ROOM), enemies: [], enemyBullets: [], particles: [], projectiles: [],
+    missionsCompleted: 6,
+    player: { x: 100, y: 40, width: 16, height: 16, alive: true, docked: false },
+    carrier: null,
+    score: 0,
+    addScore(n) { this.score += n; },
+    spawnDebris() {}, spawnSparks() {}, spawnExplosion() {},
+  };
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+
+  const played = [];
+  const original = audioManager.playWeapon;
+  audioManager.playWeapon = (kind) => { played.push(kind); };
+  try {
+    for (let i = 0; i < 600 && game.enemyBullets.length === 0; i++) t.update();
+  } finally {
+    audioManager.playWeapon = original;
+  }
+
+  assert.ok(game.enemyBullets.length === REFLECT_BEAM_SHOT_COUNT, '扇型の本数が変わっている（前提が崩れている）');
+  assert.deepEqual(played, ['reflectBeam'], `発射音が${played.length}回鳴っている（本数ぶん重なってはいけない）`);
 });

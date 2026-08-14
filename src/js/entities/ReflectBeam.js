@@ -24,7 +24,7 @@ import { ageSegments, stepBeam } from '../utils/beamPath.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class ReflectBeam {
-    constructor(game, x, y, angle) {
+    constructor(game, x, y, angle, { silent = false } = {}) {
         this.game = game;
         this.x = x;
         this.y = y;
@@ -47,7 +47,13 @@ export class ReflectBeam {
         // CollisionManager が「点ではなく帯で見る」相手だと見分けるための印
         this.isReflectBeam = true;
 
-        audioManager.playWeapon('reflectBeam', x, y);
+        // 1発が2本の扇型になったため、本ごとに鳴らすと同一座標・同一フレームで
+        // playWeapon が2回走り、ほぼコヒーレントに加算されて実効+6dBになる
+        // （1本ぶんの実測が敵マシンガン比+4.99dBで既に上限際のため、2本鳴らすと
+        // 実機で+11dB相当になっていた）。gain を下げるのではなく、扇の2本目以降を
+        // silent にして「1回の攻撃につき1回だけ鳴らす」形にする
+        // （EnemyTurret._executeAttack() が最初の1本だけ silent: false で生成する）
+        if (!silent) audioManager.playWeapon('reflectBeam', x, y);
     }
 
     /** 開いている節を (endX, endY) で閉じて segs の先頭へ積む。長さ0なら積まない（反射直後にすぐ上限へ達した場合など） */
