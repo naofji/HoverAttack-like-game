@@ -121,25 +121,22 @@ test('Escape は案内しない（P を主にする判断を守る）', () => {
 
 // ---- 2つの画面が同じ表を読んでいること ----
 
-test('HOW TO PLAY の CONTROLS が表の全行を描く', () => {
-    const { texts } = drawHowToPlayControls();
-    for (const row of CONTROLS_ROWS) {
-        assert.ok(texts.includes(row.key), `キーキャップ ${row.key} が無い`);
-        assert.ok(texts.includes(row.action), `${row.key} の説明が無い`);
-    }
-});
-
-test('設定画面の操作一覧も同じ表の全行を描く', () => {
-    const { texts } = drawSettings({ showingControls: true });
-    for (const row of CONTROLS_ROWS) {
-        assert.ok(texts.includes(row.key), `キーキャップ ${row.key} が無い`);
-        assert.ok(texts.includes(row.action), `${row.key} の説明が無い`);
+// 画面ごとの中身（図とラベル）の検証は tests/controls-diagram.test.js に置いた。
+// ここでは「表の行が両画面に届いていること」だけを見る
+test('表の全行のラベルが両画面に出る', () => {
+    for (const [name, { texts }] of [
+        ['HOW TO PLAY', drawHowToPlayControls()],
+        ['設定画面', drawSettings({ showingControls: true })],
+    ]) {
+        for (const row of CONTROLS_ROWS) {
+            assert.ok(texts.includes(row.short), `${name}: ${row.key} のラベルが無い`);
+        }
     }
 });
 
 test('操作一覧を開いていない設定画面には出ない', () => {
     const { texts } = drawSettings({ showingControls: false });
-    assert.equal(texts.includes(CONTROLS_ROWS[0].action), false);
+    assert.equal(texts.includes(CONTROLS_ROWS[0].short), false);
 });
 
 /**
@@ -156,8 +153,8 @@ function frontPanel(ctx) {
     return { left: x - 6, right: x + w + 6, afterHead: ctx.calls.slice(i + 1) };
 }
 
-// 説明文が長い行（S の「DOCK / CROUCH / FAST FUEL CHARGE」）はパネルの幅に
-// 収まりきる寸前まで来ている。行の文言を伸ばしたときに黙って枠から出ないよう、
+// 図の下に出す詳細（S の「DOCK / CROUCH / FAST FUEL CHARGE」など）はパネルの幅に
+// 収まりきる寸前まで来ている。文言を伸ばしたときに黙って枠から出ないよう、
 // 実際に描かれた文字の右端を測って縛る
 test('操作一覧の説明がパネルの内側に収まる', () => {
     for (const [name, { ctx }] of [
@@ -174,8 +171,8 @@ test('操作一覧の説明がパネルの内側に収まる', () => {
     }
 });
 
-// drawKeyCap は渡した x に**右揃え**でキャップを描く（返り値が幅）。左端は
-// キーの文字数しだいで伸びるので、右端だけ見ていると長いキー名で左へはみ出す
+// 図のキーは幅がキー名しだいで伸びる（SHIFT / SPACE は2升ぶん）。右端だけ見て
+// いると長いキーで左へはみ出す。実際にオーバーレイでそれが起きた
 test('キーキャップがパネルの左からはみ出さない', () => {
     for (const [name, { ctx }] of [
         ['HOW TO PLAY', drawHowToPlayControls()],

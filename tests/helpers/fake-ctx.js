@@ -118,20 +118,24 @@ export function extractFillRectsWithColor(calls) {
 }
 
 /**
- * fillText 呼び出しを、その時点のフォントから求めた概算幅つきで取り出す
- * ({text, x, y, size, width})。文字がパネルからはみ出していないかを見るためのもの。
+ * fillText 呼び出しを、その時点のフォントと色つきで取り出す
+ * ({text, x, y, size, width, color})。文字がパネルからはみ出していないか、
+ * 色分けが意図どおりかを見るためのもの。
  * 幅の係数は measureText と同じ 0.6（等幅フォント前提）。
  */
 export function extractTextsWithFont(calls) {
   const out = [];
   let size = 16;
+  let color = '';
   for (const c of calls) {
     if (c.name === 'set:font') {
       const px = /(\d+(?:\.\d+)?)px/.exec(String(c.args[0]));
       if (px) size = parseFloat(px[1]);
+    } else if (c.name === 'set:fillStyle') {
+      color = c.args[0];
     } else if (c.name === 'fillText') {
       const text = String(c.args[0]);
-      out.push({ text, x: c.args[1], y: c.args[2], size, width: text.length * size * 0.6 });
+      out.push({ text, x: c.args[1], y: c.args[2], size, width: text.length * size * 0.6, color });
     }
   }
   return out;

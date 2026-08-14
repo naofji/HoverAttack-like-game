@@ -13,8 +13,8 @@ import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
 import { drawStageScene } from './StageScene.js';
 import { visibleSettingsItems, settingValueText } from './settingsItems.js';
-import { CONTROLS_ROWS } from './controlsList.js';
-import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawKeyCap, drawScanlines } from './theme.js';
+import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
+import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -275,34 +275,22 @@ export class ScreenRenderer {
 
         } else {
             // ---- PAGE 2: CONTROLS ----
-            // 表は controlsList.js に置いてある。設定画面のオーバーレイと同じものを
-            // 読むので、キーを足したときにここだけ古くなることがない
-            const controls = CONTROLS_ROWS;
-
-            // 行の高さから必要なパネル高を求め、余りを上下に均等に配る。
-            // 以前は高さ450固定で、最終行の下に75px・パネルの下に208px空いていた。
-            const rowH = 46;
-            const panelH = ScreenRenderer.panelHeight(rowH * controls.length);
+            // キー名と説明を並べた表では「手をどこに置くのか」が読めなかったので
+            // 図にした（controlsDiagram.js）。設定画面のオーバーレイと同じものを
+            // 描くので、2画面で見た目も文言もずれない
+            const panelW = 800;
+            const panelH = ScreenRenderer.panelHeight(controlsDiagramHeight());
             const areaTop = 80;
             const areaBottom = H - SPACE.xl;
             const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
 
-            // 幅は 700 では足りない。16px 等幅で 51 文字の行（S のしゃがみ＋補給）が
-            // 右端ちょうどに達して余白が無くなっていた。1ページ目のパネルと同じ 800 に
-            // 揃え、キーキャップと説明も 50px 左へずらして左右の余白を保つ
-            drawPanel(ctx, cx - 400, panelY, 800, panelH, 'CONTROLS', UI.accent);
-
-            const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
-            ctx.textAlign = 'left';
-            controls.forEach((c, i) => {
-                const y = rowsTop + i * rowH + Math.round(rowH / 2);
-                drawKeyCap(ctx, cx - 230, y, c.key);
-                ctx.fillStyle = UI.ink;
-                ctx.font = font('body');
-                ctx.textBaseline = 'middle';
-                ctx.fillText(c.action, cx - 190, y);
-            });
-            ctx.textBaseline = 'alphabetic'; // reset
+            drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
+            drawControlsDiagram(
+                ctx,
+                cx - panelW / 2 + ScreenRenderer.PANEL_PAD + SPACE.md,
+                panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD,
+                panelW - (ScreenRenderer.PANEL_PAD + SPACE.md) * 2,
+            );
         }
 
         drawScanlines(ctx, W, H);
@@ -401,9 +389,9 @@ export class ScreenRenderer {
      * はみ出す行があった。
      */
     _drawControlsOverlay(ctx, cx, H) {
-        const rowH = 34;
         const panelW = 720;
-        const panelH = ScreenRenderer.panelHeight(rowH * CONTROLS_ROWS.length + rowH);
+        const hintH = 30; // 最下段の「閉じ方」の案内ぶん
+        const panelH = ScreenRenderer.panelHeight(controlsDiagramHeight() + hintH);
         const panelY = Math.floor((H - panelH) / 2);
 
         // 背後の設定パネルを一段沈める。重なった2枚のうちどちらが手前かを
@@ -413,26 +401,17 @@ export class ScreenRenderer {
 
         drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
 
-        const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
-        ctx.textBaseline = 'middle';
-        CONTROLS_ROWS.forEach((c, i) => {
-            const y = rowsTop + i * rowH + Math.round(rowH / 2);
-            ctx.textAlign = 'left';
-            // drawKeyCap は渡した x に**右揃え**で描く。キャップの左端はキー名の
-            // 長さぶん伸びるので、左枠から 170px 空けた位置を右端にする
-            // （HOW TO PLAY の2ページ目と同じ余白の取り方）
-            drawKeyCap(ctx, cx - panelW / 2 + 170, y, c.key);
-            ctx.fillStyle = UI.ink;
-            ctx.font = font('small');
-            ctx.fillText(c.action, cx - panelW / 2 + 210, y);
-        });
+        const contentTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
+        const pad = ScreenRenderer.PANEL_PAD + SPACE.md;
+        const h = drawControlsDiagram(ctx, cx - panelW / 2 + pad, contentTop, panelW - pad * 2);
 
         // 閉じ方の案内。設定画面の最下段の案内と同じ位置関係にする
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.fillStyle = UI.dim;
         ctx.font = font('small');
-        ctx.fillText('ENTER / P : CLOSE',
-            cx, rowsTop + CONTROLS_ROWS.length * rowH + Math.round(rowH / 2));
+        ctx.fillText('ENTER / P : CLOSE', cx, contentTop + h + hintH / 2);
+        ctx.textBaseline = 'alphabetic';
     }
 
     /** 途中終了の確認。押し間違いで進行を捨てないよう1段挟む。 */

@@ -163,28 +163,6 @@ export function drawPanel(ctx, x, y, w, h, title, titleColor = UI.accent) {
     ctx.restore();
 }
 
-/**
- * キーキャップ。グレーのグラデーションと影をやめ、
- * 暗い下地＋発光する縁という「未来のコンソール」寄りの見せ方にする。
- * @returns {number} 描いた幅（呼び出し側のレイアウト用）
- */
-export function drawKeyCap(ctx, x, y, text) {
-    ctx.save();
-    ctx.font = font('small', true);
-    const w = Math.max(ctx.measureText(text).width + 20, 40);
-    const h = 26;
-    const rx = x - w;
-    const ry = y - h / 2;
-
-    drawFrame(ctx, rx, ry, w, h, UI.info, { fill: UI.panelHead, radius: 5 });
-
-    ctx.fillStyle = UI.ink;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, rx + w / 2, ry + h / 2);
-    ctx.restore();
-    return w;
-}
 
 /**
  * 走査線。画面全体に薄い横縞を重ねて CRT 感を出す。

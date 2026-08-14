@@ -99,23 +99,15 @@ test('オンラインの記録が未取得でも描画は落ちない（読み�
  * キーを足したのに載せ忘れると、プレイヤーからは存在しない機能になる
  * （M キーの全画面が実際にその状態だった）。
  *
- * パネルの高さは行数から自動で決まる（rowH * controls.length）ので、行を
- * 足しても座標の手直しは要らない。画面からはみ出していないことだけ見ておく。
+ * 中身の検証は tests/controls-diagram.test.js（図の中身）と
+ * tests/controls-list.test.js（表と2画面の対応）にある。ここはデモループの
+ * 画面として**画面からはみ出していない**ことだけを見る。
+ * パネルの高さは図の高さから自動で決まるので、行を足しても座標の手直しは要らない。
  */
-test('HOW TO PLAY の CONTROLS に主要キーが載っている', () => {
+test('HOW TO PLAY の CONTROLS が画面に収まる', () => {
     const ctx = makeFakeCtx();
     const renderer = new ScreenRenderer({ canvas: { width: 1024, height: 768 } });
     renderer.drawHowToPlay(ctx, 1);
-
-    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
-    for (const key of ['A / D', 'W', 'SHIFT', 'L-CLICK', 'R-CLICK', 'F', 'S', 'R', 'M', 'P']) {
-        assert.ok(texts.includes(key), `CONTROLS に ${key} のキーキャップが無い`);
-    }
-    assert.ok(texts.includes('TOGGLE FULLSCREEN'), 'M キーの説明が無い');
-    assert.ok(texts.includes('SETTINGS / PAUSE'), 'P キーの説明が無い');
-    assert.ok(texts.includes('SWITCH WEAPON / RELOAD (MISSILE ↔ M-GUN)'), 'F キーの説明が更新されていない');
-    assert.ok(texts.includes('LOCK-ON AIM (TAP) / AUTO-AIM ON-OFF (HOLD)'),
-      'SHIFT の説明が更新されていない');
 
     // 行が増えてもパネルが画面に収まっていること
     const ys = ctx.calls
