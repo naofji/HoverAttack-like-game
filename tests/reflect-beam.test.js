@@ -51,7 +51,7 @@ test('反射回数を使い切ると消える', () => {
     steps++;
   }
   assert.equal(beam.alive, false, '消えていない');
-  assert.equal(beam.bounces, REFLECT_BEAM_MAX_BOUNCES + 1,
+  assert.equal(beam.bounces, REFLECT_BEAM_MAX_BOUNCES,
     `反射回数の上限ちょうどで消えていない: ${beam.bounces}`);
 });
 

@@ -52,7 +52,10 @@ export class ReflectBeam {
         this.path.unshift({ x: this.x, y: this.y });
         if (this.path.length > this.maxNodes) this.path.length = this.maxNodes;
 
-        if (this.bounces > REFLECT_BEAM_MAX_BOUNCES) this.alive = false;
+        // 設計上は「上限に達したら消える」。distance 側の判定（すぐ下）が
+        // `>=` なのに合わせる。`>` のままだと上限回数を跳ねた後もう1回
+        // 生き残ってしまい、実質の反射回数が設計より1回多くなっていた
+        if (this.bounces >= REFLECT_BEAM_MAX_BOUNCES) this.alive = false;
         if (this.distance >= REFLECT_BEAM_MAX_DISTANCE) this.alive = false;
 
         // マップ外（BaseLaser と同じ扱い）

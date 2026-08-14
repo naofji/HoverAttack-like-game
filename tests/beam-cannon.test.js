@@ -45,6 +45,19 @@ test('既定は従来のタレット', () => {
   assert.equal(t.maxHp, ENEMY_TURRET_HP);
 });
 
+// TURRET_TYPES はプレーンオブジェクトなので、`TURRET_TYPES[type]` という
+// 真偽判定だと Object.prototype 由来のキー（'constructor' など）まで
+// 「存在する」と誤判定してしまい、gun へのフォールバックが効かない。
+// 実際に type='constructor' を渡すと spec が Object.prototype.constructor に
+// なり、hp が undefined の不死身タレットになっていた（レビューで指摘）。
+test('未知の type (プロトタイプのキー) は gun にフォールバックする', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'constructor');
+  assert.equal(t.type, 'gun', '未知の type が gun にフォールバックしていない');
+  assert.equal(t.hp, ENEMY_TURRET_HP, 'HP が gun の値になっていない');
+  assert.equal(t.maxHp, ENEMY_TURRET_HP, 'maxHp が gun の値になっていない');
+});
+
 test('beam 型は反射ビームを撃つ', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');

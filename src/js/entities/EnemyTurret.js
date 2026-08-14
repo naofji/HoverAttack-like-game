@@ -52,7 +52,10 @@ export class EnemyTurret {
         this.y = y;
         this.width = ENEMY_TURRET_WIDTH;
         this.height = ENEMY_TURRET_HEIGHT;
-        this.type = TURRET_TYPES[type] ? type : 'gun';
+        // `TURRET_TYPES[type]` という真偽判定だと、Object.prototype 由来の
+        // キー（'constructor' など）まで「存在する」と誤判定してしまい、
+        // gun へのフォールバックが効かない。hasOwn で自前のキーだけを見る
+        this.type = Object.hasOwn(TURRET_TYPES, type) ? type : 'gun';
         this.spec = TURRET_TYPES[this.type];
         this.hp = this.spec.hp;
         this.maxHp = this.hp;

@@ -64,9 +64,13 @@ export class CollisionManager {
      * 反射ビームだけは**帯全体**が当たるので、先端の1点ではなく節ごとの線分で見る。
      * 判定に使う帯は描画と同じ segments() の戻り値で、ここが食い違うと
      * 「見えているのに当たらない／見えていないのに当たる」になる。
+     *
+     * 判別子は isReflectBeam フラグに揃える（isBaseLaser と同じ作法）。
+     * 同じファイル内でここだけ `typeof segments === 'function'` という
+     * 別の基準を使っていて、ダメージ側（_applyBulletHit）と食い違っていた。
      */
     _bulletTouches(bullet, target) {
-        if (typeof bullet.segments === 'function') {
+        if (bullet.isReflectBeam) {
             return bullet.segments().some(
                 (s) => segmentIntersectsRect(s.x1, s.y1, s.x2, s.y2, target),
             );
