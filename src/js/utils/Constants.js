@@ -457,6 +457,26 @@ export const BASE_LASER_SPEED = 12;
 // 自機(100HP)なら2発、母艦(120HP)なら3発で落ちる強さ
 export const BASE_LASER_DAMAGE = 50;
 
+// --- 反射ビームキャノン（7面。タレットの半分を差し替える） ---
+// 母艦レーザー（BASE_LASER_*）とは別物。あちらは速度12の直線で地形を貫通する。
+// こちらは遅く跳ね返るのが主眼で、見てから避けられる速さにしてある。
+export const REFLECT_BEAM_SPEED = 4;            // ホーミングミサイル(3)より少し速い
+export const REFLECT_BEAM_TAIL_SEGMENTS = 8;    // 帯を何節に等分するか
+// 帯の長さ。当たり判定が帯全体なので、これが通路を塞ぐ時間を決める。
+// **難しすぎたときに最初に下げる値**
+export const REFLECT_BEAM_TAIL_LENGTH = 160;    // 8節 × 20px
+export const REFLECT_BEAM_WIDTH = 5;            // 母艦レーザーは6
+export const REFLECT_BEAM_MAX_BOUNCES = 4;
+export const REFLECT_BEAM_MAX_DISTANCE = 1200;  // 速度4で300フレーム=5秒
+export const REFLECT_BEAM_DAMAGE = 20;          // 敵弾10・ホーミング20。自機HP100で5発
+export const REFLECT_BEAM_MUZZLE_FLASH_FRAMES = 12; // 0.2秒
+
+// 芯が白っぽい紫、外へ向かって暗紫。母艦レーザー（エメラルド #00FFAA）と
+// 一目で区別できるようにする。**hex で書くこと**（lerpColor が parseInt する）
+export const COLOR_REFLECT_BEAM_CORE = '#F2E6FF';
+export const COLOR_REFLECT_BEAM_MID = '#B266FF';
+export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
+
 // --- Enemy Base Additional Weapons ---
 export const ENEMY_BASE_TURRET_COOLDOWN = 120;
 export const ENEMY_BASE_TURRET_BURST_COUNT = 5;
