@@ -7,10 +7,9 @@ import {
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
 } from '../utils/Constants.js';
-import { pickCornerFromPositions, miniMapCornerPositions } from './minimapPlacement.js';
+import { pickStickyMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
 import { crosshairScreenPos } from './Crosshair.js';
-import { carrierArrowScreenPos } from './HUD.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
@@ -1004,21 +1003,23 @@ export class ScreenRenderer {
         if (!mm) return;
 
         // 表示位置は「操作している側」（ドッキング中でなければ自機、そうでなければ母艦）と
-        // クロスヘアを避けて、左上＞左下＞右上＞右下の順で選ぶ。
+        // クロスヘアを避ける。母艦の方向矢印（HUD.drawCarrierArrow）はミニマップより
+        // 上の面に描くようになったため、もう避ける必要が無い（重なっても矢印側が
+        // 前面に出るので位置の問題が起きない）。
+        // 自機／母艦とクロスヘアは性質が違うので別々に持つ:
+        //   - 自機／母艦: 重なったら即アウト（padding 無し）
+        //   - クロスヘア: 余白(MINIMAP_AVOID_PADDING)の外にあれば OK
+        // （詳しくは pickStickyMiniMapCorner のコメント）
         // どちらを操作中かで避けるべき対象が変わるため、両方は見ずに操作している方だけを見る。
-        const avoid = [];
+        let unitPoint = null;
         if (game.player && game.player.alive && !game.player.docked) {
-            avoid.push({ x: game.player.x + game.player.width / 2 - game.camera.x, y: game.player.y + game.player.height / 2 - game.camera.y });
+            unitPoint = { x: game.player.x + game.player.width / 2 - game.camera.x, y: game.player.y + game.player.height / 2 - game.camera.y };
         } else if (game.carrier && game.carrier.alive) {
-            avoid.push({ x: game.carrier.x + game.carrier.width / 2 - game.camera.x, y: game.carrier.y + game.carrier.height / 2 - game.camera.y });
+            unitPoint = { x: game.carrier.x + game.carrier.width / 2 - game.camera.x, y: game.carrier.y + game.carrier.height / 2 - game.camera.y };
         }
         // クロスヘアは「実際に描かれる位置」と一致させる必要があるため、Crosshair.draw() と
         // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
-        avoid.push(crosshairScreenPos(game));
-        // 母艦の方向インディケーター（HUD._drawCarrierArrow）も同じ理由で避ける。
-        // 画面内にいる/ドッキング中などは null が返るので、そのときは足さない。
-        const arrowPos = carrierArrowScreenPos(game);
-        if (arrowPos) avoid.push(arrowPos);
+        const crosshairPoint = crosshairScreenPos(game);
 
         // 焼く解像度（cols*2 x rows*2、最大600x300）はそのまま、描くときだけ画面幅の
         // 1/3 に収まるよう縮小する。元がそれより小さい場合は拡大しない（率は1で頭打ち）。
@@ -1040,7 +1041,18 @@ export class ScreenRenderer {
             hudTop: HUD_TOP_HEIGHT,
             hudBottom: HUD_BOTTOM_HEIGHT,
         });
-        const desired = pickCornerFromPositions(positions, destW, destH, avoid, MINIMAP_AVOID_PADDING);
+        // 「動く理由があるときだけ動く」ルールで隅を選ぶ（詳しくは pickStickyMiniMapCorner）。
+        // 「今の隅」は miniMapTransition.corner にある。まだ何も無い（初回描画）ときは
+        // 'topLeft' を仮の今の隅として渡す。null にして毎回選び直す形にすると、
+        // 何も避けるものが無くてもクロスヘアから最も遠い隅（HUD帯が上にしか無い
+        // ぶん、既定のマウス位置では下寄りの隅になりがち）が選ばれてしまい、
+        // 「開いたら基本は左上」という従来の見た目が崩れてしまうため。
+        const currentCorner = this.miniMapTransition ? this.miniMapTransition.corner : 'topLeft';
+        const desired = pickStickyMiniMapCorner({
+            positions, mapW: destW, mapH: destH,
+            currentCorner, unitPoint, crosshairPoint,
+            padding: MINIMAP_AVOID_PADDING,
+        });
 
         // 隅の切り替えをフェードでつなぐ。初回描画（このインスタンスでまだ何も
         // 選んでいない）は、望ましい隅をそのまま完全に見える状態で採用する

@@ -88,7 +88,7 @@ test('_drawCarrierArrow() は carrierArrowScreenPos() と同じ位置・角度�
     const hud = Object.create(HUD.prototype);
     hud.game = game;
     const ctx = makeFakeCtx();
-    hud._drawCarrierArrow(ctx, game.player, game.carrier, game.canvas.width);
+    hud.drawCarrierArrow(ctx);
 
     const pos = carrierArrowScreenPos(game);
     const translateCall = ctx.calls.find((c) => c.name === 'translate');
@@ -111,6 +111,6 @@ test('母艦が画面内なら _drawCarrierArrow() は何も描かない', () =>
     const hud = Object.create(HUD.prototype);
     hud.game = game;
     const ctx = makeFakeCtx();
-    hud._drawCarrierArrow(ctx, game.player, game.carrier, game.canvas.width);
+    hud.drawCarrierArrow(ctx);
     assert.equal(ctx.calls.length, 0, '画面内なのに何か描かれている');
 });

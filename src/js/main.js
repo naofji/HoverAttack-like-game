@@ -1512,6 +1512,10 @@ export const Game = {
         this.hud.draw(ctx);
         this.crosshair.draw(ctx);
         this._drawOverlays(ctx);
+        // 母艦の方向矢印はミニマップより上の面に描く。HUD.draw() の中に
+        // あるとミニマップに隠れてしまうため、ミニマップ(_drawOverlays)より
+        // 後に呼ぶ（ユーザー要望: 矢印はミニマップより手前に見えてほしい）。
+        this.hud.drawCarrierArrow(ctx);
 
         if (this.gameState === 'settings') {
             this.screenRenderer.drawSettings(ctx, this._settingsViewState());

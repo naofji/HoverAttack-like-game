@@ -118,7 +118,8 @@ export class HUD {
         this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
         this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
         this._drawRepairKitIcons(ctx, player, row2Y);
-        this._drawCarrierArrow(ctx, player, carrier, w);
+        // 母艦の方向矢印はここでは描かない。ミニマップより上の面に出したいため、
+        // main.js が _drawOverlays(ミニマップ)の後に drawCarrierArrow() を呼ぶ。
 
         // Separator line
         ctx.strokeStyle = '#444444';
@@ -480,7 +481,11 @@ export class HUD {
     // ------------------------------------------
     // Off-screen carrier direction indicator
     // ------------------------------------------
-    _drawCarrierArrow(ctx, player, carrier, w) {
+    // 公開メソッド: main.js がミニマップ(_drawOverlays)より後に呼ぶ
+    // （ミニマップより上の面に矢印を出すため）。座標はすべて
+    // carrierArrowScreenPos(this.game) から取れるので、player/carrier/w の
+    // 引数は不要（前回のリファクタで実質未使用になっていたぶんを整理）。
+    drawCarrierArrow(ctx) {
         const pos = carrierArrowScreenPos(this.game);
         if (!pos) return;
 
