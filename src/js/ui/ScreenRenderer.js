@@ -4,12 +4,13 @@
 
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
-    COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+    MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
 } from '../utils/Constants.js';
 import { pickCornerFromPositions, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
 import { crosshairScreenPos } from './Crosshair.js';
+import { carrierArrowScreenPos } from './HUD.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
@@ -1014,6 +1015,10 @@ export class ScreenRenderer {
         // クロスヘアは「実際に描かれる位置」と一致させる必要があるため、Crosshair.draw() と
         // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
         avoid.push(crosshairScreenPos(game));
+        // 母艦の方向インディケーター（HUD._drawCarrierArrow）も同じ理由で避ける。
+        // 画面内にいる/ドッキング中などは null が返るので、そのときは足さない。
+        const arrowPos = carrierArrowScreenPos(game);
+        if (arrowPos) avoid.push(arrowPos);
 
         // 焼く解像度（cols*2 x rows*2、最大600x300）はそのまま、描くときだけ画面幅の
         // 1/3 に収まるよう縮小する。元がそれより小さい場合は拡大しない（率は1で頭打ち）。
@@ -1059,10 +1064,9 @@ export class ScreenRenderer {
         // Draw the cached static map, shrunk to destW/destH
         ctx.drawImage(mm, mmX, mmY, destW, destH);
 
-        // Draw border
-        ctx.strokeStyle = COLOR_MINIMAP_BORDER;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(mmX, mmY, destW, destH);
+        // 外枠は描かない。サイズを上げて薄さを補ったあとは、枠が無いほうが
+        // 地形と馴染んで邪魔にならないという実機フィードバックで撤去した
+        // （COLOR_MINIMAP_BORDER も使わなくなったので Constants.js から削除済み）。
 
         // 点（自機・敵・母艦）は地形と別に、開閉フェードと隅の切り替えフェードだけを
         // 掛け直す。MINIMAP_ALPHA（地形を背景に沈めるための値）は点には掛けない。

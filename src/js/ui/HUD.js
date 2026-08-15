@@ -8,6 +8,48 @@ import {
     HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL
 } from '../utils/Constants.js';
 
+/**
+ * 母艦の方向を示す矢印の画面座標。表示されないときは null。
+ * ミニマップが矢印を隠さないよう、避ける対象としても使う（ScreenRenderer.drawMiniMap）。
+ *
+ * Crosshair.js の crosshairScreenPos() と同じ理由で切り出した: 避ける位置と
+ * 実際に描かれる位置が食い違うと意味が無いため、_drawCarrierArrow() もこの
+ * 関数を呼ぶ形にして、計算を二重に持たないようにしている。
+ *
+ * @param {object} game
+ * @returns {{x:number, y:number, angle:number}|null}
+ */
+export function carrierArrowScreenPos(game) {
+    const player = game.player;
+    const carrier = game.carrier;
+
+    if (!carrier || !carrier.alive) return null;
+    if (player && player.docked) return null;
+
+    const cam = game.camera;
+    const w = game.canvas.width;
+    const h = game.canvas.height;
+    const cx = carrier.x + carrier.width / 2;
+    const cy = carrier.y + carrier.height / 2;
+    const isOffScreen =
+        cx < cam.x ||
+        cx > cam.x + w ||
+        cy < cam.y ||
+        cy > cam.y + h;
+
+    if (!isOffScreen) return null;
+
+    const screenCenterX = cam.x + w / 2;
+    const screenCenterY = cam.y + h / 2;
+    const angle   = Math.atan2(cy - screenCenterY, cx - screenCenterX);
+    const radiusX = (w / 2) - 30;
+    const radiusY = (h / 2) - HUD_TOP_HEIGHT - 10;
+    const x = w / 2 + Math.cos(angle) * radiusX;
+    const y = h / 2 + Math.sin(angle) * radiusY;
+
+    return { x, y, angle };
+}
+
 export class HUD {
     constructor(game) {
         this.game = game;
@@ -439,31 +481,12 @@ export class HUD {
     // Off-screen carrier direction indicator
     // ------------------------------------------
     _drawCarrierArrow(ctx, player, carrier, w) {
-        if (!carrier || !carrier.alive) return;
-        if (player && player.docked) return;
-
-        const cam = this.game.camera;
-        const cx  = carrier.x + carrier.width  / 2;
-        const cy  = carrier.y + carrier.height / 2;
-        const isOffScreen =
-            cx < cam.x ||
-            cx > cam.x + w ||
-            cy < cam.y ||
-            cy > cam.y + this.game.canvas.height;
-
-        if (!isOffScreen) return;
-
-        const screenCenterX = cam.x + w / 2;
-        const screenCenterY = cam.y + this.game.canvas.height / 2;
-        const angle   = Math.atan2(cy - screenCenterY, cx - screenCenterX);
-        const radiusX = (w / 2) - 30;
-        const radiusY = (this.game.canvas.height / 2) - HUD_TOP_HEIGHT - 10;
-        const arrowX  = w / 2 + Math.cos(angle) * radiusX;
-        const arrowY  = this.game.canvas.height / 2 + Math.sin(angle) * radiusY;
+        const pos = carrierArrowScreenPos(this.game);
+        if (!pos) return;
 
         ctx.save();
-        ctx.translate(arrowX, arrowY);
-        ctx.rotate(angle);
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(pos.angle);
         ctx.fillStyle = '#FFFF00';
         ctx.beginPath();
         ctx.moveTo( 10,  0);   // Tip

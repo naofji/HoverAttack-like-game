@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 import { makeFakeCtx, extractSets, extractFillRectsWithColor } from './helpers/fake-ctx.js';
 import {
-    COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT, TILE_SIZE,
+    MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT, TILE_SIZE,
     MINIMAP_ALPHA, MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
 } from '../src/js/utils/Constants.js';
 
@@ -43,11 +43,13 @@ function draw(game) {
     return ctx.calls;
 }
 
-test('枠線は COLOR_MINIMAP_BORDER で、白ではない', () => {
+// サイズを上げて薄さを補ったあとは、枠が無いほうが地形に馴染むという
+// 実機フィードバックで撤去した。strokeRect が復活したら気づけるよう、
+// 「呼ばれていないこと」自体を縛る（COLOR_MINIMAP_BORDER 定数も削除済み）。
+test('外枠(strokeRect)は描かない', () => {
     const calls = draw(makeGame());
-    const strokes = extractSets(calls, 'strokeStyle');
-    assert.ok(strokes.includes(COLOR_MINIMAP_BORDER), '枠色が COLOR_MINIMAP_BORDER になっていない');
-    assert.equal(strokes.includes('#FFFFFF'), false, '枠が白のまま');
+    const strokeRects = calls.filter((c) => c.name === 'strokeRect');
+    assert.equal(strokeRects.length, 0, '枠線(strokeRect)が描かれている');
 });
 
 test('何も避けるものが無ければ左上に置かれる', () => {
@@ -95,18 +97,40 @@ test('点（母艦）の座標は、選ばれたミニマップの位置(mmX/mmY
 });
 
 // ⑻ 縮小率が効いている: 大きいミニマップ(600x300)を渡したとき、
-// 転送先の幅が canvasW/3 以下になること。
-test('大きいミニマップは画面幅の1/3以下に縮小される', () => {
+// 転送先の幅が canvasW * MINIMAP_MAX_WIDTH_RATIO 以下になること。
+// 定数を直接参照する形にしているので、上限の値そのものを変えてもこのテストは
+// 直さずに済む（ただし「縮小されている」ことは元サイズ(600)と比較して確かめる）。
+test('大きいミニマップは画面幅の MINIMAP_MAX_WIDTH_RATIO 以下に縮小される', () => {
     const game = makeGame({ mmW: 600, mmH: 300 });
     const calls = draw(game);
     const drawImageCall = calls.find((c) => c.name === 'drawImage');
     // ctx.drawImage(mm, dx, dy, dw, dh) の5引数形式で呼ばれているはず
     const destW = drawImageCall.args[3];
     assert.ok(destW !== undefined, 'drawImage が転送先サイズ指定なしで呼ばれている（等倍のまま）');
+    assert.ok(destW < 600, `元サイズから縮小されていない: destW=${destW}`);
     assert.ok(destW <= CANVAS_W * MINIMAP_MAX_WIDTH_RATIO + 0.001, `縮小されていない: destW=${destW}`);
     // アスペクト比を保っていること
     const destH = drawImageCall.args[4];
     assert.ok(Math.abs(destW / destH - 600 / 300) < 0.01, 'アスペクト比が保たれていない');
+});
+
+// 母艦の方向インディケーター（HUD._drawCarrierArrow）が出ているときは、
+// ミニマップがその上に重ならないよう避けること。
+// 自機は画面中央（何も避けない位置）に置き、母艦だけをカメラから大きく
+// 左上方向に離して、矢印が左上隅の近くに出る状況を作る。矢印を避けなければ
+// 左上が選ばれるはずの配置で、実際には左上以外へ逃げることを確かめる。
+test('母艦の方向矢印が出ているとき、ミニマップはその位置を避ける', () => {
+    const game = makeGame({ playerPos: { x: CANVAS_W / 2, y: CANVAS_H / 2 } });
+    // 自機は画面中央（=カメラ原点からのオフセットが半画面）なので、
+    // カメラは (0,0) のまま。母艦をカメラ・画面中央から大きく左上に離す。
+    game.carrier = { alive: true, x: -100000, y: -100000, width: 0, height: 0 };
+
+    const calls = draw(game);
+    const drawImageCall = calls.find((c) => c.name === 'drawImage');
+    const mmY = drawImageCall.args[2];
+
+    assert.notEqual(mmY, HUD_TOP_HEIGHT + MINIMAP_MARGIN,
+        '母艦の方向矢印を避けずに左上のままになっている');
 });
 
 // ⑼ 小さいミニマップは拡大されない（元が上限より小さければ等倍）。
