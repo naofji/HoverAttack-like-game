@@ -190,6 +190,12 @@ export const CARRIER_MAX_HP = 120;  // 敵ミサイル12発ぶん。80(8発)で�
 export const CARRIER_INITIAL_LIVES = 1;
 export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert
 
+// 母艦の方向矢印はミニマップより上の面に描くので、不透明のままだと
+// 下のミニマップを塗りつぶす。半透明にして両方読めるようにする。
+// 薄くしすぎると「母艦がどっちにあるか」という情報が読めなくなるので、
+// ミニマップが透ける程度に留める
+export const CARRIER_ARROW_ALPHA = 0.7;
+
 // --- Docking Resupply (gradual replenishment per frame while docked) ---
 // HP: 100 / 60 ≈ 1.67/frame → full heal in ~3.6 seconds (at 60fps)
 export const DOCK_HP_RATE = 100 / 216; // ~0.46 HP/frame → full in ~3.6s

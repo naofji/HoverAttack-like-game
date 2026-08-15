@@ -5,7 +5,8 @@
 import {
     HUD_TOP_HEIGHT,
     HUD_FONT, HUD_COLOR, HUD_BG_COLOR,
-    HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL
+    HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL,
+    CARRIER_ARROW_ALPHA
 } from '../utils/Constants.js';
 
 /**
@@ -492,6 +493,9 @@ export class HUD {
         ctx.save();
         ctx.translate(pos.x, pos.y);
         ctx.rotate(pos.angle);
+        // ミニマップより上の面に描くため、不透明のままだと下のミニマップを
+        // 塗りつぶす。restore() で自動的に元へ戻るのでここで薄くする。
+        ctx.globalAlpha = CARRIER_ARROW_ALPHA;
         ctx.fillStyle = '#FFFF00';
         ctx.beginPath();
         ctx.moveTo( 10,  0);   // Tip

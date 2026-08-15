@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HUD, carrierArrowScreenPos } from '../src/js/ui/HUD.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { HUD_TOP_HEIGHT } from '../src/js/utils/Constants.js';
+import { HUD_TOP_HEIGHT, CARRIER_ARROW_ALPHA } from '../src/js/utils/Constants.js';
 
 const CANVAS_W = 1024;
 const CANVAS_H = 768;
@@ -104,6 +104,41 @@ test('_drawCarrierArrow() は carrierArrowScreenPos() と同じ位置・角度�
     assert.ok(fillStyles.includes('#FFFF00'), '矢印の色が変わっている');
     const fillCall = ctx.calls.find((c) => c.name === 'fill');
     assert.ok(fillCall, 'fill が呼ばれていない');
+});
+
+// ミニマップより上の面に描くようになった結果、不透明のままだと下のミニマップを
+// 塗りつぶしてしまう。半透明にして両方読めるようにしている。
+test('_drawCarrierArrow() は CARRIER_ARROW_ALPHA で半透明に描く', () => {
+    const game = makeGame({ carrier: offscreenCarrier() });
+    const hud = Object.create(HUD.prototype);
+    hud.game = game;
+    const ctx = makeFakeCtx();
+    hud.drawCarrierArrow(ctx);
+
+    const alphas = ctx.calls.filter((c) => c.name === 'set:globalAlpha').map((c) => c.args[0]);
+    assert.ok(alphas.includes(CARRIER_ARROW_ALPHA),
+        `globalAlpha に CARRIER_ARROW_ALPHA が設定されていない: got ${alphas}`);
+});
+
+// globalAlpha を戻し忘れると、以降に描かれる HUD やミニマップが全部薄くなる
+// （このプロジェクトで実際にレビューで問題になった前例がある）。save/restore の
+// 内側で設定していること＝restore で自動的に戻ることを、呼び出し順で縛る。
+test('_drawCarrierArrow() の globalAlpha 設定は save/restore の内側に収まっている', () => {
+    const game = makeGame({ carrier: offscreenCarrier() });
+    const hud = Object.create(HUD.prototype);
+    hud.game = game;
+    const ctx = makeFakeCtx();
+    hud.drawCarrierArrow(ctx);
+
+    const saveIndex = ctx.calls.findIndex((c) => c.name === 'save');
+    const restoreIndex = ctx.calls.findIndex((c) => c.name === 'restore');
+    const alphaIndex = ctx.calls.findIndex((c) => c.name === 'set:globalAlpha');
+
+    assert.ok(saveIndex !== -1, 'save が呼ばれていない');
+    assert.ok(restoreIndex !== -1, 'restore が呼ばれていない');
+    assert.ok(alphaIndex !== -1, 'globalAlpha が設定されていない');
+    assert.ok(saveIndex < alphaIndex && alphaIndex < restoreIndex,
+        'globalAlpha の設定が save/restore の外にある（以降の描画が薄くなり続ける）');
 });
 
 test('母艦が画面内なら _drawCarrierArrow() は何も描かない', () => {
