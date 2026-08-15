@@ -77,3 +77,17 @@ test('ミニマップが大きい場合（600x300）でも壊れない', () => {
     assert.ok(p.x + big.mapW <= big.canvasW);
     assert.ok(p.y + big.mapH <= big.canvasH);
 });
+
+// ⑺ 余白（padding）ぶん手前で避けること。矩形の外側ぎりぎりの点でも避ける。
+test('padding を渡すと、矩形の外側ぎりぎりの点でも避ける', () => {
+    const padding = 48;
+    // 左上矩形のすぐ外側（矩形の右端から 10px 外）の点。
+    // padding 無しなら重ならないが、padding=48 ならまだ「近い」として避ける範囲内。
+    const justOutsideTopLeft = { x: BASE.margin + BASE.mapW + 10, y: BASE.hudTop + BASE.margin + 10 };
+
+    const withoutPadding = pickMiniMapCorner({ ...BASE, avoid: [justOutsideTopLeft] });
+    assert.equal(withoutPadding.x, BASE.margin, 'padding 無しでは左上のまま（前提の確認）');
+
+    const withPadding = pickMiniMapCorner({ ...BASE, avoid: [justOutsideTopLeft], padding });
+    assert.notEqual(withPadding.y, BASE.hudTop + BASE.margin, '余白を渡しても手前で避けていない');
+});

@@ -5,8 +5,10 @@
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
     COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+    MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
 } from '../utils/Constants.js';
-import { pickMiniMapCorner } from './minimapPlacement.js';
+import { pickMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
+import { advanceMiniMapTransition } from './minimapTransition.js';
 import { crosshairScreenPos } from './Crosshair.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
@@ -1013,35 +1015,71 @@ export class ScreenRenderer {
         // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
         avoid.push(crosshairScreenPos(game));
 
-        const { x: mmX, y: mmY } = pickMiniMapCorner({
+        // 焼く解像度（cols*2 x rows*2、最大600x300）はそのまま、描くときだけ画面幅の
+        // 1/3 に収まるよう縮小する。元がそれより小さい場合は拡大しない（率は1で頭打ち）。
+        const shrink = Math.min(1, (w * MINIMAP_MAX_WIDTH_RATIO) / mm.width);
+        const destW = mm.width * shrink;
+        const destH = mm.height * shrink;
+
+        // pickMiniMapCorner に渡す mapW/mapH は「実際に見える大きさ」＝縮小後の値に
+        // すること。ここを元サイズのままにすると、置き場所の当たり判定が見た目とずれる。
+        const desired = pickMiniMapCorner({
             canvasW: w,
             canvasH: h,
-            mapW: mm.width,
-            mapH: mm.height,
+            mapW: destW,
+            mapH: destH,
             margin: MINIMAP_MARGIN,
             hudTop: HUD_TOP_HEIGHT,
             hudBottom: HUD_BOTTOM_HEIGHT,
             avoid,
+            padding: MINIMAP_AVOID_PADDING,
         });
+
+        // 隅の切り替えをフェードでつなぐ。初回描画（このインスタンスでまだ何も
+        // 選んでいない）は、望ましい隅をそのまま完全に見える状態で採用する
+        // （開いた瞬間に一度フェードインさせる必要は無い＝0.85→0.55等と同じ独立した
+        // 開閉フェードは game.miniMapAlpha が別に受け持っている）。
+        if (!this.miniMapTransition) {
+            this.miniMapTransition = { corner: desired.corner, fade: 1, phase: 'idle' };
+        } else {
+            this.miniMapTransition = advanceMiniMapTransition(this.miniMapTransition, desired.corner, MINIMAP_FADE_SPEED);
+        }
+
+        const positions = miniMapCornerPositions({
+            canvasW: w,
+            canvasH: h,
+            mapW: destW,
+            mapH: destH,
+            margin: MINIMAP_MARGIN,
+            hudTop: HUD_TOP_HEIGHT,
+            hudBottom: HUD_BOTTOM_HEIGHT,
+        });
+        const { x: mmX, y: mmY } = positions[this.miniMapTransition.corner];
+
         const alpha = game.miniMapAlpha || 0;
 
         ctx.save();
-        ctx.globalAlpha = MINIMAP_ALPHA * alpha;
+        // 最終的な濃さは3つの独立したフェードの積: 地形の上に重ねる基本濃度 ×
+        // 開閉フェード(miniMapAlpha) × 隅の切り替えフェード(transition.fade)
+        ctx.globalAlpha = MINIMAP_ALPHA * alpha * this.miniMapTransition.fade;
 
-        // Draw the cached static map
-        ctx.drawImage(mm, mmX, mmY);
+        // Draw the cached static map, shrunk to destW/destH
+        ctx.drawImage(mm, mmX, mmY, destW, destH);
 
         // Draw border
         ctx.strokeStyle = COLOR_MINIMAP_BORDER;
         ctx.lineWidth = 2;
-        ctx.strokeRect(mmX, mmY, mm.width, mm.height);
+        ctx.strokeRect(mmX, mmY, destW, destH);
 
         ctx.globalAlpha = 1.0;
 
-        // Helper to draw a dot
+        // Helper to draw a dot。点は miniMapScale だけでなく縮小率(shrink)にも
+        // 追随させる必要がある。ここを忘れると、地形は縮むのに点だけ元の位置に
+        // 残ってしまい、縮小したミニマップの上でずれて見える。
+        const dotScale = game.map.miniMapScale * shrink;
         const drawDot = (worldX, worldY, color, size = 2) => {
-            const px = mmX + (worldX / TILE_SIZE) * game.map.miniMapScale;
-            const py = mmY + (worldY / TILE_SIZE) * game.map.miniMapScale;
+            const px = mmX + (worldX / TILE_SIZE) * dotScale;
+            const py = mmY + (worldY / TILE_SIZE) * dotScale;
             ctx.fillStyle = color;
             ctx.fillRect(px - size / 2, py - size / 2, size, size);
         };

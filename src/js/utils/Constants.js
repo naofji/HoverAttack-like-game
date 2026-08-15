@@ -595,12 +595,23 @@ export const COLOR_CAVE_BG = '#1a0a00';
 // 見た目は本編と一致する。彩度・明度だけここで落として背景に沈める) ---
 export const MINIMAP_SATURATION = 0.55;   // 彩度を落として背景に沈める
 export const MINIMAP_BRIGHTNESS = 0.65;   // 明度も落とす。前景の自機・敵の点を目立たせるため
-export const MINIMAP_ALPHA = 0.85;        // ミニマップ全体の不透明度 (開いたときの半透明さ)
+// ミニマップ全体の不透明度 (開いたときの半透明さ)。0.85 は地形の上に重ねると
+// 前景が読めなくなるとの実機フィードバックで 0.55 へ下げた
+export const MINIMAP_ALPHA = 0.55;
 // 白だと目立ちすぎて中身より枠が主張する。地形（暗い）と点（明るい）の
 // 中間の明度にして、輪郭は分かるが主役にならない濃さにする
 export const COLOR_MINIMAP_BORDER = '#888888';
 // 画面四隅から置き場所を選ぶときの、画面端／HUD帯からの余白
 export const MINIMAP_MARGIN = 16;
+// 画面幅に対するミニマップの上限。大きいマップ（最大600x300）だと
+// 画面の大半を覆ってしまうため、焼く解像度は変えずに描画時だけ縮小する
+export const MINIMAP_MAX_WIDTH_RATIO = 1 / 3;
+// 隅から隅への切り替えを「消える→切り替わる→現れる」でつなぐときの
+// 1フレームあたりのフェード量。0.08 で消えて現れるまで約0.4秒
+export const MINIMAP_FADE_SPEED = 0.08;
+// 自機・クロスヘアが「近づいたら」避け始めるための余白。矩形に実際に
+// 重なってからでは動き出しが遅く感じるため、少し手前で反応させる
+export const MINIMAP_AVOID_PADDING = 48;
 
 // --- Far cave backdrop (parallax) ---
 // 遠景がカメラに追従する割合。0 = 完全固定、1 = 前景と等速。
