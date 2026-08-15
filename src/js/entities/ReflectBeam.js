@@ -17,7 +17,7 @@
 
 import {
     REFLECT_BEAM_SPEED, REFLECT_BEAM_SEGMENT_FRAMES, REFLECT_BEAM_SEGMENT_LIFE,
-    REFLECT_BEAM_WIDTH, REFLECT_BEAM_MAX_BOUNCES, REFLECT_BEAM_MAX_DISTANCE,
+    REFLECT_BEAM_WIDTH, REFLECT_BEAM_MAX_BOUNCES, REFLECT_BEAM_MAX_TICKS,
     COLOR_REFLECT_BEAM_CORE, COLOR_REFLECT_BEAM_MID, COLOR_REFLECT_BEAM_EDGE,
 } from '../utils/Constants.js';
 import { ageSegments, stepBeam } from '../utils/beamPath.js';
@@ -31,7 +31,9 @@ export class ReflectBeam {
         this.vx = Math.cos(angle) * REFLECT_BEAM_SPEED;
         this.vy = Math.sin(angle) * REFLECT_BEAM_SPEED;
         this.bounces = 0;
-        this.distance = 0;
+        // 寿命はフレーム数で数える（距離ではない）。距離で数えていた頃は速度を
+        // 上げると寿命まで短くなり、1つの値が速さと寿命の2つの意味を持っていた
+        this.ticks = 0;
 
         // 今伸びている途中の節。segStart が始点、(this.x, this.y) が終点。
         // SEGMENT_FRAMES ごと・反射の瞬間に閉じて segs へ積む
@@ -88,7 +90,7 @@ export class ReflectBeam {
         this.y = next.y;
         this.vx = next.vx;
         this.vy = next.vy;
-        this.distance += REFLECT_BEAM_SPEED;
+        this.ticks++;
         this.segFrames++;
 
         if (this.segFrames >= REFLECT_BEAM_SEGMENT_FRAMES) {
@@ -104,10 +106,10 @@ export class ReflectBeam {
         const outOfMap = map && map.width !== undefined
             && (this.x < 0 || this.x > map.width || this.y < 0 || this.y > map.height);
 
-        // 設計上は「上限に達したら先端を止める」。distance 側の判定が `>=` なのに
+        // 設計上は「上限に達したら先端を止める」。ticks 側の判定が `>=` なのに
         // 揃える（`>` のままだと上限回数を跳ねた後もう1回生き残ってしまい、
         // 実質の反射回数が設計より1回多くなっていた：旧実装の教訓）
-        if (this.bounces >= REFLECT_BEAM_MAX_BOUNCES || this.distance >= REFLECT_BEAM_MAX_DISTANCE || outOfMap) {
+        if (this.bounces >= REFLECT_BEAM_MAX_BOUNCES || this.ticks >= REFLECT_BEAM_MAX_TICKS || outOfMap) {
             // 先端を止める前に、伸びかけの節を今の位置で閉じる。閉じないと
             // その節だけ segs に入らず歳を取らないまま残り続けて消えなくなる
             this._closeSegment(this.x, this.y);

@@ -485,8 +485,18 @@ export const REFLECT_BEAM_SHOT_COUNT = 2;  // 扇の本数ではなく連射数�
 export const REFLECT_BEAM_BURST_DELAY = 24;  // 0.4秒
 
 export const REFLECT_BEAM_WIDTH = 5;            // 母艦レーザーは6
-export const REFLECT_BEAM_MAX_BOUNCES = 4;
-export const REFLECT_BEAM_MAX_DISTANCE = 1200;  // 速度5で240フレーム=4秒
+
+// 実質「制限しない」。地形の隙間に挟まって動けなくなったときの安全弁
+// （反射を繰り返しても抜けられない場合）としては、20回＝20フレームぶん粘って
+// から消えることになるが、上限があること自体は変わらないので破綻はしない
+export const REFLECT_BEAM_MAX_BOUNCES = 20;
+
+// 寿命はフレーム数で決める。以前は距離（進んだpx数）で決めていて、
+// 「速度5なら240フレーム、速度8なら150フレーム」のように**速度を上げると
+// 寿命（生きている時間）まで短くなり、1つの値が2つの意味（速さと寿命）を
+// 持っていた**。ticks なら速度を変えても生きている時間は変わらず、届く距離
+// だけが変わるので、調整するときに値の意味が1つに戻る
+export const REFLECT_BEAM_MAX_TICKS = 240;      // 4秒
 export const REFLECT_BEAM_DAMAGE = 20;          // 敵弾10・ホーミング20。自機HP100で5発
 export const REFLECT_BEAM_MUZZLE_FLASH_FRAMES = 12; // 0.2秒
 // 砲身の先端から広がる光の半径。ビームの根元に隠れない大きさが要る

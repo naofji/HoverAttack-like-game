@@ -4,7 +4,7 @@ import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
 import { makeMap } from './helpers/enemy-world.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
-  REFLECT_BEAM_SPEED, REFLECT_BEAM_MAX_BOUNCES, REFLECT_BEAM_MAX_DISTANCE,
+  REFLECT_BEAM_SPEED, REFLECT_BEAM_MAX_BOUNCES, REFLECT_BEAM_MAX_TICKS,
   REFLECT_BEAM_SEGMENT_FRAMES, REFLECT_BEAM_SEGMENT_LIFE, COLOR_REFLECT_BEAM_CORE,
 } from '../src/js/utils/Constants.js';
 
@@ -38,15 +38,15 @@ test('壁で跳ね返り、反射回数が増える', () => {
   assert.ok(beam.bounces > 0, '一度も跳ね返っていない');
 });
 
-// 「距離を使い切れば消える」テストと対称に、こちらは毎フレーム distance を
-// 0 に戻して距離条件を無効化し、反射回数の分岐だけで消えることを確かめる。
-// そうしないとこの部屋では distance の上限（1200）のほうが先に尽きてしまい、
+// 「ticks を使い切れば消える」テストと対称に、こちらは毎フレーム ticks を
+// 0 に戻して寿命条件を無効化し、反射回数の分岐だけで消えることを確かめる。
+// そうしないとこの部屋では ticks の上限（240）のほうが先に尽きてしまい、
 // bounces の分岐を一度も踏まないままテストが通ってしまう（実際そうだった）
 test('反射回数を使い切ると消える', () => {
   const { beam } = makeBeam({ x: 40, y: 40, angle: 0 });
   let steps = 0;
   while (beam.alive && steps < 5000) {
-    beam.distance = 0;   // 距離の予算を使い切らせない
+    beam.ticks = 0;   // 寿命の予算を使い切らせない
     beam.update();
     steps++;
   }
@@ -55,16 +55,16 @@ test('反射回数を使い切ると消える', () => {
     `反射回数の上限ちょうどで消えていない: ${beam.bounces}`);
 });
 
-test('距離は速度ぶんずつ増える', () => {
+test('ticks は毎フレーム1ずつ増える', () => {
   const { beam } = makeBeam();
   beam.update();
   beam.update();
-  assert.equal(beam.distance, REFLECT_BEAM_SPEED * 2);
+  assert.equal(beam.ticks, 2);
 });
 
-// 「反射回数と距離の、先に尽きた方」で消える。この部屋では反射のほうが先に
-// 尽きるので、距離の上限だけを試すには反射の予算を外して確かめる
-test('反射しなくても距離を使い切れば消える', () => {
+// 「反射回数と ticks の、先に尽きた方」で消える。この部屋では反射のほうが先に
+// 尽きるので、ticks の上限だけを試すには反射の予算を外して確かめる
+test('反射しなくても ticks を使い切れば消える', () => {
   const { beam } = makeBeam();
   let steps = 0;
   while (beam.alive && steps < 5000) {
@@ -72,9 +72,21 @@ test('反射しなくても距離を使い切れば消える', () => {
     beam.update();
     steps++;
   }
-  assert.equal(beam.alive, false, '距離を使い切っても消えていない');
-  assert.ok(beam.distance >= REFLECT_BEAM_MAX_DISTANCE,
-    `距離の上限より手前で消えた: ${beam.distance}`);
+  assert.equal(beam.alive, false, 'ticks を使い切っても消えていない');
+  assert.ok(beam.ticks >= REFLECT_BEAM_MAX_TICKS,
+    `ticks の上限より手前で消えた: ${beam.ticks}`);
+});
+
+// 寿命が ticks（フレーム数）で決まることの本体: 距離で決めていた頃は速度を
+// 上げると寿命（生きている時間）まで短くなり、1つの値が2つの意味を持っていた。
+// vx/vy を直接書き換えて速度だけ変え、ticks の増え方が速度の影響を受けない
+// （＝進んだ距離ではなくフレーム数を数えている）ことを確かめる
+test('寿命は速度に依存しない（ticks は距離ではなくフレーム数）', () => {
+  const { beam } = makeBeam();
+  beam.vx = REFLECT_BEAM_SPEED * 10;   // 速度を大きく変えても
+  beam.vy = 0;
+  for (let i = 0; i < 10; i++) beam.update();
+  assert.equal(beam.ticks, 10, 'ticks が速度の影響を受けている');
 });
 
 // 1節は SEGMENT_FRAMES フレームぶん。速度5・2フレームなので10px

@@ -70,7 +70,7 @@ export function stepBeam(beam, map) {
     const by = y + rvy;
     // 反転しても抜けられない（隙間に挟まった）ときは動かさない。速度は反転
     // したままなので次のフレームで反対側へ抜ける。抜けられないまま回っても、
-    // 反射回数と距離の上限がいずれ尽きて消える
+    // 反射回数と ticks（寿命）の上限がいずれ尽きて消える
     if (map.isSolidAtPixel(bx, by)) {
         return { x, y, vx: rvx, vy: rvy, bounced: true };
     }
