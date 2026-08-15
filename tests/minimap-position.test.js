@@ -5,7 +5,7 @@ import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 import { makeFakeCtx, extractSets, extractFillRectsWithColor } from './helpers/fake-ctx.js';
 import {
     COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT, TILE_SIZE,
-    MINIMAP_ALPHA, MINIMAP_MAX_WIDTH_RATIO,
+    MINIMAP_ALPHA, MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
 } from '../src/js/utils/Constants.js';
 
 const CANVAS_W = 1024;
@@ -150,9 +150,13 @@ test('縮小されたミニマップでも、点の座標がミニマップの�
         `点が縮小後のミニマップ矩形の外にはみ出している: centerY=${centerY}, mmY=${mmY}, destH=${destH}`);
 });
 
-// ⑾ MINIMAP_ALPHA が 0.55 であること、最終的な濃さが3つの積になっていること。
-test('MINIMAP_ALPHA は 0.55', () => {
-    assert.equal(MINIMAP_ALPHA, 0.55);
+// ⑾ 最終的な濃さが3つの積になっていること。MINIMAP_ALPHA の具体値（0.55）は
+// 実機フィードバックで調整され続けている数値なので、ここでは「地形を完全な
+// 不透明にも透明にもしない範囲に収まっている」程度の緩い検証に留める
+// （このリポジトリはバランス調整を低リスクな数値調整で行う方針で、値を
+// 変えるたびにここも直す必要が出るのは調整の摩擦になる）。
+test('MINIMAP_ALPHA は 0 より大きく 1 未満', () => {
+    assert.ok(MINIMAP_ALPHA > 0 && MINIMAP_ALPHA < 1, `MINIMAP_ALPHA が範囲外: ${MINIMAP_ALPHA}`);
 });
 
 test('最終的な濃さは MINIMAP_ALPHA × miniMapAlpha × 遷移フェードの積', () => {
@@ -165,4 +169,103 @@ test('最終的な濃さは MINIMAP_ALPHA × miniMapAlpha × 遷移フェード�
     const expected = MINIMAP_ALPHA * game.miniMapAlpha;
     assert.ok(alphas.some((a) => Math.abs(a - expected) < 0.0001),
         `期待した積の globalAlpha が見つからない: got ${alphas}, expected ${expected}`);
+});
+
+// 点（自機・敵・母艦）も開閉フェードと遷移フェードには乗るが、地形の減光
+// (MINIMAP_ALPHA) は受けない。地形の上に沈める値なので、点にまで掛けると
+// 情報として読みにくくなるため。呼び出し時点の globalAlpha を fillRect ごとに
+// 追跡して確かめる（この確認をせずに ctx.globalAlpha = 1.0 で丸ごとリセットして
+// いたことがあり、その場合は開閉フェードも遷移フェードも点に効かなくなる）。
+function alphaAtEachFillRect(calls) {
+    let alpha = 1;
+    const out = [];
+    for (const c of calls) {
+        if (c.name === 'set:globalAlpha') alpha = c.args[0];
+        else if (c.name === 'fillRect') out.push(alpha);
+    }
+    return out;
+}
+
+test('点（母艦）は開閉フェード(miniMapAlpha)を受ける。地形の MINIMAP_ALPHA は掛からない', () => {
+    const game = makeGame({ carrierPos: { x: 100, y: 100 } });
+    game.miniMapAlpha = 0.4;
+    const calls = draw(game);
+
+    const carrierDotColor = '#0088FF';
+    const dots = extractFillRectsWithColor(calls).filter((r) => r.color === carrierDotColor);
+    assert.ok(dots.length >= 1, 'carrier のドットが描かれていない');
+
+    const alphas = alphaAtEachFillRect(calls);
+    // 色つき fillRect の列と alphas の列は同じ長さ・同じ順序で並ぶので、
+    // carrier 色に対応する alpha を突き合わせる。
+    const colored = extractFillRectsWithColor(calls);
+    const carrierAlphaIdx = colored.findIndex((r) => r.color === carrierDotColor);
+    const carrierAlpha = alphas[carrierAlphaIdx];
+
+    // 期待値は miniMapAlpha * 遷移フェード(初回描画なので1)。MINIMAP_ALPHA(0.55)は含まない。
+    const expected = game.miniMapAlpha * 1;
+    assert.ok(Math.abs(carrierAlpha - expected) < 0.0001,
+        `点の globalAlpha が期待どおりでない（MINIMAP_ALPHA を含んでいるか、フェードが効いていない）: got ${carrierAlpha}, expected ${expected}`);
+    assert.notEqual(carrierAlpha, 1, '点が常にフルオパシティのまま描かれている（開閉フェードが効いていない）');
+});
+
+// 配線側の結合テスト。同じ ScreenRenderer インスタンスで drawMiniMap() を2回以上
+// 呼び、避ける条件（自機の位置）を変えて、隅の切り替えフェードが実際に
+// globalAlpha へ積まれるか・フェード中は旧位置に据え置かれるかを確かめる。
+// これまでのテストは常に新しいインスタンス（＝初回描画で fade=1）だけを見ていたため、
+// フェード中の挙動は purely-functional な advanceMiniMapTransition() のテストでしか
+// 裏付けられていなかった。
+test('隅の切り替え中は、旧位置に据え置かれたまま globalAlpha に遷移フェードが積まれる（点も含めて）', () => {
+    // 「避ける」対象は操作中の機体（自機がいればそれ、いなければ母艦）なので、
+    // 母艦は avoid には使わず、carrierPos は「点が正しく描かれるか」を見るための
+    // ものとして別に置く。自機の位置を画面中央（何も避けない）→左上寄り
+    // （左上を避けて bottomLeft が望ましくなる）と動かして隅の切り替えを起こす。
+    const game = makeGame({
+        playerPos: { x: CANVAS_W / 2, y: CANVAS_H / 2 },
+    });
+    game.carrier = { alive: true, x: 100, y: 100, width: 0, height: 0 };
+    const renderer = new ScreenRenderer(game);
+
+    // 1回目: 自機が画面中央付近にいて何も避けないので左上に置かれ、
+    // 初回描画は fade=1（フェード無し）。
+    const calls1 = (() => {
+        const ctx = makeFakeCtx();
+        renderer.drawMiniMap(ctx);
+        return ctx.calls;
+    })();
+    const drawImage1 = calls1.find((c) => c.name === 'drawImage');
+    const topLeftX = drawImage1.args[1];
+    const topLeftY = drawImage1.args[2];
+    assert.equal(topLeftY, HUD_TOP_HEIGHT + MINIMAP_MARGIN, 'テストの前提が崩れている（1回目が左上ではない）');
+
+    // 2回目: 自機を左上へ動かして、望ましい隅を bottomLeft に変える。
+    // まだフェードアウトの途中（1歩ぶんしか進んでいない）なので、corner は
+    // topLeft のまま・fade は 1 - MINIMAP_FADE_SPEED になっているはず。
+    game.player.x = 5 * TILE_SIZE;
+    game.player.y = 5 * TILE_SIZE;
+    const calls2 = (() => {
+        const ctx = makeFakeCtx();
+        renderer.drawMiniMap(ctx);
+        return ctx.calls;
+    })();
+
+    const drawImage2 = calls2.find((c) => c.name === 'drawImage');
+    assert.equal(drawImage2.args[1], topLeftX, '隅の切り替え中に位置が旧位置(topLeft)から動いてしまっている');
+    assert.equal(drawImage2.args[2], topLeftY, '隅の切り替え中に位置が旧位置(topLeft)から動いてしまっている');
+
+    const expectedFade = 1 - MINIMAP_FADE_SPEED;
+    const alphas2 = extractSets(calls2, 'globalAlpha');
+    const expectedTerrainAlpha = MINIMAP_ALPHA * game.miniMapAlpha * expectedFade;
+    assert.ok(alphas2.some((a) => Math.abs(a - expectedTerrainAlpha) < 0.0001),
+        `地形の globalAlpha に遷移フェードが積まれていない: got ${alphas2}, expected ${expectedTerrainAlpha}`);
+
+    // 点（母艦）も同じ遷移フェードを受けているはず（MINIMAP_ALPHA は含まない）。
+    const alphasAtDots2 = alphaAtEachFillRect(calls2);
+    const colored2 = extractFillRectsWithColor(calls2);
+    const carrierAlphaIdx2 = colored2.findIndex((r) => r.color === '#0088FF');
+    const carrierAlpha2 = alphasAtDots2[carrierAlphaIdx2];
+    const expectedDotAlpha = game.miniMapAlpha * expectedFade;
+    assert.ok(Math.abs(carrierAlpha2 - expectedDotAlpha) < 0.0001,
+        `点の globalAlpha に遷移フェードが積まれていない: got ${carrierAlpha2}, expected ${expectedDotAlpha}`);
+    assert.notEqual(carrierAlpha2, 1, '点が隅の切り替え中もフルオパシティのままになっている');
 });

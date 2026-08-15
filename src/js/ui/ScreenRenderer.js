@@ -7,7 +7,7 @@ import {
     COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
 } from '../utils/Constants.js';
-import { pickMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
+import { pickCornerFromPositions, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
 import { crosshairScreenPos } from './Crosshair.js';
 import { RepairKit } from '../entities/RepairKit.js';
@@ -1021,9 +1021,12 @@ export class ScreenRenderer {
         const destW = mm.width * shrink;
         const destH = mm.height * shrink;
 
-        // pickMiniMapCorner に渡す mapW/mapH は「実際に見える大きさ」＝縮小後の値に
-        // すること。ここを元サイズのままにすると、置き場所の当たり判定が見た目とずれる。
-        const desired = pickMiniMapCorner({
+        // 四隅の座標は先に1回だけ求めて、避ける隅を選ぶのにも実際に描く座標を
+        // 引くのにも使い回す（以前は pickMiniMapCorner の内部と、直後の座標取得とで
+        // 同じ引数の miniMapCornerPositions を2回呼んでいた）。
+        // mapW/mapH には「実際に見える大きさ」＝縮小後の値を渡すこと。ここを
+        // 元サイズのままにすると、置き場所の当たり判定が見た目とずれる。
+        const positions = miniMapCornerPositions({
             canvasW: w,
             canvasH: h,
             mapW: destW,
@@ -1031,9 +1034,8 @@ export class ScreenRenderer {
             margin: MINIMAP_MARGIN,
             hudTop: HUD_TOP_HEIGHT,
             hudBottom: HUD_BOTTOM_HEIGHT,
-            avoid,
-            padding: MINIMAP_AVOID_PADDING,
         });
+        const desired = pickCornerFromPositions(positions, destW, destH, avoid, MINIMAP_AVOID_PADDING);
 
         // 隅の切り替えをフェードでつなぐ。初回描画（このインスタンスでまだ何も
         // 選んでいない）は、望ましい隅をそのまま完全に見える状態で採用する
@@ -1045,15 +1047,6 @@ export class ScreenRenderer {
             this.miniMapTransition = advanceMiniMapTransition(this.miniMapTransition, desired.corner, MINIMAP_FADE_SPEED);
         }
 
-        const positions = miniMapCornerPositions({
-            canvasW: w,
-            canvasH: h,
-            mapW: destW,
-            mapH: destH,
-            margin: MINIMAP_MARGIN,
-            hudTop: HUD_TOP_HEIGHT,
-            hudBottom: HUD_BOTTOM_HEIGHT,
-        });
         const { x: mmX, y: mmY } = positions[this.miniMapTransition.corner];
 
         const alpha = game.miniMapAlpha || 0;
@@ -1071,7 +1064,13 @@ export class ScreenRenderer {
         ctx.lineWidth = 2;
         ctx.strokeRect(mmX, mmY, destW, destH);
 
-        ctx.globalAlpha = 1.0;
+        // 点（自機・敵・母艦）は地形と別に、開閉フェードと隅の切り替えフェードだけを
+        // 掛け直す。MINIMAP_ALPHA（地形を背景に沈めるための値）は点には掛けない。
+        // 点は「今どこにいるか」を読むための情報であって背景ではないので、地形と
+        // 同じだけ薄めると一番目を引くはずの自機・敵の位置が読みにくくなる。
+        // 掛け直さず 1.0 に固定していた版は、隅の切り替え中に点だけフルオパシティの
+        // まま瞬間移動して見える不具合になっていた。
+        ctx.globalAlpha = alpha * this.miniMapTransition.fade;
 
         // Helper to draw a dot。点は miniMapScale だけでなく縮小率(shrink)にも
         // 追随させる必要がある。ここを忘れると、地形は縮むのに点だけ元の位置に
