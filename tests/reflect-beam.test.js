@@ -77,7 +77,7 @@ test('反射しなくても距離を使い切れば消える', () => {
     `距離の上限より手前で消えた: ${beam.distance}`);
 });
 
-// 1節は SEGMENT_FRAMES フレームぶん。速度5・2フレームなので10px
+// 1節は SEGMENT_FRAMES フレームぶん。速度4・2フレームなので8px
 test('節は SEGMENT_FRAMES ごとに増える', () => {
   const { beam } = makeBeam();
   for (let i = 0; i < REFLECT_BEAM_SEGMENT_FRAMES * 3; i++) beam.update();
