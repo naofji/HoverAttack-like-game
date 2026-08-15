@@ -47,7 +47,9 @@ const BEAM_LAMP_BACK_RADIUS = 7;
 // 薄く、中間で濃くする。0まで下げると「消えている」瞬間ができて明滅に戻ってしまうため、
 // 下限は0にしない
 const BEAM_LAMP_RING_ALPHA_MIN = 0.1;
-const BEAM_LAMP_RING_ALPHA_MAX = 0.85;
+// 0.85→0.6。輪を砲台の下に回して形は隠れなくなったが、機体の外へはみ出す弧が
+// 濃いままだと今度は地形の上で目立ちすぎる。脈が読める下限として 0.6 を選んだ
+const BEAM_LAMP_RING_ALPHA_MAX = 0.6;
 
 // 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
 // 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
@@ -359,11 +361,14 @@ export class EnemyTurret {
      *
      * - 色: 充填の進み具合（`_beamChargeProgress()`）で暗紫→明るい紫を
      *   `lerpColor()` で補間する（自前で色を混ぜない。既存の共通機構を使う）
-     * - 座: ランプ本体・輪を描く**前**に、COLOR_BEAM_CANNON_LAMP_BACK（ほぼ黒の紫）の
+     * - 座: ランプ本体を描く**前**に、COLOR_BEAM_CANNON_LAMP_BACK（ほぼ黒の紫）の
      *   円を敷く。COLOR_BEAM_CANNON_BASE/_PIVOT が明るい灰色のため、紫を直接その
      *   上に乗せてもコントラストが出ない（実機で「機体の白と重なってインパクトが
      *   弱め」と指摘された）。半径はピボットの円(半径8)を超えない範囲で、
-     *   ランプ本体・輪(最大半径6)より一回り大きい BEAM_LAMP_BACK_RADIUS(7) にした
+     *   ランプ本体より一回り大きい BEAM_LAMP_BACK_RADIUS(7) にした
+     *
+     * **輪はこのメソッドでは描かない。** 砲台の実体より先に描く必要があるので
+     * `_drawChargeRings()` に分けてあり、draw() の先頭から呼んでいる。
      * - 本体: 中心の小さな塗りつぶし円（BEAM_LAMP_CORE_RADIUS）。輪と違って
      *   縮まない、常にそこにある「ランプそのもの」
      * - 脈: 輪を BEAM_LAMP_RINGS 本、位相をずらして重ねる。「経過フレーム数」は
@@ -376,11 +381,10 @@ export class EnemyTurret {
      * - 輪の軌道: 当初はランプの内側（半径6px）だけで動かしていたが、それだと
      *   動く距離が短すぎて「波が中心へ寄る」と読めず、ただの明滅にしか見えない
      *   と実機で指摘された。砲台の胴体（ピボット半径8、機体24×24）にこれ以上の
-     *   余地が無いため、**輪を砲台の外側へ出し**、BEAM_LAMP_RING_OUTER(22)から
-     *   BEAM_LAMP_RING_INNER(9) まで収束させることで距離を稼いだ。
-     *   これにより輪は機体の外まで描かれ、床/天井に付いた砲台では地形の上に
-     *   重なって描かれるが、エネルギーが機体に集まっている表現として成立する
-     *   ことと、砲台の内側だけでは距離が足りず脈動が読めないことから許容する。
+     *   余地が無いため、**輪を砲台の外側へ出し**、BEAM_LAMP_RING_OUTER から
+     *   BEAM_LAMP_RING_INNER まで収束させることで距離を稼いだ。
+     *   その代償として輪が形の上に重なり「カタチが見えにくい」と再度指摘された
+     *   ので、**輪を砲台より先に描く**ことで解いた（`_drawChargeRings()`）。
      *   軌道の両端（外周に現れた瞬間・中心の縁に着いた瞬間）で濃さを
      *   BEAM_LAMP_RING_ALPHA_MIN まで落とし、中間で BEAM_LAMP_RING_ALPHA_MAX まで
      *   上げる。輪が唐突に湧いて消えるように見えないための、Windows の
@@ -389,13 +393,9 @@ export class EnemyTurret {
      *   「そろそろ撃つ」が読めるのが狙い（冷却時間を無くした代わりの手がかり）
      */
     _drawChargeLamp(ctx) {
-        const progress = this._beamChargeProgress();
-        const { dim, bright } = this.spec.lampColors;
-        const color = lerpColor(dim, bright, progress);
-        const cycle = BEAM_LAMP_CYCLE_SLOW + (BEAM_LAMP_CYCLE_FAST - BEAM_LAMP_CYCLE_SLOW) * progress;
-        const elapsed = Math.max(0, (this.chargeTotal || 1) - this.cooldownTimer);
+        const color = this._chargeLampColor();
 
-        // 座（ランプ本体・輪より先に描く。後だと座が上に乗って隠してしまう）
+        // 座（ランプ本体より先に描く。後だと座が上に乗って隠してしまう）
         ctx.fillStyle = COLOR_BEAM_CANNON_LAMP_BACK;
         ctx.beginPath();
         ctx.arc(0, 0, BEAM_LAMP_BACK_RADIUS, 0, Math.PI * 2);
@@ -406,11 +406,34 @@ export class EnemyTurret {
         ctx.beginPath();
         ctx.arc(0, 0, BEAM_LAMP_CORE_RADIUS, 0, Math.PI * 2);
         ctx.fill();
+    }
 
-        // 脈動の輪（輪郭線）。砲台の外側(BEAM_LAMP_RING_OUTER)から胴体の縁の
-        // すぐ外(BEAM_LAMP_RING_INNER)まで収束させる。ランプの中(半径6px)では
-        // 距離が短すぎて明滅にしか見えなかったため、砲台の外へ出した（クラス
-        // 冒頭のコメント参照）
+    /** 充填の進み具合を表すランプの色（暗紫→明るい紫）。輪と本体で同じ色を使う。 */
+    _chargeLampColor() {
+        const { dim, bright } = this.spec.lampColors;
+        return lerpColor(dim, bright, this._beamChargeProgress());
+    }
+
+    /**
+     * 脈動の輪だけを描く。**砲台の実体を1つも描かないうちに呼ぶこと。**
+     *
+     * 輪を最後に描いていた頃は、輪が台座・砲身・フィン・ピボットの上に重なって
+     * 「砲台のカタチが見えにくい」と実機で指摘された（3回目のフィードバック）。
+     * 半径を詰めるだけでは輪が形を横切ること自体は残るので、**描画順で解いた**。
+     * 先に描けば輪は機体のシルエットに隠れ、外へはみ出した弧だけが見える＝
+     * 「外から機体に吸い込まれていく光」になり、形は原理的に隠れない。
+     *
+     * 同心円なので ctx.rotate() の前に描いても見た目は変わらない。
+     */
+    _drawChargeRings(ctx) {
+        const color = this._chargeLampColor();
+        const progress = this._beamChargeProgress();
+        const cycle = BEAM_LAMP_CYCLE_SLOW + (BEAM_LAMP_CYCLE_FAST - BEAM_LAMP_CYCLE_SLOW) * progress;
+        const elapsed = Math.max(0, (this.chargeTotal || 1) - this.cooldownTimer);
+
+        // 脈動の輪（輪郭線）。BEAM_LAMP_RING_OUTER から BEAM_LAMP_RING_INNER まで
+        // 収束させる。ランプの中(半径6px)では距離が短すぎて明滅にしか見えなかった
+        // ため、機体の縁の外から始める（クラス冒頭のコメント参照）
         ctx.strokeStyle = color;
         ctx.lineWidth = BEAM_LAMP_RING_LINE_WIDTH;
         const ringSpan = BEAM_LAMP_RING_OUTER - BEAM_LAMP_RING_INNER;
@@ -442,6 +465,13 @@ export class EnemyTurret {
         ctx.translate(cx, cy);
 
         const colors = this.spec.colors;
+
+        // 充填の脈動の輪は**砲台の実体より先に**描く。後に描くと形の上に重なって
+        // 「カタチが見えにくい」（実機フィードバック3回目）。_drawChargeRings() の
+        // コメント参照
+        if (this.spec.lampColors) {
+            this._drawChargeRings(ctx);
+        }
 
         // --- Draw Base ---
         ctx.fillStyle = colors.base;

@@ -867,3 +867,76 @@ test('2発目のブレは REFLECT_BEAM_SECOND_SHOT_JITTER の範囲に収まる'
     );
   }
 });
+
+// ============================================
+// 実機フィードバック(3回目): 輪が砲台の形を隠している
+// ============================================
+//
+// 「充填リングが大きすぎて反射ビーム砲台のカタチが見えにくくなっている」への
+// 対応。大きさ以前に**描画順**が原因だった（輪は砲台の全パーツを描いた後に
+// 描かれていたので、常に形の上に乗っていた）。輪を draw() の先頭へ回し、
+// 台座・砲身・フィン・エミッタ・ピボットのすべてに隠れるようにする。
+// 機体の外へはみ出した弧だけが見える＝「外から機体に吸い込まれる光」になる。
+//
+// 順序そのものが仕様なので、順序で検証する。
+
+/** 輪(stroke されていて fill を伴わない原点の円)の stroke() が ctx.calls の何番目かを返す。 */
+function ringStrokeIndices(calls) {
+  const out = [];
+  let current = null;
+  for (let i = 0; i < calls.length; i++) {
+    const c = calls[i];
+    if (c.name === 'beginPath') {
+      current = { hasOriginArc: false, fill: false };
+    } else if (current && c.name === 'arc') {
+      if (c.args[0] === 0 && c.args[1] === 0 && c.args[2] > 0) current.hasOriginArc = true;
+    } else if (current && c.name === 'fill') {
+      current.fill = true;
+    } else if (current && c.name === 'stroke') {
+      if (current.hasOriginArc && !current.fill) out.push(i);
+    }
+  }
+  return out;
+}
+
+test('脈動の輪は砲台の本体より先に描かれる（形の上に重ならない）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+  t.cooldownTimer = 100; // 輪が3本とも出ている状態
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const rings = ringStrokeIndices(ctx.calls);
+  assert.equal(rings.length, 3, '輪が3本描かれていない（抽出に失敗している可能性）');
+
+  // 砲台の実体で最初に描かれるのは台座の塗り。輪がそれより後にあると、
+  // 輪が機体の上に乗って形を隠す
+  const firstBodyFill = ctx.calls.findIndex((c) => c.name === 'fillRect');
+  assert.ok(firstBodyFill >= 0, '砲台の本体が fillRect で描かれていない');
+  assert.ok(
+    Math.max(...rings) < firstBodyFill,
+    `輪が砲台の本体より後に描かれている（輪の最後=${Math.max(...rings)}, 本体の最初=${firstBodyFill}）`,
+  );
+});
+
+test('ランプ本体と座は砲台の本体より後に描かれる（ピボットに隠れない）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+  t.cooldownTimer = 100;
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  // 座は COLOR_BEAM_CANNON_LAMP_BACK の塗り。これがピボット(半径8)より後に
+  // 来ていないと、ランプがピボットの下に潜って見えなくなる
+  const backIdx = ctx.calls.findIndex(
+    (c) => c.name === 'set:fillStyle' && c.args[0] === COLOR_BEAM_CANNON_LAMP_BACK,
+  );
+  const lastBodyFill = ctx.calls.reduce((acc, c, i) => (c.name === 'fillRect' ? i : acc), -1);
+  assert.ok(backIdx >= 0, 'ランプの座が描かれていない');
+  assert.ok(
+    backIdx > lastBodyFill,
+    `ランプの座が砲台の本体より先に描かれている（座=${backIdx}, 本体の最後=${lastBodyFill}）`,
+  );
+});
