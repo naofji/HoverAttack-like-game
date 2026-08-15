@@ -8,6 +8,55 @@ import {
 } from '../utils/Constants.js';
 import { UI } from './theme.js';
 
+/**
+ * クロスヘアが実際に描かれるスクリーン座標（クランプ後）を返す。
+ *
+ * ミニマップの置き場所選びで「クロスヘアを避ける」ために、Crosshair.draw() の
+ * 3分岐（オートエイム中／ロック中／マウス）＋ HUD 帯クランプと同じ計算が要る。
+ * 計算を二重に持つと、避ける位置と実際に描かれる位置がずれてしまい
+ * （どちらかを直し忘れると再び食い違う）、切り出して両方から呼ぶ形にした。
+ *
+ * @param {object} game
+ * @returns {{x:number, y:number, clampedLeft:boolean, clampedRight:boolean, clampedUp:boolean, clampedDown:boolean}}
+ */
+export function crosshairScreenPos(game) {
+    const input = game.input;
+    const camera = game.camera;
+    const autoAimTarget = game.autoAimTarget;
+
+    let mx, my;
+    if (autoAimTarget) {
+        // オートエイムスナップ中: 敵のスクリーン座標に表示
+        mx = autoAimTarget.x - camera.x;
+        my = autoAimTarget.y - camera.y;
+    } else if (input.crosshairLocked) {
+        mx = input.lockedWorldX - camera.x;
+        my = input.lockedWorldY - camera.y;
+    } else {
+        mx = input.mouse.x;
+        my = input.mouse.y;
+    }
+
+    // クランプ範囲
+    const minX = 0;
+    const maxX = game.canvas.width;
+    const minY = HUD_TOP_HEIGHT;
+    const maxY = game.canvas.height - HUD_BOTTOM_HEIGHT;
+
+    // クランプされた方向を記録してから補正
+    const clampedLeft  = mx < minX;
+    const clampedRight = mx > maxX;
+    const clampedUp    = my < minY;
+    const clampedDown  = my > maxY;
+
+    if (clampedLeft)  mx = minX;
+    if (clampedRight) mx = maxX;
+    if (clampedUp)    my = minY;
+    if (clampedDown)  my = maxY;
+
+    return { x: mx, y: my, clampedLeft, clampedRight, clampedUp, clampedDown };
+}
+
 export class Crosshair {
     constructor(game) {
         this.game = game;
@@ -15,42 +64,13 @@ export class Crosshair {
 
     draw(ctx) {
         const input = this.game.input;
-        const camera = this.game.camera;
-        const autoAimTarget = this.game.autoAimTarget;
         const player = this.game.player;
         // 解除中は「効いていない」ので、赤い照準にも AUTO ラベルにもしない
         const autoAimPaused = !!(player && player.autoAimPaused && player.autoAimTimer > 0);
         const autoAimActive = !!(player && player.autoAimTimer > 0) && !autoAimPaused;
+        const autoAimTarget = this.game.autoAimTarget;
 
-        let mx, my;
-        if (autoAimTarget) {
-            // オートエイムスナップ中: 敵のスクリーン座標に表示
-            mx = autoAimTarget.x - camera.x;
-            my = autoAimTarget.y - camera.y;
-        } else if (input.crosshairLocked) {
-            mx = input.lockedWorldX - camera.x;
-            my = input.lockedWorldY - camera.y;
-        } else {
-            mx = input.mouse.x;
-            my = input.mouse.y;
-        }
-
-        // クランプ範囲
-        const minX = 0;
-        const maxX = this.game.canvas.width;
-        const minY = HUD_TOP_HEIGHT;
-        const maxY = this.game.canvas.height - HUD_BOTTOM_HEIGHT;
-
-        // クランプされた方向を記録してから補正
-        const clampedLeft  = mx < minX;
-        const clampedRight = mx > maxX;
-        const clampedUp    = my < minY;
-        const clampedDown  = my > maxY;
-
-        if (clampedLeft)  mx = minX;
-        if (clampedRight) mx = maxX;
-        if (clampedUp)    my = minY;
-        if (clampedDown)  my = maxY;
+        const { x: mx, y: my, clampedLeft, clampedRight, clampedUp, clampedDown } = crosshairScreenPos(this.game);
 
         const size = 12;
         const gap = 3;

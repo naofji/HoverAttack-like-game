@@ -2,7 +2,12 @@
 // Screen Renderer - Title, Game Over, Mission Clear, MiniMap
 // ============================================
 
-import { TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA } from '../utils/Constants.js';
+import {
+    TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
+    COLOR_MINIMAP_BORDER, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
+} from '../utils/Constants.js';
+import { pickMiniMapCorner } from './minimapPlacement.js';
+import { crosshairScreenPos } from './Crosshair.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
@@ -995,9 +1000,29 @@ export class ScreenRenderer {
 
         if (!mm) return;
 
-        // Center of the screen
-        const mmX = (w - mm.width) / 2;
-        const mmY = (h - mm.height) / 2;
+        // 表示位置は「操作している側」（ドッキング中でなければ自機、そうでなければ母艦）と
+        // クロスヘアを避けて、左上＞左下＞右上＞右下の順で選ぶ。
+        // どちらを操作中かで避けるべき対象が変わるため、両方は見ずに操作している方だけを見る。
+        const avoid = [];
+        if (game.player && game.player.alive && !game.player.docked) {
+            avoid.push({ x: game.player.x + game.player.width / 2 - game.camera.x, y: game.player.y + game.player.height / 2 - game.camera.y });
+        } else if (game.carrier && game.carrier.alive) {
+            avoid.push({ x: game.carrier.x + game.carrier.width / 2 - game.camera.x, y: game.carrier.y + game.carrier.height / 2 - game.camera.y });
+        }
+        // クロスヘアは「実際に描かれる位置」と一致させる必要があるため、Crosshair.draw() と
+        // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
+        avoid.push(crosshairScreenPos(game));
+
+        const { x: mmX, y: mmY } = pickMiniMapCorner({
+            canvasW: w,
+            canvasH: h,
+            mapW: mm.width,
+            mapH: mm.height,
+            margin: MINIMAP_MARGIN,
+            hudTop: HUD_TOP_HEIGHT,
+            hudBottom: HUD_BOTTOM_HEIGHT,
+            avoid,
+        });
         const alpha = game.miniMapAlpha || 0;
 
         ctx.save();
@@ -1007,7 +1032,7 @@ export class ScreenRenderer {
         ctx.drawImage(mm, mmX, mmY);
 
         // Draw border
-        ctx.strokeStyle = '#FFFFFF';
+        ctx.strokeStyle = COLOR_MINIMAP_BORDER;
         ctx.lineWidth = 2;
         ctx.strokeRect(mmX, mmY, mm.width, mm.height);
 

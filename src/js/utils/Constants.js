@@ -596,6 +596,11 @@ export const COLOR_CAVE_BG = '#1a0a00';
 export const MINIMAP_SATURATION = 0.55;   // 彩度を落として背景に沈める
 export const MINIMAP_BRIGHTNESS = 0.65;   // 明度も落とす。前景の自機・敵の点を目立たせるため
 export const MINIMAP_ALPHA = 0.85;        // ミニマップ全体の不透明度 (開いたときの半透明さ)
+// 白だと目立ちすぎて中身より枠が主張する。地形（暗い）と点（明るい）の
+// 中間の明度にして、輪郭は分かるが主役にならない濃さにする
+export const COLOR_MINIMAP_BORDER = '#888888';
+// 画面四隅から置き場所を選ぶときの、画面端／HUD帯からの余白
+export const MINIMAP_MARGIN = 16;
 
 // --- Far cave backdrop (parallax) ---
 // 遠景がカメラに追従する割合。0 = 完全固定、1 = 前景と等速。
