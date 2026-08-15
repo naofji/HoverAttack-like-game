@@ -514,6 +514,16 @@ export const COLOR_REFLECT_BEAM_CORE = '#F2E6FF';
 export const COLOR_REFLECT_BEAM_MID = '#B266FF';
 export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
 
+// 被弾スパーク。「レーザーに当たったときの反応が地味で判りづらい」という
+// 実機フィードバックへの対応。ビーム本体と同じ色域にして、何に当たったのかが
+// 一目で分かるようにする（通常被弾の黄色系スパークと取り違えないため）
+export const BEAM_SPARK_COLORS = ['#F2E6FF', '#C77DFF', '#B266FF'];
+// 通常のスパークは3〜5個。倍以上にしないと「走った」感じが出なかった
+export const BEAM_SPARK_COUNT = 14;
+export const BEAM_SPARK_SPEED_MIN = 2.0;   // 通常1.5。勢いよく弾けさせる
+export const BEAM_SPARK_SPEED_MAX = 5.0;   // 通常4.0
+export const BEAM_SPARK_LIFETIME = 18;     // 通常10〜19の上側に寄せて尾を長く見せる
+
 // タレットの半分を差し替える反射ビームキャノン本体（EnemyTurret の beam 型）
 export const REFLECT_BEAM_CANNON_HP = 40;        // タレット30より硬い（自機ミサイル3発）
 export const REFLECT_BEAM_CANNON_SCORE = 350;    // タレット200より高い

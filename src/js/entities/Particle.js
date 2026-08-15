@@ -285,21 +285,45 @@ export function createExplosion(x, y, count, opts = {}) {
 // --------------------------------------------
 const SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500'];
 
-export function createSparks(x, y) {
+/**
+ * ダメージのスパーク。
+ *
+ * opts は反射ビームの被弾演出（紫・全方向・数多め）のために後から足した。
+ * **既定値は従来の見た目そのまま**にしてあり、引数なしの既存の呼び出し
+ * （game.spawnSparks 経由が全部これ）は挙動が変わらない。
+ *
+ * @param {object} [opts]
+ * @param {string[]} [opts.colors] 色の候補
+ * @param {number} [opts.count] 個数（省略時は3〜5のランダム）
+ * @param {boolean} [opts.radial] true なら全方向へ。既定は従来どおり上向きに扇状
+ * @param {number} [opts.speedMin]
+ * @param {number} [opts.speedMax]
+ * @param {number} [opts.lifetime] 省略時は10〜19のランダム
+ */
+export function createSparks(x, y, opts = {}) {
+    const {
+        colors = SPARK_COLORS,
+        count = 3 + Math.floor(Math.random() * 3), // 3 to 5 sparks
+        radial = false,
+        speedMin = 1.5,
+        speedMax = 4.0,
+        lifetime = null,
+    } = opts;
     const particles = [];
-    const count = 3 + Math.floor(Math.random() * 3); // 3 to 5 sparks
 
     for (let i = 0; i < count; i++) {
-        // Upwards spread
-        const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
-        const speed = 1.5 + Math.random() * 2.5;
+        // 上向きの扇（従来）か、被弾点から全方向へ弾ける形か
+        const angle = radial
+            ? Math.random() * Math.PI * 2
+            : -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+        const speed = speedMin + Math.random() * (speedMax - speedMin);
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
-        const color = SPARK_COLORS[Math.floor(Math.random() * SPARK_COLORS.length)];
+        const color = colors[Math.floor(Math.random() * colors.length)];
         const size = 2;
-        const lifetime = 10 + Math.floor(Math.random() * 10);
+        const life = lifetime ?? 10 + Math.floor(Math.random() * 10);
 
-        particles.push(new Particle(x, y, vx, vy, color, size, lifetime));
+        particles.push(new Particle(x, y, vx, vy, color, size, life));
     }
 
     return particles;

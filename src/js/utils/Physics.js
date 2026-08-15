@@ -211,3 +211,25 @@ export function segmentIntersectsRect(x1, y1, x2, y2, rect) {
         && clip(-dy, y1 - top)
         && clip(dy, bottom - y1);
 }
+
+/**
+ * 線分上で、点 (px, py) にいちばん近い場所を返す。
+ *
+ * 反射ビームの被弾点を出すのに使う。帯（節の集まり）のどこで当たったかは
+ * segmentIntersectsRect が真偽しか返さないので、当たった節に対して
+ * 「対象の中心にいちばん近い点」を取る。節が矩形を貫いていれば、その点は
+ * 必ず矩形の内側に入る（＝見た目どおりの位置に火花が出る）。
+ *
+ * 重なりの中点を出す方法（Liang–Barsky の t0/t1 を返す）も試したが、
+ * 対象の縁をかすめる節では中点が縁に寄りすぎて火花が体から外れて見えた。
+ * 中心へ寄せるこちらのほうが素直だった。
+ */
+export function closestPointOnSegment(x1, y1, x2, y2, px, py) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return { x: x1, y: y1 };  // 長さ0の節（撃った直後）
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    return { x: x1 + dx * t, y: y1 + dy * t };
+}
