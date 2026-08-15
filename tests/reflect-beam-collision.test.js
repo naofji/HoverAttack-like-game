@@ -6,7 +6,7 @@ import { makeMap } from './helpers/enemy-world.js';
 import {
   REFLECT_BEAM_DAMAGE, BEAM_SPARK_COLORS, BEAM_SPARK_COUNT,
   BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
-  BEAM_SPARK_SIZE,
+  BEAM_SPARK_SIZE, COLOR_BEAM_SPARK_FADE,
   IMPACT_FLASH_RADIUS,
 } from '../src/js/utils/Constants.js';
 import { createSparks, ImpactFlash } from '../src/js/entities/Particle.js';
@@ -276,4 +276,82 @@ test('反射ビームの被弾で beamHit の音が鳴る', () => {
     Math.hypot(hits[0].x - cx, hits[0].y - cy) < 16,
     `音の座標が被弾点から離れている: (${hits[0].x}, ${hits[0].y})`,
   );
+});
+
+// ============================================
+// 実機フィードバック(4回目): 粒を大きく、拡がるにつれて紫へ
+// ============================================
+//
+// 「パーティクルをもう少し大きめに。拡がるにつれて紫色になっていくように」。
+// 出た瞬間は白く熱く、離れるにつれて冷めてビームの紫に落ちる、という見立て。
+// 時間で色を変えるので Particle に fadeTo を足した（既定は null ＝ 従来どおり
+// 単色。既存のあらゆる粒の見た目は変わらない）。
+
+/**
+ * その粒がそのフレームに使った塗り色。**小文字に揃える**：色を移す実装は
+ * lerpColor() を通るので '#fbf0ff' と小文字で返るが、定数側は '#FBF0FF' と
+ * 大文字で書いてある。canvas 上は同じ色なので、比較のためだけに正規化する
+ */
+function drawnColor(particle) {
+  const ctx = makeFakeCtx();
+  particle.draw(ctx);
+  const set = ctx.calls.filter((c) => c.name === 'set:fillStyle');
+  return set.length > 0 ? String(set[set.length - 1].args[0]).toLowerCase() : null;
+}
+
+/** 2つの #rrggbb の、チャンネルごとの差の最大値。 */
+function channelDistance(a, b) {
+  const parse = (h) => [1, 3, 5].map((i) => parseInt(String(h).replace('#', '').slice(i - 1, i + 1), 16));
+  const pa = parse(a);
+  const pb = parse(b);
+  return Math.max(...pa.map((v, i) => Math.abs(v - pb[i])));
+}
+
+test('被弾スパークは出た瞬間は指定の色、寿命の終わりには紫に寄る', () => {
+  const { game } = hitOnce();
+  const sparks = game.particles.filter((p) => !(p instanceof ImpactFlash));
+  assert.ok(sparks.length > 0, 'スパークが出ていない');
+
+  const p = sparks[0];
+  assert.equal(drawnColor(p), p.color.toLowerCase(), '出た瞬間の色が BEAM_SPARK_COLORS のものではない');
+
+  // 寿命の終わり際まで進める
+  while (p.lifetime > 1) p.update();
+  const late = drawnColor(p);
+  assert.notEqual(late, p.color.toLowerCase(), '時間が経っても色が変わっていない');
+  // 「完全に一致」では縛れない：粒は lifetime が 0 になる前のフレームで最後に
+  // 描かれるので、色の進みは 1 ではなく (1 - 1/寿命) までしか行かない。
+  // 見たいのは「終わりには紫と言える近さにある」ことなので距離で判定する
+  const dist = channelDistance(late, COLOR_BEAM_SPARK_FADE);
+  assert.ok(
+    dist <= 12,
+    `終わりの色が紫(${COLOR_BEAM_SPARK_FADE})から遠い: ${late}（各チャンネル最大差 ${dist}）`,
+  );
+  assert.ok(
+    dist < channelDistance(late, p.color),
+    `終わりの色が始点(${p.color})より紫に近くない: ${late}`,
+  );
+});
+
+// 「紫になっていく」は途中の段階が要る。始点と終点だけ切り替わるのでは
+// 「拡がるにつれて」にならない
+test('被弾スパークの色は途中で中間色を通る（切り替わりではなく移り変わり）', () => {
+  const { game } = hitOnce();
+  const p = game.particles.filter((s) => !(s instanceof ImpactFlash))[0];
+
+  const seen = new Set();
+  while (p.lifetime > 1) {
+    seen.add(drawnColor(p));
+    p.update();
+  }
+  assert.ok(seen.size > 3, `色が段階的に変わっていない（${seen.size}色しか通っていない）`);
+});
+
+// fadeTo を足したことで既存の粒（爆発・通常の被弾）が変わっていないこと
+test('fadeTo を渡さない粒は最後まで同じ色のまま', () => {
+  const sparks = createSparks(10, 20);
+  const p = sparks[0];
+  const first = drawnColor(p);
+  while (p.lifetime > 1) p.update();
+  assert.equal(drawnColor(p), first, '色を指定していない粒の色が変わっている');
 });

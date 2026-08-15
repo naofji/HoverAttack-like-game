@@ -8,6 +8,7 @@ import {
     IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS,
     DEATH_FLASH_COUNT, DEATH_FLASH_STAGGER,
 } from '../utils/Constants.js';
+import { lerpColor } from '../utils/color.js';
 
 /**
  * 本物のパーツ破片を撒く6機体（Player / Carrier / Drone / Tank / Turret / Attacker）が
@@ -37,12 +38,19 @@ export const CARRIER_EXPLOSION_OPTS = {
 // Explosion Particle
 // --------------------------------------------
 export class Particle {
-    constructor(x, y, vx, vy, color, size, lifetime) {
+    /**
+     * @param {string} color 出た瞬間の色
+     * @param {string|null} [fadeTo] 寿命の終わりに寄っていく色。
+     *   反射ビームの被弾（白く出て紫に冷める）のために後から足した。
+     *   **省略すると従来どおり最後まで単色**で、既存の粒は見た目が変わらない
+     */
+    constructor(x, y, vx, vy, color, size, lifetime, fadeTo = null) {
         this.x = x;
         this.y = y;
         this.vx = vx;
         this.vy = vy;
         this.color = color;
+        this.fadeTo = fadeTo;
         this.size = size;
         this.maxLifetime = lifetime || PARTICLE_LIFETIME;
         this.lifetime = this.maxLifetime;
@@ -69,7 +77,12 @@ export class Particle {
         const s = this.size * (0.5 + 0.5 * alpha);
 
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = this.color;
+        // fadeTo があれば経過に応じて色を移す。「拡がるにつれて紫になる」を
+        // 位置ではなく時間で作っているのは、粒の速度がばらばらでも同じ見え方に
+        // なるため（距離で決めると速い粒だけ先に紫になり、群れとして揃わない）
+        ctx.fillStyle = this.fadeTo
+            ? lerpColor(this.color, this.fadeTo, 1 - alpha)
+            : this.color;
         ctx.fillRect(this.x - s / 2, this.y - s / 2, s, s);
         ctx.globalAlpha = 1.0;
     }
@@ -306,6 +319,7 @@ const SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500'];
  * @param {number} [opts.speedMax]
  * @param {number} [opts.lifetime] 省略時は10〜19のランダム
  * @param {number} [opts.size] 粒の一辺。省略時は従来どおり2
+ * @param {string} [opts.fadeTo] 寿命の終わりに寄っていく色。省略時は単色のまま
  */
 export function createSparks(x, y, opts = {}) {
     const {
@@ -316,6 +330,7 @@ export function createSparks(x, y, opts = {}) {
         speedMax = 4.0,
         lifetime = null,
         size = 2,
+        fadeTo = null,
     } = opts;
     const particles = [];
 
@@ -330,7 +345,7 @@ export function createSparks(x, y, opts = {}) {
         const color = colors[Math.floor(Math.random() * colors.length)];
         const life = lifetime ?? 10 + Math.floor(Math.random() * 10);
 
-        particles.push(new Particle(x, y, vx, vy, color, size, life));
+        particles.push(new Particle(x, y, vx, vy, color, size, life, fadeTo));
     }
 
     return particles;
