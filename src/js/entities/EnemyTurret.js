@@ -9,7 +9,7 @@ import {
     REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_SCORE,
     REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
     REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_BURST_DELAY,
-    REFLECT_BEAM_MUZZLE_FLASH_RADIUS,
+    REFLECT_BEAM_MUZZLE_FLASH_RADIUS, REFLECT_BEAM_SECOND_SHOT_OFFSET,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
     COLOR_BEAM_CANNON_FIN,
     COLOR_REFLECT_BEAM_CORE,
@@ -128,6 +128,11 @@ export class EnemyTurret {
 
         // Visual recoil
         this.recoil = 0;
+
+        // 2連弾の2発目にずらす角度の符号。撃つたびではなく「2発目を撃つたび」に
+        // 反転させる（毎回同じ側だと避け方を覚えられ、乱数だと同じ側が続きうる
+        // ため使わない）。beam 型以外では参照されない
+        this.secondShotSide = 1;
     }
 
     update() {
@@ -274,9 +279,20 @@ export class EnemyTurret {
             // 「1発撃って、しばらくして2発目」という形にした。角度は _updateAiming() が
             // 毎フレーム currentAngle = targetAngle（即時照準）で自機を追っているので、
             // 間隔を空けて撃つだけで2発目は自動的にその瞬間の自機の位置を向く。
-            // 固定の扇を足さなくても「狙い直し」で角度が変わるので、SPREAD は不要になった
+            // 固定の扇を足さなくても「狙い直し」で角度が変わるので、SPREAD は不要になった。
+            //
+            // ただし自機が止まっていると「狙い直し」が効かず、2発とも同じ線に乗ってしまう
+            // （実機で「2連射目は少しずらした方がいい」と指摘された）。1発目はそのまま、
+            // 2発目にだけ REFLECT_BEAM_SECOND_SHOT_OFFSET を足す。burstCount は連射開始時に
+            // maxBurstCount(=2) が入り撃つたびに1減る（_updateStateMachine 参照）ので、
+            // ここではまだ減っていない＝maxBurstCount のままなら1発目、減っていれば2発目
+            let angle = this.currentAngle;
+            if (this.burstCount < this.maxBurstCount) {
+                angle += REFLECT_BEAM_SECOND_SHOT_OFFSET * this.secondShotSide;
+                this.secondShotSide *= -1; // 次の2発目のために左右を入れ替える
+            }
             this.game.enemyBullets.push(
-                new ReflectBeam(this.game, muzzleX, muzzleY, this.currentAngle),
+                new ReflectBeam(this.game, muzzleX, muzzleY, angle),
             );
             this.muzzleFlash = REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
         } else {

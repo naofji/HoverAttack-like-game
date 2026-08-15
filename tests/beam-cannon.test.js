@@ -10,6 +10,7 @@ import {
   REFLECT_BEAM_BURST_DELAY, ENEMY_TURRET_BURST_DELAY,
   REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
   COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
+  REFLECT_BEAM_SECOND_SHOT_OFFSET,
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
 
@@ -104,9 +105,8 @@ test('beam 型は1回の攻撃(2発)のあとは連射しない（クールダ�
   const afterFirstVolley = game.enemyBullets.length;
   assert.equal(afterFirstVolley, 2);
   // 撃った直後にさらに回しても、クールダウン中は増えない
-  // （REFLECT_BEAM_CANNON_COOLDOWN=180 より短い範囲で見る。長く回すと次の
-  // クールダウン明けの攻撃が始まってしまい、この「連射しない」テストの趣旨とは
-  // 別の話になる）
+  // （REFLECT_BEAM_CHARGE_MIN=180 より短い範囲で見る。長く回すと次の充填明けの
+  // 攻撃が始まってしまい、この「連射しない」テストの趣旨とは別の話になる）
   for (let i = 0; i < 100; i++) t.update();
   assert.equal(game.enemyBullets.length, afterFirstVolley, '連射している');
 });
@@ -174,11 +174,12 @@ test('gun 型は視線が通らないと撃たない', () => {
   assert.equal(game.enemyBullets.length, 0, '遮蔽があるのに撃っている');
 });
 
-// 今回の要望の本体: 2発目は「撃つ瞬間の自機の位置」を向く。1発目のあと自機を
-// 動かしてから2発目を撃たせ、角度が動いた後の自機の方向と一致することを縛る。
-// `_updateAiming()` を1発目の角度で固定してしまう回帰が起きれば、この角度の
-// 一致が崩れて失敗する
-test('2発目は撃つ瞬間の自機の位置へ狙い直す', () => {
+// 今回の要望の本体: 2発目は「撃つ瞬間の自機の位置」を向く（± 小さな角度のずれを
+// 別に足す。それは REFLECT_BEAM_SECOND_SHOT_OFFSET 側のテストで扱う）。1発目の
+// あと自機を動かしてから2発目を撃たせ、角度が「動いた後の自機の方向 ± ずれ」に
+// なっていることを縛る。`_updateAiming()` を1発目の角度で固定してしまう回帰や、
+// ずれが狙い直しを上書きしてしまう回帰が起きれば、この一致が崩れて失敗する
+test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範囲で）', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
   fireOnce(t, game);
@@ -195,19 +196,25 @@ test('2発目は撃つ瞬間の自機の位置へ狙い直す', () => {
   const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
   assert.notEqual(firstAngle, secondAngle, '2発とも同じ角度のまま（狙い直していない）');
 
-  // 動いた後の自機の方向と一致すること
+  // 動いた後の自機の方向 ± REFLECT_BEAM_SECOND_SHOT_OFFSET のどちらかと一致すること
+  // （狙い直しが、ずれに置き換わっていないことを縛る）
   const cx = t.x + t.width / 2;
   const cy = t.y + t.height / 2;
   const expected = Math.atan2(
     game.player.y + game.player.height / 2 - cy,
     game.player.x + game.player.width / 2 - cx,
   );
-  assert.ok(Math.abs(secondAngle - expected) < 1e-6, '2発目が動いた後の自機を向いていない');
+  const diff = Math.abs(secondAngle - expected);
+  assert.ok(
+    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) < 1e-6,
+    `2発目が「動いた後の自機 ± ずれ」を向いていない: diff=${diff}`,
+  );
 });
 
-// 上のテストの対照実験: 自機が動かなければ2発の角度は同じになる（角度差は
-// 「狙い直し」の結果であって、常に角度が変わる仕掛けではないことを縛る）
-test('自機が動かなければ2発の角度は同じ', () => {
+// 今回の要望の本体: 自機が止まっていて狙い直しが効かなくても、2発目には
+// REFLECT_BEAM_SECOND_SHOT_OFFSET ぶんのずれが乗るので2発の角度は違う。
+// オフセットを0にする回帰（あるいは足し忘れ）が起きれば失敗する
+test('自機が動かなくても、2発目には小さな角度のずれが乗る', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
   fireOnce(t, game);
@@ -217,7 +224,61 @@ test('自機が動かなければ2発の角度は同じ', () => {
   assert.equal(game.enemyBullets.length, 2);
   const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
 
-  assert.equal(firstAngle, secondAngle, '自機が動いていないのに角度が変わった');
+  assert.notEqual(firstAngle, secondAngle, '自機が動いていないのに2発の角度が同じ（ずれが乗っていない）');
+  const diff = Math.abs(secondAngle - firstAngle);
+  assert.ok(
+    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) < 1e-6,
+    `ずれの大きさが REFLECT_BEAM_SECOND_SHOT_OFFSET と違う: diff=${diff}`,
+  );
+});
+
+// 1発目はずらさない。狙った方向そのままに飛ぶことを縛る
+test('1発目はずらさない（狙った方向そのまま）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  fireOnce(t, game);
+  assert.equal(game.enemyBullets.length, 1);
+
+  const cx = t.x + t.width / 2;
+  const cy = t.y + t.height / 2;
+  const expected = Math.atan2(
+    game.player.y + game.player.height / 2 - cy,
+    game.player.x + game.player.width / 2 - cx,
+  );
+  const firstAngle = Math.atan2(game.enemyBullets[0].vy, game.enemyBullets[0].vx);
+  assert.ok(Math.abs(firstAngle - expected) < 1e-9, '1発目が狙った方向からずれている');
+});
+
+// ずらす側は発射のたびに交互に入れ替える。毎回同じ側だと避け方を覚えられ、
+// 乱数だと同じ側が続くことがあるため（乱数は使わない方針。game.rng も消費しない）。
+// 1回目の攻撃(2発)と2回目の攻撃(2発)、それぞれの「2発目のずれの符号」が
+// 逆になっていることを縛る
+test('2発目のずれは発射のたびに交互になる', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+
+  fireOnce(t, game);
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  assert.equal(game.enemyBullets.length, 2, '1回目の攻撃で2発出ていない');
+  const angle1a = Math.atan2(game.enemyBullets[0].vy, game.enemyBullets[0].vx);
+  const angle1b = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
+  const side1 = Math.sign(angle1b - angle1a);
+
+  // 充填を待たずに2回目の攻撃へ進める（充填時間そのものはこのテストの対象では
+  // ないため、cooldownTimer を直接0にして次の攻撃をすぐ始める）。fireOnce() は
+  // 「弾が0発の状態から1発出るまで」を回す作りなので、既に2発ある状態からは
+  // 使えず、ここでは3発目が出るまで直接回す
+  t.cooldownTimer = 0;
+  for (let i = 0; i < 600 && game.enemyBullets.length < 3; i++) t.update();
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  assert.equal(game.enemyBullets.length, 4, '2回目の攻撃で2発出ていない');
+  const angle2a = Math.atan2(game.enemyBullets[2].vy, game.enemyBullets[2].vx);
+  const angle2b = Math.atan2(game.enemyBullets[3].vy, game.enemyBullets[3].vx);
+  const side2 = Math.sign(angle2b - angle2a);
+
+  assert.notEqual(side1, 0, '1回目のずれが検出できていない');
+  assert.notEqual(side2, 0, '2回目のずれが検出できていない');
+  assert.notEqual(side1, side2, 'ずらす側が交互になっていない（毎回同じ側）');
 });
 
 // 型ごとに連射間隔を持たせた影響で、既存の gun 型（連射間隔10）を壊していないこと

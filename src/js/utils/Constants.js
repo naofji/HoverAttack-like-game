@@ -510,9 +510,16 @@ export const REFLECT_BEAM_CANNON_SCORE = 350;    // タレット200より高い
 //
 // 固定の周期だとリズムを読み切られるため、1発ごとにこの範囲から選び直す
 // （Math.random() を使う。game.rng を使うと週次の決定性が壊れるため厳禁）。
-// 中央値は旧 REFLECT_BEAM_CANNON_COOLDOWN(180) に合わせ、そこから ±で幅を持たせた
+// 中央値は旧・冷却時間だった180に合わせ、そこから REFLECT_BEAM_CHARGE_MIN/MAX の
+// 幅を持たせた
 export const REFLECT_BEAM_CHARGE_MIN = 180;  // 3.0秒
 export const REFLECT_BEAM_CHARGE_MAX = 240;  // 4.0秒
+
+// 2連弾の2発目だけに足す、小さな角度のずれ。自機が止まっていると
+// _updateAiming() の「狙い直し」が効かず、2発とも同じ線に乗ってしまう
+// （実機で「2連射目は少しずらした方がいい」と指摘された）。以前の同時2本の
+// 扇型は±15度だったが、こちらは狙い直しと重なるぶん小さくてよい
+export const REFLECT_BEAM_SECOND_SHOT_OFFSET = 8 * Math.PI / 180;  // 8度
 
 // 既存のタレット（#555555 / #888888 / #667788）より明るい灰色。並んだときに
 // 新型だと分かるようにする
