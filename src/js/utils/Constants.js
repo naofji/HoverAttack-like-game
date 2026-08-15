@@ -518,11 +518,24 @@ export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
 // 実機フィードバックへの対応。ビーム本体と同じ色域にして、何に当たったのかが
 // 一目で分かるようにする（通常被弾の黄色系スパークと取り違えないため）
 export const BEAM_SPARK_COLORS = ['#F2E6FF', '#C77DFF', '#B266FF'];
-// 通常のスパークは3〜5個。倍以上にしないと「走った」感じが出なかった
-export const BEAM_SPARK_COUNT = 14;
+// 通常のスパークは3〜5個。倍以上にしないと「走った」感じが出なかった。
+// 14 でもまだ「地味すぎて見えない」と実機で指摘されたので 28 へ倍増し、
+// 速度と寿命も上げた（散る範囲が広がるぶん、1粒あたりの見つけやすさが上がる）
+export const BEAM_SPARK_COUNT = 28;
 export const BEAM_SPARK_SPEED_MIN = 2.0;   // 通常1.5。勢いよく弾けさせる
-export const BEAM_SPARK_SPEED_MAX = 5.0;   // 通常4.0
-export const BEAM_SPARK_LIFETIME = 18;     // 通常10〜19の上側に寄せて尾を長く見せる
+export const BEAM_SPARK_SPEED_MAX = 6.5;   // 通常4.0。5.0 から更に上げた
+export const BEAM_SPARK_LIFETIME = 22;     // 通常10〜19。18 から更に伸ばして尾を長く見せる
+
+// 被弾点の閃光。粒を増やすだけでは「一瞬の出来事」が視界の端で拾えないので、
+// 既存の ImpactFlash（命中の合図に使う小さく硬い光）を紫で1つ出す。
+// 爆発(playBlast)ではないので音は付いてこない ＝ 効果音は別に選べる。
+// 半径はミサイル着弾(IMPACT_FLASH_RADIUS=18)より小さく、マシンガン(6)より
+// 大きい 14。自機を覆い隠さず、それでいて必ず目に入る大きさ
+export const BEAM_SPARK_FLASH_RADIUS = 14;
+// 芯はビーム本体の芯と同じ、リングは砲台のランプの明るい紫。被弾の光と、
+// 撃ってきた砲台とが同じ色域で結びつく
+export const COLOR_BEAM_HIT_FLASH_CORE = '#F2E6FF';
+export const COLOR_BEAM_HIT_FLASH_RING = '#C77DFF';
 
 // タレットの半分を差し替える反射ビームキャノン本体（EnemyTurret の beam 型）
 export const REFLECT_BEAM_CANNON_HP = 40;        // タレット30より硬い（自機ミサイル3発）

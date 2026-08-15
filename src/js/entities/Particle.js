@@ -169,12 +169,18 @@ export class ImpactFlash {
      * @param {number} y
      * @param {number} [radius] 最大半径。弾種で変えられる
      * @param {number} [delay] 光り始めるまでの待ち。破壊時に連ねて瞬かせるのに使う
+     * @param {object} [colors] 色。反射ビームの被弾（紫）のために後から足した。
+     *   **既定は従来の白＋淡い橙**で、色を渡さない既存の呼び出しは見た目が変わらない
+     * @param {string} [colors.core] 中心の芯
+     * @param {string} [colors.ring] 外周のリング
      */
-    constructor(x, y, radius = IMPACT_FLASH_RADIUS, delay = 0) {
+    constructor(x, y, radius = IMPACT_FLASH_RADIUS, delay = 0, colors = {}) {
         this.x = x;
         this.y = y;
         this.radius = radius;
         this.delay = delay;
+        this.coreColor = colors.core ?? '#FFFFFF';
+        this.ringColor = colors.ring ?? '#FFE8A0';
         this.maxLifetime = IMPACT_FLASH_LIFETIME;
         this.lifetime = IMPACT_FLASH_LIFETIME;
         this.alive = true;
@@ -202,14 +208,14 @@ export class ImpactFlash {
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = alpha;
 
-        // 中心の白い芯。序盤ほど大きく、すぐ縮んで消える
-        ctx.fillStyle = '#FFFFFF';
+        // 中心の芯。序盤ほど大きく、すぐ縮んで消える
+        ctx.fillStyle = this.coreColor;
         ctx.beginPath();
         ctx.arc(this.x, this.y, r * (1 - p) * 0.9, 0, Math.PI * 2);
         ctx.fill();
 
         // 外周のリング。これが「輪郭のある閃光」に見せている部分
-        ctx.strokeStyle = '#FFE8A0';
+        ctx.strokeStyle = this.ringColor;
         ctx.lineWidth = Math.max(1, 2 * (1 - p));
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);

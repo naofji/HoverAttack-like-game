@@ -17,9 +17,11 @@ import {
     REFLECT_BEAM_DAMAGE,
     BEAM_SPARK_COLORS, BEAM_SPARK_COUNT,
     BEAM_SPARK_SPEED_MIN, BEAM_SPARK_SPEED_MAX, BEAM_SPARK_LIFETIME,
+    BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
-import { createSparks } from '../entities/Particle.js';
+import { createSparks, ImpactFlash } from '../entities/Particle.js';
+import { audioManager } from '../audio/AudioManager.js';
 import { recordHit } from '../utils/hitPoint.js';
 
 export class CollisionManager {
@@ -117,8 +119,21 @@ export class CollisionManager {
             damage = REFLECT_BEAM_DAMAGE;
             // 「当たっても地味で判りづらい」という実機フィードバックへの対応。
             // 紫のスパークを被弾点から全方向へ弾けさせる。
-            // 爆発（spawnExplosion）は使わない：音が付いてくるので、連続で
-            // 当たりうるビームでは爆発音が鳴り続けて耳につく
+            // 爆発（spawnExplosion）は使わない：playBlast は爆発音まで込みなので、
+            // 演出だけ欲しいここでは合わない（音は下で beamHit を選んで鳴らす）。
+            //
+            // 粒だけでは「まだ地味で見えない」と再度指摘されたので、被弾点に
+            // 紫の閃光を1つ足した。粒は散らばって視界の端では拾えないが、
+            // 1点で光る閃光は拾える。ImpactFlash は「命中の合図」用の既存の
+            // 部品で、色を渡せるようにして使い回している
+            game.particles.push(new ImpactFlash(hx, hy, BEAM_SPARK_FLASH_RADIUS, 0, {
+                core: COLOR_BEAM_HIT_FLASH_CORE,
+                ring: COLOR_BEAM_HIT_FLASH_RING,
+            }));
+            // 被弾の音。当たるとビーム自体が消える（下で alive = false）ので
+            // 1発につき1回しか鳴らない。連射でも 0.4秒(REFLECT_BEAM_BURST_DELAY)
+            // 離れた2回までで、鳴り続けることはない
+            audioManager.playWeapon('beamHit', hx, hy);
             game.particles.push(...createSparks(hx, hy, {
                 colors: BEAM_SPARK_COLORS,
                 count: BEAM_SPARK_COUNT,

@@ -93,3 +93,43 @@ test('2連弾は1発につき1回、合計2回発射音が鳴る（同時には�
   assert.equal(game.enemyBullets.length, REFLECT_BEAM_SHOT_COUNT, '2連弾の本数が変わっている（前提が崩れている）');
   assert.deepEqual(played, ['reflectBeam', 'reflectBeam'], `発射音が${played.length}回鳴っている（2連弾で2回のはず）`);
 });
+
+// ============================================
+// 被弾音（実機フィードバック3回目「もっと派手に。専用の効果音があってもいい」）
+// ============================================
+//
+// 当たるとビーム自体が消えるので1発につき1回しか鳴らない。連射でも
+// REFLECT_BEAM_BURST_DELAY(0.4秒) 離れた2回まで＝鳴り続ける心配は無い。
+// それでも発射音より控えめにするのは、被弾は「撃たれた」より後の出来事で、
+// 画面には閃光とスパークという視覚の手がかりが同時に出るため。
+
+test('表に beamHit がある', () => {
+  assert.ok(WEAPON_SOUNDS.beamHit, '表に無い');
+});
+
+// 無音バグを実際に出したことがあるためのテスト
+test('被弾音は鳴っている（無音ではない）', () => {
+  const level = levelOf('beamHit');
+  assert.ok(level > 0.001, `ほぼ無音: ${level}`);
+});
+
+test('被弾音は発射音より控えめだが、埋もれない', () => {
+  const rel = db(levelOf('beamHit') / levelOf('reflectBeam'));
+  assert.ok(rel < -2, `発射音に対して控えめになっていない: ${rel.toFixed(1)}dB`);
+  assert.ok(rel > -10, `発射音に対して小さすぎて埋もれる: ${rel.toFixed(1)}dB`);
+});
+
+// 発射音（低く唸る）と被弾音（高く弾ける）が同じ音に聞こえないこと。
+// 同じだと「撃たれた」のか「当たった」のかが音では区別できない
+test('被弾音は発射音より高い帯域で鳴る', () => {
+  assert.ok(
+    WEAPON_SOUNDS.beamHit.hiss.from > WEAPON_SOUNDS.reflectBeam.hiss.from,
+    '被弾音のノイズが発射音より高くない（撃たれたのか当たったのか区別できない）',
+  );
+});
+
+// 短い一撃であること。長いと被弾が続いたときに尾が重なって濁る
+test('被弾音は短い（0.15秒以内）', () => {
+  const d = profileDuration(WEAPON_SOUNDS.beamHit);
+  assert.ok(d <= 0.15, `長すぎる: ${d}秒`);
+});
