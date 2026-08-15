@@ -521,6 +521,18 @@ test('波形が壊れず、2つの音節として鳴る', () => {
   assert.ok(gap < first * 0.25, `音節が繋がっている: 谷 ${gap.toFixed(4)} / 山 ${first.toFixed(4)}`);
 });
 
+// 実機で「聞こえにくい」と指摘され gain を上げた（0.16→0.26）。他の武器音と
+// 並んでも埋もれない大きさか、敵マシンガンとの相対 dB で縛る
+// （tests/reflect-beam-sound.test.js と同じやり方）。無音バグの再発防止も兼ねる
+test('「レディ」は敵マシンガンより静かにならない（実機で聞こえにくいと指摘された分の調整）', () => {
+  const readyBuf = renderWeaponProfile(WEAPON_SOUNDS.readyVoice);
+  const mgBuf = renderWeaponProfile(WEAPON_SOUNDS.enemyMg);
+  const readyLevel = transientLevel((i) => readyBuf[i] ?? 0, profileDuration(WEAPON_SOUNDS.readyVoice));
+  const mgLevel = transientLevel((i) => mgBuf[i] ?? 0, profileDuration(WEAPON_SOUNDS.enemyMg));
+  const rel = db(readyLevel / mgLevel);
+  assert.ok(rel > -2, `敵マシンガンより静かすぎる: ${rel.toFixed(1)}dB`);
+});
+
 // --- 補給の装填クリック ---------------------------------------------------------
 
 test('装填は1発＝1打撃', () => {
