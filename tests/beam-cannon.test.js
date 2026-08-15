@@ -21,6 +21,9 @@ import { lerpColor } from '../src/js/utils/color.js';
 // 別途決め打つ）。BARREL_LENGTH=14, BARREL_BASE=4
 const BARREL_BASE = 4;
 const BARREL_LENGTH = 14;
+// ランプ本体の半径。draw() 側と同じ値（描画専用なので EnemyTurret.js の
+// モジュールスコープにあり、import できない）
+const BEAM_LAMP_CORE_RADIUS_FOR_TEST = 2;
 
 const ROOM = [
   '####################',
@@ -939,4 +942,40 @@ test('ランプ本体と座は砲台の本体より後に描かれる（ピボ�
     backIdx > lastBodyFill,
     `ランプの座が砲台の本体より先に描かれている（座=${backIdx}, 本体の最後=${lastBodyFill}）`,
   );
+});
+
+// ============================================
+// 実機フィードバック(4回目): 座がピボットを黒く塗り潰していた
+// ============================================
+//
+// 「PIVOT に重なるように黒いマスクを掛けていないか」という指摘。掛けていた。
+// 暗い座(COLOR_BEAM_CANNON_LAMP_BACK, 半径7)はピボットの円(半径8)を描いた
+// **後**に敷かれるので、残る明るい部分は外周1pxのリングだけだった。
+// ピボットを明るくするほど悪化する組み合わせで、白くした結果あらわになった。
+//
+// 座のサイズ根拠も古かった。元は「輪(最大半径6)を覆う」大きさとして7を選んだ
+// もので、輪を砲台の外へ出した時点で基準はランプ本体(半径2)に変わっている。
+//
+// 「はみ出さない(r <= 8)」だけでは、ちょうど 8 でも通ってしまい塗り潰しを
+// 防げない。ピボットが**面として**残る大きさであることを縛る。
+test('暗い座はピボットの円を塗り潰さず、明るい面をはっきり残す', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const arcs = arcCallsWithStyle(ctx.calls);
+  const seatArc = arcs.find((a) => a.x === 0 && a.y === 0 && a.fillStyle === COLOR_BEAM_CANNON_LAMP_BACK);
+  assert.ok(seatArc, '暗い座の arc が見つからない');
+
+  // 座が覆う面積がピボット(半径8)の半分を超えたら「マスク」に見える。
+  // 面積比 = (r/8)^2 なので、半分の境目は r = 8/√2 ≒ 5.66
+  const coverage = (seatArc.r / 8) ** 2;
+  assert.ok(
+    coverage < 0.5,
+    `座がピボットの面積の ${(coverage * 100).toFixed(0)}% を覆っている（黒いマスクに見える）: r=${seatArc.r}`,
+  );
+
+  // 逆に小さすぎるとランプの座として機能しない（本体は半径2）
+  assert.ok(seatArc.r > BEAM_LAMP_CORE_RADIUS_FOR_TEST, `座がランプ本体より小さい: r=${seatArc.r}`);
 });
