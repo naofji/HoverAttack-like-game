@@ -923,11 +923,6 @@ export const Game = {
     _updateMiniMap() {
         if (this.input.isKeyPressed('KeyR')) this.showMiniMap = !this.showMiniMap;
 
-        // Auto-close on movement input
-        if (this.showMiniMap && (this.input.isKeyDown('KeyA') || this.input.isKeyDown('KeyD') || this.input.isKeyDown('KeyW'))) {
-            this.showMiniMap = false;
-        }
-
         const fadeSpeed = 0.08;
         this.miniMapAlpha = this.showMiniMap
             ? Math.min(1.0, this.miniMapAlpha + fadeSpeed)
