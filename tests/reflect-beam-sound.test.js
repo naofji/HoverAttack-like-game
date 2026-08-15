@@ -7,7 +7,7 @@ import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
 import { EnemyTurret } from '../src/js/entities/EnemyTurret.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { makeMap } from './helpers/enemy-world.js';
-import { REFLECT_BEAM_SHOT_COUNT } from '../src/js/utils/Constants.js';
+import { REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_BURST_DELAY } from '../src/js/utils/Constants.js';
 
 // 単発の短い音どうしを比べるので transientLevel を使う（tests/weapon-sounds.test.js
 // と同じやり方）。brief 案の aWeightedRms(() => renderWeaponProfile(...)) は
@@ -51,11 +51,12 @@ test('撃つと発射音を鳴らす', () => {
   assert.deepEqual(played, ['reflectBeam']);
 });
 
-// 1発が REFLECT_BEAM_SHOT_COUNT 本の扇型になった際、本ごとに鳴らすと
-// 同一座標・同一フレームで playWeapon が重なりほぼコヒーレントに加算されて
-// 実効+6dB になる（単発の実測が敵マシンガン比+4.99dBで既に上限際のため、
-// 実機では約+11dB相当になっていた）。1回の攻撃につき1回だけ鳴ることを縛る
-test('1回の攻撃につき発射音は1回だけ（扇型の本数ぶん重ならない）', () => {
+// 1発が2連弾（REFLECT_BEAM_SHOT_COUNT 発）になった。REFLECT_BEAM_BURST_DELAY
+// (0.4秒) 離れて撃つので、同一フレームで playWeapon が重なって実効+6dBになる
+// 問題は起きない。むしろ「2発来た」ことが分かるよう、2発とも鳴らす方針にした
+// （EnemyTurret._executeAttack() から silent 引数を削除）。
+// 1回の攻撃(2発)につき発射音も2回、同時に鳴らないことを縛る
+test('2連弾は1発につき1回、合計2回発射音が鳴る（同時には鳴らない）', () => {
   const ROOM = [
     '####################',
     '#..................#',
@@ -79,10 +80,16 @@ test('1回の攻撃につき発射音は1回だけ（扇型の本数ぶん重な
   audioManager.playWeapon = (kind) => { played.push(kind); };
   try {
     for (let i = 0; i < 600 && game.enemyBullets.length === 0; i++) t.update();
+    // 1発目の時点ではまだ1回だけ
+    assert.deepEqual(played, ['reflectBeam'], '1発目の時点で発射音が1回になっていない');
+
+    // burstTimer=burstDelay からの数え方は tests/beam-cannon.test.js のコメント参照。
+    // burstDelay+1 回の update() で2発目が撃たれる
+    for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
   } finally {
     audioManager.playWeapon = original;
   }
 
-  assert.ok(game.enemyBullets.length === REFLECT_BEAM_SHOT_COUNT, '扇型の本数が変わっている（前提が崩れている）');
-  assert.deepEqual(played, ['reflectBeam'], `発射音が${played.length}回鳴っている（本数ぶん重なってはいけない）`);
+  assert.equal(game.enemyBullets.length, REFLECT_BEAM_SHOT_COUNT, '2連弾の本数が変わっている（前提が崩れている）');
+  assert.deepEqual(played, ['reflectBeam', 'reflectBeam'], `発射音が${played.length}回鳴っている（2連弾で2回のはず）`);
 });

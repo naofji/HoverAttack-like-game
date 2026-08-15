@@ -7,7 +7,7 @@ import { makeFakeCtx, extractPolylines } from './helpers/fake-ctx.js';
 import {
   REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_SCORE, ENEMY_TURRET_HP,
   REFLECT_BEAM_MUZZLE_FLASH_FRAMES, COLOR_BEAM_CANNON_BARREL,
-  REFLECT_BEAM_SHOT_COUNT,
+  REFLECT_BEAM_BURST_DELAY, ENEMY_TURRET_BURST_DELAY,
 } from '../src/js/utils/Constants.js';
 
 // 砲身の見た目パラメータ。draw() 側と同じ値をここでも持つ（描画専用の値は
@@ -69,18 +69,42 @@ test('beam 型は反射ビームを撃つ', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
   fireOnce(t, game);
-  // 1回の攻撃で扇型に REFLECT_BEAM_SHOT_COUNT 本撃つ（実機の指摘で1本から変更）
-  assert.equal(game.enemyBullets.length, REFLECT_BEAM_SHOT_COUNT, 'ビームが出ていない');
+  assert.equal(game.enemyBullets.length, 1, 'ビームが出ていない');
   assert.ok(game.enemyBullets[0] instanceof ReflectBeam, '出たのがビームではない');
 });
 
-test('beam 型は1回の攻撃で連射しない（クールダウン中は増えない）', () => {
+// 2連弾の1本目・2本目が「同一フレーム」に出てしまうと、狙い直しの意味が無くなる。
+// 1発目が出た瞬間には enemyBullets はまだ1発で、REFLECT_BEAM_BURST_DELAY フレーム
+// 進めてはじめて2発目が出ることを縛る（同時発射に戻っていたら失敗する形）
+test('beam 型は1回の攻撃で2発を、間隔を空けて撃つ', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
   fireOnce(t, game);
+  assert.equal(game.enemyBullets.length, 1, '1発目の時点で2発出ている（同時発射のまま）');
+
+  // burstTimer は発射した瞬間に spec.burstDelay(=REFLECT_BEAM_BURST_DELAY) に
+  // セットされ、以後の update() で 1 ずつ減って 0 になった「次の」呼び出しで
+  // 撃つ（_updateStateMachine 参照）。よって2発目が出るまでに必要な追加の
+  // update() 呼び出しは REFLECT_BEAM_BURST_DELAY + 1 回
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY; i++) t.update();
+  assert.equal(game.enemyBullets.length, 1, '間隔を空けずに2発目が出た');
+
+  t.update();
+  assert.equal(game.enemyBullets.length, 2, '2発目が出ていない');
+});
+
+test('beam 型は1回の攻撃(2発)のあとは連射しない（クールダウン中は増えない）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  fireOnce(t, game);
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
   const afterFirstVolley = game.enemyBullets.length;
+  assert.equal(afterFirstVolley, 2);
   // 撃った直後にさらに回しても、クールダウン中は増えない
-  for (let i = 0; i < 60; i++) t.update();
+  // （REFLECT_BEAM_CANNON_COOLDOWN=180 より短い範囲で見る。長く回すと次の
+  // クールダウン明けの攻撃が始まってしまい、この「連射しない」テストの趣旨とは
+  // 別の話になる）
+  for (let i = 0; i < 100; i++) t.update();
   assert.equal(game.enemyBullets.length, afterFirstVolley, '連射している');
 });
 
@@ -147,19 +171,64 @@ test('gun 型は視線が通らないと撃たない', () => {
   assert.equal(game.enemyBullets.length, 0, '遮蔽があるのに撃っている');
 });
 
-// 一方向だけだと動いている自機には当たらず緊張感が無い、という実機の指摘
-test('beam 型は1回の攻撃で扇型に複数本撃つ', () => {
+// 今回の要望の本体: 2発目は「撃つ瞬間の自機の位置」を向く。1発目のあと自機を
+// 動かしてから2発目を撃たせ、角度が動いた後の自機の方向と一致することを縛る。
+// `_updateAiming()` を1発目の角度で固定してしまう回帰が起きれば、この角度の
+// 一致が崩れて失敗する
+test('2発目は撃つ瞬間の自機の位置へ狙い直す', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
-  for (let i = 0; i < 600 && game.enemyBullets.length === 0; i++) t.update();
-  assert.equal(game.enemyBullets.length, REFLECT_BEAM_SHOT_COUNT);
+  fireOnce(t, game);
+  assert.equal(game.enemyBullets.length, 1);
+  const firstAngle = Math.atan2(game.enemyBullets[0].vy, game.enemyBullets[0].vx);
 
-  // 照準を中心に左右へ均等に開いている
-  const angles = game.enemyBullets.map((b) => Math.atan2(b.vy, b.vx));
-  const mid = angles.reduce((a, b) => a + b, 0) / angles.length;
-  assert.ok(Math.abs(mid - t.currentAngle) < 1e-6, '扇の中心が照準からずれている');
-  const spread = Math.max(...angles) - Math.min(...angles);
-  assert.ok(spread > 0, '全部同じ向きに撃っている');
+  // 1発目のあと、自機を大きく動かす（下方向へ）
+  game.player.x = 100;
+  game.player.y = 150;
+
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  assert.equal(game.enemyBullets.length, 2, '2発目が出ていない');
+
+  const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
+  assert.notEqual(firstAngle, secondAngle, '2発とも同じ角度のまま（狙い直していない）');
+
+  // 動いた後の自機の方向と一致すること
+  const cx = t.x + t.width / 2;
+  const cy = t.y + t.height / 2;
+  const expected = Math.atan2(
+    game.player.y + game.player.height / 2 - cy,
+    game.player.x + game.player.width / 2 - cx,
+  );
+  assert.ok(Math.abs(secondAngle - expected) < 1e-6, '2発目が動いた後の自機を向いていない');
+});
+
+// 上のテストの対照実験: 自機が動かなければ2発の角度は同じになる（角度差は
+// 「狙い直し」の結果であって、常に角度が変わる仕掛けではないことを縛る）
+test('自機が動かなければ2発の角度は同じ', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  fireOnce(t, game);
+  const firstAngle = Math.atan2(game.enemyBullets[0].vy, game.enemyBullets[0].vx);
+
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  assert.equal(game.enemyBullets.length, 2);
+  const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
+
+  assert.equal(firstAngle, secondAngle, '自機が動いていないのに角度が変わった');
+});
+
+// 型ごとに連射間隔を持たせた影響で、既存の gun 型（連射間隔10）を壊していないこと
+test('gun 型の連射間隔は従来どおり10のまま', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'gun');
+  for (let i = 0; i < 600 && game.enemyBullets.length === 0; i++) t.update();
+  assert.equal(game.enemyBullets.length, 1);
+
+  for (let i = 0; i < ENEMY_TURRET_BURST_DELAY; i++) t.update();
+  assert.equal(game.enemyBullets.length, 1, '2発目が早く出すぎている（間隔が10より短い）');
+
+  t.update();
+  assert.equal(game.enemyBullets.length, 2, '2発目が出ていない（間隔が10より長い）');
 });
 
 // 発射位置が砲身の中だと、放射光がビームの根元に隠れて見えない（実機で指摘）。

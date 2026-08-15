@@ -7,7 +7,7 @@ import {
     ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
     ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
     REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_COOLDOWN, REFLECT_BEAM_CANNON_SCORE,
-    REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_SPREAD,
+    REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_BURST_DELAY,
     REFLECT_BEAM_MUZZLE_FLASH_RADIUS,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
     COLOR_BEAM_CANNON_FIN,
@@ -37,6 +37,7 @@ const TURRET_TYPES = {
         score: ENEMY_TURRET_SCORE,
         cooldown: ENEMY_TURRET_COOLDOWN,
         burst: ENEMY_TURRET_BURST_COUNT,
+        burstDelay: ENEMY_TURRET_BURST_DELAY,   // 従来どおり
         colors: { base: '#555555', barrel: '#888888', pivot: '#667788' },
     },
     beam: {
@@ -46,7 +47,8 @@ const TURRET_TYPES = {
         // 遮蔽に隠れても撃つ。反射する武器なので、壁越しに撃って跳ね返らせるのが
         // この砲台の見せ場になる。隠れているだけで安全だと緊張感が出ない
         ignoresLineOfSight: true,
-        burst: 1,  // 1回の攻撃。ただし1回で SHOT_COUNT 本を扇型に撃つ
+        burst: REFLECT_BEAM_SHOT_COUNT,          // 2連弾
+        burstDelay: REFLECT_BEAM_BURST_DELAY,    // 発と発の間隔を長めに取る
         colors: {
             base: COLOR_BEAM_CANNON_BASE,
             barrel: COLOR_BEAM_CANNON_BARREL,
@@ -143,7 +145,10 @@ export class EnemyTurret {
             if (this.burstTimer <= 0) {
                 this._executeAttack();
                 this.burstCount--;
-                this.burstTimer = ENEMY_TURRET_BURST_DELAY;
+                // 連射間隔は型から引く。以前は全型共通の ENEMY_TURRET_BURST_DELAY(10) を
+                // 直書きしていたが、beam 型は2連弾の間隔を意図的に長く取る
+                // （REFLECT_BEAM_BURST_DELAY=24）ため、型ごとの spec.burstDelay を見る
+                this.burstTimer = this.spec.burstDelay;
                 if (this.burstCount <= 0) {
                     this.state         = 'cooldown';
                     this.cooldownTimer = this.spec.cooldown;
@@ -211,20 +216,15 @@ export class EnemyTurret {
             // ここで固定しておき、draw() はこの値だけを使う
             this.muzzleFlashOffset = off;
 
-            // 照準を中心に左右へ均等に開く。**乱数は使わない**（週次の決定性を
-            // 壊さないため。スポーンと違い発射は rng を引かない作りを保つ）
-            for (let i = 0; i < REFLECT_BEAM_SHOT_COUNT; i++) {
-                const t = REFLECT_BEAM_SHOT_COUNT === 1
-                    ? 0
-                    : (i / (REFLECT_BEAM_SHOT_COUNT - 1)) * 2 - 1;  // -1..+1
-                const angle = this.currentAngle + t * REFLECT_BEAM_SPREAD;
-                // 発射音は1回の攻撃につき1回だけ。2本目以降は silent にしないと
-                // 同一座標・同一フレームで playWeapon が重なり実効+6dBになる
-                // （ReflectBeam のコンストラクタ側コメント参照）
-                this.game.enemyBullets.push(
-                    new ReflectBeam(this.game, muzzleX, muzzleY, angle, { silent: i > 0 }),
-                );
-            }
+            // 扇型（±SPREAD で複数本同時）はやめた。2連弾にして、_updateStateMachine()
+            // が spec.burstDelay(24) 間隔を空けて _executeAttack() を2回呼ぶことで
+            // 「1発撃って、しばらくして2発目」という形にした。角度は _updateAiming() が
+            // 毎フレーム currentAngle = targetAngle（即時照準）で自機を追っているので、
+            // 間隔を空けて撃つだけで2発目は自動的にその瞬間の自機の位置を向く。
+            // 固定の扇を足さなくても「狙い直し」で角度が変わるので、SPREAD は不要になった
+            this.game.enemyBullets.push(
+                new ReflectBeam(this.game, muzzleX, muzzleY, this.currentAngle),
+            );
             this.muzzleFlash = REFLECT_BEAM_MUZZLE_FLASH_FRAMES;
         } else {
             // Inaccuracy

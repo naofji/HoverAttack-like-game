@@ -24,7 +24,7 @@ import { ageSegments, stepBeam } from '../utils/beamPath.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class ReflectBeam {
-    constructor(game, x, y, angle, { silent = false } = {}) {
+    constructor(game, x, y, angle) {
         this.game = game;
         this.x = x;
         this.y = y;
@@ -47,13 +47,12 @@ export class ReflectBeam {
         // CollisionManager が「点ではなく帯で見る」相手だと見分けるための印
         this.isReflectBeam = true;
 
-        // 1発が2本の扇型になったため、本ごとに鳴らすと同一座標・同一フレームで
-        // playWeapon が2回走り、ほぼコヒーレントに加算されて実効+6dBになる
-        // （1本ぶんの実測が敵マシンガン比+4.99dBで既に上限際のため、2本鳴らすと
-        // 実機で+11dB相当になっていた）。gain を下げるのではなく、扇の2本目以降を
-        // silent にして「1回の攻撃につき1回だけ鳴らす」形にする
-        // （EnemyTurret._executeAttack() が最初の1本だけ silent: false で生成する）
-        if (!silent) audioManager.playWeapon('reflectBeam', x, y);
+        // 以前は1発が2本の扇型（同一フレーム・同一座標）だったため、両方鳴らすと
+        // playWeapon が重なり実効+6dBになる問題があり、2本目以降を silent にしていた。
+        // 今は2連弾（EnemyTurret の burstDelay=24 フレーム=0.4秒離して撃つ）なので
+        // 音が重なる心配は無い。「2発来た」ことが分かる方が良いという判断で、
+        // 2発とも普通に鳴らす（silent 引数は削除した）
+        audioManager.playWeapon('reflectBeam', x, y);
     }
 
     /** 開いている節を (endX, endY) で閉じて segs の先頭へ積む。長さ0なら積まない（反射直後にすぐ上限へ達した場合など） */

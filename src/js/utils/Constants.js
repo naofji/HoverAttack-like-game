@@ -471,10 +471,18 @@ export const REFLECT_BEAM_SPEED = 5;
 export const REFLECT_BEAM_SEGMENT_FRAMES = 2;  // 1節を閉じるまでのフレーム数。速度5なので1節=10px
 export const REFLECT_BEAM_SEGMENT_LIFE = 16;   // 1節の寿命。80px(8節)ぶん生きる
 
-// 1発を扇型に分ける。一方向だけだと動いている自機には当たらず緊張感が無い、
-// という実機の指摘。総量は変えていない（80px × 2本 = 従来の160px 1本ぶん）
-export const REFLECT_BEAM_SHOT_COUNT = 2;
-export const REFLECT_BEAM_SPREAD = 15 * Math.PI / 180;  // 照準を中心に左右へ開く角度（±15度）
+// 1回の攻撃を2連弾にする。当初は同時に扇型（±15度）で2本撃っていたが、
+// ユーザーから「いきなり2本同時ではなく2連弾にして、2発目は撃つ時点の自機の
+// 位置へ狙い直してほしい」と指示された。_updateAiming() が毎フレーム
+// currentAngle = targetAngle（即時照準）で自機を向いているので、間隔を空けて
+// 撃つだけで2発目は自動的にその瞬間の自機の位置を向く。角度の違いは
+// 「狙い直し」から生まれるので、固定の扇（SPREAD）はもう要らない
+export const REFLECT_BEAM_SHOT_COUNT = 2;  // 扇の本数ではなく連射数（EnemyTurret の burst）
+
+// 2連弾の間隔。自機が意味のある距離を動ける長さにする。短すぎると2発目が
+// ほぼ同じ方向になり「狙い直している」感じが出ず、長すぎると2連弾に聞こえない。
+// gun 型の連射間隔（ENEMY_TURRET_BURST_DELAY = 10）より意図的に長い
+export const REFLECT_BEAM_BURST_DELAY = 24;  // 0.4秒
 
 export const REFLECT_BEAM_WIDTH = 5;            // 母艦レーザーは6
 export const REFLECT_BEAM_MAX_BOUNCES = 4;
