@@ -500,14 +500,33 @@ export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
 
 // タレットの半分を差し替える反射ビームキャノン本体（EnemyTurret の beam 型）
 export const REFLECT_BEAM_CANNON_HP = 40;        // タレット30より硬い（自機ミサイル3発）
-export const REFLECT_BEAM_CANNON_COOLDOWN = 180; // タレットは120で5連射。単発なので長め
 export const REFLECT_BEAM_CANNON_SCORE = 350;    // タレット200より高い
+
+// 冷却時間は廃止した。ユーザーから「冷却時間は不要で、充填で連続して打ってくる
+// ような感じにしてほしい」と指示され、`cooldown` 状態そのものを通らなくした
+// （EnemyTurret.js の beam 型は撃ち終わったら 'idle' に戻り、cooldownTimer を
+// 「次弾までの充填」として使い回す）。パイロットランプで進み具合を見せることで
+// 「そろそろ撃つ」が読めるようにし、待ち時間そのものに意味を持たせる方針にした。
+//
+// 固定の周期だとリズムを読み切られるため、1発ごとにこの範囲から選び直す
+// （Math.random() を使う。game.rng を使うと週次の決定性が壊れるため厳禁）。
+// 中央値は旧 REFLECT_BEAM_CANNON_COOLDOWN(180) に合わせ、そこから ±で幅を持たせた
+export const REFLECT_BEAM_CHARGE_MIN = 180;  // 3.0秒
+export const REFLECT_BEAM_CHARGE_MAX = 240;  // 4.0秒
 
 // 既存のタレット（#555555 / #888888 / #667788）より明るい灰色。並んだときに
 // 新型だと分かるようにする
 export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
 export const COLOR_BEAM_CANNON_BARREL = '#D8DEE4';
 export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
+
+// パイロットランプ（充填の進み具合を示す）。撃った直後は暗紫、充填が高まるほど
+// 明るい紫に輝く。暗紫は COLOR_REFLECT_BEAM_EDGE（ビームの外周）と同じ値にして、
+// 「撃ち終わった直後の砲台＝ビームの外周色」で統一感を持たせた。
+// **色は必ず hex 形式で書くこと**（lerpColor() が parseInt するため。rgba() を
+// 入れると '#NaNNaNNaN' になり実 canvas では無言で劣化する）
+export const COLOR_BEAM_CANNON_LAMP_DIM = '#3B0F6B';
+export const COLOR_BEAM_CANNON_LAMP_BRIGHT = '#C77DFF';
 // 砲身より一段暗くして、線として見えるようにする。冷却フィン（ラジエーター）で
 // 輪郭に凹凸を出し、既存のタレットと形でも見分けられるようにするためのもの
 export const COLOR_BEAM_CANNON_FIN = '#8A939C';

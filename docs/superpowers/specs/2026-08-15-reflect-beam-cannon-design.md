@@ -215,6 +215,54 @@ SpawnManager の仕事、という既存の分担をそのまま使う。
 跳ね返る武器なので、壁越しに撃って跳ね返らせるのがこの砲台の見せ場になる、という
 位置づけとも合っている。
 
+### 撃つ周期 — 冷却なしの充填式（2026-08-15 変更、ユーザー指定）
+
+当初は他のタレットと同じく、2連弾を撃ち切ったら `cooldown` 状態で
+`REFLECT_BEAM_CANNON_COOLDOWN`（180フレーム固定）待ってから `idle` に戻る形だった。
+その後ユーザーから「パイロットランプを紫系に変え、冷却時間は不要で、充填で
+連続して打ってくるような感じにしてほしい」と指示され、`cooldown` 状態そのものを
+撤廃した。
+
+**なぜ冷却をやめたか**: 固定の冷却時間は「待たされているだけ」で、ランプが
+何も語らなかった。充填という形にして、ランプの色と脈の速さで進み具合を
+見せる方が、「そろそろ撃つ」が読めて待ち時間そのものに意味が出る。危険を
+読んで動く隙が生まれるぶん、待ち時間が単なる休止ではなくなる。
+
+**実装**: 新しい状態を増やさず、`bursting` → `idle` の遷移だけに変えた
+（`EnemyTurret._updateStateMachine()`）。`idle` 状態の待機カウントダウン
+（`cooldownTimer`）をそのまま「次弾までの充填」として使い回している。
+
+```js
+if (this.burstCount <= 0) {
+    if (this.spec.charge) {
+        // beam 型: cooldown を経由せず idle に戻り、cooldownTimer を
+        // 次弾までの充填として使い回す
+        this.state         = 'idle';
+        this.chargeTotal   = this._rollBeamCharge();
+        this.cooldownTimer = this.chargeTotal;
+    } else {
+        this.state         = 'cooldown';
+        this.cooldownTimer = this.spec.cooldown;
+    }
+}
+```
+
+`gun` 型は元の `bursting` → `cooldown` → `idle` のまま変えていない
+（`spec.charge` を持たないことで自動的に旧経路に分岐する。`fins` と同じ、
+表にキーがあるかどうかで分岐する形）。
+
+**充填時間は1発ごとに `REFLECT_BEAM_CHARGE_MIN`〜`MAX`（180〜240フレーム
+＝3.0〜4.0秒）の範囲から選び直す。** 固定値だと、プレイヤーが数拍数えるだけで
+発射タイミングを完全に読み切れてしまい、ランプを見る意味が薄れる。範囲から
+選び直すことで「ランプを見ないと正確なタイミングは分からない」を保っている。
+
+**乱数は `Math.random()` を使う。`game.rng` は絶対に使わない。** マップ生成の
+外（発射のたびに何度も呼ばれる場所）で `game.rng` を消費すると、以降に生成される
+敵の構成が全部ずれて週次の決定性が壊れる（`WeekSeed.js` の保証）。既存のタレットも
+初期タイミングのばらつきや gun 型の着弾ブレに `Math.random()` を使っており、
+それに倣った。テストは `game.rng.next` を数えるモックを渡し、0回であることを縛る
+（`tests/beam-cannon.test.js`）。
+
 ## 見た目（ユーザーの指定）
 
 ### ビームの色 — 芯が白っぽい紫、周囲が暗紫
@@ -263,6 +311,58 @@ SpawnManager の仕事、という既存の分担をそのまま使う。
 分岐する（型ごとの違いは表の1行に出す、という既存方針のまま）。
 
 - `COLOR_BEAM_CANNON_FIN = '#8A939C'`
+
+### パイロットランプ — 充填の進み具合を紫の脈動で見せる（2026-08-15 追加、ユーザー指定）
+
+冷却をやめて充填式にしたぶん（「撃つ周期」参照）、中心のパイロットランプが
+「あとどれくらいで撃つか」を伝える役目を持つ。ユーザーの指定は次の3点:
+
+- 色は黄色系ではなく**紫色系**にする
+- **打ち終わった直後は暗紫**、**充填が高まるほど紫色に輝く**
+- **外周から中心にかけて脈打つ**ように色が変わっていく
+
+`gun` 型は変更なし（従来どおり `bursting` 中は赤 `#FF2222`、それ以外は黄
+`#FFCC00`）。`draw()` の分岐を型名では増やさず、`spec.lampColors` の有無で
+分ける（`fins` と同じやり方）。
+
+```js
+if (this.spec.lampColors) {
+    this._drawChargeLamp(ctx);       // beam 型
+} else {
+    ctx.fillStyle = (this.state === 'bursting') ? '#FF2222' : '#FFCC00'; // gun 型（従来どおり）
+    ...
+}
+```
+
+**色の補間**: 充填の進み具合（`_beamChargeProgress()` = `1 - cooldownTimer / chargeTotal`、
+0除算対策あり）を `src/js/utils/color.js` の **`lerpColor()`** に渡し、
+`COLOR_BEAM_CANNON_LAMP_DIM`（暗紫）→ `COLOR_BEAM_CANNON_LAMP_BRIGHT`（明るい紫）を
+補間する。自前で色を混ぜず、既存の共通機構をそのまま使う（CLAUDE.md の
+「まず表に行を足せないか」と同じ思想で、既にある部品を再利用する）。暗紫は
+ビームの外周色 `COLOR_REFLECT_BEAM_EDGE` と同じ値にして、「撃ち終わった直後の
+砲台＝ビームの外周色」で統一感を持たせた。
+
+**色は必ず hex 形式。** `lerpColor()` が `parseInt` するため、`rgba()` を定数に
+入れると `'#NaNNaNNaN'` になり実 canvas で無言で劣化する（ビームの色・砲台の色と
+同じ注意点。全色の hex 形式を縛るテストがある）。
+
+**脈動 — 外周から中心へ**: 半径 `BEAM_LAMP_MAX_RADIUS`（6px。胴体のピボット半径8px
+からはみ出さない範囲で、旧ランプの半径3pxより大きく）から縮んでいく輪を
+`BEAM_LAMP_RINGS`（3本）、位相をずらして重ねて描く。`(t + k / 本数) % 1` で
+1本が中心に着いたら次の輪が外周に現れる形にした（`EnemyTurret.js` の
+`_drawChargeLamp()`）。これらは描画専用のパラメータなので `Constants.js` では
+なく `EnemyTurret.js` のモジュールスコープに置いた（`BARREL_BASE`/`BARREL_LENGTH`
+や `EnemyAttacker.js` の `LEG_STYLES` と同じ扱い）。
+
+**時間の基準は専用カウンタを持たず、充填の経過そのもの
+（`chargeTotal - cooldownTimer`）を使う。** ゲームのフレームカウンタに頼らず
+`cooldownTimer` の減り方だけで脈が進むので、充填の状態とランプの動きが
+常に同期する。副次的に、テストからも `cooldownTimer` を直接書き換えるだけで
+脈の動きを検証できる。
+
+**充填が進むほど脈を速くする**（周期を `BEAM_LAMP_CYCLE_SLOW`(50) →
+`BEAM_LAMP_CYCLE_FAST`(14) で短くする）。「そろそろ撃つ」が読めるのが狙いで、
+冷却時間を無くした代わりの手がかりになっている。
 
 ### 発射時 — 砲口に丸い放射光
 
@@ -324,12 +424,17 @@ SpawnManager の仕事、という既存の分担をそのまま使う。
 | `REFLECT_BEAM_MUZZLE_FLASH_FRAMES` | 12 | 0.2秒 |
 | `REFLECT_BEAM_MUZZLE_FLASH_RADIUS` | 18 | 砲身の先端から広がる光の半径。`_muzzleOffset()` と揃えた値。追加された定数 |
 | `REFLECT_BEAM_CANNON_HP` | 40 | タレット30より硬い（自機ミサイル3発） |
-| `REFLECT_BEAM_CANNON_COOLDOWN` | 180 | タレットは120で5連射。単発なので長め |
 | `REFLECT_BEAM_CANNON_SCORE` | 350 | タレット200より高い |
 | `COLOR_BEAM_CANNON_FIN` | `#8A939C` | 冷却フィンの色。追加された定数 |
+| `REFLECT_BEAM_CHARGE_MIN` | 180（3.0秒） | 冷却の代わりに導入した充填時間の範囲の下限。中央値は旧 `REFLECT_BEAM_CANNON_COOLDOWN`(180) に合わせた。1発ごとにこの範囲から選び直す（固定だとリズムを読み切られるため） |
+| `REFLECT_BEAM_CHARGE_MAX` | 240（4.0秒） | 充填時間の範囲の上限 |
+| `COLOR_BEAM_CANNON_LAMP_DIM` | `#3B0F6B` | パイロットランプの暗紫（撃った直後）。`COLOR_REFLECT_BEAM_EDGE`（ビームの外周色）と同じ値 |
+| `COLOR_BEAM_CANNON_LAMP_BRIGHT` | `#C77DFF` | パイロットランプの明るい紫（充填しきったとき） |
 
 削除された定数: `REFLECT_BEAM_TAIL_SEGMENTS`・`REFLECT_BEAM_TAIL_LENGTH`
-（固定長切り出し方式の廃止に伴う。「ビームの形」参照）。
+（固定長切り出し方式の廃止に伴う。「ビームの形」参照）、
+`REFLECT_BEAM_CANNON_COOLDOWN`（冷却の廃止に伴う。「撃つ周期」参照。
+`REFLECT_BEAM_CHARGE_MIN`/`MAX` に役目が移った）。
 
 ## 音
 
@@ -376,6 +481,15 @@ SpawnManager の仕事、という既存の分担をそのまま使う。
 - **音量の実測** — A特性で既存音との相対 dB（`tests/reflect-beam-sound.test.js`）
 - 描画は `tests/helpers/fake-ctx.js` で、砲口の放射光が `createRadialGradient` で
   描かれること・発射時にだけ出ること
+- **撃つ周期とパイロットランプ（`tests/beam-cannon.test.js`）** — beam 型が
+  撃ち終わったあと `cooldown` 状態を通らず `idle` に戻ること、充填時間が
+  `REFLECT_BEAM_CHARGE_MIN`〜`MAX` の範囲に毎回入り固定値ではないこと（範囲から
+  選び直しているかを縛る）、充填の進み具合が撃った直後の0付近から充填しきった
+  1付近へ増えること、撃った直後のランプは暗紫寄り・充填しきったランプは明るい紫寄り
+  であること（`makeFakeCtx()` で `set:fillStyle` を拾う）、脈動の輪が外周から
+  中心へ動くこと（時間を進めると `arc` の半径が縮む輪があること）、
+  **`game.rng` を消費しないこと**（`rng.next` を数えるモックで0回を縛る）、
+  gun 型は従来どおり黄／赤のランプで `cooldown` 状態を通ることが変わらないこと
 
 **ソース文字列を grep するテストは書かない。** 呼び出しが存在しても到達不能なら
 通ってしまう（実際にそれで抜けたバグがある）。
@@ -390,14 +504,18 @@ SpawnManager の仕事、という既存の分担をそのまま使う。
   場合は `REFLECT_BEAM_SEGMENT_FRAMES` をさらに下げる）
 - 帯が通路を塞ぐ時間が長すぎないか（`REFLECT_BEAM_SEGMENT_LIFE`。**最初に下げる値**）
 - 反射4回・1200px が長すぎないか
-- **2連弾・遮蔽無視の2つで被弾圧が上がっている点。** 辛ければ
-  `REFLECT_BEAM_CANNON_COOLDOWN`（180）を伸ばす → `REFLECT_BEAM_BURST_DELAY`（24）を
-  伸ばして2発目までの猶予を長くする → `REFLECT_BEAM_DAMAGE`（20）を下げる、の順に
-  効く。**2発とも当たると40ダメージ**（自機HP100）になる点は要注意
+- **2連弾・遮蔽無視・冷却レス化の3つで被弾圧が上がっている点。** 辛ければ
+  `REFLECT_BEAM_CHARGE_MIN`/`MAX`（180〜240）の範囲を広げる（特に下限を上げる）
+  → `REFLECT_BEAM_BURST_DELAY`（24）を伸ばして2発目までの猶予を長くする →
+  `REFLECT_BEAM_DAMAGE`（20）を下げる、の順に効く。**2発とも当たると40ダメージ**
+  （自機HP100）になる点は要注意
 - 紫の帯が洞窟の背景に埋もれないか
 - 明るい灰色＋冷却フィンの砲台が、既存のタレットと並んだときに形でも見分けられるか
 - 砲口の放射光が、砲身に隠れず・撃ったことを伝えられているか
-- 7面の難度が上がりすぎていないか（半分という割合、クールダウン180）
+- **パイロットランプが充填の進み具合を伝えられているか**（暗紫→明るい紫、
+  外周から中心への脈動、充填が進むほど脈が速くなる）。冷却をやめた代わりに
+  「そろそろ撃つ」をランプで読めるようにした狙いどおりに機能しているか
+- 7面の難度が上がりすぎていないか（半分という割合、充填時間3.0〜4.0秒）
 
 ## やらないこと
 

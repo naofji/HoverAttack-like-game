@@ -6,12 +6,14 @@ import {
     ENEMY_TURRET_HP, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_TURRET_SIGHT_RANGE, ENEMY_TURRET_SCORE,
     ENEMY_TURRET_BURST_COUNT, ENEMY_TURRET_BURST_DELAY, ENEMY_TURRET_COOLDOWN,
-    REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_COOLDOWN, REFLECT_BEAM_CANNON_SCORE,
+    REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_SCORE,
+    REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
     REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_BURST_DELAY,
     REFLECT_BEAM_MUZZLE_FLASH_RADIUS,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
     COLOR_BEAM_CANNON_FIN,
     COLOR_REFLECT_BEAM_CORE,
+    COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -19,11 +21,21 @@ import { ReflectBeam } from './ReflectBeam.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
 import { playDestruction } from './destruction.js';
 import { applyDamage } from '../utils/damage.js';
+import { lerpColor } from '../utils/color.js';
 
 // 砲身の見た目。描画専用のパラメータなので Constants ではなくここに置く
 // （EnemyAttacker.js の LEG_STYLES と同じ扱い）
 const BARREL_BASE = 4;    // 砲身が始まる位置（中心から）
 const BARREL_LENGTH = 14; // 砲身の長さ
+
+// beam 型のパイロットランプ（充填の進み具合を示す脈動）。描画専用のパラメータ
+// なので Constants ではなくここに置く。「外周から中心にかけて脈打つ」を、
+// 同じ半径から縮んでいく複数の輪を位相をずらして重ねる形で表現する
+// （1本が中心に着いたら次の輪が外周に現れる。(t + k/本数) % 1 が肝）
+const BEAM_LAMP_RINGS = 3;
+const BEAM_LAMP_MAX_RADIUS = 6;    // 胴体(半径8)からはみ出さない範囲で、旧警告灯(半径3)より大きく
+const BEAM_LAMP_CYCLE_SLOW = 50;   // 充填直後(進み0)の脈の周期。ゆったり
+const BEAM_LAMP_CYCLE_FAST = 14;   // 充填しきった(進み1)ときの周期。速くして「そろそろ撃つ」を伝える
 
 // 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
 // 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
@@ -43,7 +55,9 @@ const TURRET_TYPES = {
     beam: {
         hp: REFLECT_BEAM_CANNON_HP,
         score: REFLECT_BEAM_CANNON_SCORE,
-        cooldown: REFLECT_BEAM_CANNON_COOLDOWN,
+        // 冷却は無し。撃ち終わったらすぐ充填に入り、溜まったらまた撃つ。
+        // 1発ごとに範囲から選ぶのは、固定だとリズムを読み切られるため
+        charge: { min: REFLECT_BEAM_CHARGE_MIN, max: REFLECT_BEAM_CHARGE_MAX },
         // 遮蔽に隠れても撃つ。反射する武器なので、壁越しに撃って跳ね返らせるのが
         // この砲台の見せ場になる。隠れているだけで安全だと緊張感が出ない
         ignoresLineOfSight: true,
@@ -57,6 +71,9 @@ const TURRET_TYPES = {
         // 冷却フィン。砲身に直交する直線を等間隔に引く。型ごとの違いは表の1行に
         // 出す方針なので、draw() に型の分岐を増やさずここから引く（gun は持たない）
         fins: { count: 4, halfHeight: 4, color: COLOR_BEAM_CANNON_FIN },
+        // パイロットランプの色。gun は今までどおり draw() 内の黄／赤決め打ちのまま
+        // （このキーが無いことで分岐する。fins と同じ扱い）
+        lampColors: { dim: COLOR_BEAM_CANNON_LAMP_DIM, bright: COLOR_BEAM_CANNON_LAMP_BRIGHT },
     },
 };
 
@@ -88,8 +105,17 @@ export class EnemyTurret {
         this.currentAngle = this.targetAngle;
 
         // AI State
-        this.state = 'idle'; // 'idle', 'bursting', 'cooldown'
-        this.cooldownTimer = Math.floor(Math.random() * this.spec.cooldown); // Randomize initial offset
+        this.state = 'idle'; // 'idle', 'bursting', 'cooldown'（beam 型は cooldown を通らない）
+        if (this.spec.charge) {
+            // beam 型: cooldownTimer を「次弾までの充填」として使い回す。
+            // 初期化時点でも一度選んでおき、初弾のタイミングにばらつきを持たせる
+            // （既存の gun 型の「初期オフセットをランダムにする」意図を踏襲）
+            this.chargeTotal = this._rollBeamCharge();
+            this.cooldownTimer = Math.floor(Math.random() * this.chargeTotal);
+        } else {
+            this.chargeTotal = 0; // gun 型では使わない
+            this.cooldownTimer = Math.floor(Math.random() * this.spec.cooldown); // Randomize initial offset
+        }
 
         // Burst scaling: Mission 5 (index 4) and above get 8 rounds
         // （既存のタレットだけ。ビームは常に単発 = spec.burst）
@@ -150,8 +176,17 @@ export class EnemyTurret {
                 // （REFLECT_BEAM_BURST_DELAY=24）ため、型ごとの spec.burstDelay を見る
                 this.burstTimer = this.spec.burstDelay;
                 if (this.burstCount <= 0) {
-                    this.state         = 'cooldown';
-                    this.cooldownTimer = this.spec.cooldown;
+                    if (this.spec.charge) {
+                        // beam 型: 'cooldown' を経由せず 'idle' に戻り、待機中の
+                        // カウントダウンをそのまま「次弾までの充填」として使う。
+                        // 1発ごとに範囲から選び直す（固定だとリズムを読み切られる）
+                        this.state         = 'idle';
+                        this.chargeTotal   = this._rollBeamCharge();
+                        this.cooldownTimer = this.chargeTotal;
+                    } else {
+                        this.state         = 'cooldown';
+                        this.cooldownTimer = this.spec.cooldown;
+                    }
                 }
             } else {
                 this.burstTimer--;
@@ -197,6 +232,24 @@ export class EnemyTurret {
      */
     _muzzleOffset() {
         return BARREL_BASE + BARREL_LENGTH - this.recoil;
+    }
+
+    /**
+     * 充填時間を範囲から選ぶ（beam 型専用）。固定値だと連射のリズムを読み切られる
+     * ため、1発ごとに選び直す。**`game.rng` は使わない**（マップ生成以外で
+     * 消費すると週次シードの決定性が壊れる。既存のタレットも初期タイミングの
+     * ばらつきや gun 型の着弾ブレに Math.random() を使っており、それに倣う）
+     */
+    _rollBeamCharge() {
+        const { min, max } = this.spec.charge;
+        return Math.floor(min + Math.random() * (max - min));
+    }
+
+    /** 充填の進み具合（0=撃った直後 〜 1=充填しきった）。ランプの色と脈の速さに使う。 */
+    _beamChargeProgress() {
+        if (!this.chargeTotal) return 1;
+        const remaining = Math.max(0, Math.min(this.chargeTotal, this.cooldownTimer));
+        return 1 - remaining / this.chargeTotal;
     }
 
     _executeAttack() {
@@ -251,6 +304,41 @@ export class EnemyTurret {
     /** 破壊時の破片パーツ。設置向きと死亡時の砲塔角度を反映する。 */
     getDebrisParts() {
         return [...turretBaseParts(this), ...turretHeadParts(this)];
+    }
+
+    /**
+     * beam 型のパイロットランプ。ユーザー指定の「打ち終わると暗紫、充填が高まると
+     * 紫に輝く、外周から中心にかけて脈打つ」の実装。
+     *
+     * - 色: 充填の進み具合（`_beamChargeProgress()`）で暗紫→明るい紫を
+     *   `lerpColor()` で補間する（自前で色を混ぜない。既存の共通機構を使う）
+     * - 脈: 半径 BEAM_LAMP_MAX_RADIUS から縮んでいく輪を BEAM_LAMP_RINGS 本、
+     *   位相をずらして重ねる。「経過フレーム数」は専用のカウンタを持たず
+     *   `chargeTotal - cooldownTimer` から出す（充填の進みそのものが時間の
+     *   代わりになる。テストからも cooldownTimer を直接動かすだけで検証できる）
+     * - 充填が進むほど周期を BEAM_LAMP_CYCLE_SLOW→FAST で短くし、脈を速くする。
+     *   「そろそろ撃つ」が読めるのが狙い（冷却時間を無くした代わりの手がかり）
+     */
+    _drawChargeLamp(ctx) {
+        const progress = this._beamChargeProgress();
+        const { dim, bright } = this.spec.lampColors;
+        const color = lerpColor(dim, bright, progress);
+        const cycle = BEAM_LAMP_CYCLE_SLOW + (BEAM_LAMP_CYCLE_FAST - BEAM_LAMP_CYCLE_SLOW) * progress;
+        const elapsed = Math.max(0, (this.chargeTotal || 1) - this.cooldownTimer);
+
+        ctx.fillStyle = color;
+        for (let k = 0; k < BEAM_LAMP_RINGS; k++) {
+            // phase: 0=外周に現れた瞬間 → 1=中心に着いた瞬間（一周したら次の輪が外周に現れる）
+            const phase = ((elapsed / cycle) + k / BEAM_LAMP_RINGS) % 1;
+            const r = BEAM_LAMP_MAX_RADIUS * (1 - phase);
+            // 中心に近づくほど薄くする。同じ色を塗り重ねることで、外周から中心へ
+            // 収束していく濃淡のグラデーションに見せる
+            ctx.globalAlpha = 0.15 + 0.35 * (1 - phase);
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(0.5, r), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
     }
 
     draw(ctx) {
@@ -326,11 +414,16 @@ export class EnemyTurret {
         ctx.fill();
         ctx.stroke();
 
-        // Warning light
-        ctx.fillStyle = (this.state === 'bursting') ? '#FF2222' : '#FFCC00';
-        ctx.beginPath();
-        ctx.arc(0, 0, 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Warning light。beam 型は充填の進み具合を見せるランプに差し替わる
+        // （lampColors の有無で分岐。fins と同じ「型ごとの違いは表の1行」の扱い）
+        if (this.spec.lampColors) {
+            this._drawChargeLamp(ctx);
+        } else {
+            ctx.fillStyle = (this.state === 'bursting') ? '#FF2222' : '#FFCC00';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // 発射直後の砲口の放射光。撃ったことを伝えるための演出で、遅いビームの
         // 出どころを見失わないようにする役目。**予告ではない**

@@ -8,7 +8,10 @@ import {
   REFLECT_BEAM_CANNON_HP, REFLECT_BEAM_CANNON_SCORE, ENEMY_TURRET_HP,
   REFLECT_BEAM_MUZZLE_FLASH_FRAMES, COLOR_BEAM_CANNON_BARREL,
   REFLECT_BEAM_BURST_DELAY, ENEMY_TURRET_BURST_DELAY,
+  REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
+  COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
 } from '../src/js/utils/Constants.js';
+import { lerpColor } from '../src/js/utils/color.js';
 
 // 砲身の見た目パラメータ。draw() 側と同じ値をここでも持つ（描画専用の値は
 // Constants ではなく EnemyTurret.js のモジュールスコープにあるため、テスト側で
@@ -304,4 +307,148 @@ test('gun 型は冷却フィンを持たない', () => {
 
   const finLines = findFinSegments(ctx.calls);
   assert.equal(finLines.length, 0, 'gun 型にフィンが出ている');
+});
+
+// ============================================
+// 充填式の連射（冷却なし）とパイロットランプ
+// ============================================
+//
+// 「冷却時間は不要で、充填で連続して打ってくる」というユーザー要望の実装。
+// beam 型は撃ち終わったら 'cooldown' 状態を経由せず 'idle' に戻り、
+// cooldownTimer を「次弾までの充填」として使い回す。
+
+/** 1回の攻撃(2発)を撃ち切るまで update を回す。 */
+function fireVolley(turret, game) {
+  fireOnce(turret, game);
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) turret.update();
+}
+
+test('beam 型は撃ち終わったあと cooldown 状態を通らず idle に戻る', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  fireVolley(t, game);
+  assert.equal(game.enemyBullets.length, 2, '2発とも出ていない');
+  assert.equal(t.state, 'idle', 'cooldown 状態を経由している（beam 型は冷却が無いはず）');
+});
+
+test('充填時間は毎回 REFLECT_BEAM_CHARGE_MIN〜MAX の範囲に入り、固定値ではない', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+
+  const seen = new Set();
+  for (let volley = 0; volley < 12; volley++) {
+    fireVolley(t, game);
+    assert.ok(
+      t.chargeTotal >= REFLECT_BEAM_CHARGE_MIN && t.chargeTotal <= REFLECT_BEAM_CHARGE_MAX,
+      `充填時間が範囲外: ${t.chargeTotal}`,
+    );
+    seen.add(t.chargeTotal);
+  }
+  // 固定値だとリズムを読み切られるため、1発ごとに選び直していること。
+  // 実装を「常に min にする」に壊すとこの assert が落ちる（12回中1種類だけになる）
+  assert.ok(seen.size > 1, '充填時間が毎回同じ値になっている（範囲から選び直していない）');
+});
+
+test('充填の進み具合は撃った直後の0付近から充填しきった1付近へ増える', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  fireVolley(t, game);
+
+  const justFired = t._beamChargeProgress();
+  assert.ok(justFired < 0.05, `撃った直後の進み具合が0付近ではない: ${justFired}`);
+
+  for (let i = 0; i < t.chargeTotal - 1; i++) t.update();
+  const almostCharged = t._beamChargeProgress();
+  assert.ok(almostCharged > 0.95, `充填しきる直前の進み具合が1付近ではない: ${almostCharged}`);
+  assert.ok(almostCharged > justFired, '進み具合が増えていない');
+});
+
+test('game.rng を消費しない（充填時間の抽選は Math.random のみ使う）', () => {
+  const game = makeGame();
+  let rngCalls = 0;
+  game.rng = { next: () => { rngCalls++; return 0.5; } };
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  for (let volley = 0; volley < 5; volley++) fireVolley(t, game);
+  assert.equal(rngCalls, 0, 'game.rng を消費している（週次の決定性が壊れる）');
+});
+
+test('撃った直後のランプは暗紫寄り、充填しきったランプは明るい紫寄り', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+
+  const expectedDim = lerpColor(COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, 0);
+  const expectedBright = lerpColor(COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, 1);
+  // 暗紫と明るい紫は別の値であること（同じ色に潰れていたらそもそもテストにならない）
+  assert.notEqual(expectedDim, expectedBright, 'DIM/BRIGHT の定数が同じ色になっている');
+
+  // 撃った直後: cooldownTimer === chargeTotal（進み0）
+  t.chargeTotal = 200;
+  t.cooldownTimer = 200;
+  t.state = 'idle';
+  const dimCtx = makeFakeCtx();
+  t.draw(dimCtx);
+  const dimColors = dimCtx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  assert.ok(dimColors.includes(expectedDim), '撃った直後のランプが暗紫になっていない');
+  assert.ok(!dimColors.includes(expectedBright), '撃った直後なのに明るい紫で描かれている');
+
+  // 充填しきった: cooldownTimer === 0（進み1）
+  t.cooldownTimer = 0;
+  const brightCtx = makeFakeCtx();
+  t.draw(brightCtx);
+  const brightColors = brightCtx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  assert.ok(brightColors.includes(expectedBright), '充填しきったランプが明るい紫になっていない');
+  assert.ok(!brightColors.includes(expectedDim), '充填しきったのに暗紫のままで描かれている');
+});
+
+test('gun 型のランプは従来どおり黄／赤で、色は充填率に依存しない', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'gun');
+
+  const idleCtx = makeFakeCtx();
+  t.draw(idleCtx);
+  const idleColors = idleCtx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  assert.ok(idleColors.includes('#FFCC00'), '待機中のランプが黄色になっていない');
+
+  t.state = 'bursting';
+  const burstCtx = makeFakeCtx();
+  t.draw(burstCtx);
+  const burstColors = burstCtx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
+  assert.ok(burstColors.includes('#FF2222'), '連射中のランプが赤色になっていない');
+});
+
+test('gun 型は今までどおり cooldown 状態を通る', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'gun');
+  for (let i = 0; i < 600 && game.enemyBullets.length === 0; i++) t.update();
+  // burst 分だけ撃ち切るまで進める（gun のバーストは maxBurstCount 発、
+  // 間隔は ENEMY_TURRET_BURST_DELAY）
+  for (let i = 0; i < t.maxBurstCount * (ENEMY_TURRET_BURST_DELAY + 1) + 5; i++) {
+    t.update();
+    if (t.state === 'cooldown') break;
+  }
+  assert.equal(t.state, 'cooldown', 'gun 型が cooldown 状態を通らなくなっている');
+});
+
+test('パイロットランプの脈動の輪は外周から中心へ動く（時間が進むと arc の半径が縮む）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+  t.cooldownTimer = 199; // 撃った直後（経過1フレーム分）
+
+  const early = makeFakeCtx();
+  t.draw(early);
+  const earlyRadii = early.calls.filter((c) => c.name === 'arc' && c.args[0] === 0 && c.args[1] === 0)
+    .map((c) => c.args[2]);
+
+  t.cooldownTimer = 180; // 少し充填が進んだ状態（同じ脈の周期内で経過が増える）
+  const later = makeFakeCtx();
+  t.draw(later);
+  const laterRadii = later.calls.filter((c) => c.name === 'arc' && c.args[0] === 0 && c.args[1] === 0)
+    .map((c) => c.args[2]);
+
+  assert.ok(earlyRadii.length > 0 && laterRadii.length > 0, 'パイロットランプの輪が描かれていない');
+  // 少なくとも1本は、時間が進むにつれ半径が縮んでいること
+  // （中心に近づく＝外周から中心への脈動。全本が同時に大きくなっていたら失敗する）
+  const shrunk = earlyRadii.some((r0, i) => laterRadii[i] !== undefined && laterRadii[i] < r0);
+  assert.ok(shrunk, '輪の半径が時間とともに縮んでいない');
 });
