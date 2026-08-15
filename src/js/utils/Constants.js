@@ -555,13 +555,21 @@ export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
 // **色は必ず hex 形式で書くこと**（lerpColor() が parseInt するため。rgba() を
 // 入れると '#NaNNaNNaN' になり実 canvas では無言で劣化する）
 export const COLOR_BEAM_CANNON_LAMP_DIM = '#3B0F6B';
-// 元は #C77DFF（彩度低め）だったが、実機で「色が白っぽすぎて機体の白と重なって
-// インパクトが弱い」と指摘された。より彩度の高い青紫寄りへ変更
-export const COLOR_BEAM_CANNON_LAMP_BRIGHT = '#B026FF';
+// 一度「機体の明るい灰色に埋もれるので彩度を上げる」として #B026FF（青紫寄り）に
+// 変えたが、実機で「以前の白っぽい色の方が良い」と指摘され #C77DFF（白っぽい紫）
+// へ戻した。埋もれる問題は COLOR_BEAM_CANNON_LAMP_BACK（暗い座）を敷くことで
+// 別途解決済みなので、色そのものの彩度を上げる必要は無かった
+export const COLOR_BEAM_CANNON_LAMP_BRIGHT = '#C77DFF';
 // ランプ本体・輪を描く前に敷く暗い座。COLOR_BEAM_CANNON_BASE/_PIVOT が明るい灰色
 // なので、紫を直接その上に乗せてもコントラストが出ない（実機フィードバック）。
 // ほぼ黒に近い紫を先に塗って、その上へランプの色を重ねることでインパクトを出す
 export const COLOR_BEAM_CANNON_LAMP_BACK = '#1A0A2E';
+
+// 充填リングの軌道。ランプの中（半径6px）では動く距離が短すぎて「波が中心へ
+// 寄る」と読めず、ただの明滅に見えた（実機で指摘された）。砲台の外側から
+// 胴体の縁まで収束させることで、距離を稼いで動きを読めるようにする
+export const BEAM_LAMP_RING_OUTER = 22;  // 機体(24x24)より一回り外
+export const BEAM_LAMP_RING_INNER = 9;   // ピボット(半径8)のすぐ外
 // 砲身より一段暗くして、線として見えるようにする。冷却フィン（ラジエーター）で
 // 輪郭に凹凸を出し、既存のタレットと形でも見分けられるようにするためのもの
 export const COLOR_BEAM_CANNON_FIN = '#8A939C';

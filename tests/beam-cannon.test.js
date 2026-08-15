@@ -11,6 +11,7 @@ import {
   REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
   COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
   COLOR_BEAM_CANNON_LAMP_BACK,
+  BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
   REFLECT_BEAM_SECOND_SHOT_OFFSET, REFLECT_BEAM_SECOND_SHOT_JITTER,
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
@@ -565,6 +566,110 @@ test('パイロットランプの脈動の輪は外周から中心へ動く（�
 });
 
 // ============================================
+// 実機フィードバック(2回目): 脈動を「読める」動きにする
+// ============================================
+//
+// 「中心に向かって波打つ感じ（Windows のファイル転送インジケーターのような
+// 感じ）は見て取れなかった」という指摘への対応。原因はランプの内側（半径6px）
+// でだけ輪を動かしていたことで、動く距離が短すぎて明滅にしか見えなかった。
+// 輪を砲台の外側(BEAM_LAMP_RING_OUTER)から胴体の縁のすぐ外(BEAM_LAMP_RING_INNER)
+// まで収束させることで距離を稼いだ。
+
+// beginPath() の区切りで ctx.calls を「1つの図形」の単位にまとめ、arc の半径と
+// その時点の globalAlpha を一緒に持たせるヘルパー。輪(stroke && !fill)だけを
+// 抜き出すのに使う（座・ランプ本体・ピボットは fill を伴うので除外できる）
+function ringArcs(calls) {
+  const out = [];
+  let current = null;
+  let globalAlpha = 1;
+  const finalize = () => { if (current) out.push(current); };
+  for (const c of calls) {
+    if (c.name === 'set:globalAlpha') globalAlpha = c.args[0];
+    if (c.name === 'beginPath') {
+      finalize();
+      current = { arcs: [], fill: false, stroke: false, alpha: globalAlpha };
+    } else if (current && c.name === 'arc') {
+      current.arcs.push({ x: c.args[0], y: c.args[1], r: c.args[2] });
+    } else if (current && c.name === 'fill') {
+      current.fill = true;
+    } else if (current && c.name === 'stroke') {
+      current.stroke = true;
+      current.alpha = globalAlpha; // stroke() 時点で有効な alpha を採用
+    }
+  }
+  finalize();
+  return out
+    .filter((s) => s.stroke && !s.fill && s.arcs.length > 0)
+    .map((s) => ({ r: s.arcs[0].r, alpha: s.alpha }));
+}
+
+// ① リングの半径が BEAM_LAMP_RING_INNER 〜 BEAM_LAMP_RING_OUTER の範囲にあること。
+// ランプの内側（半径6px 以内）だけで動いていたら、この範囲チェックで必ず落ちる
+test('脈動の輪はランプの内側ではなく、砲台の外側(BEAM_LAMP_RING_OUTER)から胴体の縁のすぐ外(BEAM_LAMP_RING_INNER)の範囲で動く', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+
+  // 周期の中の色々な位相を見るため、cooldownTimer を複数サンプルする
+  for (const cooldownTimer of [199, 170, 140, 100, 60, 20, 1]) {
+    t.cooldownTimer = cooldownTimer;
+    const ctx = makeFakeCtx();
+    t.draw(ctx);
+    const rings = ringArcs(ctx.calls);
+    assert.ok(rings.length > 0, `輪が描かれていない (cooldownTimer=${cooldownTimer})`);
+    for (const { r } of rings) {
+      assert.ok(
+        r >= BEAM_LAMP_RING_INNER - 1e-6 && r <= BEAM_LAMP_RING_OUTER + 1e-6,
+        `輪の半径が想定の範囲外: r=${r} (期待 ${BEAM_LAMP_RING_INNER}〜${BEAM_LAMP_RING_OUTER})`,
+      );
+    }
+  }
+});
+
+// ③ 輪の本数は3本のまま（実機フィードバックの対象は軌道と濃淡で、本数は変えない）
+test('脈動の輪は3本のまま', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+  assert.equal(ringArcs(ctx.calls).length, 3, '輪の本数が3本から変わっている');
+});
+
+// ④ 軌道の両端（外周に現れた瞬間・中心の縁に着いた瞬間）で薄く、中間で濃い。
+// 「湧いて消えるのが唐突に見えない」ためのなだらかな濃淡（Windows の転送
+// インジケーターのような見え方）を縛る
+test('脈動の輪は軌道の両端で薄く、中間で濃い（濃さがなだらかに変わる）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+
+  // 輪は BEAM_LAMP_RINGS(3) 本あるので、1本の位相が「端」に来るタイミングと
+  // 「中間」に来るタイミングをそれぞれ用意する。周期は cycle であり、
+  // BEAM_LAMP_CYCLE_SLOW(50)〜FAST(14) の範囲。progress=0 (chargeTotal=cooldownTimer)
+  // のときは cycle=50 になるので、その前提で elapsed を選ぶ
+  t.cooldownTimer = t.chargeTotal - 1; // elapsed=1 → phase≈0.02（端）
+  const edgeCtx = makeFakeCtx();
+  t.draw(edgeCtx);
+  const edgeAlphas = ringArcs(edgeCtx.calls).map((s) => s.alpha);
+
+  t.cooldownTimer = t.chargeTotal - 25; // elapsed=25 → phase=0.5（中間、cycle=50想定）
+  const midCtx = makeFakeCtx();
+  t.draw(midCtx);
+  const midAlphas = ringArcs(midCtx.calls).map((s) => s.alpha);
+
+  assert.ok(edgeAlphas.length > 0 && midAlphas.length > 0, '輪が描かれていない');
+  // 端の濃さの最大値より、中間の濃さの最大値の方が濃い（値が大きい）こと
+  const maxEdge = Math.max(...edgeAlphas);
+  const maxMid = Math.max(...midAlphas);
+  assert.ok(maxMid > maxEdge, `中間の方が濃いはずが、端(${maxEdge})以下: 中間=${maxMid}`);
+
+  // 濃さが一定でないこと（同じ描画内でも輪ごとに位相が違うので alpha はばらつくはず）
+  const allAlphas = [...edgeAlphas, ...midAlphas];
+  const distinct = new Set(allAlphas.map((a) => a.toFixed(4)));
+  assert.ok(distinct.size > 1, '輪の濃さが常に一定になっている（なだらかな濃淡になっていない）');
+});
+
+// ============================================
 // 実機フィードバック: 輪を「輪」として見せる／紫を強くする／2発目にブレを足す
 // ============================================
 //
@@ -617,11 +722,13 @@ test('パイロットランプの脈動の輪は塗りつぶしではなく線(s
   t.draw(ctx);
 
   const segments = arcSegments(ctx.calls);
-  // ピボット本体(半径8)や座・ランプ本体(fill)を除いた、輪だけの図形
-  // （stroke されていて、fill はされていない、半径0〜8未満の円）
+  // ピボット本体(半径8, fill+stroke)や座・ランプ本体(fillのみ)を除いた、輪だけの
+  // 図形（stroke されていて、fill はされていない円。輪は砲台の外(BEAM_LAMP_RING_OUTER)
+  // まで出るので、以前の「半径0〜8未満」という範囲では絞れなくなった。fill の有無だけで
+  // 十分区別できる）
   const ringSegments = segments.filter((s) => (
     s.stroke && !s.fill
-    && s.arcs.some((a) => a.x === 0 && a.y === 0 && a.r > 0 && a.r < 8)
+    && s.arcs.some((a) => a.x === 0 && a.y === 0 && a.r > 0)
   ));
   assert.ok(ringSegments.length > 0, '輪が stroke で描かれていない（塗りつぶしのままの可能性）');
   for (const s of ringSegments) {

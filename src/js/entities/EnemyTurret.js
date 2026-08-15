@@ -15,6 +15,7 @@ import {
     COLOR_BEAM_CANNON_FIN,
     COLOR_REFLECT_BEAM_CORE,
     COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, COLOR_BEAM_CANNON_LAMP_BACK,
+    BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -34,14 +35,19 @@ const BARREL_LENGTH = 14; // 砲身の長さ
 // 同じ半径から縮んでいく複数の輪を位相をずらして重ねる形で表現する
 // （1本が中心に着いたら次の輪が外周に現れる。(t + k/本数) % 1 が肝）
 const BEAM_LAMP_RINGS = 3;
-const BEAM_LAMP_MAX_RADIUS = 6;    // 胴体(半径8)からはみ出さない範囲で、旧警告灯(半径3)より大きく
 const BEAM_LAMP_CYCLE_SLOW = 50;   // 充填直後(進み0)の脈の周期。ゆったり
 const BEAM_LAMP_CYCLE_FAST = 14;   // 充填しきった(進み1)ときの周期。速くして「そろそろ撃つ」を伝える
 const BEAM_LAMP_RING_LINE_WIDTH = 1.75; // 輪1本1本が独立して見える太さ(1.5〜2の指定内)
 const BEAM_LAMP_CORE_RADIUS = 2;   // 中心の塗りつぶし本体。輪(stroke)と別に残す
-// 暗い座の半径。ランプ本体・輪(最大半径6)より一回り大きく、ピボットの円(半径8)は
-// 超えない範囲で選んだ
+// 暗い座の半径。ランプ本体(BEAM_LAMP_CORE_RADIUS)より一回り大きく、ピボットの円
+// (半径8)は超えない範囲で選んだ。輪はもう座の内側には収まらない(BEAM_LAMP_RING_INNER=9
+// が座の外)ので、座のサイズ基準は「輪」から「ランプ本体」に変わった
 const BEAM_LAMP_BACK_RADIUS = 7;
+// 輪の濃さ（globalAlpha）の範囲。軌道の両端(外周に現れた瞬間・中心の縁に着いた瞬間)で
+// 薄く、中間で濃くする。0まで下げると「消えている」瞬間ができて明滅に戻ってしまうため、
+// 下限は0にしない
+const BEAM_LAMP_RING_ALPHA_MIN = 0.1;
+const BEAM_LAMP_RING_ALPHA_MAX = 0.85;
 
 // 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
 // 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
@@ -350,13 +356,25 @@ export class EnemyTurret {
      *   ランプ本体・輪(最大半径6)より一回り大きい BEAM_LAMP_BACK_RADIUS(7) にした
      * - 本体: 中心の小さな塗りつぶし円（BEAM_LAMP_CORE_RADIUS）。輪と違って
      *   縮まない、常にそこにある「ランプそのもの」
-     * - 脈: 半径 BEAM_LAMP_MAX_RADIUS から縮んでいく輪を BEAM_LAMP_RINGS 本、
-     *   位相をずらして重ねる。「経過フレーム数」は専用のカウンタを持たず
-     *   `chargeTotal - cooldownTimer` から出す（充填の進みそのものが時間の
-     *   代わりになる。テストからも cooldownTimer を直接動かすだけで検証できる）。
-     *   以前は半透明の円を塗りつぶし(fill)で重ねていたが、それだと輪ではなく
-     *   ただの明滅に見える（実機フィードバック）。ctx.stroke() の輪郭線に変え、
-     *   「本体＋その外側を内向きに縮んでいく輪」という見え方にした
+     * - 脈: 輪を BEAM_LAMP_RINGS 本、位相をずらして重ねる。「経過フレーム数」は
+     *   専用のカウンタを持たず `chargeTotal - cooldownTimer` から出す（充填の
+     *   進みそのものが時間の代わりになる。テストからも cooldownTimer を直接
+     *   動かすだけで検証できる）。以前は半透明の円を塗りつぶし(fill)で重ねて
+     *   いたが、それだと輪ではなくただの明滅に見える（実機フィードバック）。
+     *   ctx.stroke() の輪郭線に変え、「本体＋その外側を内向きに縮んでいく輪」
+     *   という見え方にした
+     * - 輪の軌道: 当初はランプの内側（半径6px）だけで動かしていたが、それだと
+     *   動く距離が短すぎて「波が中心へ寄る」と読めず、ただの明滅にしか見えない
+     *   と実機で指摘された。砲台の胴体（ピボット半径8、機体24×24）にこれ以上の
+     *   余地が無いため、**輪を砲台の外側へ出し**、BEAM_LAMP_RING_OUTER(22)から
+     *   BEAM_LAMP_RING_INNER(9) まで収束させることで距離を稼いだ。
+     *   これにより輪は機体の外まで描かれ、床/天井に付いた砲台では地形の上に
+     *   重なって描かれるが、エネルギーが機体に集まっている表現として成立する
+     *   ことと、砲台の内側だけでは距離が足りず脈動が読めないことから許容する。
+     *   軌道の両端（外周に現れた瞬間・中心の縁に着いた瞬間）で濃さを
+     *   BEAM_LAMP_RING_ALPHA_MIN まで落とし、中間で BEAM_LAMP_RING_ALPHA_MAX まで
+     *   上げる。輪が唐突に湧いて消えるように見えないための、Windows の
+     *   ファイル転送インジケーターのような「なだらかな濃淡」を狙った
      * - 充填が進むほど周期を BEAM_LAMP_CYCLE_SLOW→FAST で短くし、脈を速くする。
      *   「そろそろ撃つ」が読めるのが狙い（冷却時間を無くした代わりの手がかり）
      */
@@ -379,18 +397,24 @@ export class EnemyTurret {
         ctx.arc(0, 0, BEAM_LAMP_CORE_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
-        // 脈動の輪（輪郭線）
+        // 脈動の輪（輪郭線）。砲台の外側(BEAM_LAMP_RING_OUTER)から胴体の縁の
+        // すぐ外(BEAM_LAMP_RING_INNER)まで収束させる。ランプの中(半径6px)では
+        // 距離が短すぎて明滅にしか見えなかったため、砲台の外へ出した（クラス
+        // 冒頭のコメント参照）
         ctx.strokeStyle = color;
         ctx.lineWidth = BEAM_LAMP_RING_LINE_WIDTH;
+        const ringSpan = BEAM_LAMP_RING_OUTER - BEAM_LAMP_RING_INNER;
         for (let k = 0; k < BEAM_LAMP_RINGS; k++) {
-            // phase: 0=外周に現れた瞬間 → 1=中心に着いた瞬間（一周したら次の輪が外周に現れる）
+            // phase: 0=外周に現れた瞬間 → 1=中心の縁に着いた瞬間（一周したら次の輪が外周に現れる）
             const phase = ((elapsed / cycle) + k / BEAM_LAMP_RINGS) % 1;
-            const r = BEAM_LAMP_MAX_RADIUS * (1 - phase);
-            // 中心に近づくほど薄くする。線でも同じ考え方で、外周から中心へ
-            // 収束していく濃淡に見せる
-            ctx.globalAlpha = 0.3 + 0.5 * (1 - phase);
+            const r = BEAM_LAMP_RING_INNER + ringSpan * (1 - phase);
+            // 軌道の両端(phase=0,1)で薄く、中間(phase=0.5)で濃くする。湧いて
+            // 消えるのが唐突に見えないための「なだらかな濃淡」（実機フィードバック）。
+            // sin(pi*phase) は両端で0・中央で1になるので、そのままカーブとして使える
+            const fade = Math.sin(Math.PI * phase);
+            ctx.globalAlpha = BEAM_LAMP_RING_ALPHA_MIN + (BEAM_LAMP_RING_ALPHA_MAX - BEAM_LAMP_RING_ALPHA_MIN) * fade;
             ctx.beginPath();
-            ctx.arc(0, 0, Math.max(0.5, r), 0, Math.PI * 2);
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.stroke();
         }
         ctx.globalAlpha = 1;
