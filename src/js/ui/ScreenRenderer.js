@@ -5,7 +5,7 @@
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
-    MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
+    MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING, MINIMAP_SIDE_HYSTERESIS,
 } from '../utils/Constants.js';
 import { pickStickyMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
@@ -1041,17 +1041,17 @@ export class ScreenRenderer {
             hudTop: HUD_TOP_HEIGHT,
             hudBottom: HUD_BOTTOM_HEIGHT,
         });
-        // 「動く理由があるときだけ動く」ルールで隅を選ぶ（詳しくは pickStickyMiniMapCorner）。
+        // 「カーソルがいる側の反対側」ルールで隅を選ぶ（詳しくは pickStickyMiniMapCorner）。
         // 「今の隅」は miniMapTransition.corner にある。まだ何も無い（初回描画）ときは
-        // 'topLeft' を仮の今の隅として渡す。null にして毎回選び直す形にすると、
-        // 何も避けるものが無くてもクロスヘアから最も遠い隅（HUD帯が上にしか無い
-        // ぶん、既定のマウス位置では下寄りの隅になりがち）が選ばれてしまい、
-        // 「開いたら基本は左上」という従来の見た目が崩れてしまうため。
+        // 'topLeft' を仮の今の隅として渡す。中心線の不感帯の中にカーソルがいるときは
+        // 「今の隅」がそのまま答えになるので、初回の既定値がそこで効く
+        // （＝画面中央にカーソルがある状態で開いたら左上に出る、という従来の見た目）。
         const currentCorner = this.miniMapTransition ? this.miniMapTransition.corner : 'topLeft';
         const desired = pickStickyMiniMapCorner({
             positions, mapW: destW, mapH: destH,
             currentCorner, unitPoint, crosshairPoint,
             padding: MINIMAP_AVOID_PADDING,
+            hysteresis: MINIMAP_SIDE_HYSTERESIS,
         });
 
         // 隅の切り替えをフェードでつなぐ。初回描画（このインスタンスでまだ何も
