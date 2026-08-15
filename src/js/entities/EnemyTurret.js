@@ -80,9 +80,19 @@ const TURRET_TYPES = {
             barrel: COLOR_BEAM_CANNON_BARREL,
             pivot: COLOR_BEAM_CANNON_PIVOT,
         },
-        // 冷却フィン。砲身に直交する直線を等間隔に引く。型ごとの違いは表の1行に
-        // 出す方針なので、draw() に型の分岐を増やさずここから引く（gun は持たない）
-        fins: { count: 4, halfHeight: 4, color: COLOR_BEAM_CANNON_FIN },
+        // 砲身を1px 厚くする（gun は ±2）。ビーム砲としての「太い導波管」を出す。
+        // 形はあくまでタレットが原型なので、長さも付け根の位置も変えない
+        barrelHalfHeight: 3,
+        // 砲口の放射器（エミッタ）。砲身の先に付く塊で、ここからビームが出ることを
+        // 形で示す。放射光（muzzleFlash）もこの塊の位置に出る
+        emitter: { length: 3, halfHeight: 5 },
+        // 冷却フィン。**塗りのある小さな板**として砲身にまたがらせる。
+        // 以前は線を4本引いていたが、砲身(高さ4px)の倍の高さの縦線が宙に浮いて
+        // 見え、「櫛」のようで形が破綻していた（実機フィードバック）。板にして
+        // 砲身に接続し、本数も4→3に減らして間隔を空けた。
+        // 型ごとの違いは表の1行に出す方針なので、draw() に型の分岐を増やさず
+        // ここから引く（gun は持たない）
+        fins: { count: 3, halfHeight: 4, width: 2, color: COLOR_BEAM_CANNON_FIN },
         // パイロットランプの色。gun は今までどおり draw() 内の黄／赤決め打ちのまま
         // （このキーが無いことで分岐する。fins と同じ扱い）
         lampColors: { dim: COLOR_BEAM_CANNON_LAMP_DIM, bright: COLOR_BEAM_CANNON_LAMP_BRIGHT },
@@ -455,35 +465,43 @@ export class EnemyTurret {
         // --- Draw Rotating Turret Head ---
         ctx.rotate(this.currentAngle);
 
-        // Barrel
+        // Barrel（厚みは型ごと。gun は従来どおり ±2）
         ctx.fillStyle = colors.barrel;
         const barrelLength = BARREL_LENGTH - this.recoil;
-        ctx.fillRect(BARREL_BASE, -2, barrelLength, 4);
-        ctx.strokeRect(BARREL_BASE, -2, barrelLength, 4);
+        const barrelHalf = this.spec.barrelHalfHeight ?? 2;
+        ctx.fillRect(BARREL_BASE, -barrelHalf, barrelLength, barrelHalf * 2);
+        ctx.strokeRect(BARREL_BASE, -barrelHalf, barrelLength, barrelHalf * 2);
 
-        // 冷却フィン（beam 型のみ）。砲身に直交する線を等間隔に引き、輪郭に
-        // 凹凸を出す。色だけで区別していた既存タレットとの差別化のため
+        // 冷却フィン（beam 型のみ）。**塗りのある板**を砲身にまたがらせて、
+        // 輪郭に凹凸を出す。色だけで区別していた既存タレットとの差別化のため。
+        // 線ではなく板にしたのは、線だと砲身から浮いて「櫛」に見えたため
         const fins = this.spec.fins;
         if (fins) {
-            ctx.strokeStyle = fins.color;
+            ctx.fillStyle = fins.color;
             ctx.lineWidth = 1;
-            ctx.beginPath();
             for (let i = 0; i < fins.count; i++) {
-                // 砲身を count+1 等分した内側の点に引く。両端（付け根と砲口）を
-                // 空けることで、砲口の放射光とフィンが重ならない
+                // 砲身を count+1 等分した内側の点に置く。両端（付け根と砲口）を
+                // 空けることで、エミッタとピボットのどちらにも被らない
                 const fx = BARREL_BASE + barrelLength * (i + 1) / (fins.count + 1);
-                ctx.moveTo(fx, -fins.halfHeight);
-                ctx.lineTo(fx, fins.halfHeight);
+                ctx.fillRect(fx - fins.width / 2, -fins.halfHeight, fins.width, fins.halfHeight * 2);
+                ctx.strokeRect(fx - fins.width / 2, -fins.halfHeight, fins.width, fins.halfHeight * 2);
             }
-            ctx.stroke();
 
-            // フィン描画で strokeStyle/lineWidth を上書きしたままにすると、
-            // 直後のピボットの stroke() がフィンの色・太さ（明るい1px）で
-            // 描かれてしまい、draw() 冒頭で設定した本来の輪郭（#222222・2px）が
-            // 薄い縁に化ける。beam 型だけ砲台の輪郭が弱く見える退行になっていたため、
-            // ここで明示的に戻す
-            ctx.strokeStyle = '#222222';
+            // フィン描画で lineWidth を上書きしたままにすると、直後のピボットの
+            // stroke() が細い線で描かれ、draw() 冒頭で設定した本来の輪郭
+            // （#222222・2px）が薄い縁に化ける。beam 型だけ砲台の輪郭が弱く見える
+            // 退行になっていたため、ここで明示的に戻す
             ctx.lineWidth = 2;
+        }
+
+        // 砲口の放射器（beam 型のみ）。砲身の先に一回り大きい塊を付けて、
+        // 「ここからビームが出る」を形で示す。放射光もこの位置に出る
+        const emitter = this.spec.emitter;
+        if (emitter) {
+            const ex = BARREL_BASE + barrelLength - emitter.length;
+            ctx.fillStyle = colors.pivot;
+            ctx.fillRect(ex, -emitter.halfHeight, emitter.length, emitter.halfHeight * 2);
+            ctx.strokeRect(ex, -emitter.halfHeight, emitter.length, emitter.halfHeight * 2);
         }
 
         // Main pivot body (Circle)

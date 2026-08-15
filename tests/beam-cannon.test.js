@@ -10,7 +10,7 @@ import {
   REFLECT_BEAM_BURST_DELAY, ENEMY_TURRET_BURST_DELAY,
   REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
   COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
-  COLOR_BEAM_CANNON_LAMP_BACK,
+  COLOR_BEAM_CANNON_LAMP_BACK, COLOR_BEAM_CANNON_FIN, COLOR_BEAM_CANNON_PIVOT,
   BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
   REFLECT_BEAM_SECOND_SHOT_OFFSET, REFLECT_BEAM_SECOND_SHOT_JITTER,
 } from '../src/js/utils/Constants.js';
@@ -320,27 +320,35 @@ test('ビームは砲口（砲身の先端）から出る', () => {
 });
 
 /**
- * ctx.calls の全ポリラインの中から、「垂直（x1===x2）かつ砲身の厚み(±2)より
- * 上下へはみ出す」線分を集める。
+ * ctx.calls から「フィンの色で塗られた矩形」を集める。
  *
- * フィンは1回の beginPath〜stroke の中で moveTo/lineTo を count 回繰り返して
- * 描いているため、extractPolylines() は全体を1本の折れ線として返す
- * （`beginPath`〜`stroke` の間の点をまとめて1本にする仕様）。以前は
- * 「最初のポリラインを2点ずつに切って垂直線分を数える」実装にしていたが、
- * これだと①gun 型に誤って fins を足しても「垂直な短い線分が無い」ことしか
- * 見ておらず素通りする穴があり（レビュー指摘）、②draw() の描画順が変わって
- * フィンが最初のポリラインでなくなると無関係な線を掴んで壊れる、という
- * 2つの問題があった。全ポリライン・全線分を対象にすることで両方を塞ぐ。
+ * フィンは以前 stroke の縦線で描いていたが、砲身(高さ4px)の倍の高さの線が
+ * 宙に浮いて「櫛」に見え、砲台の形が破綻していた（実機フィードバック）。
+ * 塗りのある板に作り直したので、テストも fillRect を見る形へ変えた。
+ * 色で絞ることで、砲身・エミッタ・台座の矩形と取り違えない。
  */
-function findFinSegments(calls) {
+function findFinRects(calls) {
   const out = [];
-  for (const line of extractPolylines(calls)) {
-    for (let i = 0; i + 1 < line.length; i++) {
-      const p0 = line[i];
-      const p1 = line[i + 1];
-      if (p0.x === p1.x && Math.abs(p0.y) > 2 && Math.abs(p1.y) > 2) {
-        out.push([p0, p1]);
-      }
+  let fillStyle = null;
+  for (const c of calls) {
+    if (c.name === 'set:fillStyle') fillStyle = c.args[0];
+    else if (c.name === 'fillRect' && fillStyle === COLOR_BEAM_CANNON_FIN) {
+      const [x, y, w, h] = c.args;
+      out.push({ x, y, w, h });
+    }
+  }
+  return out;
+}
+
+/** 指定色で塗られた矩形を集める（エミッタの検証用） */
+function findRectsOfColor(calls, color) {
+  const out = [];
+  let fillStyle = null;
+  for (const c of calls) {
+    if (c.name === 'set:fillStyle') fillStyle = c.args[0];
+    else if (c.name === 'fillRect' && fillStyle === color) {
+      const [x, y, w, h] = c.args;
+      out.push({ x, y, w, h });
     }
   }
   return out;
@@ -355,25 +363,64 @@ test('beam 型は砲身に冷却フィンが立つ', () => {
   t.draw(ctx);
 
   const barrelLength = BARREL_LENGTH - t.recoil;
-  const finLines = findFinSegments(ctx.calls);
-  assert.equal(finLines.length, t.spec.fins.count, 'フィンの本数が違う');
+  const fins = findFinRects(ctx.calls);
+  assert.equal(fins.length, t.spec.fins.count, 'フィンの本数が違う');
 
-  for (const [p0, p1] of finLines) {
+  for (const r of fins) {
     // 砲身の中心線に対して上下対称であること
-    assert.ok(p0.y === -p1.y, 'フィンが砲身の中心線に対して非対称');
+    assert.equal(r.y, -(r.y + r.h), 'フィンが砲身の中心線に対して非対称');
     // 砲身の範囲の内側にあること（付け根と砲口を空ける）
-    assert.ok(p0.x > BARREL_BASE && p0.x < BARREL_BASE + barrelLength, 'フィンが砲身の外にある');
+    assert.ok(r.x > BARREL_BASE && r.x + r.w < BARREL_BASE + barrelLength, 'フィンが砲身の外にある');
   }
 });
 
-test('gun 型は冷却フィンを持たない', () => {
+// 「櫛のように浮いて見える」という形の破綻への回帰テスト。
+// フィンは砲身より高いが、砲身の厚みをまたいで（＝上下に貫いて）いなければ
+// 砲身から浮いた飾りになる
+test('冷却フィンは砲身にまたがっていて、宙に浮いていない', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const barrelHalf = t.spec.barrelHalfHeight;
+  const fins = findFinRects(ctx.calls);
+  assert.ok(fins.length > 0, 'フィンが描かれていない');
+  for (const r of fins) {
+    assert.ok(r.y < -barrelHalf, 'フィンが砲身の上側にまたがっていない');
+    assert.ok(r.y + r.h > barrelHalf, 'フィンが砲身の下側にまたがっていない');
+    assert.ok(r.w > 0, 'フィンが線（幅0）に戻っている');
+  }
+});
+
+// 砲口の放射器。「ここからビームが出る」を形で示す塊
+test('beam 型は砲口に放射器(エミッタ)の塊を持つ', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const emitter = t.spec.emitter;
+  const barrelLength = BARREL_LENGTH - t.recoil;
+  const muzzle = BARREL_BASE + barrelLength;
+  const blocks = findRectsOfColor(ctx.calls, COLOR_BEAM_CANNON_PIVOT)
+    .filter((r) => Math.abs((r.x + r.w) - muzzle) < 1e-6);
+
+  assert.equal(blocks.length, 1, 'エミッタが砲口の位置に描かれていない');
+  const [b] = blocks;
+  assert.equal(b.h, emitter.halfHeight * 2, 'エミッタの高さが違う');
+  assert.ok(b.h > t.spec.barrelHalfHeight * 2, 'エミッタが砲身より太くない（塊に見えない）');
+  assert.equal(b.y, -emitter.halfHeight, 'エミッタが砲身の中心線に対して非対称');
+});
+
+test('gun 型は冷却フィンもエミッタも持たない', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'gun');
   const ctx = makeFakeCtx();
   t.draw(ctx);
 
-  const finLines = findFinSegments(ctx.calls);
-  assert.equal(finLines.length, 0, 'gun 型にフィンが出ている');
+  assert.equal(findFinRects(ctx.calls).length, 0, 'gun 型にフィンが出ている');
+  assert.equal(t.spec.emitter, undefined, 'gun 型にエミッタが設定されている');
 });
 
 // ============================================
