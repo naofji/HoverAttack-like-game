@@ -16,7 +16,7 @@ import {
     SCORE_HOMING_INTERCEPT, SCORE_CRUISE_DESTROY,
     REFLECT_BEAM_DAMAGE,
     BEAM_SPARK_COLORS, BEAM_SPARK_COUNT,
-    BEAM_SPARK_SPEED_MIN, BEAM_SPARK_SPEED_MAX, BEAM_SPARK_LIFETIME,
+    BEAM_SPARK_SPEED_MIN, BEAM_SPARK_SPEED_MAX, BEAM_SPARK_LIFETIME, BEAM_SPARK_SIZE,
     BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
@@ -141,6 +141,7 @@ export class CollisionManager {
                 speedMin: BEAM_SPARK_SPEED_MIN,
                 speedMax: BEAM_SPARK_SPEED_MAX,
                 lifetime: BEAM_SPARK_LIFETIME,
+                size: BEAM_SPARK_SIZE,
             }));
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = DAMAGE_CRUISE_MISSILE;

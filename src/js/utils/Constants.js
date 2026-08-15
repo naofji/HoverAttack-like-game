@@ -517,7 +517,14 @@ export const COLOR_REFLECT_BEAM_EDGE = '#3B0F6B';
 // 被弾スパーク。「レーザーに当たったときの反応が地味で判りづらい」という
 // 実機フィードバックへの対応。ビーム本体と同じ色域にして、何に当たったのかが
 // 一目で分かるようにする（通常被弾の黄色系スパークと取り違えないため）
-export const BEAM_SPARK_COLORS = ['#F2E6FF', '#C77DFF', '#B266FF'];
+// 実機で「もっと明るいスパークの方が良い」と指摘され、3色とも明度を上げた
+// （旧: #F2E6FF / #C77DFF / #B266FF）。いちばん暗かった #B266FF は暗い地形の
+// 上では沈んで見えなかった。白を1色混ぜて芯の明るさを出しつつ、残り2色で
+// 紫であること（＝ビームに当たった）は保つ
+export const BEAM_SPARK_COLORS = ['#FFFFFF', '#F0DDFF', '#D9A6FF'];
+// 粒の一辺。通常のスパークは 2。明るさは色だけでなく面積でも決まるので、
+// 1px 大きくして「明るい」に寄せる（4px にすると破片と見分けが付かなくなる）
+export const BEAM_SPARK_SIZE = 3;
 // 通常のスパークは3〜5個。倍以上にしないと「走った」感じが出なかった。
 // 14 でもまだ「地味すぎて見えない」と実機で指摘されたので 28 へ倍増し、
 // 速度と寿命も上げた（散る範囲が広がるぶん、1粒あたりの見つけやすさが上がる）
@@ -532,9 +539,10 @@ export const BEAM_SPARK_LIFETIME = 22;     // 通常10〜19。18 から更に伸
 // 半径はミサイル着弾(IMPACT_FLASH_RADIUS=18)より小さく、マシンガン(6)より
 // 大きい 14。自機を覆い隠さず、それでいて必ず目に入る大きさ
 export const BEAM_SPARK_FLASH_RADIUS = 14;
-// 芯はビーム本体の芯と同じ、リングは砲台のランプの明るい紫。被弾の光と、
-// 撃ってきた砲台とが同じ色域で結びつく
-export const COLOR_BEAM_HIT_FLASH_CORE = '#F2E6FF';
+// リングは砲台のランプの明るい紫。被弾の光と、撃ってきた砲台とが同じ色域で
+// 結びつく。芯は当初ビーム本体と同じ #F2E6FF にしていたが、「もっと明るく」
+// という指摘を受けて純白へ。加算合成(lighter)で描くので芯は白がいちばん強い
+export const COLOR_BEAM_HIT_FLASH_CORE = '#FFFFFF';
 export const COLOR_BEAM_HIT_FLASH_RING = '#C77DFF';
 
 // タレットの半分を差し替える反射ビームキャノン本体（EnemyTurret の beam 型）
@@ -570,7 +578,11 @@ export const REFLECT_BEAM_SECOND_SHOT_JITTER = 0.05;  // ±0.05rad ≒ ±2.9度
 // 新型だと分かるようにする
 export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
 export const COLOR_BEAM_CANNON_BARREL = '#D8DEE4';
-export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
+// ピボット（回転軸の円）と砲口のエミッタが引く色。#C0C8D0 → #DDE4EB。
+// 「円状の構造物をもっと明るい灰色に」という実機フィードバック。
+// 砲身(#D8DEE4)よりわずかに明るいので、円の側が主役として立ちつつ、
+// 暗いランプの座(#1A0A2E)とのコントラストも上がる
+export const COLOR_BEAM_CANNON_PIVOT = '#DDE4EB';
 
 // パイロットランプ（充填の進み具合を示す）。撃った直後は暗紫、充填が高まるほど
 // 明るい紫に輝く。暗紫は COLOR_REFLECT_BEAM_EDGE（ビームの外周）と同じ値にして、

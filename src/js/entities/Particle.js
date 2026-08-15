@@ -305,6 +305,7 @@ const SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500'];
  * @param {number} [opts.speedMin]
  * @param {number} [opts.speedMax]
  * @param {number} [opts.lifetime] 省略時は10〜19のランダム
+ * @param {number} [opts.size] 粒の一辺。省略時は従来どおり2
  */
 export function createSparks(x, y, opts = {}) {
     const {
@@ -314,6 +315,7 @@ export function createSparks(x, y, opts = {}) {
         speedMin = 1.5,
         speedMax = 4.0,
         lifetime = null,
+        size = 2,
     } = opts;
     const particles = [];
 
@@ -326,7 +328,6 @@ export function createSparks(x, y, opts = {}) {
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
         const color = colors[Math.floor(Math.random() * colors.length)];
-        const size = 2;
         const life = lifetime ?? 10 + Math.floor(Math.random() * 10);
 
         particles.push(new Particle(x, y, vx, vy, color, size, life));

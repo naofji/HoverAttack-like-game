@@ -6,6 +6,7 @@ import { makeMap } from './helpers/enemy-world.js';
 import {
   REFLECT_BEAM_DAMAGE, BEAM_SPARK_COLORS, BEAM_SPARK_COUNT,
   BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
+  BEAM_SPARK_SIZE,
   IMPACT_FLASH_RADIUS,
 } from '../src/js/utils/Constants.js';
 import { createSparks, ImpactFlash } from '../src/js/entities/Particle.js';
@@ -183,6 +184,20 @@ test('createSparks は引数なしなら今までどおりの黄色系', () => {
   assert.ok(sparks.length >= 3 && sparks.length <= 5, '既定の個数が変わっている');
   const legacy = ['#FFFFE0', '#FFD700', '#FFA500'];
   for (const p of sparks) assert.ok(legacy.includes(p.color), `色が変わっている: ${p.color}`);
+  // size を opts に足したときの回帰。既定は従来の 2
+  for (const p of sparks) assert.equal(p.size, 2, `既定の粒の大きさが変わっている: ${p.size}`);
+});
+
+// 「もっと明るいスパークの方が良い」への対応。明るさは色だけでなく面積でも
+// 決まるので、粒を1px 大きくしている
+test('反射ビームの被弾スパークは通常より大きい粒で出る', () => {
+  const { game } = hitOnce();
+  const sparks = game.particles.filter((p) => !(p instanceof ImpactFlash));
+  assert.ok(sparks.length > 0, 'スパークが出ていない');
+  for (const p of sparks) {
+    assert.equal(p.size, BEAM_SPARK_SIZE, `粒の大きさが違う: ${p.size}`);
+    assert.ok(p.size > 2, '通常のスパーク(2)より大きくない');
+  }
 });
 
 // ============================================
