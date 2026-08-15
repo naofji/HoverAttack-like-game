@@ -877,11 +877,6 @@ export class Map {
         this.miniMapCanvas.height = this.rows * this.miniMapScale;
         const ctx = this.miniMapCanvas.getContext('2d');
 
-        // 背景を先に塗る。tile cache は空きタイルを描かない(透明)ので、塗らないと
-        // 縮小画像を重ねたときに背景が抜けて見える。
-        ctx.fillStyle = COLOR_CAVE_BG;
-        ctx.fillRect(0, 0, this.miniMapCanvas.width, this.miniMapCanvas.height);
-
         // 実際の地形(tileCacheCanvas, TILE_SIZE=16px/タイル)を 2px/タイルへ縮小して
         // 焼くだけにする。以前はここで独自にタイルを fillRect し直していて、面取り
         // 多角形やひび割れ表現を持つ本編の見た目と食い違っていた。
@@ -889,6 +884,24 @@ export class Map {
             ctx.imageSmoothingQuality = 'high';
         }
         this._applyMiniMapToning(ctx, () => {
+            // 背景を先に塗る。tile cache は空きタイルを描かない(透明)ので、塗らないと
+            // 縮小画像を重ねたときに背景が抜けて見える。
+            //
+            // ★ 背景の fillRect もこのコールバック(トーニングの対象)の中に入れる。
+            // 以前は toning の外(if 分岐より前)で塗っていて、ctx.filter が使える環境
+            // では filter が「これから描く内容」にしかかからないため tile cache だけが
+            // トーニングされ、背景(COLOR_CAVE_BG)は無彩色化・減光されないまま透けて
+            // 見えていた。一方フォールバック経路は draw() のあとキャンバス全体へ
+            // ブレンドをかけるので、背景も一緒にトーニングされる — 同じ処理のはずが
+            // 経路によって背景の暗さが変わっていた（レビュー指摘）。
+            // COLOR_CAVE_BG はもともと暗いので実害は小さいが、意図しない差なので、
+            // 「両経路とも背景を含めて全体にかける」方に統一する。tile cache 側だけに
+            // 絞る案(フォールバックのブレンド範囲をタイル形状に切り抜く)は tile cache が
+            // 空きタイル抜きの不定形で、クリップの組み方が複雑になり実装リスクが上がる
+            // ため見送った。
+            ctx.fillStyle = COLOR_CAVE_BG;
+            ctx.fillRect(0, 0, this.miniMapCanvas.width, this.miniMapCanvas.height);
+
             ctx.drawImage(
                 this.tileCacheCanvas,
                 0, 0, this.width, this.height,

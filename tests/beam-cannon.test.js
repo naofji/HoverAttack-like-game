@@ -403,6 +403,12 @@ test('充填時間は毎回 REFLECT_BEAM_CHARGE_MIN〜MAX の範囲に入り、�
 
   const seen = new Set();
   for (let volley = 0; volley < 12; volley++) {
+    // fireOnce() は「game.enemyBullets が空の間だけ update を回す」作りなので、
+    // クリアせずに使い回すと2回目以降は1フレームも進まない（ループ内で回るのは
+    // fireVolley 内の REFLECT_BEAM_BURST_DELAY+1 フレームだけ）。実際に12回撃たせて
+    // サンプルを採るため、毎回クリアしてから撃つ（レビュー指摘: 以前は実質2サンプル
+    // しか採れておらず、その2つが偶然一致すると下の assert が約1.6%の確率で落ちていた）
+    game.enemyBullets.length = 0;
     fireVolley(t, game);
     assert.ok(
       t.chargeTotal >= REFLECT_BEAM_CHARGE_MIN && t.chargeTotal <= REFLECT_BEAM_CHARGE_MAX,
@@ -411,8 +417,47 @@ test('充填時間は毎回 REFLECT_BEAM_CHARGE_MIN〜MAX の範囲に入り、�
     seen.add(t.chargeTotal);
   }
   // 固定値だとリズムを読み切られるため、1発ごとに選び直していること。
-  // 実装を「常に min にする」に壊すとこの assert が落ちる（12回中1種類だけになる）
+  // 実装を「常に min にする」に壊すとこの assert が落ちる（12回中1種類だけになる）。
+  // ただしこれは乱数まかせの検証で、範囲の両端に正しく写ることまでは確率でしか
+  // 縛れない。両端の一致は下の2本の決定的なテストで別途縛る
   assert.ok(seen.size > 1, '充填時間が毎回同じ値になっている（範囲から選び直していない）');
+});
+
+// 上のテストは「12回引いて2種類以上あること」という確率的な検証で、CLAUDE.md の
+// 「乱数依存の不等式テストを書かない」方針から外れる（前例: スラスター炎で約4%の
+// 確率で落ちるテストを出し、純関数へ切り出して直した）。Math.random を差し替えて
+// 「範囲の両端に正しく写る」ことを確率ゼロで縛る
+test('充填時間は Math.random=0 のとき REFLECT_BEAM_CHARGE_MIN に写る', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    fireVolley(t, game);
+  } finally {
+    // 差し替えを他のテストへ漏らさない
+    Math.random = originalRandom;
+  }
+  assert.equal(t.chargeTotal, REFLECT_BEAM_CHARGE_MIN);
+});
+
+test('充填時間は Math.random が1に近いとき、選べる上限(REFLECT_BEAM_CHARGE_MAX-1)に写る', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.999999;
+    fireVolley(t, game);
+  } finally {
+    Math.random = originalRandom;
+  }
+  // _rollBeamCharge() は Math.floor(min + Math.random() * (max - min))。
+  // Math.random() は仕様上常に1未満なので、rand を1に近づけても
+  // min + rand*(max-min) は max に限りなく近づくだけで max 自身には届かず、
+  // floor した実際の上限は REFLECT_BEAM_CHARGE_MAX - 1 になる（[min, max) の半開区間）。
+  // 「REFLECT_BEAM_CHARGE_MAX ちょうどに写る」という素朴な期待は実装と合わないため、
+  // 実装が実際に選べる値のほうを正としてここで縛る
+  assert.equal(t.chargeTotal, REFLECT_BEAM_CHARGE_MAX - 1);
 });
 
 test('充填の進み具合は撃った直後の0付近から充填しきった1付近へ増える', () => {
