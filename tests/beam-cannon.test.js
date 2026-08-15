@@ -10,7 +10,8 @@ import {
   REFLECT_BEAM_BURST_DELAY, ENEMY_TURRET_BURST_DELAY,
   REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
   COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
-  REFLECT_BEAM_SECOND_SHOT_OFFSET,
+  COLOR_BEAM_CANNON_LAMP_BACK,
+  REFLECT_BEAM_SECOND_SHOT_OFFSET, REFLECT_BEAM_SECOND_SHOT_JITTER,
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
 
@@ -205,8 +206,11 @@ test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範�
     game.player.x + game.player.width / 2 - cx,
   );
   const diff = Math.abs(secondAngle - expected);
+  // REFLECT_BEAM_SECOND_SHOT_JITTER ぶんのランダムなブレが乗るようになったので、
+  // 厳密な一致ではなく、そのブレの範囲に収まっていることを縛る（性質は変えず、
+  // ブレのぶんだけ許容を広げる）
   assert.ok(
-    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) < 1e-6,
+    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) <= REFLECT_BEAM_SECOND_SHOT_JITTER + 1e-9,
     `2発目が「動いた後の自機 ± ずれ」を向いていない: diff=${diff}`,
   );
 });
@@ -226,8 +230,9 @@ test('自機が動かなくても、2発目には小さな角度のずれが乗�
 
   assert.notEqual(firstAngle, secondAngle, '自機が動いていないのに2発の角度が同じ（ずれが乗っていない）');
   const diff = Math.abs(secondAngle - firstAngle);
+  // ブレのぶんだけ許容を広げる（上と同じ理由）
   assert.ok(
-    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) < 1e-6,
+    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) <= REFLECT_BEAM_SECOND_SHOT_JITTER + 1e-9,
     `ずれの大きさが REFLECT_BEAM_SECOND_SHOT_OFFSET と違う: diff=${diff}`,
   );
 });
@@ -512,4 +517,154 @@ test('パイロットランプの脈動の輪は外周から中心へ動く（�
   // （中心に近づく＝外周から中心への脈動。全本が同時に大きくなっていたら失敗する）
   const shrunk = earlyRadii.some((r0, i) => laterRadii[i] !== undefined && laterRadii[i] < r0);
   assert.ok(shrunk, '輪の半径が時間とともに縮んでいない');
+});
+
+// ============================================
+// 実機フィードバック: 輪を「輪」として見せる／紫を強くする／2発目にブレを足す
+// ============================================
+//
+// beginPath() の区切りで ctx.calls を「1つの図形（arc群 + fill/stroke の有無 +
+// その時点の lineWidth）」の単位にまとめるヘルパー。塗りつぶしの円と、線で
+// 描かれた輪を区別するために使う（fill だけの円と stroke だけの円を見分ける）。
+function arcSegments(calls) {
+  const out = [];
+  let current = null;
+  let lineWidth = 1;
+  const finalize = () => { if (current) out.push(current); };
+  for (const c of calls) {
+    if (c.name === 'set:lineWidth') lineWidth = c.args[0];
+    if (c.name === 'beginPath') {
+      finalize();
+      current = { arcs: [], fill: false, stroke: false, lineWidth };
+    } else if (current && c.name === 'arc') {
+      current.arcs.push({ x: c.args[0], y: c.args[1], r: c.args[2] });
+    } else if (current && c.name === 'fill') {
+      current.fill = true;
+    } else if (current && c.name === 'stroke') {
+      current.stroke = true;
+      current.lineWidth = lineWidth;
+    }
+  }
+  finalize();
+  return out;
+}
+
+// arc() の呼び出し1つ1つに、その時点で有効な fillStyle/strokeStyle を添える。
+// 座（COLOR_BEAM_CANNON_LAMP_BACK）がどの半径で描かれたかを見分けるのに使う
+function arcCallsWithStyle(calls) {
+  let fillStyle = '';
+  let strokeStyle = '';
+  const out = [];
+  for (const c of calls) {
+    if (c.name === 'set:fillStyle') fillStyle = c.args[0];
+    else if (c.name === 'set:strokeStyle') strokeStyle = c.args[0];
+    else if (c.name === 'arc') out.push({ x: c.args[0], y: c.args[1], r: c.args[2], fillStyle, strokeStyle });
+  }
+  return out;
+}
+
+// ⑴ 脈動の輪は、塗りつぶし(fill)を重ねる形ではなく、輪郭線(stroke)で描く。
+// 半透明の塗りを重ねると輪ではなく明滅に見える、という実機フィードバックの対応
+test('パイロットランプの脈動の輪は塗りつぶしではなく線(stroke)で描かれる', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const segments = arcSegments(ctx.calls);
+  // ピボット本体(半径8)や座・ランプ本体(fill)を除いた、輪だけの図形
+  // （stroke されていて、fill はされていない、半径0〜8未満の円）
+  const ringSegments = segments.filter((s) => (
+    s.stroke && !s.fill
+    && s.arcs.some((a) => a.x === 0 && a.y === 0 && a.r > 0 && a.r < 8)
+  ));
+  assert.ok(ringSegments.length > 0, '輪が stroke で描かれていない（塗りつぶしのままの可能性）');
+  for (const s of ringSegments) {
+    assert.ok(
+      s.lineWidth >= 1.5 && s.lineWidth <= 2,
+      `輪の線の太さが範囲外(1.5〜2を想定): ${s.lineWidth}`,
+    );
+  }
+});
+
+// ⑵-2 ランプの下に暗い座が敷かれる。かつ、ランプ本体より先に描かれること
+// （後に描くと隠れてしまうため、順序が意味を持つ）
+test('ランプの下に暗い座(COLOR_BEAM_CANNON_LAMP_BACK)が、ランプ本体より先に敷かれる', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  t.chargeTotal = 200;
+  t.cooldownTimer = 200; // 進み0 -> 暗紫寄りの色で描かれる（区別しやすい値を使う）
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const expectedLampColor = lerpColor(COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, 0);
+
+  const backIdx = ctx.calls.findIndex((c) => c.name === 'set:fillStyle' && c.args[0] === COLOR_BEAM_CANNON_LAMP_BACK);
+  const lampIdx = ctx.calls.findIndex((c) => c.name === 'set:fillStyle' && c.args[0] === expectedLampColor);
+
+  assert.ok(backIdx >= 0, '暗い座(COLOR_BEAM_CANNON_LAMP_BACK)が描かれていない');
+  assert.ok(lampIdx >= 0, 'ランプ本体の色が描かれていない');
+  assert.ok(backIdx < lampIdx, '座がランプ本体より後に描かれている（これだと座が隠してしまう）');
+});
+
+// ⑵-3 座はピボットの円（半径8）からはみ出さない
+test('暗い座はピボットの円（半径8）からはみ出さない', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+
+  const arcs = arcCallsWithStyle(ctx.calls);
+  const seatArc = arcs.find((a) => a.x === 0 && a.y === 0 && a.fillStyle === COLOR_BEAM_CANNON_LAMP_BACK);
+  assert.ok(seatArc, '暗い座の arc が見つからない');
+  assert.ok(seatArc.r > 0, '座の半径が0以下');
+  assert.ok(seatArc.r <= 8, `座がピボット(半径8)からはみ出している: r=${seatArc.r}`);
+});
+
+// ⑶ 2発目のブレ。同じ側・同じ自機位置で撃たせても、REFLECT_BEAM_SECOND_SHOT_JITTER
+// ぶんのランダムなブレのおかげで角度が毎回わずかに変わる。左右交互のオフセット
+// （8度）だけを比べると符号違いで「変わった」ことになってしまいブレを検証
+// できないため、同じ側どうし（1回目と3回目）を比べる
+test('2発目の角度は、同じ側・同じ自機位置でも撃つたびにわずかに変わる（ブレが効いている）', () => {
+  const game = makeGame();
+  const t = new EnemyTurret(game, 32, 40, false, 'beam');
+  const secondAngles = [];
+
+  fireOnce(t, game);
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  secondAngles.push(Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx));
+
+  for (let v = 1; v < 4; v++) {
+    t.cooldownTimer = 0;
+    const before = game.enemyBullets.length;
+    for (let i = 0; i < 600 && game.enemyBullets.length < before + 1; i++) t.update();
+    for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+    secondAngles.push(Math.atan2(game.enemyBullets[before + 1].vy, game.enemyBullets[before + 1].vx));
+  }
+
+  // 0回目と2回目（インデックス0, 2）は左右交互で同じ側になる
+  assert.notEqual(
+    secondAngles[0], secondAngles[2],
+    '同じ側・同じ自機位置なのに2発目の角度が毎回同じ（ブレが効いていない）',
+  );
+});
+
+// ⑶ ブレの大きさが REFLECT_BEAM_SECOND_SHOT_JITTER の範囲に収まる（暴れすぎない）
+test('2発目のブレは REFLECT_BEAM_SECOND_SHOT_JITTER の範囲に収まる', () => {
+  const game = makeGame();
+  for (let trial = 0; trial < 30; trial++) {
+    const t = new EnemyTurret(game, 32, 40, false, 'beam');
+    game.enemyBullets = [];
+    fireOnce(t, game);
+    const firstAngle = Math.atan2(game.enemyBullets[0].vy, game.enemyBullets[0].vx);
+    for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+    const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
+
+    const diff = Math.abs(secondAngle - firstAngle);
+    const err = Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET);
+    assert.ok(
+      err <= REFLECT_BEAM_SECOND_SHOT_JITTER + 1e-9,
+      `ブレが REFLECT_BEAM_SECOND_SHOT_JITTER の範囲を超えている: err=${err}`,
+    );
+  }
 });

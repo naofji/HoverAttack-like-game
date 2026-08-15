@@ -531,6 +531,12 @@ export const REFLECT_BEAM_CHARGE_MAX = 240;  // 4.0秒
 // 扇型は±15度だったが、こちらは狙い直しと重なるぶん小さくてよい
 export const REFLECT_BEAM_SECOND_SHOT_OFFSET = 8 * Math.PI / 180;  // 8度
 
+// 2発目には小さなブレを足す。左右交互のずれ(REFLECT_BEAM_SECOND_SHOT_OFFSET)だけだと
+// 反射の経路が2通りに固定されてしまい、跳ね返り先が読めてしまうため（実機で
+// 「2発目のブレを微妙に加えた方が反射角度が変わっていい」と指摘された）。既存の
+// タレットの弾が持つ不正確さ((Math.random() - 0.5) * 0.1)と同じ大きさに揃えてある
+export const REFLECT_BEAM_SECOND_SHOT_JITTER = 0.05;  // ±0.05rad ≒ ±2.9度
+
 // 既存のタレット（#555555 / #888888 / #667788）より明るい灰色。並んだときに
 // 新型だと分かるようにする
 export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
@@ -543,7 +549,13 @@ export const COLOR_BEAM_CANNON_PIVOT = '#C0C8D0';
 // **色は必ず hex 形式で書くこと**（lerpColor() が parseInt するため。rgba() を
 // 入れると '#NaNNaNNaN' になり実 canvas では無言で劣化する）
 export const COLOR_BEAM_CANNON_LAMP_DIM = '#3B0F6B';
-export const COLOR_BEAM_CANNON_LAMP_BRIGHT = '#C77DFF';
+// 元は #C77DFF（彩度低め）だったが、実機で「色が白っぽすぎて機体の白と重なって
+// インパクトが弱い」と指摘された。より彩度の高い青紫寄りへ変更
+export const COLOR_BEAM_CANNON_LAMP_BRIGHT = '#B026FF';
+// ランプ本体・輪を描く前に敷く暗い座。COLOR_BEAM_CANNON_BASE/_PIVOT が明るい灰色
+// なので、紫を直接その上に乗せてもコントラストが出ない（実機フィードバック）。
+// ほぼ黒に近い紫を先に塗って、その上へランプの色を重ねることでインパクトを出す
+export const COLOR_BEAM_CANNON_LAMP_BACK = '#1A0A2E';
 // 砲身より一段暗くして、線として見えるようにする。冷却フィン（ラジエーター）で
 // 輪郭に凹凸を出し、既存のタレットと形でも見分けられるようにするためのもの
 export const COLOR_BEAM_CANNON_FIN = '#8A939C';

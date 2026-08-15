@@ -10,10 +10,11 @@ import {
     REFLECT_BEAM_CHARGE_MIN, REFLECT_BEAM_CHARGE_MAX,
     REFLECT_BEAM_MUZZLE_FLASH_FRAMES, REFLECT_BEAM_SHOT_COUNT, REFLECT_BEAM_BURST_DELAY,
     REFLECT_BEAM_MUZZLE_FLASH_RADIUS, REFLECT_BEAM_SECOND_SHOT_OFFSET,
+    REFLECT_BEAM_SECOND_SHOT_JITTER,
     COLOR_BEAM_CANNON_BASE, COLOR_BEAM_CANNON_BARREL, COLOR_BEAM_CANNON_PIVOT,
     COLOR_BEAM_CANNON_FIN,
     COLOR_REFLECT_BEAM_CORE,
-    COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
+    COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, COLOR_BEAM_CANNON_LAMP_BACK,
 } from '../utils/Constants.js';
 import { hasLineOfSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -36,6 +37,11 @@ const BEAM_LAMP_RINGS = 3;
 const BEAM_LAMP_MAX_RADIUS = 6;    // 胴体(半径8)からはみ出さない範囲で、旧警告灯(半径3)より大きく
 const BEAM_LAMP_CYCLE_SLOW = 50;   // 充填直後(進み0)の脈の周期。ゆったり
 const BEAM_LAMP_CYCLE_FAST = 14;   // 充填しきった(進み1)ときの周期。速くして「そろそろ撃つ」を伝える
+const BEAM_LAMP_RING_LINE_WIDTH = 1.75; // 輪1本1本が独立して見える太さ(1.5〜2の指定内)
+const BEAM_LAMP_CORE_RADIUS = 2;   // 中心の塗りつぶし本体。輪(stroke)と別に残す
+// 暗い座の半径。ランプ本体・輪(最大半径6)より一回り大きく、ピボットの円(半径8)は
+// 超えない範囲で選んだ
+const BEAM_LAMP_BACK_RADIUS = 7;
 
 // 型ごとの違いは**この表の1行**に出る。新しいクラスを作ると、照準・視線判定・
 // 被弾・破片・スコアの5つを写すことになる。EnemyAttacker が4型を1クラス＋
@@ -288,7 +294,16 @@ export class EnemyTurret {
             // ここではまだ減っていない＝maxBurstCount のままなら1発目、減っていれば2発目
             let angle = this.currentAngle;
             if (this.burstCount < this.maxBurstCount) {
-                angle += REFLECT_BEAM_SECOND_SHOT_OFFSET * this.secondShotSide;
+                // 左右交互のずれ(REFLECT_BEAM_SECOND_SHOT_OFFSET)だけだと、反射する
+                // 経路が2通りに固定されてしまい、跳ね返り先が読めてしまう（実機で
+                // 「2発目のブレを微妙に加えた方が反射角度が変わっていい」と指摘された）。
+                // 小さなランダムのブレを追加で足す。ブレは交互のずれ(8度)より必ず
+                // 小さく保つ（大きくすると「左右交互」の性質そのものが壊れ、既存の
+                // 「ずれの符号が交互になる」テストが意味を失う）。
+                // 既存タレットの inaccuracy と同じ (Math.random() - 0.5) * 0.1 の形。
+                // game.rng は使わない（週次の決定性が壊れるため厳禁）
+                const jitter = (Math.random() - 0.5) * 2 * REFLECT_BEAM_SECOND_SHOT_JITTER;
+                angle += REFLECT_BEAM_SECOND_SHOT_OFFSET * this.secondShotSide + jitter;
                 this.secondShotSide *= -1; // 次の2発目のために左右を入れ替える
             }
             this.game.enemyBullets.push(
@@ -328,10 +343,20 @@ export class EnemyTurret {
      *
      * - 色: 充填の進み具合（`_beamChargeProgress()`）で暗紫→明るい紫を
      *   `lerpColor()` で補間する（自前で色を混ぜない。既存の共通機構を使う）
+     * - 座: ランプ本体・輪を描く**前**に、COLOR_BEAM_CANNON_LAMP_BACK（ほぼ黒の紫）の
+     *   円を敷く。COLOR_BEAM_CANNON_BASE/_PIVOT が明るい灰色のため、紫を直接その
+     *   上に乗せてもコントラストが出ない（実機で「機体の白と重なってインパクトが
+     *   弱め」と指摘された）。半径はピボットの円(半径8)を超えない範囲で、
+     *   ランプ本体・輪(最大半径6)より一回り大きい BEAM_LAMP_BACK_RADIUS(7) にした
+     * - 本体: 中心の小さな塗りつぶし円（BEAM_LAMP_CORE_RADIUS）。輪と違って
+     *   縮まない、常にそこにある「ランプそのもの」
      * - 脈: 半径 BEAM_LAMP_MAX_RADIUS から縮んでいく輪を BEAM_LAMP_RINGS 本、
      *   位相をずらして重ねる。「経過フレーム数」は専用のカウンタを持たず
      *   `chargeTotal - cooldownTimer` から出す（充填の進みそのものが時間の
-     *   代わりになる。テストからも cooldownTimer を直接動かすだけで検証できる）
+     *   代わりになる。テストからも cooldownTimer を直接動かすだけで検証できる）。
+     *   以前は半透明の円を塗りつぶし(fill)で重ねていたが、それだと輪ではなく
+     *   ただの明滅に見える（実機フィードバック）。ctx.stroke() の輪郭線に変え、
+     *   「本体＋その外側を内向きに縮んでいく輪」という見え方にした
      * - 充填が進むほど周期を BEAM_LAMP_CYCLE_SLOW→FAST で短くし、脈を速くする。
      *   「そろそろ撃つ」が読めるのが狙い（冷却時間を無くした代わりの手がかり）
      */
@@ -342,17 +367,31 @@ export class EnemyTurret {
         const cycle = BEAM_LAMP_CYCLE_SLOW + (BEAM_LAMP_CYCLE_FAST - BEAM_LAMP_CYCLE_SLOW) * progress;
         const elapsed = Math.max(0, (this.chargeTotal || 1) - this.cooldownTimer);
 
+        // 座（ランプ本体・輪より先に描く。後だと座が上に乗って隠してしまう）
+        ctx.fillStyle = COLOR_BEAM_CANNON_LAMP_BACK;
+        ctx.beginPath();
+        ctx.arc(0, 0, BEAM_LAMP_BACK_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ランプ本体（塗りつぶしの点。輪と違って縮まない）
         ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(0, 0, BEAM_LAMP_CORE_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 脈動の輪（輪郭線）
+        ctx.strokeStyle = color;
+        ctx.lineWidth = BEAM_LAMP_RING_LINE_WIDTH;
         for (let k = 0; k < BEAM_LAMP_RINGS; k++) {
             // phase: 0=外周に現れた瞬間 → 1=中心に着いた瞬間（一周したら次の輪が外周に現れる）
             const phase = ((elapsed / cycle) + k / BEAM_LAMP_RINGS) % 1;
             const r = BEAM_LAMP_MAX_RADIUS * (1 - phase);
-            // 中心に近づくほど薄くする。同じ色を塗り重ねることで、外周から中心へ
-            // 収束していく濃淡のグラデーションに見せる
-            ctx.globalAlpha = 0.15 + 0.35 * (1 - phase);
+            // 中心に近づくほど薄くする。線でも同じ考え方で、外周から中心へ
+            // 収束していく濃淡に見せる
+            ctx.globalAlpha = 0.3 + 0.5 * (1 - phase);
             ctx.beginPath();
             ctx.arc(0, 0, Math.max(0.5, r), 0, Math.PI * 2);
-            ctx.fill();
+            ctx.stroke();
         }
         ctx.globalAlpha = 1;
     }
