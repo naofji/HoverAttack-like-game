@@ -2,7 +2,7 @@
 // Screen Renderer - Title, Game Over, Mission Clear, MiniMap
 // ============================================
 
-import { TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES } from '../utils/Constants.js';
+import { TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA } from '../utils/Constants.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
@@ -987,6 +987,10 @@ export class ScreenRenderer {
         const game = this.game;
         const w = game.canvas.width;
         const h = game.canvas.height;
+
+        // 地形が壊れて「古い」印が立っていたら、開いて描く直前に1回だけ焼き直す。
+        // 閉じている間は焼かないので毎フレームのコストは増えない。
+        game.map.refreshMiniMap();
         const mm = game.map.miniMapCanvas;
 
         if (!mm) return;
@@ -997,7 +1001,7 @@ export class ScreenRenderer {
         const alpha = game.miniMapAlpha || 0;
 
         ctx.save();
-        ctx.globalAlpha = 0.85 * alpha;
+        ctx.globalAlpha = MINIMAP_ALPHA * alpha;
 
         // Draw the cached static map
         ctx.drawImage(mm, mmX, mmY);

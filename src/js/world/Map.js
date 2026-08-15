@@ -14,7 +14,8 @@ import {
     ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT,
     COLOR_CAVE_BG, TILE_SIZE,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    STAGE_PALETTES
+    STAGE_PALETTES,
+    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -183,8 +184,12 @@ export class Map {
         this._addMainBaseDefenders(); // Force add defenders specifically around the base
 
         // Step 11: Generate off-screen mini-map
-        this._generateMiniMap();
+        // tile cache (実寸で焼いた地形) を先に作ってから、それを縮小してミニマップにする。
+        // 以前はミニマップ用に独自にタイルを塗り直していて、実際の地形(面取り多角形・
+        // ひび割れ)と見え方が食い違っていた。tile cache から drawImage で縮小するだけに
+        // すれば、本編の見た目とミニマップが常に一致する。
         this._initTileCache();
+        this._generateMiniMap();
 
         // Step 12: Generate the parallax far backdrop (must come last —
         // it consumes rng, and moving it earlier would shift terrain generation).
@@ -811,6 +816,11 @@ export class Map {
                 }
             }
         }
+
+        // ミニマップは tile cache を縮小して焼いているので、地形が壊れたら古くなる。
+        // 毎フレーム焼き直すと無駄なので「古い」印だけ立てて、実際に開いて
+        // 描画する直前(refreshMiniMap)まで焼き直しを遅延させる。
+        this.miniMapDirty = true;
     }
 
     /** Destroy blocks in a radius (for grenades) */
@@ -861,26 +871,80 @@ export class Map {
     // ------------------------------------------
 
     _generateMiniMap() {
-        this.miniMapScale = 2; // 2 pixels per tile
+        this.miniMapScale = 2; // 2 pixels per tile。drawMiniMap() 側の座標計算が前提にしているので変えない。
         this.miniMapCanvas = document.createElement('canvas');
         this.miniMapCanvas.width = this.cols * this.miniMapScale;
         this.miniMapCanvas.height = this.rows * this.miniMapScale;
         const ctx = this.miniMapCanvas.getContext('2d');
 
-        // Draw background
+        // 背景を先に塗る。tile cache は空きタイルを描かない(透明)ので、塗らないと
+        // 縮小画像を重ねたときに背景が抜けて見える。
         ctx.fillStyle = COLOR_CAVE_BG;
         ctx.fillRect(0, 0, this.miniMapCanvas.width, this.miniMapCanvas.height);
 
-        // Draw static blocks
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                const block = this.grid[r][c];
-                if (block === BLOCK_EMPTY) continue;
-
-                ctx.fillStyle = this.blockStyles[block].fill;
-                ctx.fillRect(c * this.miniMapScale, r * this.miniMapScale, this.miniMapScale, this.miniMapScale);
-            }
+        // 実際の地形(tileCacheCanvas, TILE_SIZE=16px/タイル)を 2px/タイルへ縮小して
+        // 焼くだけにする。以前はここで独自にタイルを fillRect し直していて、面取り
+        // 多角形やひび割れ表現を持つ本編の見た目と食い違っていた。
+        if (ctx.imageSmoothingQuality !== undefined) {
+            ctx.imageSmoothingQuality = 'high';
         }
+        this._applyMiniMapToning(ctx, () => {
+            ctx.drawImage(
+                this.tileCacheCanvas,
+                0, 0, this.width, this.height,
+                0, 0, this.miniMapCanvas.width, this.miniMapCanvas.height
+            );
+        });
+
+        this.miniMapDirty = false;
+    }
+
+    /**
+     * 縮小した地形の彩度・明度を落として背景に沈める(前景の自機・敵の点を目立たせるため)。
+     * `ctx.filter` が使える環境ではそれで一発、使えない環境向けにブレンドモードでの
+     * フォールバックを用意する。draw はコールバックとして渡し、filter 適用中に呼ぶ。
+     */
+    _applyMiniMapToning(ctx, draw) {
+        if (typeof ctx.filter === 'string') {
+            const prevFilter = ctx.filter;
+            ctx.filter = `saturate(${MINIMAP_SATURATION}) brightness(${MINIMAP_BRIGHTNESS})`;
+            draw();
+            ctx.filter = prevFilter;
+            return;
+        }
+
+        // filter 非対応環境向け: ブレンドモードで代替する。
+        // 'saturation' ブレンドは「色相・明度は背景(=描いた地形)から、彩度だけ描画色
+        // (=灰色=無彩色)から取る」効果になるので、globalAlpha で不透明度を絞って
+        // 元の彩度と無彩色の間を MINIMAP_SATURATION の割合で混ぜることで代用する。
+        draw();
+        const w = this.miniMapCanvas.width;
+        const h = this.miniMapCanvas.height;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'saturation';
+        ctx.globalAlpha = 1 - MINIMAP_SATURATION;
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+
+        // 明度を落とす: 黒を半透明で重ねるだけの単純な近似(source-over)。
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1 - MINIMAP_BRIGHTNESS;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+    }
+
+    /**
+     * ミニマップが「古い」場合だけ焼き直す。ScreenRenderer.drawMiniMap() が
+     * 描画の直前に呼ぶ。閉じている間は焼かず、開いて描画するときに1回だけ焼き直す
+     * ので、地形破壊がミニマップへ反映されつつ毎フレームのコストは増えない。
+     */
+    refreshMiniMap() {
+        if (!this.miniMapDirty) return;
+        this._generateMiniMap();
     }
 
     // ------------------------------------------

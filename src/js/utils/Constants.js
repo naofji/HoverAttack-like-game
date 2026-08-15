@@ -591,6 +591,12 @@ export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_CAVE_BG = '#1a0a00';
 
+// --- Mini-map (実際の地形を縮小して焼く。tile cache を drawImage で縮小するだけなので
+// 見た目は本編と一致する。彩度・明度だけここで落として背景に沈める) ---
+export const MINIMAP_SATURATION = 0.55;   // 彩度を落として背景に沈める
+export const MINIMAP_BRIGHTNESS = 0.65;   // 明度も落とす。前景の自機・敵の点を目立たせるため
+export const MINIMAP_ALPHA = 0.85;        // ミニマップ全体の不透明度 (開いたときの半透明さ)
+
 // --- Far cave backdrop (parallax) ---
 // 遠景がカメラに追従する割合。0 = 完全固定、1 = 前景と等速。
 // 見た目が弱すぎ/強すぎる場合はこの1値だけを調整する。
