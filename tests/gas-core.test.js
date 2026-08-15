@@ -33,6 +33,33 @@ test('previousWeekId returns the ISO week 7 days earlier', () => {
   assert.equal(ctx.previousWeekId(new Date(Date.UTC(2026, 0, 5))), '2026-W01');
 });
 
+test('nextWeekId returns the ISO week 7 days later', () => {
+  assert.equal(ctx.nextWeekId(new Date(Date.UTC(2026, 0, 5))), '2026-W03');
+});
+
+test('resolveWeekId accepts prev/current/next week id as-is (fixed date, not new Date())', () => {
+  // 基準日を固定: 2026-01-05 (Mon) は 2026-W02。
+  const now = new Date(Date.UTC(2026, 0, 5));
+  assert.equal(ctx.resolveWeekId(ctx.previousWeekId(now), now), '2026-W01');
+  assert.equal(ctx.resolveWeekId(ctx.isoWeekId(now), now), '2026-W02');
+  assert.equal(ctx.resolveWeekId(ctx.nextWeekId(now), now), '2026-W03');
+});
+
+test('resolveWeekId falls back to server week when client week is 2+ weeks off', () => {
+  const now = new Date(Date.UTC(2026, 0, 5)); // 2026-W02
+  assert.equal(ctx.resolveWeekId('2025-W52', now), '2026-W02'); // 2週間前
+  assert.equal(ctx.resolveWeekId('2026-W04', now), '2026-W02'); // 2週間後
+});
+
+test('resolveWeekId falls back to server week on missing/malformed/wrong-type input', () => {
+  const now = new Date(Date.UTC(2026, 0, 5)); // 2026-W02
+  assert.equal(ctx.resolveWeekId(undefined, now), '2026-W02');
+  assert.equal(ctx.resolveWeekId(null, now), '2026-W02');
+  assert.equal(ctx.resolveWeekId('', now), '2026-W02');
+  assert.equal(ctx.resolveWeekId(20260101, now), '2026-W02');
+  assert.equal(ctx.resolveWeekId('not-a-week', now), '2026-W02');
+});
+
 test('sanitizeName strips control chars, uppercases, caps length, defaults', () => {
   assert.equal(ctx.sanitizeName('abc'), 'ABC');
   assert.equal(ctx.sanitizeName('abcdefghijklmnop'), 'ABCDEFGHIJ'); // 10 max

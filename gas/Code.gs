@@ -33,6 +33,25 @@ function previousWeekId(date) {
   return isoWeekId(new Date(date.getTime() - 7 * 24 * 3600 * 1000));
 }
 
+function nextWeekId(date) {
+  return isoWeekId(new Date(date.getTime() + 7 * 24 * 3600 * 1000));
+}
+
+// クライアントが自己申告する週 ID をどこまで信じるか。
+// マップの種はクライアントの時計から作られるので、週境界をまたいだ直後は
+// 端末の時計のずれでサーバーの「今週」と1週ずれることがある（例: 日曜23:55に
+// プレイし始めて月曜00:05に登録すると、クライアントは先週の地形で遊んでいる）。
+// それを正しく前週として記録できるよう、前後1週間だけは自己申告を信じる。
+// それより離れた値は、細工すれば任意の週に記録を差し込めてしまうので受け付けず、
+// サーバー時刻から計算した「今週」に落とす。
+function resolveWeekId(clientWeekId, now) {
+  if (typeof clientWeekId !== 'string' || !clientWeekId) return isoWeekId(now);
+  if (clientWeekId === previousWeekId(now) || clientWeekId === isoWeekId(now) || clientWeekId === nextWeekId(now)) {
+    return clientWeekId;
+  }
+  return isoWeekId(now);
+}
+
 function sanitizeName(raw) {
   var s = (raw == null ? '' : String(raw));
   s = s.replace(/[\x00-\x1F\x7F]/g, '');
@@ -178,7 +197,7 @@ function doPost(e) {
           break;
         }
       }
-      var weekS = isoWeekId(nowS);
+      var weekS = resolveWeekId(body.weekId, nowS);
       for (var sj = 0; sj < sv.value.stages.length; sj++) {
         var st = sv.value.stages[sj];
         stageSheet.appendRow([nowS, weekS, sv.value.name, st.stage, st.timeMs, st.score, sv.value.country || '']);
@@ -200,7 +219,7 @@ function doPost(e) {
         break;
       }
     }
-    var weekId = isoWeekId(now);
+    var weekId = resolveWeekId(body.weekId, now);
     var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || ''];
     sheet.appendRow(row);
     rows.push(row);

@@ -54,7 +54,8 @@ export class OnlineLeaderboard {
             const res = await fetch(this.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ kind: 'stages', name: payload.name, country: payload.country, stages: payload.stages || [] }),
+                // weekId はマップ生成に使った週をそのまま送る（サーバー側が前後1週間だけ信用する）。
+                body: JSON.stringify({ kind: 'stages', name: payload.name, country: payload.country, stages: payload.stages || [], weekId: payload.weekId }),
                 signal: ctrl.signal,
             });
             if (!res.ok) return { ok: false, error: 'http-' + res.status };

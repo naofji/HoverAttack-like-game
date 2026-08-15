@@ -68,6 +68,14 @@ test('submit posts as text/plain and returns rank', async () => {
   assert.equal(typeof seen.body, 'string'); // JSON string body
 });
 
+test('submit includes weekId in the posted body', async () => {
+  let sent = null;
+  globalThis.fetch = async (url, opts) => { sent = JSON.parse(opts.body); return { ok: true, json: async () => ({ ok: true, rank: 0, weekId: '2026-W29' }) }; };
+  const lb = new OnlineLeaderboard('https://example.test/exec');
+  await lb.submit({ name: 'A', score: 20000, mission: 4, clearTime: null, weekId: '2026-W29' });
+  assert.equal(sent.weekId, '2026-W29');
+});
+
 test('submit surfaces server reason on ok:false', async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: false, reason: 'rate-limited' }) });
   const lb = new OnlineLeaderboard('https://example.test/exec');
@@ -102,6 +110,14 @@ test('submitStages posts kind=stages and returns ok', async () => {
     assert.equal(sent.kind, 'stages');
     assert.equal(sent.name, 'ZZ');
     assert.equal(sent.stages[0].stage, 1);
+});
+
+test('submitStages includes weekId in the posted body', async () => {
+    let sent = null;
+    globalThis.fetch = async (url, opts) => { sent = JSON.parse(opts.body); return { ok: true, json: async () => ({ ok: true }) }; };
+    const lb = new OnlineLeaderboard('https://example.test/exec');
+    await lb.submitStages({ name: 'ZZ', country: 'JP', stages: [{ stage: 1, timeMs: 1000, score: 500 }], weekId: '2026-W29' });
+    assert.equal(sent.weekId, '2026-W29');
 });
 
 test('submitStages returns not-configured with empty url', async () => {
