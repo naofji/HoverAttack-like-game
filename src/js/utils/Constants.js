@@ -642,6 +642,21 @@ export const EMERGENCY_DEFENSE_BASE_RADIUS = 120;
 export const EMERGENCY_DEFENSE_SPEED_MULT = 1.15;
 export const EMERGENCY_DEFENSE_SIGHT_RANGE = 250;
 
+// 総攻撃中の「見境なしの発砲」。緊急防衛に入ると敵は基地の周囲へ向かう return
+// 状態になるが、_handleShooting() は chase のときしか撃たないので、**通路が無くて
+// 基地に辿り着けない敵は壁の前で足踏みしたまま一発も撃たない置物になっていた**
+// （実機で頻発するとの報告）。自機を見つけていなくても基地の方向へ撃たせる。
+//
+// 基地の方向へ撃たせるのは絵のためだけではない。**敵のミサイルも地形を壊す**
+// （Missile.js の damageBlock() は自機の弾かどうかを見ていない）ので、
+// 足止めされた敵が自分で壁を掘り、やがて基地へ近づけるようになる。
+// 「通路が無くて近寄れない」という根本原因そのものが時間とともに解消される。
+export const EMERGENCY_WILD_FIRE_SPREAD = 20 * Math.PI / 180;  // ±20度
+// 発射間隔の倍率。1.0 = 交戦中と同じペース。ユーザーの判断は「その頃には敵の数も
+// 減っているはずなので通常と同じかそれ以上の頻度でよい」。**下げると頻度が上がる。**
+// 逆に実機で弾が多すぎる／重い場合は、まずここを上げて間引く
+export const EMERGENCY_WILD_FIRE_INTERVAL_MULT = 1.0;
+
 // --- Per-stage block palettes (stage 1..7) ---
 // Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.
 export const STAGE_PALETTES = [

@@ -14,6 +14,7 @@ import {
     RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
     ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT, EMERGENCY_DEFENSE_SIGHT_RANGE,
+    EMERGENCY_WILD_FIRE_SPREAD, EMERGENCY_WILD_FIRE_INTERVAL_MULT,
     ENEMY_RECOIL_PROFILES,
     SMOKE_COOLDOWN,
 } from '../utils/Constants.js';
@@ -828,6 +829,15 @@ export class EnemyAttacker {
         this.fireTimer--;
         if (this.fireTimer > 0) return;
         if (this.aiState !== 'chase' || !target) {
+            // 総攻撃（緊急防衛）中は、自機を見つけていなくても基地の方向へ撃つ。
+            // ここを足す前は、通路が無くて基地に辿り着けない敵が壁の前で足踏み
+            // したまま一発も撃たない置物になっていた（実機で頻発するとの報告）。
+            // 詳しくは _fireWild() のコメント
+            if (this.emergencyDefense && this.emergencyTargetBase) {
+                this._fireWild();
+                this.fireTimer = Math.round(this.config.fireInterval * EMERGENCY_WILD_FIRE_INTERVAL_MULT);
+                return;
+            }
             this.fireTimer = this.config.fireInterval;
             return;
         }
@@ -842,6 +852,58 @@ export class EnemyAttacker {
         // Normal firing
         this._fire(target);
         this.fireTimer = this.config.fireInterval;
+    }
+
+    /**
+     * 総攻撃中の「見境なしの発砲」。自機ではなく**基地の方向**へ、
+     * EMERGENCY_WILD_FIRE_SPREAD のばらつきを付けて素のミサイルを1発撃つ。
+     *
+     * **_fire() を使い回さないのは意図的。** あちらの型ごとの分岐のうち、
+     * グレネードはここでは逆効果になる（放物線は遠距離へ投げても手前に落ちる
+     * だけ）。artillery のホーミングだけは残す（下記）。
+     *
+     * 基地の方向へ撃つのは絵のためだけではない。**敵の素のミサイルは地形を壊す**
+     * （Missile の damageBlock() は自機の弾かどうかを見ていない）ので、
+     * 足止めされた敵が自分で壁を掘って基地へ近づけるようになる。
+     * ばらつきを付けているのは、同じ線に乗ると掘れる穴が1本の線にしかならず
+     * 壁が崩れないため。
+     *
+     * **artillery だけはホーミングを撃つ**（ユーザー判断。元々ホーミングを撃つ
+     * 攻城型なので、総攻撃中も型の個性を残す）。ただし**ホーミングは
+     * _avoidObstacles() で壁を迂回するのでほとんど地形を壊さない**＝道を開く役には
+     * ならない。artillery 以外が素のミサイルで掘るので、全体としては成立する。
+     * **全タイプをホーミングにすると壁が掘れなくなり、この変更の本来の狙い
+     * （通路が無くて近寄れない状況の解消）が失われる。**
+     *
+     * なお、ホーミングでも「自機を狙う」ことにはならない。追尾が始まるのは
+     * 発射から 30 フレーム後かつ**自機が 240px 以内にいるとき**だけで
+     * （ENEMY_HOMING_MISSILE_DELAY / _ENGAGE_DISTANCE）、それまでは初期角度＝
+     * 基地の方向へ直進する。
+     */
+    _fireWild() {
+        const base = this.emergencyTargetBase;
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const angle = Math.atan2(
+            (base.y + base.height / 2) - cy,
+            (base.x + base.width / 2) - cx,
+        ) + (Math.random() - 0.5) * 2 * EMERGENCY_WILD_FIRE_SPREAD;
+
+        // 撃つ方を向く。足止めされて vx がほぼ 0 のときは _updateFacing() が
+        // 向きを決められず、背中側へ撃っているように見えるため
+        this.facingRight = Math.cos(angle) >= 0;
+
+        const muzzleX = cx + Math.cos(angle) * 10;
+        const muzzleY = cy + Math.sin(angle) * 6;
+
+        if (this.config.name === 'artillery') {
+            this.game.enemyBullets.push(new EnemyHomingMissile(this.game, muzzleX, muzzleY, angle));
+            audioManager.playWeapon('homing', muzzleX, muzzleY);
+            return;
+        }
+        const missile = new Missile(this.game, muzzleX, muzzleY, angle, false, this.config.name === 'rival');
+        this.game.projectiles.push(missile);
+        audioManager.playWeapon('enemyMissile', muzzleX, muzzleY);
     }
 
     _fire(target) {
