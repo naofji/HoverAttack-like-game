@@ -5,7 +5,7 @@ import {
 } from '../src/js/utils/audioFalloff.js';
 import {
   AUDIO_PAN_RANGE, AUDIO_PAN_MAX, CANVAS_WIDTH, CANVAS_HEIGHT,
-  AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE,
+  AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE, AUDIO_OFFSCREEN_FALLOFF_EXP,
 } from '../src/js/utils/Constants.js';
 
 /** 画面がワールド原点あたりを映している状態。 */
@@ -178,4 +178,53 @@ test('画面の縦横は音の判定と食い違わない', () => {
   assert.equal(VIEW.halfW, CANVAS_WIDTH / 2);
   assert.equal(VIEW.halfH, CANVAS_HEIGHT / 2);
   assert.equal(AUDIO_PAN_RANGE, CANVAS_WIDTH / 2, 'パンの範囲が画面幅とずれている');
+});
+
+// ============================================
+// 画面外の減衰を強める（2026-08-16、実機フィードバック）
+// ============================================
+//
+// 「画面外の音についてはもっと減衰してもいい」。総攻撃モードで画面外の発砲が
+// 同時多発するようになり、1発あたりは控えめでも重なると耳につくようになった。
+//
+// **縁の音量を下げるのではなくカーブを立てる方を主にした。** 縁の音量
+// (AUDIO_OFFSCREEN_GAIN) だけを下げると画面の境界での段差が広がり、「画面に
+// 入った瞬間に急に鳴る」が目立つ。指数を上げれば境界の段差はほぼそのままで、
+// 少し離れただけで大きく落ちる。
+
+test('画面外の減衰は直線ではなく、離れるほど急に落ちる（下に凸）', () => {
+  const at = (out) => positionalVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
+  const fade = AUDIO_OFFSCREEN_FADE;
+
+  // 中点の音量が「両端の平均」より小さければ下に凸（＝直線より速く落ちる）。
+  // 指数を1（直線）に戻すとちょうど平均に一致するので、この判定で気づける
+  const mid = at(fade / 2);
+  const linearMid = (at(0) + at(fade)) / 2;
+  assert.ok(mid < linearMid * 0.99, `直線的に落ちている: mid=${mid}, 直線なら=${linearMid}`);
+});
+
+test('画面外の同じ距離での音量が、従来（縁0.5の直線）より小さい', () => {
+  const fade = AUDIO_OFFSCREEN_FADE;
+  for (const out of [fade * 0.2, fade * 0.5, fade * 0.75]) {
+    const actual = positionalVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
+    const legacy = 0.5 * (1 - out / fade);   // 変更前の式をそのまま置く
+    assert.ok(actual < legacy, `${out}px で従来より小さくなっていない: ${actual} >= ${legacy}`);
+  }
+});
+
+// カーブを変えても、両端の約束は変わらないこと
+test('カーブを変えても画面内は満音量、1画面ぶんで無音のまま', () => {
+  assert.equal(positionalVolume(VIEW.cx, VIEW.cy, VIEW), 1, '画面内が満音量でない');
+  assert.equal(
+    positionalVolume(VIEW.cx + VIEW.halfW + AUDIO_OFFSCREEN_FADE, VIEW.cy, VIEW), 0,
+    '1画面ぶんで無音になっていない',
+  );
+});
+
+// 指数を 1 に戻せば従来の直線に戻せる（実機で行き過ぎたときの逃げ道）
+test('AUDIO_OFFSCREEN_FALLOFF_EXP は 1 以上（1 なら従来の直線）', () => {
+  assert.ok(
+    AUDIO_OFFSCREEN_FALLOFF_EXP >= 1,
+    `指数が 1 未満だと従来より緩くなる: ${AUDIO_OFFSCREEN_FALLOFF_EXP}`,
+  );
 });

@@ -6,7 +6,7 @@
  */
 import {
     AUDIO_PAN_RANGE, AUDIO_PAN_MAX,
-    AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE,
+    AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE, AUDIO_OFFSCREEN_FALLOFF_EXP,
 } from './Constants.js';
 
 /**
@@ -34,8 +34,14 @@ export function offscreenDistance(sx, sy, view) {
  * 狭く、画面に映っている敵が既にほぼ無音だった（中心から256pxで22%）。
  * 見えている敵は聞こえるべきなので、画面内は一律で満音量にした。
  *
- * 画面外は半分から始めて、1画面ぶん離れると 0 になる。ここを 0 にしないと、
- * マップのどこかに敵がいる限り低い唸りが鳴り続ける。
+ * 画面外は AUDIO_OFFSCREEN_GAIN から始めて、1画面ぶん離れると 0 になる。
+ * ここを 0 にしないと、マップのどこかに敵がいる限り低い唸りが鳴り続ける。
+ *
+ * 落ち方は直線ではなく AUDIO_OFFSCREEN_FALLOFF_EXP 乗の下に凸のカーブ。
+ * 「画面外の音はもっと減衰してよい」という実機フィードバックへの対応で、
+ * **縁の音量を下げるより先にカーブを立てた**（縁だけ下げると画面の境界での
+ * 段差が広がり、「画面に入った瞬間に急に鳴る」が目立つため）。指数を 1 に
+ * 戻せば従来の直線に戻る。
  *
  * 画面の境界で音量が飛ぶが、AudioManager 側が setTargetAtTime で
  * 滑らかに追従させるので段差としては聞こえない。
@@ -49,7 +55,7 @@ export function positionalVolume(sx, sy, view) {
     const out = offscreenDistance(sx, sy, view);
     if (out === 0) return 1;
     const fade = 1 - out / AUDIO_OFFSCREEN_FADE;
-    return fade > 0 ? AUDIO_OFFSCREEN_GAIN * fade : 0;
+    return fade > 0 ? AUDIO_OFFSCREEN_GAIN * Math.pow(fade, AUDIO_OFFSCREEN_FALLOFF_EXP) : 0;
 }
 
 /**
