@@ -116,7 +116,8 @@ const CORNER_NAMES = ['topLeft', 'bottomLeft', 'topRight', 'bottomRight'];
  * 中心線の前後に不感帯を置いたこと。カーソルが中心付近で揺れても側は変わらない
  * （不感帯を出るには横 spanX*hysteresis、縦 spanY*hysteresis ぶん離れる必要がある）。
  *
- * 自機（ドッキング中は母艦）と重なる隅は避ける。裏返す順は「上下 → 左右 → 両方」。
+ * 自機（ドッキング中は母艦）に**近づかれた**隅は避ける（unitPadding の分だけ
+ * 手前で反応する）。裏返す順は「上下 → 左右 → 両方」。
  * カーソルとの左右関係のほうが体感で効くので、まず上下だけを裏返して左右を保つ。
  *
  * @param {{topLeft, bottomLeft, topRight, bottomRight}} positions miniMapCornerPositions() の戻り値
@@ -125,15 +126,19 @@ const CORNER_NAMES = ['topLeft', 'bottomLeft', 'topRight', 'bottomRight'];
  * @param {string|null} currentCorner 今表示している隅。無ければ（初回など）null→左上扱い
  * @param {{x:number,y:number}|null} unitPoint 自機（またはドッキング中の母艦）の画面座標
  * @param {{x:number,y:number}|null} crosshairPoint クロスヘアの画面座標
- * @param {number} [padding] クロスヘアの当たり判定にだけ足す余白
+ * @param {number} [padding] クロスヘアの当たり判定に足す余白
+ * @param {number} [unitPadding] 自機／母艦の当たり判定に足す余白。既定は0
+ *   （＝重なってから動く従来の挙動。呼び出し側が明示したときだけ先回りする）
  * @param {number} [hysteresis] 中心線の不感帯。隅と隅の間隔に対する比
  * @returns {{x:number,y:number,corner:string}}
  */
-export function pickStickyMiniMapCorner({ positions, mapW, mapH, currentCorner = null, unitPoint = null, crosshairPoint = null, padding = 0, hysteresis = 0.15 }) {
+export function pickStickyMiniMapCorner({ positions, mapW, mapH, currentCorner = null, unitPoint = null, crosshairPoint = null, padding = 0, unitPadding = 0, hysteresis = 0.15 }) {
     const overlaps = (rect, p, pad) =>
         !!p && p.x >= rect.x - pad && p.x <= rect.x + mapW + pad && p.y >= rect.y - pad && p.y <= rect.y + mapH + pad;
 
-    const blockedByUnit = (name) => overlaps(positions[name], unitPoint, 0);
+    // 自機にも余白を持たせる。0 のままだと矩形へ入るまで動き出さず、そこから
+    // フェードで切り替わるので**必ず一度は重なる**（実機フィードバック）
+    const blockedByUnit = (name) => overlaps(positions[name], unitPoint, unitPadding);
     const blockedByCrosshair = (name) => overlaps(positions[name], crosshairPoint, padding);
 
     const current = CORNER_NAMES.includes(currentCorner) ? currentCorner : 'topLeft';

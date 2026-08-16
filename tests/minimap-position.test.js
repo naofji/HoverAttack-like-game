@@ -86,8 +86,12 @@ test('点（母艦）の座標は、選ばれたミニマップの位置(mmX/mmY
     const carrierDotColor = '#0088FF';
     const dots = extractFillRectsWithColor(calls).filter((r) => r.color === carrierDotColor);
     assert.ok(dots.length >= 1, 'carrier のドットが描かれていない');
-    const expectedPx = mmX + (game.carrier.x / TILE_SIZE) * game.map.miniMapScale;
-    const expectedPy = mmY + (game.carrier.y / TILE_SIZE) * game.map.miniMapScale;
+    // 縮尺は drawImage の転送先サイズから取る。miniMapScale をそのまま使うと
+    // 「等倍で描かれる」前提になるが、表示サイズを一定に保つようになってからは
+    // 小さいマップは拡大されるので、その前提は成り立たない
+    const dotScale = game.map.miniMapScale * (drawImageCall.args[3] / MM_W);
+    const expectedPx = mmX + (game.carrier.x / TILE_SIZE) * dotScale;
+    const expectedPy = mmY + (game.carrier.y / TILE_SIZE) * dotScale;
     // fillRect は中心から size/2 だけずらして描くので、中心座標に戻して比較する
     const dot = dots[0];
     const centerX = dot.x + dot.w / 2;
@@ -134,15 +138,39 @@ test('母艦の方向矢印が出ていても、ミニマップはその位置�
         '矢印がまだ避ける対象に残っていて、左上から動いてしまっている');
 });
 
-// ⑼ 小さいミニマップは拡大されない（元が上限より小さければ等倍）。
-test('小さいミニマップは拡大されない', () => {
-    const game = makeGame({ mmW: MM_W, mmH: MM_H }); // 300x150 < 1024/3
-    const calls = draw(game);
+// ⑼ **マップの広さによらず表示サイズを一定に保つ**（実機フィードバック）。
+// 以前は「上限より小さければ等倍」＝拡大しない作りだったので、面が進んで
+// マップが広くなるほどミニマップも大きくなり、面ごとに見え方が変わっていた。
+// 焼く解像度は cols*2 のまま（マップの広さに比例する）なので、小さいマップは
+// 拡大されることになる。ミニマップは元々ぼかして沈めた絵なので許容する。
+test('マップの広さが変わってもミニマップの表示サイズは一定', () => {
+    const sizes = [];
+    for (const [mmW, mmH] of [[300, 150], [450, 225], [600, 300]]) {
+        const calls = draw(makeGame({ mmW, mmH }));
+        const c = calls.find((x) => x.name === 'drawImage');
+        sizes.push({ w: c.args[3], h: c.args[4] });
+    }
+    for (const s of sizes.slice(1)) {
+        assert.ok(Math.abs(s.w - sizes[0].w) < 0.001, `表示幅がマップの広さで変わっている: ${JSON.stringify(sizes)}`);
+        assert.ok(Math.abs(s.h - sizes[0].h) < 0.001, `表示高さがマップの広さで変わっている: ${JSON.stringify(sizes)}`);
+    }
+    assert.ok(
+        Math.abs(sizes[0].w - CANVAS_W * MINIMAP_MAX_WIDTH_RATIO) < 0.001,
+        `表示幅が画面幅の MINIMAP_MAX_WIDTH_RATIO になっていない: ${sizes[0].w}`,
+    );
+});
+
+// 小さいマップでも拡大されること（上の一定サイズの裏返し。等倍で止まる実装が
+// 戻ってきたらここで気づける）
+test('上限より小さいミニマップは拡大される', () => {
+    const calls = draw(makeGame({ mmW: MM_W, mmH: MM_H })); // 300x150
     const drawImageCall = calls.find((c) => c.name === 'drawImage');
-    const destW = drawImageCall.args[3];
-    const destH = drawImageCall.args[4];
-    assert.equal(destW, MM_W, '拡大されないはずが等倍になっていない');
-    assert.equal(destH, MM_H, '拡大されないはずが等倍になっていない');
+    assert.ok(drawImageCall.args[3] > MM_W, `拡大されていない: destW=${drawImageCall.args[3]}`);
+    // アスペクト比は保つ
+    assert.ok(
+        Math.abs(drawImageCall.args[3] / drawImageCall.args[4] - MM_W / MM_H) < 0.01,
+        'アスペクト比が保たれていない',
+    );
 });
 
 // ⑽ 点の座標が縮小率に追随している: 縮小されたときに、点がミニマップの

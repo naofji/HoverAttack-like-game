@@ -157,3 +157,62 @@ test('今いる隅に自機が重なったら移る', () => {
     const r = pick('topLeft', { x: 900, y: 700 }, unitAtTopLeft);
     assert.notEqual(r.corner, 'topLeft', '自機と重なっているのに留まっている');
 });
+
+// ============================================
+// 実機フィードバック: 近づいても動かず、自機がミニマップと重なる
+// ============================================
+//
+// 自機の当たり判定だけ余白ゼロで見ていた（クロスヘアには padding があった）ので、
+// **実際に矩形へ入るまで動かない**。しかも隅の切り替えはフェードを挟むので、
+// 動き出してから消えるまでの十数フレームは重なったままになる。
+// 自機にも余白（unitPadding）を持たせ、入る手前で動き始めるようにする。
+
+const UNIT_PADDING = 64;
+
+function pickWithUnitPadding(currentCorner, unitPoint, crosshairPoint = null) {
+    return pickStickyMiniMapCorner({
+        positions, mapW: BASE.mapW, mapH: BASE.mapH,
+        currentCorner, unitPoint, crosshairPoint,
+        padding: PADDING, unitPadding: UNIT_PADDING,
+    });
+}
+
+test('自機がミニマップに入る手前（余白の内側）でも、隅が切り替わる', () => {
+    // 左上のミニマップの右下の角から、外へ少しだけ離れた点。
+    // 矩形の外なので余白ゼロの実装では「重なっていない」と判定される
+    const tl = positions.topLeft;
+    const justOutside = {
+        x: tl.x + BASE.mapW + UNIT_PADDING / 2,
+        y: tl.y + BASE.mapH + UNIT_PADDING / 2,
+    };
+    assert.ok(
+        justOutside.x > tl.x + BASE.mapW && justOutside.y > tl.y + BASE.mapH,
+        '前提が崩れている：この点は矩形の外にあるはず',
+    );
+
+    const r = pickWithUnitPadding('topLeft', justOutside);
+    assert.notEqual(r.corner, 'topLeft', '自機が近づいているのに左上のままになっている');
+});
+
+test('自機が余白の外にいるうちは、隅は動かない（過敏に往復しない）', () => {
+    const tl = positions.topLeft;
+    const farOutside = {
+        x: tl.x + BASE.mapW + UNIT_PADDING * 2,
+        y: tl.y + BASE.mapH + UNIT_PADDING * 2,
+    };
+    const r = pickWithUnitPadding('topLeft', farOutside);
+    assert.equal(r.corner, 'topLeft', '自機が十分離れているのに動いている');
+});
+
+// unitPadding を省略したときに従来どおり（余白ゼロ）であること。
+// 既定を変えると pickStickyMiniMapCorner を使う他の呼び出しの挙動が変わる
+test('unitPadding を渡さなければ従来どおり余白ゼロで判定する', () => {
+    const tl = positions.topLeft;
+    const justOutside = { x: tl.x + BASE.mapW + 10, y: tl.y + BASE.mapH + 10 };
+    const r = pickStickyMiniMapCorner({
+        positions, mapW: BASE.mapW, mapH: BASE.mapH,
+        currentCorner: 'topLeft', unitPoint: justOutside, crosshairPoint: null,
+        padding: PADDING,
+    });
+    assert.equal(r.corner, 'topLeft', '余白を渡していないのに動いている');
+});

@@ -6,6 +6,7 @@ import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING, MINIMAP_SIDE_HYSTERESIS,
+    MINIMAP_AVOID_PADDING_UNIT,
 } from '../utils/Constants.js';
 import { pickStickyMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
@@ -1007,7 +1008,9 @@ export class ScreenRenderer {
         // 上の面に描くようになったため、もう避ける必要が無い（重なっても矢印側が
         // 前面に出るので位置の問題が起きない）。
         // 自機／母艦とクロスヘアは性質が違うので別々に持つ:
-        //   - 自機／母艦: 重なったら即アウト（padding 無し）
+        //   - 自機／母艦: 余白(MINIMAP_AVOID_PADDING_UNIT)の外にあれば OK。
+        //     クロスヘアより大きく取るのは、隅の切り替えがフェードを挟むぶん
+        //     早く動き始めないと、動いている最中に重なってしまうため
         //   - クロスヘア: 余白(MINIMAP_AVOID_PADDING)の外にあれば OK
         // （詳しくは pickStickyMiniMapCorner のコメント）
         // どちらを操作中かで避けるべき対象が変わるため、両方は見ずに操作している方だけを見る。
@@ -1021,9 +1024,19 @@ export class ScreenRenderer {
         // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
         const crosshairPoint = crosshairScreenPos(game);
 
-        // 焼く解像度（cols*2 x rows*2、最大600x300）はそのまま、描くときだけ画面幅の
-        // 1/3 に収まるよう縮小する。元がそれより小さい場合は拡大しない（率は1で頭打ち）。
-        const shrink = Math.min(1, (w * MINIMAP_MAX_WIDTH_RATIO) / mm.width);
+        // 焼く解像度（cols*2 x rows*2）はマップの広さに比例するが、**画面に出す
+        // 大きさはマップの広さによらず一定**にする。以前は「上限より小さければ
+        // 等倍」＝拡大しない作りだったので、面が進んでマップが広くなるほど
+        // ミニマップも大きくなり、面ごとに見え方が変わっていた（実機フィードバック）。
+        // 幅を画面幅の MINIMAP_MAX_WIDTH_RATIO に合わせ、縦が HUD 帯の間に
+        // 収まらないマップだけ高さ側で頭打ちにする（アスペクト比は常に保つ）。
+        // 小さいマップは拡大されることになるが、ミニマップは元々彩度と明度を
+        // 落として沈めた絵なので、多少の甘さは問題にならない。
+        const availH = h - HUD_TOP_HEIGHT - HUD_BOTTOM_HEIGHT - MINIMAP_MARGIN * 2;
+        const shrink = Math.min(
+            (w * MINIMAP_MAX_WIDTH_RATIO) / mm.width,
+            availH / mm.height,
+        );
         const destW = mm.width * shrink;
         const destH = mm.height * shrink;
 
@@ -1051,6 +1064,7 @@ export class ScreenRenderer {
             positions, mapW: destW, mapH: destH,
             currentCorner, unitPoint, crosshairPoint,
             padding: MINIMAP_AVOID_PADDING,
+            unitPadding: MINIMAP_AVOID_PADDING_UNIT,
             hysteresis: MINIMAP_SIDE_HYSTERESIS,
         });
 
