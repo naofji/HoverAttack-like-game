@@ -809,12 +809,29 @@ export const Game = {
 
     _updateMissionClear() {
         if (this._updateTimeBonusSlot(false)) return;
-        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
-            this._restoreFullscreen();
-            this.gameState = 'playing';
-            this.stateManager.nextMission();
-            audioManager.startBGM(this.missionsCompleted);
+
+        // S だけ先に見る。下の「任意のキーで次へ」に混ぜると、getTypedChars に
+        // 's' が乗るぶんセーブと前進が二重に走る。
+        // 払えないときは**無反応**にする（連打で 10000 点を失う事故を防ぐため、
+        // 確認ダイアログではなく専用キーにしてある）。
+        if (this.input.isKeyPressed('KeyS')) {
+            if (!this.saveManager.canSaveNow()) return;
+            this.saveManager.saveHere();
+            this._advanceToNextMission();
+            return;
         }
+
+        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
+            this._advanceToNextMission();
+        }
+    },
+
+    /** 面クリア画面から次の面へ。セーブの有無で変わらない部分をまとめた。 */
+    _advanceToNextMission() {
+        this._restoreFullscreen();
+        this.gameState = 'playing';
+        this.stateManager.nextMission();
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     /**

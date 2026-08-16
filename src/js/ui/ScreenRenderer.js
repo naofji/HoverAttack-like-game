@@ -23,6 +23,7 @@ import { drawStageScene } from './StageScene.js';
 import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
+import { SAVE_COST } from '../utils/Constants.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -511,11 +512,34 @@ export class ScreenRenderer {
             ctx.fillStyle = UI.ink;
             glow(ctx, UI.info, 'mid');
             ctx.font = font('sub', true);
-            ctx.fillText('PRESS ANY KEY TO CONTINUE', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('[W] NEXT STAGE', canvas.width / 2, canvas.height / 2 + 60);
             ctx.restore();
+
+            this._drawSaveOption(ctx, canvas.width / 2, canvas.height / 2 + 88);
         }
 
         this._drawStageTop5Notice(ctx, canvas.height / 2 + 90);
+    }
+
+    /**
+     * 面クリア画面のセーブ行。**払えないときも行は出す** — 黙って消すと
+     * 「セーブという機能がある」ことすら伝わらないため、理由を添えて暗くする。
+     */
+    _drawSaveOption(ctx, cx, y) {
+        const canSave = this.game.saveManager && this.game.saveManager.canSaveNow();
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('sub', true);
+        if (canSave) {
+            ctx.fillStyle = UI.gold;
+            glow(ctx, UI.gold, 'mid');
+            ctx.fillText(`[S] SAVE & NEXT   -${SAVE_COST} PTS`, cx, y);
+        } else {
+            ctx.fillStyle = UI.dim;
+            ctx.fillText(`[S] SAVE & NEXT   SCORE TOO LOW`, cx, y);
+        }
+        ctx.restore();
+        ctx.textAlign = 'left';
     }
 
     _drawStageTop5Notice(ctx, y) {
