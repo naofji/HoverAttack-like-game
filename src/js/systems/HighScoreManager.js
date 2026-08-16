@@ -74,16 +74,24 @@ export class HighScoreManager {
         return score > this.scores[this.scores.length - 1].score;
     }
 
-    addScore(name, score, mission, clearTime = null, country = '') {
+    /**
+     * @param {number} [tries=1] セーブ地点から何回目の挑戦か。
+     *   **同点のときだけ**順位に効く（少ないほうが上）。スコアそのものは
+     *   減らさない——セーブの 10000 点コストで既に払っているので二重取りにしない。
+     */
+    addScore(name, score, mission, clearTime = null, country = '', tries = 1) {
         const entry = {
             name: (name || 'AAA').toUpperCase().substring(0, 10),
             score: score,
             mission: mission,
             clearTime: clearTime,
             country: country || '',
+            tries: Number(tries) || 1,
         };
         this.scores.push(entry);
-        this.scores.sort((a, b) => b.score - a.score);
+        // 保存済みの古いエントリには tries が無いので、ここで `|| 1` して吸収する
+        // （_load() で書き換えると保存データを汚すため、比較側だけで吸収する）。
+        this.scores.sort((a, b) => (b.score - a.score) || ((Number(a.tries) || 1) - (Number(b.tries) || 1)));
         if (this.scores.length > MAX_WEEKLY) {
             this.scores = this.scores.slice(0, MAX_WEEKLY);
         }

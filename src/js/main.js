@@ -835,7 +835,7 @@ export const Game = {
                 // ここが通ってしまう
                 if (!this.stageSelectRun && this.highScoreManager.isHighScore(this.score)) {
                     this.localRankIndex = this.highScoreManager.addScore(
-                        this.playerNameInput, this.score, displayMission, formattedTime, country
+                        this.playerNameInput, this.score, displayMission, formattedTime, country, this.runTries
                     );
                     this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
                 } else {

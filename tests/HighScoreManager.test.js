@@ -78,3 +78,34 @@ test('addScore stores country and defaults to empty string', async () => {
   assert.equal(top[0].country, 'JP');
   assert.equal(top[1].country, '');
 });
+
+test('同点ならトライ数が少ないほうが上', async () => {
+  const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
+  const m = new HighScoreManager('2026-W10');
+  m.addScore('AAA', 50000, 5, null, '', 3);
+  m.addScore('BBB', 50000, 5, null, '', 1);
+  const top = m.getTop10();
+  assert.equal(top[0].name, 'BBB');
+  assert.equal(top[1].name, 'AAA');
+});
+
+test('tries を渡さない旧来の呼び方は 1 として扱う', async () => {
+  const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
+  const m = new HighScoreManager('2026-W10');
+  m.addScore('AAA', 50000, 5);
+  assert.equal(m.getTop10()[0].tries, 1);
+});
+
+test('スコアが違えばトライ数は順位を動かさない', async () => {
+  const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
+  const m = new HighScoreManager('2026-W10');
+  m.addScore('AAA', 60000, 5, null, '', 9);
+  m.addScore('BBB', 50000, 5, null, '', 1);
+  assert.equal(m.getTop10()[0].name, 'AAA');
+});
+
+test('保存して読み直してもトライ数が残る', async () => {
+  const { HighScoreManager } = await import('../src/js/systems/HighScoreManager.js');
+  new HighScoreManager('2026-W10').addScore('AAA', 50000, 5, null, '', 4);
+  assert.equal(new HighScoreManager('2026-W10').getTop10()[0].tries, 4);
+});

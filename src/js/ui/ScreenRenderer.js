@@ -824,6 +824,11 @@ export class ScreenRenderer {
         { key: 'rank', label: 'RANK', x: 31, align: 'right' },
         { key: 'score', label: 'SCORE', x: 130, align: 'right' },
         { key: 'name', label: 'NAME', x: 226, align: 'left' },
+        // TRY は名前の右端ぎりぎりに小さく置く。列を増やして表を広げると
+        // 他の列の座標を全部引き直すことになるため、隙間に収めた。
+        // body 16px 等幅なら名前10文字で約96px（226→322）。x=346 右揃え・small で
+        // 3文字「T99」を描いても約23px（323→346）で収まり、次の flag(x=354) と衝突しない。
+        { key: 'tries', label: 'TRY', x: 346, align: 'right', small: true },
         { key: 'flag', label: 'REGION', x: 354, align: 'left' },
         { key: 'mission', label: 'MISSION', x: 552, align: 'right' },
         { key: 'time', label: 'TIME', x: 632, align: 'right' },
@@ -911,6 +916,7 @@ export class ScreenRenderer {
                 // 空き枠。順位だけ残して他は罫で埋める。
                 ctx.fillStyle = emptyShade;
                 for (const c of cols) {
+                    if (c.key === 'tries') continue; // 空き枠に T の点線は出さない（意味が無い）
                     ctx.textAlign = c.align;
                     ctx.fillText(c.key === 'rank' ? `${index + 1}.` : '·····', left + c.x, rowY);
                 }
@@ -925,6 +931,9 @@ export class ScreenRenderer {
                 rank: `${index + 1}.`,
                 score: String(entry.score),
                 name: String(entry.name || ''),
+                // tries が無い(旧データ)か 1(初回クリア)なら何も描かない。
+                // セーブを使わない大多数の行を "T1" で汚さないため。
+                tries: (Number(entry.tries) || 1) >= 2 ? `T${Number(entry.tries)}` : '',
                 flag: flagEmoji(entry.country),
                 mission: String(entry.mission),
                 time: entry.clearTime ? String(entry.clearTime) : '—',
@@ -934,6 +943,8 @@ export class ScreenRenderer {
                 const text = values[c.key];
                 if (!text) continue;
                 ctx.textAlign = c.align;
+                // TRY だけ小さく描く。名前の隙間に置いているので body だと溢れる
+                ctx.font = c.small ? font('small', true) : font('body', true);
                 if (highlighted) {
                     ctx.fillStyle = ROW_HIGHLIGHT;
                     ctx.fillText(text, left + c.x, rowY);
