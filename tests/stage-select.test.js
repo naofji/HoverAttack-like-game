@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/js/main.js';
 import { SaveManager } from '../src/js/systems/SaveManager.js';
+import { makeSave } from '../src/js/utils/saveData.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 
@@ -110,4 +111,45 @@ test('面セレクト画面は到達した数だけ番号を描く', async () =>
     assert.ok(texts.some((t) => t.includes('STAGE RANKINGS ONLY')));
     // 選択中の1つだけ枠が付く
     assert.equal(ctx.calls.filter((c) => c.name === 'strokeRect').length, 1);
+});
+
+// stageSelectRun が false に戻るタイミングの回帰テスト。
+// stageSelectRun = true にするのは _startStageSelectRun() だけ、false に戻すのは
+// 従来 _startGameIfRequested() だけだった。面セレクトのランを Escape で切り上げて
+// タイトルへ戻っても true のまま残り、_drawSaveHints() は sm.save だけを見るので
+// 「[C] CONTINUE」の行は出るのに、_updateTitle の C 分岐は canContinueHere()
+// (= !stageSelectRun && ...) を見るため C を押しても反応しない、という不整合になっていた。
+test('面セレクトのランを終えてタイトルに戻ると stageSelectRun が false に戻る', () => {
+    const storage = storageReached(2);
+    const game = makeGame({ storage, stageSelectIndex: 2, input: fakeInput(['KeyW']) });
+    game._updateStageSelect(); // 面セレクトのランを開始
+    assert.equal(game.stageSelectRun, true, '前提: 面セレクトのランが始まっている');
+
+    // セーブがある状態を作る（makeGame のデフォルトは _enterDemoState をフェイクに
+    // 差し替えているので、ここでは本物の Game._enterDemoState を直接呼んで検証する）
+    game.saveManager.progress.save = makeSave({
+        mode: 'normal', missionsCompleted: 2, score: 50000, totalTime: 12000, stageResults: [],
+    });
+
+    Game._enterDemoState.call(game, 'title');
+
+    assert.equal(game.stageSelectRun, false, 'タイトルに戻ってもランが終わった扱いになっていない');
+    assert.equal(game.canContinueHere(), true, 'セーブがあるのに C が効かない状態のまま');
+});
+
+// continueFromSave() 側でも明示的に false へ戻す（セーブからの再開は必ず通しラン）。
+// _enterDemoState 側だけに直しても、面セレクトのラン中に C を押すケースは
+// canContinueHere() が !stageSelectRun を見て弾くので通常は到達しないが、
+// 「判定側と描画側を揃えるだけでは駄目」という設計判断を継続からも二重に守る。
+test('continueFromSave() は stageSelectRun を false に戻す', () => {
+    const storage = storageReached(2);
+    const game = makeGame({ storage });
+    game.stageSelectRun = true;
+    game.saveManager.progress.save = makeSave({
+        mode: 'normal', missionsCompleted: 2, score: 50000, totalTime: 12000, stageResults: [],
+    });
+
+    Game.continueFromSave.call(game);
+
+    assert.equal(game.stageSelectRun, false);
 });

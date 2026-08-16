@@ -429,6 +429,17 @@ export const Game = {
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
+        // 面セレクトのランはここで終わったことにする。stageSelectRun を true に
+        // するのは _startStageSelectRun() だけで、以前は false に戻すのが
+        // _startGameIfRequested() だけだった。そのため面セレクトのランを
+        // Escape 等で切り上げてデモ／タイトルへ戻っても true のまま残り、
+        // _drawSaveHints() は sm.save だけを見て「[C] CONTINUE」の行を出すのに、
+        // _updateTitle の C 分岐は canContinueHere()（!stageSelectRun 込み）を見る
+        // ため C が反応しない、という「案内はあるのに押せない」不整合になっていた。
+        // _drawSaveHints 側を canContinueHere() に揃える直し方は取らない――
+        // それだと症状が「押せない」から「行が消える」に変わるだけで、セーブが
+        // あるのに再開できない状態そのものは解消しないため。
+        this.stageSelectRun = false;
         // ミッションを抜けるので効果音を落とす。ホバー音・母艦のエンジン・
         // 回復ハムは止める指示があるまで鳴り続ける作りで、ここを抜けると
         // 毎フレームの更新も止まるため、放っておくとタイトルで鳴りっぱなしに
@@ -904,6 +915,10 @@ export const Game = {
         if (!this.saveManager.applyContinue()) return;
         this._restoreFullscreen();
         this.gameState = 'playing';
+        // セーブからの再開は必ず通しラン。_enterDemoState 側の変更だけでも
+        // canContinueHere() の !stageSelectRun 側の道は塞がるが、ここでも
+        // 明示しておく二重の安全側（呼び出し経路が増えても再開後は必ず false）。
+        this.stageSelectRun = false;
         // resetScore = false。applyContinue が入れたスコアと累計時間を消さない
         this.stateManager.resetLevel(false);
         audioManager.startBGM(this.missionsCompleted);
