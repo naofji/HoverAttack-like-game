@@ -72,6 +72,11 @@ export class ScreenRenderer {
      * 使えないものは行ごと出さない。どの面から再開するのかとモードを必ず
      * 書く — タイトルで A/D を触った後、再開時にモードが保存値へ固定される
      * ことと食い違って見えるため。
+     *
+     * 画面下部は実測すると隙間が無い（`canvas.height` からの相対値）:
+     *   モード説明文  -42 ／ PRESS ENTER TO START -20（点滅）／ デモの位置ドット -5
+     * 2行ぶん入れる隙間が無いので、ロゴ下の空いている領域（モードセレクタの
+     * 見出し `[ A / D ] SELECT MODE` = -108 のさらに上）に置く。
      */
     _drawSaveHints(ctx, canvas) {
         const sm = this.game.saveManager;
@@ -89,7 +94,7 @@ export class ScreenRenderer {
         ctx.font = font('small', true);
         ctx.fillStyle = UI.gold;
         glow(ctx, UI.gold, 'mid');
-        lines.forEach((t, i) => ctx.fillText(t, canvas.width / 2, canvas.height - 28 + i * 16));
+        lines.forEach((t, i) => ctx.fillText(t, canvas.width / 2, canvas.height - 146 + i * 16));
         ctx.restore();
         ctx.textAlign = 'left';
     }

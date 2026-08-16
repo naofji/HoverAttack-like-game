@@ -97,3 +97,13 @@ test('セーブも到達も無ければヒントを出さない', async () => {
     new ScreenRenderer(game)._drawSaveHints(ctx, game.canvas);
     assert.equal(ctx.calls.filter((c) => c.name === 'fillText').length, 0);
 });
+
+test('セーブのヒントは画面下部の既存表示と重ならない', () => {
+    const game = makeGame({ storage: storageWithSave() });
+    game.canvas = { width: 960, height: 720 };
+    const ctx = makeFakeCtx();
+    new ScreenRenderer(game)._drawSaveHints(ctx, game.canvas);
+    const ys = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[2]);
+    // PRESS ENTER TO START が height-20、位置ドットが height-5 を使っている
+    for (const y of ys) assert.ok(y < game.canvas.height - 100, `y=${y} が下部の表示に近すぎる`);
+});
