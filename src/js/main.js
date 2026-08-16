@@ -32,7 +32,7 @@ import {
     VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
     VIEW_CULL_MARGIN,
-    CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS, SAVE_COST,
+    CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
