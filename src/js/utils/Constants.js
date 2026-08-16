@@ -754,7 +754,7 @@ export const AUTO_AIM_HOLD_TENTHS_MAX = 20;
 
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.
-export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbwziaAIPlNhCDeFo4OFJhhcgBQzySfRp6g-7wC0w9vFEsKCV0nEjYncvPr8n_5Zjrbv/exec';
+export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbyVQ4loEQENSOV3f6zv4lZ-_Z4HxDT3xDh4IJjQiW1INdtTt6qOaLsN5FdJTI7FjWHD/exec';
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
 // --- ホバー音の音作り ---
