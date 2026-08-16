@@ -96,12 +96,15 @@ function groupFame(fameRows) {
   for (var i = 0; i < fameRows.length; i++) {
     var wk = String(fameRows[i][0]);
     if (!byWeek[wk]) { byWeek[wk] = []; order.push(wk); }
-    byWeek[wk].push({ name: String(fameRows[i][2]), score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '' });
+    // tries 列(index 7)は後から足した。列が無い旧行は 1 とみなす
+    byWeek[wk].push({ name: String(fameRows[i][2]), score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '', tries: Number(fameRows[i][7]) || 1 });
   }
   var out = [];
   for (var j = order.length - 1; j >= 0; j--) {
     var w = order[j];
-    byWeek[w].sort(function (a, b) { return b.score - a.score; });
+    // 週ランキングと同じ並び。殿堂は週ランキングのアーカイブなので、
+    // 同点の扱いが違うと保存した瞬間に順位が入れ替わって見える
+    byWeek[w].sort(function (a, b) { return (b.score - a.score) || (a.tries - b.tries); });
     out.push({ weekId: w, entries: byWeek[w] });
   }
   return out;
@@ -272,7 +275,7 @@ function weeklySnapshot() {
     }
     var top = topNForWeek(readRows_(getSheet_(SCORES_SHEET)), prev, FAME_TOP);
     for (var r = 0; r < top.length; r++) {
-      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '']);
+      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '', top[r].tries]);
     }
   } finally {
     lock.releaseLock();

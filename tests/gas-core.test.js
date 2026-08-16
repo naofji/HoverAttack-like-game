@@ -279,3 +279,26 @@ test('readRows_ はgetLastColumnが0の壊れたシートでも例外を投げ�
   const rows = ctx.readRows_(sheet);
   assert.deepEqual(rows, []);
 });
+
+// 殿堂（WALL OF FAME）は週ランキングの上位3件のアーカイブ。トライ数は同点時の
+// タイブレークとして順位に効いているので、アーカイブ側にも持たせないと
+// 「なぜこの順位か」の但し書きが落ちる。
+test('groupFame は tries を返し、列が無い旧行は 1 とみなす', () => {
+  const rows = [
+    ['2026-W29', 1, 'AAA', 90000, 7, '12:34', 'JP', 4],
+    ['2026-W29', 2, 'OLD', 80000, 6, '', 'US'],   // tries 列が無い旧行
+  ];
+  const out = ctx.groupFame(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].entries[0].tries, 4);
+  assert.equal(out[0].entries[1].tries, 1);
+});
+
+test('groupFame も同点ならトライ数が少ないほうを上にする', () => {
+  const rows = [
+    ['2026-W29', 1, 'AAA', 90000, 7, '', 'JP', 3],
+    ['2026-W29', 2, 'BBB', 90000, 7, '', 'US', 1],
+  ];
+  const out = ctx.groupFame(rows);
+  assert.deepEqual(out[0].entries.map(function (e) { return e.name; }), ['BBB', 'AAA']);
+});

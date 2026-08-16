@@ -928,12 +928,13 @@ export class ScreenRenderer {
         { key: 'rank', label: 'RANK', x: 31, align: 'right' },
         { key: 'score', label: 'SCORE', x: 130, align: 'right' },
         { key: 'name', label: 'NAME', x: 226, align: 'left' },
-        // TRY は名前の右端ぎりぎりに小さく置く。列を増やして表を広げると
-        // 他の列の座標を全部引き直すことになるため、隙間に収めた。
-        // body 16px 等幅なら名前10文字で約96px（226→322）。x=346 右揃え・small で
-        // 3文字「T99」を描いても約23px（323→346）で収まり、次の flag(x=354) と衝突しない。
-        { key: 'tries', label: 'TRY', x: 346, align: 'right', small: true },
         { key: 'flag', label: 'REGION', x: 354, align: 'left' },
+        // TRY は「そのランがどう終わったか」の仲間なので MISSION / TIME と並べる。
+        // 当初は名前と国旗の隙間（x=346・small）に押し込んでいたが、名前列に
+        // ぶら下がって見えて浮いた（実機の指摘）。国旗(354 左揃え)から十分離れた
+        // 470 に右揃えで置くと、470→552→632 と 82/80px のほぼ等間隔になり、
+        // 3列が1つのまとまりとして読める。
+        { key: 'tries', label: 'TRY', x: 470, align: 'right' },
         { key: 'mission', label: 'MISSION', x: 552, align: 'right' },
         { key: 'time', label: 'TIME', x: 632, align: 'right' },
     ];
@@ -953,9 +954,14 @@ export class ScreenRenderer {
         { key: 'score', x: 130, align: 'right' },
         { key: 'name', x: 162, align: 'left' },
         { key: 'flag', x: 292, align: 'left' },
+        // TRY はブロックの右端。名前(162 左揃え・最大10文字≒258)と
+        // 国旗(292 左揃え)の隙間に入れると、週ランキング表で一度やって
+        // 「名前にぶら下がって浮く」と言われた形になる。国旗の右へ出すために
+        // ブロック幅を 330→366 に広げた（2列で 788px、1024 の画面に収まる）。
+        { key: 'tries', x: 366, align: 'right' },
     ];
 
-    static FAME_BLOCK_WIDTH = 330;
+    static FAME_BLOCK_WIDTH = 366;
 
     /** パネル見出し帯の高さ（theme.drawPanel と揃える）＋内側の余白。 */
     static PANEL_HEAD = 36;
@@ -1047,8 +1053,6 @@ export class ScreenRenderer {
                 const text = values[c.key];
                 if (!text) continue;
                 ctx.textAlign = c.align;
-                // TRY だけ小さく描く。名前の隙間に置いているので body だと溢れる
-                ctx.font = c.small ? font('small', true) : font('body', true);
                 if (highlighted) {
                     ctx.fillStyle = ROW_HIGHLIGHT;
                     ctx.fillText(text, left + c.x, rowY);
@@ -1147,6 +1151,9 @@ export class ScreenRenderer {
                         score: String(e.score),
                         name: String(e.name || ''),
                         flag: flagEmoji(e.country),
+                        // 週ランキング表と同じ規則。1（と旧データ）は空文字にして、
+                        // 描画ループの `if (!text) continue;` に落とす
+                        tries: (Number(e.tries) || 1) >= 2 ? `T${Number(e.tries)}` : '',
                     };
                     for (const c of cols) {
                         const text = values[c.key];
