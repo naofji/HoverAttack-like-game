@@ -59,6 +59,25 @@ test('save の形が壊れていれば save だけ捨て、reached は生かす'
     assert.equal(got.reached, 5);
 });
 
+// sanitizeSave は mode を「非空文字列」としか見ていなかった。壊れた／改竄された
+// mode が入ると SaveManager.applyContinue() の MODES[next.mode].gameSpeed で
+// TypeError になる。ScreenRenderer._drawSaveHints() は MODES[s.mode] ? ... : s.mode
+// で守られているため、「タイトルに行が出るのに C を押すと落ちる」という
+// 最悪の見え方になっていた。未知の形はセーブ無しとして扱う設計に沿い、
+// mode が MODE_ORDER に無ければ save ごと null にする。
+test('mode が未知の文字列なら save は null になる(未知の形はセーブ無しとして扱う)', () => {
+    const storage = fakeStorage({
+        [PROGRESS_STORAGE_KEY]: JSON.stringify({
+            weekId: '2026-W33',
+            save: { ...SAMPLE, mode: 'totally-bogus-mode' },
+            reached: 4,
+        }),
+    });
+    const got = loadProgress('2026-W33', storage);
+    assert.equal(got.save, null);
+    assert.equal(got.reached, 4, 'save だけ捨て、reached は生かす');
+});
+
 test('localStorage が使えなくても投げない', () => {
     assert.deepEqual(loadProgress('2026-W33', fakeStorage({}, { throwOnGet: true })), { save: null, reached: 0 });
     assert.doesNotThrow(() => writeProgress('2026-W33', { save: null, reached: 1 }, fakeStorage({}, { throwOnSet: true })));

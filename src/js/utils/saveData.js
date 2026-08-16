@@ -10,6 +10,7 @@
 // ============================================
 
 import { SAVE_COST } from './Constants.js';
+import { MODE_ORDER } from './modes.js';
 
 export const PROGRESS_STORAGE_KEY = 'hoverattack_progress';
 
@@ -32,7 +33,13 @@ function sanitizeSave(raw) {
     const score = num(raw.score);
     const totalTime = num(raw.totalTime);
     const tries = num(raw.tries);
-    if (typeof raw.mode !== 'string' || !raw.mode) return null;
+    // 「非空文字列」だけでは、壊れた／改竄された mode が
+    // SaveManager.applyContinue() の MODES[next.mode].gameSpeed で
+    // TypeError になる（ScreenRenderer._drawSaveHints() は MODES[s.mode] ?
+    // ... : s.mode で守っているため「行は出るのに C を押すと落ちる」という
+    // 最悪の見え方になる）。既知のモード名だけを通し、外れたら未知の形として
+    // save ごと捨てる。
+    if (typeof raw.mode !== 'string' || !MODE_ORDER.includes(raw.mode)) return null;
     if (missionsCompleted === null || missionsCompleted < 1 || missionsCompleted >= MAX_STAGE) return null;
     if (score === null || score < 0) return null;
     if (totalTime === null || totalTime < 0) return null;
