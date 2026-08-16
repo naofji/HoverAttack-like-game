@@ -31,6 +31,7 @@ import {
     LEADERBOARD_URL,
     VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
+    VIEW_CULL_MARGIN,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
@@ -73,6 +74,7 @@ import { MODES, cycleMode } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/renderInterp.js';
+import { isInView } from './utils/viewCull.js';
 
 // ============================================
 // Game Object
@@ -1546,7 +1548,10 @@ export const Game = {
 
         for (const proj of this.projectiles) proj.draw(ctx);
         for (const particle of this.particles) particle.draw(ctx);
-        for (const mine of this.landmines) mine.draw(ctx);
+        for (const mine of this.landmines) {
+            if (!isInView(mine, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
+            mine.draw(ctx);
+        }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);
         for (const kit of this.missileKits) kit.draw(ctx);
@@ -1562,6 +1567,13 @@ export const Game = {
 
         // Enemies and their HP bars
         for (const enemy of this.enemies) {
+            // 画面に掛かっていない敵は描かない。実測(2026-08-16)で敵は平均100体
+            // いるのに画面内は16%だけで、**1体あたりの ctx 呼び出しが 23.0 → 1.1**
+            // （フレーム合計 1886 → 108）になった。
+            // **更新は間引かない**（画面外でも巡回や帰還を続ける必要がある）ので、
+            // ここで飛ばしても挙動は一切変わらない。敵6クラスの draw() に
+            // 描画以外の副作用が無いことは確認済み
+            if (!isInView(enemy, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             enemy.draw(ctx);
             if (enemy.alive && enemy.constructor.name !== 'EnemyBase' && enemy.constructor.name !== 'Landmine') {
                 this._drawHpBarIfDamaged(ctx, enemy);

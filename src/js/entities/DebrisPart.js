@@ -9,6 +9,7 @@ import {
     DEBRIS_GRAVITY, DEBRIS_DRAG, DEBRIS_MAX_FALL_SPEED,
     DEBRIS_FLASH_COLOR, DEBRIS_FADE_START,
 } from '../utils/Constants.js';
+import { isInView } from '../utils/viewCull.js';
 
 export class DebrisPart {
     /**
@@ -95,16 +96,21 @@ export class DebrisPart {
         ctx.restore();
     }
 
-    /** カメラ矩形から余裕をもって外れていれば描画を省く。 */
+    /**
+     * カメラ矩形から余裕をもって外れていれば描画を省く。
+     *
+     * 判定は敵と共通の isInView() に寄せてある（同じ判定の写しを2つ持たない）。
+     * ただし**余裕の取り方は敵と違う**ので margin で渡す。破片は当たり判定も
+     * 意味も持たない演出なので、敵の VIEW_CULL_MARGIN(64) ほど広く取る必要がなく、
+     * 従来どおり max(w,h) + 8 のまま。
+     *
+     * this.x/y は**中心**なので、width/height を渡さず点として判定させ、
+     * 広がりは margin に含める（centerOf は width が無ければ x をそのまま中心と見る）。
+     */
     _isOffscreen() {
         const game = this.game;
         if (!game || !game.camera || !game.canvas) return false;
         const margin = Math.max(this.w, this.h) + 8;
-        return (
-            this.x < game.camera.x - margin ||
-            this.y < game.camera.y - margin ||
-            this.x > game.camera.x + game.canvas.width + margin ||
-            this.y > game.camera.y + game.canvas.height + margin
-        );
+        return !isInView({ x: this.x, y: this.y }, game.camera, game.canvas, margin);
     }
 }
