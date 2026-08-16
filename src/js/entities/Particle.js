@@ -116,11 +116,15 @@ export class TrailParticle {
         const alpha = Math.max(0.1, 1.0 - progress);
         const size = 2 + progress * 2;
 
-        ctx.save();
+        // save/restore を使わず、Particle.draw() と同じ「置いて最後に 1 へ戻す」形。
+        // やっているのは globalAlpha と定数の fillStyle を置くことだけで、
+        // 状態スタックの出入りに 2 呼び出し払う理由が無い。
+        // 実測(2026-08-16)でこの粒は平均177個・**ピーク690個**と particles の
+        // 大半を占めており、1個 3 呼び出しが 1 呼び出しになる。見た目は不変
         ctx.globalAlpha = alpha;
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(Math.round(this.x) - size / 2, Math.round(this.y) - size / 2, size, size);
-        ctx.restore();
+        ctx.globalAlpha = 1.0;
     }
 }
 
