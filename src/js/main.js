@@ -830,7 +830,10 @@ export const Game = {
                 // (A stage-only qualifier reaches naming to save per-stage records, but
                 // must not be inserted into the overall ranking.)
                 this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
-                if (this.highScoreManager.isHighScore(this.score)) {
+                // 面セレクトのランは週スコアへ登録しない（送信もしない）。
+                // 判定側(_tryGoToRanking)だけを塞ぐと、面別で名前入力に来たときに
+                // ここが通ってしまう
+                if (!this.stageSelectRun && this.highScoreManager.isHighScore(this.score)) {
                     this.localRankIndex = this.highScoreManager.addScore(
                         this.playerNameInput, this.score, displayMission, formattedTime, country
                     );
@@ -1777,7 +1780,10 @@ export const Game = {
     _tryGoToRanking() {
         // Eligible to name if the overall run is a high score OR any cleared stage
         // would make its per-stage top 5 (so partial runs can still leave a record).
-        const eligible = this.highScoreManager.isHighScore(this.score) || this._anyStageWouldRank();
+        // **面セレクトのランは週スコアに出さない**ので、週ハイスコアの側は見ない。
+        // 単独の1面だけを遊んだ記録が通しランと同じ表に並ぶのは筋が通らないため。
+        const weeklyEligible = !this.stageSelectRun && this.highScoreManager.isHighScore(this.score);
+        const eligible = weeklyEligible || this._anyStageWouldRank();
         if (eligible) {
             this.gameState = 'ranking_entry';
             this.playerNameInput = "";
