@@ -178,7 +178,7 @@ export const Game = {
     gameSpeed: MODES.normal.gameSpeed,
     simAccumulator: 0,
     simAlpha: 1,
-    gameState: 'title', // 'title' | 'playing' | 'settings' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display'
+    gameState: 'title', // 'title' | 'playing' | 'settings' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display' | 'stage_select'
     settings: null,          // init() で loadSettings() が入れる
     settingsIndex: 0,        // 設定画面で選択中の行
     settingsReturnTo: null,  // 設定画面を閉じたときに戻る状態
@@ -188,6 +188,7 @@ export const Game = {
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
+    stageSelectIndex: 1,  // 面セレクトで選んでいる面（1..saveManager.reached）
     stageDisplayIndex: 0,   // which stage (0..6) the attract screen is showing
     stageDisplayTimer: 0,   // sub-timer for auto-advance
     playerNameInput: "",
@@ -373,6 +374,7 @@ export const Game = {
             case 'game_clear': return this._updateGameClear(deltaTime);
             case 'mission_clear': return this._updateMissionClear();
             case 'settings': return this._updateSettings();
+            case 'stage_select': return this._updateStageSelect();
             case 'playing': return this._updatePlaying(deltaTime);
         }
     },
@@ -632,6 +634,15 @@ export const Game = {
             this.continueFromSave();
             return;
         }
+        // reached が 1 以上、つまり少なくとも1面クリアしていないと選ぶ面が無い。
+        // saveManager の有無も見るのは canContinueHere() に倣った ── 一部の
+        // デモ遷移テストは saveManager 無しで _updateTitle を呼ぶため
+        if (this.saveManager && this.saveManager.reached >= 1 && this.input.isKeyPressed('KeyS')) {
+            this.stageSelectIndex = 1;
+            this.gameState = 'stage_select';
+            this.stateTimer = 0;
+            return;
+        }
         if (this._handleDemoJump()) return;
 
         this.stateTimer += deltaTime;
@@ -641,6 +652,52 @@ export const Game = {
         } else {
             this._startGameIfRequested();
         }
+    },
+
+    /**
+     * 面セレクト。**タイムアタック用**なので、選んだ面だけを単独で遊ぶ。
+     * キーはタイトル（A/D で選ぶ）と面クリア画面（W で進む）に揃えてある
+     * ——新しい決定キーを増やさないため。
+     *
+     * Escape は本番では main.js の共通ハンドラ（'title'/'playing'/'settings' 以外は
+     * Escape でタイトルへ戻す仕組み）が先に拾うので、この分岐に実際は届かない。
+     * それでもここに残すのは、このメソッド単体でテストしたときの意味を保つため。
+     */
+    _updateStageSelect() {
+        const max = this.saveManager.reached;
+        if (this.input.isKeyPressed('Escape')) {
+            this._enterDemoState('title');
+            return;
+        }
+        if (this.input.isKeyPressed('KeyA')) {
+            this.stageSelectIndex = Math.max(1, this.stageSelectIndex - 1);
+            return;
+        }
+        if (this.input.isKeyPressed('KeyD')) {
+            this.stageSelectIndex = Math.min(max, this.stageSelectIndex + 1);
+            return;
+        }
+        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
+            this._startStageSelectRun(this.stageSelectIndex);
+        }
+    },
+
+    /**
+     * 面セレクトから始める。スコアもタイムも 0 から。
+     * resetLevel(true) を使わないのは、あちらが missionsCompleted を
+     * debugStartMission へ戻してしまい、選んだ面が無視されるため。
+     */
+    _startStageSelectRun(stage) {
+        this._restoreFullscreen();
+        this.stageSelectRun = true;
+        this.runTries = 1;
+        this.missionsCompleted = stage - 1;
+        this.score = 0;
+        this.totalTime = 0;
+        this.stageResults = [];
+        this.gameState = 'playing';
+        this.stateManager.resetLevel(false);
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     _updateHowToPlay(deltaTime) {
@@ -1566,6 +1623,13 @@ export const Game = {
         const ctx = this.ctx;
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // 面セレクトはデモ巡回に含めない（タイムアタック専用の単発画面なので、
+        // DEMO_SCREEN_DRAWERS の表を通すと位置ドットが付いてアトラクトの一部に見えてしまう）
+        if (this.gameState === 'stage_select') {
+            this.screenRenderer.drawStageSelect(ctx);
+            return;
+        }
 
         // Full-screen states — skip world rendering.
         // どの画面も「専用の描画 → 位置ドット → 終わり」で同じなので、

@@ -23,7 +23,7 @@ import { drawStageScene } from './StageScene.js';
 import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
-import { SAVE_COST } from '../utils/Constants.js';
+import { SAVE_COST, STAGE_PALETTES } from '../utils/Constants.js';
 
 export class ScreenRenderer {
     constructor(game) {
@@ -97,6 +97,71 @@ export class ScreenRenderer {
         lines.forEach((t, i) => ctx.fillText(t, canvas.width / 2, canvas.height - 146 + i * 16));
         ctx.restore();
         ctx.textAlign = 'left';
+    }
+
+    /**
+     * 面セレクト。**デモの巡回には入れない**ので、位置ドットは出さない。
+     * 「記録は面別ランキングにのみ残る」を明記するのは、週スコアランキングに
+     * 出ないことを遊ぶ前に知らせるため。
+     */
+    drawStageSelect(ctx) {
+        const canvas = this.game.canvas;
+        const max = this.game.saveManager.reached;
+        const picked = this.game.stageSelectIndex;
+
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('title', true);
+        ctx.fillStyle = UI.ok;
+        glow(ctx, UI.ok, 'hard');
+        ctx.fillText('STAGE SELECT', canvas.width / 2, 90);
+        ctx.restore();
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('small');
+        ctx.fillStyle = UI.info;
+        ctx.fillText('TIME ATTACK — RECORDED IN STAGE RANKINGS ONLY', canvas.width / 2, 124);
+        ctx.restore();
+
+        // 面の並び。選んでいるものだけ色と枠を与え、他は落とす
+        const GAP = 74;
+        const left = canvas.width / 2 - ((max - 1) * GAP) / 2;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let n = 1; n <= max; n++) {
+            const x = left + (n - 1) * GAP;
+            const y = canvas.height / 2;
+            const on = n === picked;
+            // STAGE_PALETTES は { fill, border } の2色。面別ランキング画面と
+            // 同じ配色を使うことで「何面の色か」が両画面で一致する
+            const tint = STAGE_PALETTES[n - 1].fill;
+            ctx.font = font('head', true);
+            ctx.fillStyle = on ? tint : UI.dim;
+            if (on) glow(ctx, tint, 'mid');
+            ctx.fillText(String(n), x, y);
+            if (on) {
+                ctx.strokeStyle = tint;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x - 22, y - 22, 44, 44);
+            }
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('sub', true);
+        ctx.fillStyle = UI.ink;
+        ctx.fillText('[A] [D] SELECT    [W] START    [ESC] BACK', canvas.width / 2, canvas.height - 70);
+        ctx.restore();
+
+        drawScanlines(ctx, canvas.width, canvas.height);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
     }
 
     /**
