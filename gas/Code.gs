@@ -71,17 +71,22 @@ function validateEntry(entry) {
   if (score <= MIN_SCORE || score > SCORE_CAP) return { ok: false, reason: 'score-range' };
   var mission = Math.min(7, Math.max(1, Math.floor(Number(entry.mission) || 1)));
   var clearTime = (typeof entry.clearTime === 'string' && entry.clearTime) ? entry.clearTime : null;
-  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime, country: sanitizeCountry(entry.country) } };
+  // トライ数は同点時のタイブレークにしか使わないので、壊れていても弾かず 1 に落とす。
+  // ここで reject すると、送れないクライアントのスコアが丸ごと失われる
+  var tries = Math.min(999, Math.max(1, Math.floor(Number(entry.tries) || 1)));
+  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime, country: sanitizeCountry(entry.country), tries: tries } };
 }
 
 function topNForWeek(rows, weekId, n) {
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) === weekId) {
-      out.push({ name: String(rows[i][2]), score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '' });
+      // tries 列(index 7)は後から足した。列が無い旧行は 1 とみなす
+      out.push({ name: String(rows[i][2]), score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '', tries: Number(rows[i][7]) || 1 });
     }
   }
-  out.sort(function (a, b) { return b.score - a.score; });
+  // 同点はトライ数が少ないほうが上。スコア自体は減らさない
+  out.sort(function (a, b) { return (b.score - a.score) || (a.tries - b.tries); });
   return out.slice(0, n);
 }
 
@@ -220,7 +225,7 @@ function doPost(e) {
       }
     }
     var weekId = resolveWeekId(body.weekId, now);
-    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || ''];
+    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || '', entry.tries];
     sheet.appendRow(row);
     rows.push(row);
     var top = topNForWeek(rows, weekId, MAX_RANKING);

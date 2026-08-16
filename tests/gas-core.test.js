@@ -70,11 +70,49 @@ test('sanitizeName strips control chars, uppercases, caps length, defaults', () 
 test('validateEntry accepts a valid entry and rejects bad ones', () => {
   const ok = ctx.validateEntry({ name: 'zz', score: 12345, mission: 4, clearTime: null, country: 'jp' });
   assert.equal(ok.ok, true);
-  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null, country: 'JP' });
+  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null, country: 'JP', tries: 1 });
   assert.equal(ctx.validateEntry({ name: 'x', score: 10000 }).ok, false); // not > MIN_SCORE
   assert.equal(ctx.validateEntry({ name: 'x', score: -5 }).ok, false);
   assert.equal(ctx.validateEntry({ name: 'x', score: 1.5 }).ok, false); // non-integer
   assert.equal(ctx.validateEntry(null).ok, false);
+});
+
+test('validateEntry は tries を受け取り、無ければ 1 にする', () => {
+  const withTries = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5, tries: 3 });
+  assert.equal(withTries.ok, true);
+  assert.equal(withTries.value.tries, 3);
+
+  const without = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5 });
+  assert.equal(without.value.tries, 1);
+});
+
+test('validateEntry は壊れた tries を 1 に落とす', () => {
+  for (const bad of ['x', -5, 0, null, 1e9]) {
+    const v = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5, tries: bad });
+    assert.equal(v.ok, true);
+    assert.ok(v.value.tries >= 1 && v.value.tries <= 999, String(bad));
+  }
+});
+
+test('topNForWeek は同点でトライ数が少ないほうを上にする', () => {
+  const rows = [
+    [new Date(), '2026-W33', 'AAA', 50000, 5, '', 'JP', 3],
+    [new Date(), '2026-W33', 'BBB', 50000, 5, '', 'JP', 1],
+    [new Date(), '2026-W33', 'CCC', 60000, 6, '', 'JP', 9],
+  ];
+  const top = ctx.topNForWeek(rows, '2026-W33', 10);
+  assert.deepEqual(top.map(function (e) { return e.name; }), ['CCC', 'BBB', 'AAA']);
+  assert.equal(top[0].tries, 9);
+});
+
+test('topNForWeek は tries 列が無い旧行を 1 として扱う', () => {
+  const rows = [
+    [new Date(), '2026-W33', 'AAA', 50000, 5, '', 'JP', 2],
+    [new Date(), '2026-W33', 'OLD', 50000, 5, '', 'JP'],   // 列が無い
+  ];
+  const top = ctx.topNForWeek(rows, '2026-W33', 10);
+  assert.equal(top[0].name, 'OLD');
+  assert.equal(top[0].tries, 1);
 });
 
 test('sanitizeCountry keeps 2 letters uppercased, else empty', () => {

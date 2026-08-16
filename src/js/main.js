@@ -804,12 +804,12 @@ export const Game = {
         }
     },
 
-    async _submitOnline(name, score, mission, clearTime, country) {
+    async _submitOnline(name, score, mission, clearTime, country, tries) {
         if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) return;
         // weekId はマップ生成に使った週（init() で1回だけ決まる this.week）をそのまま送る。
         // サーバー受信時刻から週を計算すると、週境界をまたいでクリアしたとき
         // 「遊んだ地形の週」と「記録される週」がずれるため。
-        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country, weekId: this.week.weekId });
+        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country, tries, weekId: this.week.weekId });
         if (res.ok) {
             this.globalRankIndex = res.rank;
             await this._refreshOnline();
@@ -837,7 +837,7 @@ export const Game = {
                     this.localRankIndex = this.highScoreManager.addScore(
                         this.playerNameInput, this.score, displayMission, formattedTime, country, this.runTries
                     );
-                    this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
+                    this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country, this.runTries);
                 } else {
                     this.localRankIndex = -1;
                 }

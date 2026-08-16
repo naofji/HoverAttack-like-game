@@ -48,3 +48,27 @@ test('_updateRankingEntry の submitStages 呼び出しも this.week.weekId を�
     assert.equal(g.onlineLeaderboard.submitStagesCalls.length, 1);
     assert.equal(g.onlineLeaderboard.submitStagesCalls[0].weekId, '2026-W29');
 });
+
+test('_submitOnline は tries をペイロードに含める', async () => {
+    const g = makeGame();
+    await g._submitOnline('AAA', 20000, 4, null, 'JP', 4);
+    assert.equal(g.onlineLeaderboard.submitCalls[0].tries, 4);
+});
+
+test('_updateRankingEntry は runTries をそのまま送る', () => {
+    const g = makeGame({
+        input: { getTypedChars: () => ['Enter'] },
+        playerNameInput: 'AAA',
+        missionsCompleted: 7,
+        totalTime: 12345,
+        score: 999999,
+        runTries: 3,
+        stageSelectRun: false,
+        stageResults: [{ stage: 1, timeMs: 1000, score: 500 }],
+        highScoreManager: { isHighScore: () => true, addScore: () => 0 },
+        stageRankingManager: { addStageResult: () => {} },
+        _restoreFullscreen: () => {},
+    });
+    g._updateRankingEntry();
+    assert.equal(g.onlineLeaderboard.submitCalls[0].tries, 3);
+});
