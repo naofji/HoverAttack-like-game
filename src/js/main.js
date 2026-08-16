@@ -188,6 +188,7 @@ export const Game = {
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
+    titleMenuIndex: 0,    // タイトルのメニューで選んでいる行（0..titleMenuItems().length-1）
     stageSelectIndex: 1,  // 面セレクトで選んでいる面（1..saveManager.reached）
     stageDisplayIndex: 0,   // which stage (0..6) the attract screen is showing
     stageDisplayTimer: 0,   // sub-timer for auto-advance

@@ -39,7 +39,9 @@ function makeGame(over = {}) {
     g.stageSelectRun = false;
     g.gameState = 'title';
     g.stateTimer = 0;
-    g.titleMenuIndex = 0;
+    // titleMenuIndex は**わざと置かない**。Game 側の初期値をそのまま使わせる。
+    // ここで 0 を置いていたせいで「Game のフィールド宣言を書き忘れていて
+    // 本番では undefined → NaN になり選択が動かない」を検出できなかった。
     g.stageSelectIndex = 1;
     g.resetCalls = 0;
     g.restartCalls = 0;
@@ -95,6 +97,24 @@ test('面セレクトのラン中は CONTINUE を並べない', () => {
 });
 
 // --- W/S の移動 ---
+
+// 実機で「W/S で上下の選択ができない」と報告されて発覚した回帰。
+// Game のオブジェクトリテラルに titleMenuIndex の宣言が無く、本番では
+// undefined から始まっていた。Math.min(undefined, n) は NaN になるので、
+// 以後どの計算も NaN のまま＝選択が動かず、強調も出ない。
+// **初期値を与えずに動かす**テストでないと捕まらない。
+test('初期状態（Game の既定値のまま）でも S で下へ動く', () => {
+    const g = makeGame({ storage: storageReached(3, storageWithSave()), input: fakeInput(['KeyS']) });
+    assert.equal(g.titleMenuIndex, 0, 'Game 側の初期値が 0 になっていない');
+    g._updateTitle(16);
+    assert.equal(g.titleMenuIndex, 1);
+    assert.equal(g.selectedTitleItem(), 'continue');
+});
+
+test('初期状態でも決定できる（selectedTitleItem が undefined にならない）', () => {
+    const g = makeGame({ storage: storageWithSave() });
+    assert.equal(g.selectedTitleItem(), 'start');
+});
 
 test('W/S で上下に動き、両端で止まる', () => {
     const storage = storageReached(3, storageWithSave());
