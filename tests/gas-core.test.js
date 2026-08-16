@@ -70,11 +70,49 @@ test('sanitizeName strips control chars, uppercases, caps length, defaults', () 
 test('validateEntry accepts a valid entry and rejects bad ones', () => {
   const ok = ctx.validateEntry({ name: 'zz', score: 12345, mission: 4, clearTime: null, country: 'jp' });
   assert.equal(ok.ok, true);
-  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null, country: 'JP' });
+  assert.deepEqual(ok.value, { name: 'ZZ', score: 12345, mission: 4, clearTime: null, country: 'JP', tries: 1 });
   assert.equal(ctx.validateEntry({ name: 'x', score: 10000 }).ok, false); // not > MIN_SCORE
   assert.equal(ctx.validateEntry({ name: 'x', score: -5 }).ok, false);
   assert.equal(ctx.validateEntry({ name: 'x', score: 1.5 }).ok, false); // non-integer
   assert.equal(ctx.validateEntry(null).ok, false);
+});
+
+test('validateEntry は tries を受け取り、無ければ 1 にする', () => {
+  const withTries = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5, tries: 3 });
+  assert.equal(withTries.ok, true);
+  assert.equal(withTries.value.tries, 3);
+
+  const without = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5 });
+  assert.equal(without.value.tries, 1);
+});
+
+test('validateEntry は壊れた tries を 1 に落とす', () => {
+  for (const bad of ['x', -5, 0, null, 1e9]) {
+    const v = ctx.validateEntry({ name: 'AAA', score: 50000, mission: 5, tries: bad });
+    assert.equal(v.ok, true);
+    assert.ok(v.value.tries >= 1 && v.value.tries <= 999, String(bad));
+  }
+});
+
+test('topNForWeek は同点でトライ数が少ないほうを上にする', () => {
+  const rows = [
+    [new Date(), '2026-W33', 'AAA', 50000, 5, '', 'JP', 3],
+    [new Date(), '2026-W33', 'BBB', 50000, 5, '', 'JP', 1],
+    [new Date(), '2026-W33', 'CCC', 60000, 6, '', 'JP', 9],
+  ];
+  const top = ctx.topNForWeek(rows, '2026-W33', 10);
+  assert.deepEqual(top.map(function (e) { return e.name; }), ['CCC', 'BBB', 'AAA']);
+  assert.equal(top[0].tries, 9);
+});
+
+test('topNForWeek は tries 列が無い旧行を 1 として扱う', () => {
+  const rows = [
+    [new Date(), '2026-W33', 'AAA', 50000, 5, '', 'JP', 2],
+    [new Date(), '2026-W33', 'OLD', 50000, 5, '', 'JP'],   // 列が無い
+  ];
+  const top = ctx.topNForWeek(rows, '2026-W33', 10);
+  assert.equal(top[0].name, 'OLD');
+  assert.equal(top[0].tries, 1);
 });
 
 test('sanitizeCountry keeps 2 letters uppercased, else empty', () => {
@@ -170,4 +208,97 @@ test('topStagesForWeek coerces a numeric-looking sheet cell name to a string', (
     assert.equal(out[0].time[0].name, '42');
     assert.equal(typeof out[0].score[0].name, 'string');
     assert.equal(out[0].score[0].name, '42');
+});
+
+// readRows_ 用の偽シート。getLastColumn() をそのまま getRange の numCols に渡す
+// ことを確かめたいので、getRange が要求された列数を記録しておく。
+function makeFakeSheet(lastRow, lastColumn, values) {
+  var requestedNumCols = null;
+  return {
+    getLastRow: function () { return lastRow; },
+    getLastColumn: function () { return lastColumn; },
+    getRange: function (row, col, numRows, numCols) {
+      requestedNumCols = numCols;
+      return { getValues: function () { return values; } };
+    },
+    _requestedNumCols: function () { return requestedNumCols; },
+  };
+}
+
+// コンティニューのたびにセーブ地点より前の面の記録が何度も appendRow されるため、
+// GAS 側も取り込み(集計)時に name+timeMs+score が完全一致する行を1件に畳む。
+test('topStagesForWeek は同一行(name+timeMs+score完全一致)を1件に畳む', () => {
+    const rows = [
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'],
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'], // 完全に同じ行(重複投稿)
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(out[0].time.length, 1, `重複が畳まれていない: ${JSON.stringify(out[0].time)}`);
+    assert.equal(out[0].score.length, 1);
+});
+
+test('topStagesForWeek は timeMs か score が違えば別記録として両方残す', () => {
+    const rows = [
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'],
+        [new Date(), 'W1', 'AAA', 1, 5001, 100, 'JP'], // timeMs だけ違う
+        [new Date(), 'W1', 'AAA', 1, 5000, 101, 'JP'], // score だけ違う
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(out[0].time.length, 3);
+    assert.equal(out[0].score.length, 3);
+});
+
+test('readRows_ は getLastColumn() が返す列数ぶんだけ読む(8列のScoresシート)', () => {
+  const sheet = makeFakeSheet(3, 8, [
+    ['t', 'W1', 'AAA', 100, 1, '', 'JP', 3],
+    ['t', 'W1', 'BBB', 200, 1, '', 'JP', 1],
+  ]);
+  const rows = ctx.readRows_(sheet);
+  assert.equal(sheet._requestedNumCols(), 8);
+  assert.equal(rows.length, 2);
+});
+
+test('readRows_ は7列のWallOfFame/StageScoresシートでも(getLastColumnに合わせて)読める', () => {
+  const sheet = makeFakeSheet(2, 7, [
+    ['W1', 1, 'AAA', 100, 1, '', 'JP'],
+  ]);
+  const rows = ctx.readRows_(sheet);
+  assert.equal(sheet._requestedNumCols(), 7);
+  assert.equal(rows.length, 1);
+});
+
+test('readRows_ は空シート(getLastRow<2)で[]を返し、getRangeを呼ばない', () => {
+  const sheet = makeFakeSheet(1, 0, []);
+  const rows = ctx.readRows_(sheet);
+  assert.deepEqual(rows, []);
+  assert.equal(sheet._requestedNumCols(), null); // getRange未呼び出し
+});
+
+test('readRows_ はgetLastColumnが0の壊れたシートでも例外を投げず[]を返す', () => {
+  const sheet = makeFakeSheet(5, 0, []);
+  const rows = ctx.readRows_(sheet);
+  assert.deepEqual(rows, []);
+});
+
+// 殿堂（WALL OF FAME）は週ランキングの上位3件のアーカイブ。トライ数は同点時の
+// タイブレークとして順位に効いているので、アーカイブ側にも持たせないと
+// 「なぜこの順位か」の但し書きが落ちる。
+test('groupFame は tries を返し、列が無い旧行は 1 とみなす', () => {
+  const rows = [
+    ['2026-W29', 1, 'AAA', 90000, 7, '12:34', 'JP', 4],
+    ['2026-W29', 2, 'OLD', 80000, 6, '', 'US'],   // tries 列が無い旧行
+  ];
+  const out = ctx.groupFame(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].entries[0].tries, 4);
+  assert.equal(out[0].entries[1].tries, 1);
+});
+
+test('groupFame も同点ならトライ数が少ないほうを上にする', () => {
+  const rows = [
+    ['2026-W29', 1, 'AAA', 90000, 7, '', 'JP', 3],
+    ['2026-W29', 2, 'BBB', 90000, 7, '', 'US', 1],
+  ];
+  const out = ctx.groupFame(rows);
+  assert.deepEqual(out[0].entries.map(function (e) { return e.name; }), ['BBB', 'AAA']);
 });

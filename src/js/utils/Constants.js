@@ -1108,3 +1108,13 @@ export const PLAYER_DEATH_EXPLOSION_SPREAD = 0.9; // 破片は隠さないが確
 // 自機と母艦だけが死亡ホールドで90tick寄りで見せられるので、この2つは体格に見合わせる。
 export const CARRIER_DEATH_EXPLOSION_COUNT = 100;
 export const CARRIER_DEATH_EXPLOSION_SPREAD = 1.3;
+
+// --- 途中セーブ ---
+// セーブ1回のコスト。HighScoreManager の MIN_SCORE も偶然 10000 だが、
+// あちらは「ランキングに載る下限」で別物。連動させないため定数を分けている。
+export const SAVE_COST = 10000;
+// ゲームオーバーで CONTINUE? を出しておく時間。従来の自動遷移は 4 秒
+// (GAMEOVER_WAIT_MS)。選択肢を読んで decide する時間として倍以上を取った。
+export const CONTINUE_COUNTDOWN_MS = 9000;
+// セーブが無いときの従来どおりの待ち時間（main.js に直書きされていた 4000）。
+export const GAMEOVER_WAIT_MS = 4000;

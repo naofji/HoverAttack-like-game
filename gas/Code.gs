@@ -71,17 +71,22 @@ function validateEntry(entry) {
   if (score <= MIN_SCORE || score > SCORE_CAP) return { ok: false, reason: 'score-range' };
   var mission = Math.min(7, Math.max(1, Math.floor(Number(entry.mission) || 1)));
   var clearTime = (typeof entry.clearTime === 'string' && entry.clearTime) ? entry.clearTime : null;
-  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime, country: sanitizeCountry(entry.country) } };
+  // トライ数は同点時のタイブレークにしか使わないので、壊れていても弾かず 1 に落とす。
+  // ここで reject すると、送れないクライアントのスコアが丸ごと失われる
+  var tries = Math.min(999, Math.max(1, Math.floor(Number(entry.tries) || 1)));
+  return { ok: true, value: { name: sanitizeName(entry.name), score: score, mission: mission, clearTime: clearTime, country: sanitizeCountry(entry.country), tries: tries } };
 }
 
 function topNForWeek(rows, weekId, n) {
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) === weekId) {
-      out.push({ name: String(rows[i][2]), score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '' });
+      // tries 列(index 7)は後から足した。列が無い旧行は 1 とみなす
+      out.push({ name: String(rows[i][2]), score: Number(rows[i][3]), mission: Number(rows[i][4]), clearTime: rows[i][5] || null, country: rows[i][6] || '', tries: Number(rows[i][7]) || 1 });
     }
   }
-  out.sort(function (a, b) { return b.score - a.score; });
+  // 同点はトライ数が少ないほうが上。スコア自体は減らさない
+  out.sort(function (a, b) { return (b.score - a.score) || (a.tries - b.tries); });
   return out.slice(0, n);
 }
 
@@ -91,12 +96,15 @@ function groupFame(fameRows) {
   for (var i = 0; i < fameRows.length; i++) {
     var wk = String(fameRows[i][0]);
     if (!byWeek[wk]) { byWeek[wk] = []; order.push(wk); }
-    byWeek[wk].push({ name: String(fameRows[i][2]), score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '' });
+    // tries 列(index 7)は後から足した。列が無い旧行は 1 とみなす
+    byWeek[wk].push({ name: String(fameRows[i][2]), score: Number(fameRows[i][3]), mission: Number(fameRows[i][4]), clearTime: fameRows[i][5] || null, country: fameRows[i][6] || '', tries: Number(fameRows[i][7]) || 1 });
   }
   var out = [];
   for (var j = order.length - 1; j >= 0; j--) {
     var w = order[j];
-    byWeek[w].sort(function (a, b) { return b.score - a.score; });
+    // 週ランキングと同じ並び。殿堂は週ランキングのアーカイブなので、
+    // 同点の扱いが違うと保存した瞬間に順位が入れ替わって見える
+    byWeek[w].sort(function (a, b) { return (b.score - a.score) || (a.tries - b.tries); });
     out.push({ weekId: w, entries: byWeek[w] });
   }
   return out;
@@ -122,11 +130,24 @@ function validateStageEntry(entry) {
 function topStagesForWeek(rows, weekId, n) {
   var byStage = [];
   for (var s = 0; s < STAGE_COUNT; s++) byStage.push([]);
+  // コンティニューは applyContinue() で stageResults を丸ごと復元するので、
+  // セーブ地点より前の面の記録は死ぬたびに何度も appendRow される。投稿側は
+  // 止めない設計（「復元した stageResults は投稿済み」と印を付けると、セーブ後に
+  // 一度も投稿せずブラウザを閉じたときセーブ前の面の記録が永久に失われるため）
+  // なので、ここで name+timeMs+score が完全一致する行を1件に畳んでから並べる。
+  // timeMs はミリ秒精度なので、正当な再挑戦がここまで完全一致することは実質ない。
+  var seen = {};
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) !== weekId) continue;
     var stage = Number(rows[i][3]);
     if (stage < 1 || stage > STAGE_COUNT) continue;
-    byStage[stage - 1].push({ name: String(rows[i][2]), timeMs: Number(rows[i][4]), score: Number(rows[i][5]), country: rows[i][6] || '' });
+    var name = String(rows[i][2]);
+    var timeMs = Number(rows[i][4]);
+    var score = Number(rows[i][5]);
+    var dedupKey = stage + '|' + name + '|' + timeMs + '|' + score;
+    if (seen[dedupKey]) continue;
+    seen[dedupKey] = true;
+    byStage[stage - 1].push({ name: name, timeMs: timeMs, score: score, country: rows[i][6] || '' });
   }
   var out = [];
   for (var k = 0; k < STAGE_COUNT; k++) {
@@ -149,7 +170,15 @@ function getSheet_(name) {
 function readRows_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  // 列数を7固定にしていたため、Scores に tries(8列目)を足しても読み戻せなかった
+  // (topNForWeek の rows[i][7] が常に undefined になる)。sheet.getLastColumn() で
+  // その時点の実列数を読む。この関数は Scores(8列)/WallOfFame(7列)/StageScores(7列)
+  // で共用しているので、固定値ではなく実測が必要。
+  // getLastColumn() は空シートで 0 を返すことがあるため、その場合も getRange を
+  // 呼ばず [] を返す(numCols=0 で getRange を呼ぶと例外になる)。
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return [];
+  return sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
 }
 
 function readStageRows_() {
@@ -220,7 +249,7 @@ function doPost(e) {
       }
     }
     var weekId = resolveWeekId(body.weekId, now);
-    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || ''];
+    var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || '', entry.tries];
     sheet.appendRow(row);
     rows.push(row);
     var top = topNForWeek(rows, weekId, MAX_RANKING);
@@ -246,7 +275,7 @@ function weeklySnapshot() {
     }
     var top = topNForWeek(readRows_(getSheet_(SCORES_SHEET)), prev, FAME_TOP);
     for (var r = 0; r < top.length; r++) {
-      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '']);
+      fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '', top[r].tries]);
     }
   } finally {
     lock.releaseLock();

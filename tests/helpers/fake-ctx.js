@@ -6,6 +6,10 @@ const METHODS = [
   'beginPath', 'closePath', 'moveTo', 'lineTo', 'arc',
   'stroke', 'fill', 'fillRect', 'strokeRect', 'clearRect',
   'drawImage', 'setLineDash', 'fillText', 'strokeText',
+  // 曲線と切り抜き。実装側（StageScene の洞窟や角丸の枠）が使うので、
+  // 無いと「fake ctx に生えていないだけ」で描画テストが落ちる。
+  // 記録するだけなので、名前で絞る既存のテストには影響しない
+  'arcTo', 'quadraticCurveTo', 'bezierCurveTo', 'ellipse', 'clip', 'roundRect',
 ];
 
 /** これらのプロパティへの代入は calls に `{ name: 'set:<prop>', args: [value] }` として記録する。 */

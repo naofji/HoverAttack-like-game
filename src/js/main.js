@@ -32,6 +32,7 @@ import {
     VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
     VIEW_CULL_MARGIN,
+    CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
@@ -61,6 +62,7 @@ import { GameStateManager } from './systems/GameStateManager.js';
 import { DeathHold } from './systems/DeathHold.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
 import { StageRankingManager, pickStageRanking } from './systems/StageRankingManager.js';
+import { SaveManager } from './systems/SaveManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
@@ -170,11 +172,13 @@ export const Game = {
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
+    runTries: 1,          // 今のランがセーブ地点から何回目か。通常スタートは 1
+    stageSelectRun: false, // 面セレクトから始めたランか（週スコアに出さない）
     mode: 'normal',       // 'normal' | 'newtype'
     gameSpeed: MODES.normal.gameSpeed,
     simAccumulator: 0,
     simAlpha: 1,
-    gameState: 'title', // 'title' | 'playing' | 'settings' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display'
+    gameState: 'title', // 'title' | 'playing' | 'settings' | 'gameover' | 'mission_clear' | 'game_clear' | 'ranking_entry' | 'local_ranking_display' | 'global_ranking_display' | 'stage_ranking_display' | 'wall_of_fame_display' | 'stage_select'
     settings: null,          // init() で loadSettings() が入れる
     settingsIndex: 0,        // 設定画面で選択中の行
     settingsReturnTo: null,  // 設定画面を閉じたときに戻る状態
@@ -184,6 +188,7 @@ export const Game = {
     showMiniMap: false,
     miniMapAlpha: 0,
     stateTimer: 0,
+    stageSelectIndex: 1,  // 面セレクトで選んでいる面（1..saveManager.reached）
     stageDisplayIndex: 0,   // which stage (0..6) the attract screen is showing
     stageDisplayTimer: 0,   // sub-timer for auto-advance
     playerNameInput: "",
@@ -240,6 +245,9 @@ export const Game = {
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
         this.stageRankingManager = new StageRankingManager(this.week.weekId);
+        // 途中セーブと面セレクトの解放。週IDで無効化されるので、
+        // highScoreManager と同じくここ（週が確定した直後）で作る。
+        this.saveManager = new SaveManager(this);
         this.onlineLeaderboard = new OnlineLeaderboard(LEADERBOARD_URL);
         this.onlineData = null;                       // { weekId, ranking, fame } when loaded
         this.onlineStatus = LEADERBOARD_URL ? 'loading' : 'offline';
@@ -366,6 +374,7 @@ export const Game = {
             case 'game_clear': return this._updateGameClear(deltaTime);
             case 'mission_clear': return this._updateMissionClear();
             case 'settings': return this._updateSettings();
+            case 'stage_select': return this._updateStageSelect();
             case 'playing': return this._updatePlaying(deltaTime);
         }
     },
@@ -420,6 +429,13 @@ export const Game = {
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
+        // 面セレクトのランはここで終わったことにする。stageSelectRun を true に
+        // するのは _startStageSelectRun() だけで、以前は false に戻すのが
+        // 新しい通しランを始める経路だけだった。そのため面セレクトのランを
+        // Escape 等で切り上げてデモ／タイトルへ戻っても true のまま残り、
+        // タイトルのメニューから CONTINUE が消えたままになる
+        // （titleMenuItems() が canContinueHere() を見るため）。
+        this.stageSelectRun = false;
         // ミッションを抜けるので効果音を落とす。ホバー音・母艦のエンジン・
         // 回復ハムは止める指示があるまで鳴り続ける作りで、ここを抜けると
         // 毎フレームの更新も止まるため、放っておくとタイトルで鳴りっぱなしに
@@ -586,24 +602,48 @@ export const Game = {
     },
 
     /**
-     * デモループの各画面から「ゲームを始める入力」を拾う。
-     * タイトルもランキングも、どの画面から始めても手順は同じなので
-     * ここ1箇所にまとめる（以前は6画面に同じ4行が写されていた）。
-     * @returns {boolean} 開始したら true
+     * デモ画面（遊び方・ランキング4種）から ENTER／クリックでタイトルへ戻す。
+     *
+     * **以前はここが「どの画面からでも即 1面スタート」だった。** コンティニューと
+     * 面セレクトを足したことで、同じ ENTER が画面によって「開始」「決定」と
+     * 意味を変えるようになり分かりにくくなった（ユーザーの判断）。**ゲームを
+     * 始める入口はタイトルのメニュー1箇所だけ**にして、ENTER はどこでも
+     * 「決定」に統一した。デモ画面での決定は「メニューへ戻る」。
+     * @returns {boolean} 戻ったら true
      */
-    _startGameIfRequested() {
+    _returnToTitleIfRequested() {
         if (!this._anyKeyOrClick()) return false;
-        // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
-        // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
-        // 場合しか通らないので、transient activation が生きている
-        this._restoreFullscreen();
-        this.stateManager.restart();
-        this.gameState = 'playing';
-        audioManager.startBGM(this.missionsCompleted);
+        this._enterDemoState('title');
         return true;
     },
 
+    /**
+     * タイトルのメニューに今並ぶ項目。**使えないものは並べない** —
+     * 出ている＝選べる、を保つため（グレーで出すと「なぜ選べないのか」を
+     * 別途説明する羽目になる）。
+     *
+     * `continue` の条件は `canContinueHere()` と同一にしてある。片方だけ
+     * 変えると「行は出ているのに決定しても何も起きない」が生まれる。
+     */
+    titleMenuItems() {
+        const items = ['start'];
+        if (this.canContinueHere()) items.push('continue');
+        if (this.saveManager && this.saveManager.reached >= 1) items.push('stageSelect');
+        return items;
+    },
+
+    /**
+     * 今選ばれている項目。**毎回 items から引き直す** — 週替わりでセーブが
+     * 消えるなど、項目が減って titleMenuIndex が範囲外に残ることがあるため。
+     */
+    selectedTitleItem() {
+        const items = this.titleMenuItems();
+        return items[Math.min(this.titleMenuIndex, items.length - 1)];
+    },
+
     _updateTitle(deltaTime) {
+        // A/D は横の選択（モード）、W/S は縦の選択（メニュー）、ENTER が決定。
+        // 面セレクト画面も同じ規則で動く
         if (this.input.isKeyPressed('KeyA')) {
             this.mode = cycleMode(this.mode, -1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
@@ -614,15 +654,106 @@ export const Game = {
             this.gameSpeed = MODES[this.mode].gameSpeed;
             return;
         }
+
+        const items = this.titleMenuItems();
+        // 端で止める（巡回させない）。項目が3つまでしかなく、巡回すると
+        // 「一番下から下を押したら START に戻った」が事故に見える
+        this.titleMenuIndex = Math.min(this.titleMenuIndex, items.length - 1);
+        if (this.input.isKeyPressed('KeyW')) {
+            this.titleMenuIndex = Math.max(0, this.titleMenuIndex - 1);
+            return;
+        }
+        if (this.input.isKeyPressed('KeyS')) {
+            this.titleMenuIndex = Math.min(items.length - 1, this.titleMenuIndex + 1);
+            return;
+        }
         if (this._handleDemoJump()) return;
+
+        if (this._anyKeyOrClick()) {
+            this._activateTitleMenu();
+            return;
+        }
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 8000) {
             this._enterDemoState('how_to_play');
             this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
-        } else {
-            this._startGameIfRequested();
         }
+    },
+
+    /** メニューの決定。全画面へ入れるのはここが入力直後にしか通らないため。 */
+    _activateTitleMenu() {
+        // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
+        // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
+        // 場合しか通らないので、transient activation が生きている
+        this._restoreFullscreen();
+        switch (this.selectedTitleItem()) {
+            case 'continue':
+                this.continueFromSave();
+                return;
+            case 'stageSelect':
+                this.stageSelectIndex = 1;
+                this.gameState = 'stage_select';
+                this.stateTimer = 0;
+                return;
+            default:
+                // 新しい通しラン。**セーブは消さない** — 誤って決定しても
+                // 続きを失わないように、次にセーブが成立するまで残す
+                this.runTries = 1;
+                this.stageSelectRun = false;
+                this.stateManager.restart();
+                this.gameState = 'playing';
+                audioManager.startBGM(this.missionsCompleted);
+        }
+    },
+
+    /**
+     * 面セレクト。**タイムアタック用**なので、選んだ面だけを単独で遊ぶ。
+     *
+     * 面は縦に並ぶので W/S で選び、ENTER で決定する——タイトルのメニューと
+     * 同じ手つき。以前は A/D で選んで W で始める形だったが、A/D は
+     * 「横の選択（モード）」、W/S は「縦の選択」、ENTER は「決定」と
+     * 役割を固定した方が覚えることが減る（ユーザーの判断）。
+     *
+     * Escape は本番では main.js の共通ハンドラ（'title'/'playing'/'settings' 以外は
+     * Escape でタイトルへ戻す仕組み）が先に拾うので、この分岐に実際は届かない。
+     * それでもここに残すのは、このメソッド単体でテストしたときの意味を保つため。
+     */
+    _updateStageSelect() {
+        const max = this.saveManager.reached;
+        if (this.input.isKeyPressed('Escape')) {
+            this._enterDemoState('title');
+            return;
+        }
+        if (this.input.isKeyPressed('KeyW')) {
+            this.stageSelectIndex = Math.max(1, this.stageSelectIndex - 1);
+            return;
+        }
+        if (this.input.isKeyPressed('KeyS')) {
+            this.stageSelectIndex = Math.min(max, this.stageSelectIndex + 1);
+            return;
+        }
+        if (this._anyKeyOrClick()) {
+            this._startStageSelectRun(this.stageSelectIndex);
+        }
+    },
+
+    /**
+     * 面セレクトから始める。スコアもタイムも 0 から。
+     * resetLevel(true) を使わないのは、あちらが missionsCompleted を
+     * debugStartMission へ戻してしまい、選んだ面が無視されるため。
+     */
+    _startStageSelectRun(stage) {
+        this._restoreFullscreen();
+        this.stageSelectRun = true;
+        this.runTries = 1;
+        this.missionsCompleted = stage - 1;
+        this.score = 0;
+        this.totalTime = 0;
+        this.stageResults = [];
+        this.gameState = 'playing';
+        this.stateManager.resetLevel(false);
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     _updateHowToPlay(deltaTime) {
@@ -632,7 +763,7 @@ export const Game = {
         if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
             this._enterDemoState('local_ranking_display');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -645,7 +776,7 @@ export const Game = {
             const hasOnline = this.onlineStatus === 'ok' && this.onlineData;
             this._enterDemoState(hasOnline ? 'global_ranking_display' : 'title');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -659,7 +790,7 @@ export const Game = {
             const hasStages = this.maxStageReached() >= 1;
             this._enterDemoState(hasStages ? 'stage_ranking_display' : 'wall_of_fame_display');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -681,6 +812,10 @@ export const Game = {
         } catch (e) {
             /* ignore storage failures */
         }
+        // 面セレクトの解放は**週ごと**に消える。上の旧キーは週非依存のままにする
+        // ——あちらは面別ランキング表示画面の出現ゲート(_availableDemoStates)に
+        // 使われていて、週別にすると週明けにその画面が出なくなる。
+        if (this.saveManager) this.saveManager.recordReached(stage);
     },
 
     _updateStageRankingDisplay(deltaTime) {
@@ -696,7 +831,7 @@ export const Game = {
                 return;
             }
         }
-        this._startGameIfRequested();
+        this._returnToTitleIfRequested();
     },
 
     _updateWallOfFameDisplay(deltaTime) {
@@ -706,7 +841,7 @@ export const Game = {
         if (this.stateTimer > 10000) {
             this._enterDemoState('title');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -725,12 +860,12 @@ export const Game = {
         }
     },
 
-    async _submitOnline(name, score, mission, clearTime, country) {
+    async _submitOnline(name, score, mission, clearTime, country, tries) {
         if (!this.onlineLeaderboard || !this.onlineLeaderboard.url) return;
         // weekId はマップ生成に使った週（init() で1回だけ決まる this.week）をそのまま送る。
         // サーバー受信時刻から週を計算すると、週境界をまたいでクリアしたとき
         // 「遊んだ地形の週」と「記録される週」がずれるため。
-        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country, weekId: this.week.weekId });
+        const res = await this.onlineLeaderboard.submit({ name, score, mission, clearTime, country, tries, weekId: this.week.weekId });
         if (res.ok) {
             this.globalRankIndex = res.rank;
             await this._refreshOnline();
@@ -751,11 +886,14 @@ export const Game = {
                 // (A stage-only qualifier reaches naming to save per-stage records, but
                 // must not be inserted into the overall ranking.)
                 this.globalRankIndex = -1; // clear until this submission's own rank comes back (avoids stale highlight)
-                if (this.highScoreManager.isHighScore(this.score)) {
+                // 面セレクトのランは週スコアへ登録しない（送信もしない）。
+                // 判定側(_tryGoToRanking)だけを塞ぐと、面別で名前入力に来たときに
+                // ここが通ってしまう
+                if (!this.stageSelectRun && this.highScoreManager.isHighScore(this.score)) {
                     this.localRankIndex = this.highScoreManager.addScore(
-                        this.playerNameInput, this.score, displayMission, formattedTime, country
+                        this.playerNameInput, this.score, displayMission, formattedTime, country, this.runTries
                     );
-                    this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country);
+                    this._submitOnline(this.playerNameInput, this.score, displayMission, formattedTime, country, this.runTries);
                 } else {
                     this.localRankIndex = -1;
                 }
@@ -788,7 +926,47 @@ export const Game = {
 
     _updateGameOver(deltaTime) {
         this.stateTimer += deltaTime;
-        if (this.stateTimer > 4000) this._tryGoToRanking();
+
+        if (this.canContinueHere()) {
+            if (this.input.isKeyPressed('KeyC')) {
+                this.continueFromSave();
+                return;
+            }
+            // カウントダウンを待ってから従来の流れへ。放置すればランキング登録に
+            // 進むので、見逃しても手順が止まらない（既存の自動遷移の性格を保つ）
+            if (this.stateTimer > CONTINUE_COUNTDOWN_MS) this._tryGoToRanking();
+            return;
+        }
+
+        if (this.stateTimer > GAMEOVER_WAIT_MS) this._tryGoToRanking();
+    },
+
+    /**
+     * ここでコンティニューを出せるか。
+     * **面セレクトのランでは出さない** — セーブは通しラン専用で、単発の
+     * タイムアタックから通しランの続きへ飛べてしまうのは筋が通らない。
+     */
+    canContinueHere() {
+        return !this.stageSelectRun && !!(this.saveManager && this.saveManager.save);
+    },
+
+    /** CONTINUE? の残り秒。描画用（0 未満にはしない）。 */
+    continueSecondsLeft() {
+        return Math.max(0, Math.ceil((CONTINUE_COUNTDOWN_MS - this.stateTimer) / 1000));
+    },
+
+    /** セーブ地点から再開する。トライ数の加算と保存は SaveManager の仕事。 */
+    continueFromSave() {
+        if (!this.saveManager.applyContinue()) return;
+        this._restoreFullscreen();
+        this.gameState = 'playing';
+        // セーブからの再開は必ず通しラン。_enterDemoState 側の変更だけでも
+        // canContinueHere() の !stageSelectRun 側の道は塞がるが、ここでも
+        // 明示しておく二重の安全側（呼び出し経路が増えても再開後は必ず false）。
+        this.stageSelectRun = false;
+        // resetScore = false。applyContinue が入れたスコアと累計時間を消さない
+        this.stateManager.resetLevel(false);
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     _updateGameClear(deltaTime) {
@@ -799,12 +977,31 @@ export const Game = {
 
     _updateMissionClear() {
         if (this._updateTimeBonusSlot(false)) return;
-        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
-            this._restoreFullscreen();
-            this.gameState = 'playing';
-            this.stateManager.nextMission();
-            audioManager.startBGM(this.missionsCompleted);
+
+        // S だけ先に見る。下の決定の判定に混ぜると、セーブと前進が二重に走る。
+        // 払えないときは**無反応**にする（連打で 10000 点を失う事故を防ぐため、
+        // 確認ダイアログではなく専用キーにしてある）。
+        if (this.input.isKeyPressed('KeyS')) {
+            if (!this.saveManager.canSaveNow()) return;
+            this.saveManager.saveHere();
+            this._advanceToNextMission();
+            return;
         }
+
+        // 決定は ENTER（＋クリック）。**以前は「任意の文字キーでも進む」だった**が、
+        // タイトルと面セレクトを ENTER 決定に統一したのに合わせて揃えた。
+        // W は手が覚えているので別名として残す。
+        if (this._anyKeyOrClick() || this.input.isKeyPressed('KeyW')) {
+            this._advanceToNextMission();
+        }
+    },
+
+    /** 面クリア画面から次の面へ。セーブの有無で変わらない部分をまとめた。 */
+    _advanceToNextMission() {
+        this._restoreFullscreen();
+        this.gameState = 'playing';
+        this.stateManager.nextMission();
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     /**
@@ -1492,6 +1689,13 @@ export const Game = {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+        // 面セレクトはデモ巡回に含めない（タイムアタック専用の単発画面なので、
+        // DEMO_SCREEN_DRAWERS の表を通すと位置ドットが付いてアトラクトの一部に見えてしまう）
+        if (this.gameState === 'stage_select') {
+            this.screenRenderer.drawStageSelect(ctx);
+            return;
+        }
+
         // Full-screen states — skip world rendering.
         // どの画面も「専用の描画 → 位置ドット → 終わり」で同じなので、
         // 違いのある1行だけを DEMO_SCREEN_DRAWERS の表に置く。
@@ -1638,7 +1842,10 @@ export const Game = {
     _tryGoToRanking() {
         // Eligible to name if the overall run is a high score OR any cleared stage
         // would make its per-stage top 5 (so partial runs can still leave a record).
-        const eligible = this.highScoreManager.isHighScore(this.score) || this._anyStageWouldRank();
+        // **面セレクトのランは週スコアに出さない**ので、週ハイスコアの側は見ない。
+        // 単独の1面だけを遊んだ記録が通しランと同じ表に並ぶのは筋が通らないため。
+        const weeklyEligible = !this.stageSelectRun && this.highScoreManager.isHighScore(this.score);
+        const eligible = weeklyEligible || this._anyStageWouldRank();
         if (eligible) {
             this.gameState = 'ranking_entry';
             this.playerNameInput = "";
