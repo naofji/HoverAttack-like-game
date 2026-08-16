@@ -72,6 +72,32 @@ test('wouldRankTime / wouldRankScore boundaries', async () => {
     assert.equal(m.wouldRankScore(1, 100), false);
 });
 
+// コンティニューのたびにセーブ地点より前の面の記録が stageResults 経由で
+// 何度も投稿される問題への回帰テスト。投稿側は止めない設計（セーブ後に一度も
+// 投稿せず閉じた場合にセーブ前の面の記録が失われるのを避けるため）なので、
+// 取り込み側の addStageResult で同一記録を弾く。
+test('addStageResult: 同じ記録(name+timeMs+score完全一致)を2回入れても1件しか入らない', async () => {
+    const { StageRankingManager } = await import('../src/js/systems/StageRankingManager.js');
+    const m = new StageRankingManager('2026-W10');
+    const rec = { name: 'AAA', timeMs: 12345, score: 5000, country: 'JP' };
+    m.addStageResult(1, rec);
+    m.addStageResult(1, rec); // 同じ記録をもう一度(コンティニューして再投稿した想定)
+    const s = m.getStage(1);
+    assert.equal(s.time.length, 1, `time に重複が入った: ${JSON.stringify(s.time)}`);
+    assert.equal(s.score.length, 1, `score に重複が入った: ${JSON.stringify(s.score)}`);
+});
+
+test('addStageResult: timeMs か score だけ違えば別記録として2件とも入る', async () => {
+    const { StageRankingManager } = await import('../src/js/systems/StageRankingManager.js');
+    const m = new StageRankingManager('2026-W10');
+    m.addStageResult(1, { name: 'AAA', timeMs: 12345, score: 5000, country: 'JP' });
+    m.addStageResult(1, { name: 'AAA', timeMs: 12346, score: 5000, country: 'JP' }); // timeMs だけ違う
+    m.addStageResult(1, { name: 'AAA', timeMs: 12345, score: 5001, country: 'JP' }); // score だけ違う
+    const s = m.getStage(1);
+    assert.equal(s.time.length, 3);
+    assert.equal(s.score.length, 3);
+});
+
 test('rolls over when weekId changes', async () => {
     const { StageRankingManager } = await import('../src/js/systems/StageRankingManager.js');
     const a = new StageRankingManager('2026-W10');
