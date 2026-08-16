@@ -6,7 +6,7 @@ import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, MINIMAP_ALPHA,
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING, MINIMAP_SIDE_HYSTERESIS,
-    MINIMAP_AVOID_PADDING_UNIT,
+    MINIMAP_AVOID_PADDING_UNIT, MINIMAP_VIEWPORT_HIGHLIGHT, COLOR_MINIMAP_VIEWPORT,
 } from '../utils/Constants.js';
 import { pickStickyMiniMapCorner, miniMapCornerPositions } from './minimapPlacement.js';
 import { advanceMiniMapTransition } from './minimapTransition.js';
@@ -1094,6 +1094,38 @@ export class ScreenRenderer {
         // 地形と馴染んで邪魔にならないという実機フィードバックで撤去した
         // （COLOR_MINIMAP_BORDER も使わなくなったので Constants.js から削除済み）。
 
+        // 「今この画面に映っている範囲」を明るくする。ミニマップの表示サイズを
+        // マップの広さによらず一定にしたことで失われた「全体がどれくらい広いか」を、
+        // **可視領域が占める割合**という形で取り戻すためのもの（可視領域は常に
+        // 64x48 タイル固定なので、割合がそのまま縮尺になる）。
+        //
+        // 白の半透明を重ねる。地形をもう一度重ねて不透明度を上げる方式は、
+        // ミニマップがライブのゲーム画面の上に乗っているぶん背後の絵で
+        // コントラストが変わってしまい、狙った差が出る保証がない。
+        // 「外を暗くする」案はユーザーが却下（既に暗いのでこれ以上暗い部分を
+        // 作るとマップとして読めなくなる）。
+        //
+        // 点より**先**に描くこと。ミニマップを開ける一番の目的は「見えていない
+        // 敵がどこにいるか」なので、赤い点が白に埋もれてはいけない。
+        const viewScale = game.map.miniMapScale * shrink;
+        const viewX = mmX + (game.camera.x / TILE_SIZE) * viewScale;
+        const viewY = mmY + (game.camera.y / TILE_SIZE) * viewScale;
+        const viewW = (w / TILE_SIZE) * viewScale;
+        const viewH = (h / TILE_SIZE) * viewScale;
+        // マップの端ではカメラが止まるので、素直に計算するとミニマップの外へ
+        // はみ出す。はみ出した白が地形の外に浮くと、ミニマップの矩形と食い違って見える
+        const clipX = Math.max(mmX, viewX);
+        const clipY = Math.max(mmY, viewY);
+        const clipW = Math.min(mmX + destW, viewX + viewW) - clipX;
+        const clipH = Math.min(mmY + destH, viewY + viewH) - clipY;
+        if (clipW > 0 && clipH > 0) {
+            // 濃さは地形と同じフェードに追随させるが、MINIMAP_ALPHA は掛けない
+            // （あれは地形を背景に沈めるための値。ハイライトは沈める対象ではない）
+            ctx.globalAlpha = MINIMAP_VIEWPORT_HIGHLIGHT * alpha * this.miniMapTransition.fade;
+            ctx.fillStyle = COLOR_MINIMAP_VIEWPORT;
+            ctx.fillRect(clipX, clipY, clipW, clipH);
+        }
+
         // 点（自機・敵・母艦）は地形と別に、開閉フェードと隅の切り替えフェードだけを
         // 掛け直す。MINIMAP_ALPHA（地形を背景に沈めるための値）は点には掛けない。
         // 点は「今どこにいるか」を読むための情報であって背景ではないので、地形と
@@ -1105,10 +1137,11 @@ export class ScreenRenderer {
         // Helper to draw a dot。点は miniMapScale だけでなく縮小率(shrink)にも
         // 追随させる必要がある。ここを忘れると、地形は縮むのに点だけ元の位置に
         // 残ってしまい、縮小したミニマップの上でずれて見える。
-        const dotScale = game.map.miniMapScale * shrink;
+        // 縮尺は可視領域のハイライトと同じもの（viewScale）を使う。別々に持つと
+        // 点とハイライトがずれる。
         const drawDot = (worldX, worldY, color, size = 2) => {
-            const px = mmX + (worldX / TILE_SIZE) * dotScale;
-            const py = mmY + (worldY / TILE_SIZE) * dotScale;
+            const px = mmX + (worldX / TILE_SIZE) * viewScale;
+            const py = mmY + (worldY / TILE_SIZE) * viewScale;
             ctx.fillStyle = color;
             ctx.fillRect(px - size / 2, py - size / 2, size, size);
         };
