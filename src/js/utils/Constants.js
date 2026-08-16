@@ -586,12 +586,15 @@ export const REFLECT_BEAM_SECOND_SHOT_JITTER = 0.05;  // ±0.05rad ≒ ±2.9度
 // 新型だと分かるようにする
 export const COLOR_BEAM_CANNON_BASE = '#AAB2BA';
 export const COLOR_BEAM_CANNON_BARREL = '#D8DEE4';
-// ピボット（回転軸の円）と砲口のエミッタが引く色。#C0C8D0 → #DDE4EB → #F2F6FA。
-// 「円状の構造物をもっと明るい灰色に」「もっと白くして良い」という実機
-// フィードバックを2回受けての値。ほぼ白だが、輪郭(#222222・2px)が回るので
-// 純白(#FFFFFF)にしても輪郭は残る。砲身(#D8DEE4)よりはっきり明るいので、
-// 円の側が主役として立ち、暗いランプの座(#1A0A2E)とのコントラストも最大になる
-export const COLOR_BEAM_CANNON_PIVOT = '#F2F6FA';
+// ピボット（回転軸の円）と砲口のエミッタが引く色。
+// #C0C8D0 → #DDE4EB → #F2F6FA → #C8D0D8 と動かした。ほぼ白まで上げたのは
+// 「もっと白く」という指摘に沿ったものだが、実機で見ると円だけが浮いて
+// 砲台が「白い円に部品が生えたもの」に見えた（「白さを落として他のパーツと
+// 同程度に」）。base(#AAB2BA) と barrel(#D8DEE4) の中間に置き直し、3つの
+// パーツが同じ金属の別の面に見えるようにした。
+// なお、白くした際にあらわになった「暗い座がピボットを塗り潰す」問題は
+// BEAM_LAMP_BACK_RADIUS の側で直してある（白さを戻しても再発しない）
+export const COLOR_BEAM_CANNON_PIVOT = '#C8D0D8';
 
 // パイロットランプ（充填の進み具合を示す）。撃った直後は暗紫、充填が高まるほど
 // 明るい紫に輝く。暗紫は COLOR_REFLECT_BEAM_EDGE（ビームの外周）と同じ値にして、

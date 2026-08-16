@@ -23,7 +23,7 @@ const BARREL_BASE = 4;
 const BARREL_LENGTH = 14;
 // ランプ本体の半径。draw() 側と同じ値（描画専用なので EnemyTurret.js の
 // モジュールスコープにあり、import できない）
-const BEAM_LAMP_CORE_RADIUS_FOR_TEST = 2;
+const BEAM_LAMP_CORE_RADIUS_FOR_TEST = 3;
 
 const ROOM = [
   '####################',
