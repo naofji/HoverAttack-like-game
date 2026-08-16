@@ -19,7 +19,7 @@ import { formatClock } from '../utils/formatTime.js';
 import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { MODES, MODE_ORDER } from '../utils/modes.js';
-import { drawStageScene } from './StageScene.js';
+import { drawStageScene, stageEnemyLabel } from './StageScene.js';
 import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
@@ -60,106 +60,191 @@ export class ScreenRenderer {
 
         drawScanlines(ctx, canvas.width, canvas.height);
 
-        this._drawStartHint(ctx);
+        this._drawTitleMenu(ctx, canvas);
 
         this._drawModeSelector(ctx, canvas);
 
-        this._drawSaveHints(ctx, canvas);
+        this._drawKeyLegend(ctx, canvas);
     }
 
     /**
-     * タイトル下部の追加ヒント。**行が出ている＝使える**を保つため、
-     * 使えないものは行ごと出さない。どの面から再開するのかとモードを必ず
-     * 書く — タイトルで A/D を触った後、再開時にモードが保存値へ固定される
-     * ことと食い違って見えるため。
+     * タイトルの縦メニュー。**使えない項目は並べない**ので、出ている行は必ず
+     * 選べる（Game.titleMenuItems() が唯一の判断元。描画側で条件を書き直すと、
+     * 「行はあるのに決定しても何も起きない」がまた生まれる）。
      *
-     * 画面下部は実測すると隙間が無い（`canvas.height` からの相対値）:
-     *   モード説明文  -42 ／ PRESS ENTER TO START -20（点滅）／ デモの位置ドット -5
-     * 2行ぶん入れる隙間が無いので、ロゴ下の空いている領域（モードセレクタの
-     * 見出し `[ A / D ] SELECT MODE` = -108 のさらに上）に置く。
+     * CONTINUE には**どの面・どのモードから再開するのかを必ず書く** — 再開時は
+     * モードが保存値へ固定されるので、A/D で選んだモードとの食い違いを先に見せる。
+     *
+     * 縦位置: ロゴの下端（canvas.height/3 - 40 から 5行×18px ≒ 高さ720で 272）と、
+     * モードセレクタの見出し `[ A / D ] SELECT MODE`(-108) の間に置く。
+     * 3項目・行間28pxで -230..-174。
      */
-    _drawSaveHints(ctx, canvas) {
-        const sm = this.game.saveManager;
-        const lines = [];
-        if (sm && sm.save) {
-            const s = sm.save;
-            const modeLabel = MODES[s.mode] ? MODES[s.mode].label : s.mode;
-            lines.push(`[C] CONTINUE - STAGE ${s.missionsCompleted + 1} / ${modeLabel}  (TRY ${s.tries})`);
-        }
-        if (sm && sm.reached >= 1) lines.push('[S] STAGE SELECT');
-        if (lines.length === 0) return;
+    _drawTitleMenu(ctx, canvas) {
+        const items = this.game.titleMenuItems();
+        const selected = this.game.selectedTitleItem();
+        const top = canvas.height - 230;
 
         ctx.save();
         ctx.textAlign = 'center';
+        items.forEach((key, i) => {
+            const on = key === selected;
+            const y = top + i * 28;
+            ctx.font = font('sub', true);
+            if (on) {
+                ctx.fillStyle = UI.gold;
+                glow(ctx, UI.gold, 'mid');
+            } else {
+                ctx.fillStyle = UI.dim;
+                ctx.shadowBlur = 0;
+            }
+            ctx.fillText(this._titleMenuLabel(key), canvas.width / 2, y);
+            if (on) {
+                // 選択中の目印。左右に置くのは、項目の文字数がまちまちで
+                // 下線だと長さが揃わず落ち着かないため
+                ctx.fillText('\u25B6', canvas.width / 2 - 190, y);
+                ctx.fillText('\u25C0', canvas.width / 2 + 190, y);
+            }
+        });
+        ctx.restore();
+        ctx.textAlign = 'left';
+    }
+
+    _titleMenuLabel(key) {
+        if (key === 'continue') {
+            const s = this.game.saveManager.save;
+            const modeLabel = MODES[s.mode] ? MODES[s.mode].label : s.mode;
+            return `CONTINUE - STAGE ${s.missionsCompleted + 1} / ${modeLabel}  (TRY ${s.tries})`;
+        }
+        if (key === 'stageSelect') return 'STAGE SELECT';
+        return 'START';
+    }
+
+    /**
+     * 操作の凡例。**キーの役割は画面をまたいで固定**（A/D=横の選択、
+     * W/S=縦の選択、ENTER=決定）なので、タイトルで一度見せれば他の画面でも通じる。
+     * 以前あった `PRESS ENTER TO START` の位置(-20)をそのまま使う。
+     */
+    _drawKeyLegend(ctx, canvas) {
+        ctx.save();
+        ctx.textAlign = 'center';
         ctx.font = font('small', true);
-        ctx.fillStyle = UI.gold;
-        glow(ctx, UI.gold, 'mid');
-        lines.forEach((t, i) => ctx.fillText(t, canvas.width / 2, canvas.height - 146 + i * 16));
+        ctx.fillStyle = UI.dim;
+        ctx.fillText('[W][S] SELECT    [A][D] MODE    [ENTER] DECIDE', canvas.width / 2, canvas.height - 20);
         ctx.restore();
         ctx.textAlign = 'left';
     }
 
     /**
      * 面セレクト。**デモの巡回には入れない**ので、位置ドットは出さない。
-     * 「記録は面別ランキングにのみ残る」を明記するのは、週スコアランキングに
-     * 出ないことを遊ぶ前に知らせるため。
+     *
+     * 面別ランキング画面と同じ言語で見せる ── 左に面の一覧、右に選んでいる面の
+     * `drawStageScene()`（洞窟の色が面ごとに変わり、自機とその面の敵が撃ち合う）。
+     * 番号だけを並べた版から作り直したのは、色とキャラクターが無いと
+     * 「何面がどんな面か」が思い出せず選べないため（ユーザーの指摘）。
+     *
+     * **未到達の面は番号も敵の名前も伏せる。** このリポジトリは未到達の面と
+     * その敵を驚きとして取っておく方針（面別ランキング画面の出現ゲートも同じ理由）。
      */
     drawStageSelect(ctx) {
         const canvas = this.game.canvas;
+        const W = canvas.width;
+        const H = canvas.height;
         const max = this.game.saveManager.reached;
         const picked = this.game.stageSelectIndex;
+        const palette = STAGE_PALETTES[picked - 1] || STAGE_PALETTES[0];
+        // 面の色はどれも暗いので、文字に使うぶんは白へ寄せて読めるようにする
+        // （面別ランキング画面と同じ 0.55）
+        const accent = lerpColor(palette.fill, '#ffffff', 0.55);
 
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, W, H);
 
         ctx.save();
         ctx.textAlign = 'center';
         ctx.font = font('title', true);
-        ctx.fillStyle = UI.ok;
-        glow(ctx, UI.ok, 'hard');
-        ctx.fillText('STAGE SELECT', canvas.width / 2, 90);
-        ctx.restore();
-
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.font = font('small');
+        this._metallicText(ctx, 'STAGE SELECT', W / 2, 56, accent);
         ctx.fillStyle = UI.info;
-        ctx.fillText('TIME ATTACK — RECORDED IN STAGE RANKINGS ONLY', canvas.width / 2, 124);
+        ctx.font = font('small', true);
+        ctx.fillText('TIME ATTACK \u00B7 RECORDED IN STAGE RANKINGS ONLY', W / 2, 82);
         ctx.restore();
 
-        // 面の並び。選んでいるものだけ色と枠を与え、他は落とす
-        const GAP = 74;
-        const left = canvas.width / 2 - ((max - 1) * GAP) / 2;
+        this._drawStageSelectList(ctx, W * 0.22, 140, max, picked, accent);
+
+        // 右半分にシーン。幅は画面の 46%、高さはシーンの作りに合わせて 150px
+        // （面別ランキング画面と同じ高さ。それ以上潰すと脚や砲塔が読めない）
+        const sceneW = Math.round(W * 0.46);
+        const sceneX = Math.round(W * 0.5);
+        drawStageScene(ctx, sceneX, 150, sceneW, 150, picked - 1, palette, Date.now());
+
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (let n = 1; n <= max; n++) {
-            const x = left + (n - 1) * GAP;
-            const y = canvas.height / 2;
-            const on = n === picked;
-            // STAGE_PALETTES は { fill, border } の2色。面別ランキング画面と
-            // 同じ配色を使うことで「何面の色か」が両画面で一致する
-            const tint = STAGE_PALETTES[n - 1].fill;
-            ctx.font = font('head', true);
-            ctx.fillStyle = on ? tint : UI.dim;
-            if (on) glow(ctx, tint, 'mid');
-            ctx.fillText(String(n), x, y);
-            if (on) {
-                ctx.strokeStyle = tint;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x - 22, y - 22, 44, 44);
-            }
-        }
+        const midX = sceneX + sceneW / 2;
+        ctx.font = font('head', true);
+        ctx.fillStyle = accent;
+        glow(ctx, accent, 'mid');
+        ctx.fillText(`STAGE ${picked}`, midX, 336);
         ctx.restore();
 
         ctx.save();
         ctx.textAlign = 'center';
         ctx.font = font('sub', true);
         ctx.fillStyle = UI.ink;
-        ctx.fillText('[A] [D] SELECT    [W] START    [ESC] BACK', canvas.width / 2, canvas.height - 70);
+        ctx.fillText(stageEnemyLabel(picked - 1), midX, 366);
+        ctx.font = font('small');
+        ctx.fillStyle = UI.dim;
+        ctx.fillText(MODES[this.game.mode].label, midX, 392);
         ctx.restore();
 
-        drawScanlines(ctx, canvas.width, canvas.height);
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('small', true);
+        ctx.fillStyle = UI.dim;
+        ctx.fillText('[W][S] SELECT    [ENTER] START    [ESC] BACK', W / 2, H - 20);
+        ctx.restore();
+
+        drawScanlines(ctx, W, H);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+    }
+
+    /**
+     * 面セレクトの一覧。7行を必ず描き、未到達の面は伏せ字にする ── 行数が
+     * 増減すると「あと何面あるのか」が読めず、解放の手応えも消えるため。
+     */
+    _drawStageSelectList(ctx, centerX, topY, max, picked, accent) {
+        const LINE_H = 34;
+        ctx.save();
+        ctx.textBaseline = 'middle';
+        for (let n = 1; n <= STAGE_PALETTES.length; n++) {
+            const y = topY + (n - 1) * LINE_H;
+            const locked = n > max;
+            const on = n === picked;
+
+            if (on) {
+                // 選択中の帯。面の色をそのまま敷くと暗すぎて読めないので、
+                // 黒へ寄せた帯＋左端に面の色の縦棒を立てる
+                ctx.fillStyle = lerpColor(STAGE_PALETTES[n - 1].fill, '#000000', 0.55);
+                ctx.fillRect(centerX - 150, y - 15, 300, 30);
+                ctx.fillStyle = accent;
+                ctx.fillRect(centerX - 150, y - 15, 4, 30);
+            }
+
+            ctx.textAlign = 'right';
+            ctx.font = font('sub', true);
+            ctx.fillStyle = locked ? UI.faint : (on ? accent : UI.dim);
+            ctx.fillText(locked ? '-' : String(n), centerX - 110, y);
+
+            ctx.textAlign = 'left';
+            ctx.font = font('body', true);
+            if (locked) {
+                ctx.fillStyle = UI.faint;
+                ctx.fillText('- - -', centerX - 92, y);
+            } else {
+                ctx.fillStyle = on ? UI.ink : UI.dim;
+                ctx.fillText(stageEnemyLabel(n - 1), centerX - 92, y);
+            }
+        }
+        ctx.restore();
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
     }
@@ -546,7 +631,7 @@ export class ScreenRenderer {
     }
 
     /**
-     * 「PRESS ENTER TO START」の点滅ヒント。デモループの全画面が同じものを
+     * 「PRESS ENTER FOR MENU」の点滅ヒント。デモループの全画面が同じものを
      * 画面下端の中央に出すので、5画面ぶんの写しをここ1箇所にまとめる。
      *
      * save/restore で囲うので、呼び出し側が前後で textAlign を触っていても
@@ -564,7 +649,10 @@ export class ScreenRenderer {
         ctx.font = font('sub', true);
         ctx.textAlign = 'center';
         glow(ctx, UI.info, 'mid');
-        ctx.fillText('PRESS ENTER TO START', canvas.width / 2, canvas.height - 20);
+        // **「START」ではなく「MENU」。** デモ画面の ENTER はゲームを始めず
+        // タイトルのメニューへ戻る（ゲームを始める入口はメニュー1箇所だけ、
+        // という統一）。文言を残すと嘘の案内になる。
+        ctx.fillText('PRESS ENTER FOR MENU', canvas.width / 2, canvas.height - 20);
         ctx.restore();
     }
 
@@ -622,13 +710,13 @@ export class ScreenRenderer {
             ctx.fillStyle = UI.ink;
             glow(ctx, UI.info, 'mid');
             ctx.font = font('sub', true);
-            ctx.fillText('[W] NEXT STAGE', canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('[ENTER] NEXT STAGE', canvas.width / 2, canvas.height / 2 + 60);
             ctx.restore();
 
             this._drawSaveOption(ctx, canvas.width / 2, canvas.height / 2 + 88);
         }
 
-        // [W] NEXT STAGE が +60、[S] SAVE & NEXT が +88(font('sub')=18px)。
+        // [ENTER] NEXT STAGE が +60、[S] SAVE & NEXT が +88(font('sub')=18px)。
         // 通知を +90 のままにすると [S] 行とベースラインが2pxしか離れず重なって
         // 読めなくなった（+88 の行を今回足したことによる退行）。+88 の行の下端
         // (18px)から34px空けた +122 にする。ゲームクリア画面側の呼び出し(+120、

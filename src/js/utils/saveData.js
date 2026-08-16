@@ -35,7 +35,7 @@ function sanitizeSave(raw) {
     const tries = num(raw.tries);
     // 「非空文字列」だけでは、壊れた／改竄された mode が
     // SaveManager.applyContinue() の MODES[next.mode].gameSpeed で
-    // TypeError になる（ScreenRenderer._drawSaveHints() は MODES[s.mode] ?
+    // TypeError になる（ScreenRenderer の _titleMenuLabel() は MODES[s.mode] ?
     // ... : s.mode で守っているため「行は出るのに C を押すと落ちる」という
     // 最悪の見え方になる）。既知のモード名だけを通し、外れたら未知の形として
     // save ごと捨てる。

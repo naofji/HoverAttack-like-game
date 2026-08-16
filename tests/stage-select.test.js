@@ -56,24 +56,35 @@ function storageReached(n) {
     return storage;
 }
 
-test('A / D で選択が動き、1..reached で止まる', async () => {
+// 面は縦に並ぶので W/S。A/D は「横の選択（モード）」に役割を固定したので、
+// ここでは使わない。
+test('W / S で選択が動き、1..reached で止まる', async () => {
     const storage = storageReached(3);
-    let game = makeGame({ storage, stageSelectIndex: 1, input: fakeInput(['KeyA']) });
+    let game = makeGame({ storage, stageSelectIndex: 1, input: fakeInput(['KeyW']) });
     game._updateStageSelect();
-    assert.equal(game.stageSelectIndex, 1, '1 より下がらない');
+    assert.equal(game.stageSelectIndex, 1, '1 より上へ行かない');
 
-    game = makeGame({ storage, stageSelectIndex: 1, input: fakeInput(['KeyD']) });
+    game = makeGame({ storage, stageSelectIndex: 1, input: fakeInput(['KeyS']) });
     game._updateStageSelect();
     assert.equal(game.stageSelectIndex, 2);
 
-    game = makeGame({ storage, stageSelectIndex: 3, input: fakeInput(['KeyD']) });
+    game = makeGame({ storage, stageSelectIndex: 3, input: fakeInput(['KeyS']) });
     game._updateStageSelect();
     assert.equal(game.stageSelectIndex, 3, 'reached を超えない');
 });
 
-test('W でその面から始まる', async () => {
+test('A / D では選択が動かない', async () => {
+    for (const key of ['KeyA', 'KeyD']) {
+        const game = makeGame({ storage: storageReached(3), stageSelectIndex: 2, input: fakeInput([key]) });
+        game._updateStageSelect();
+        assert.equal(game.stageSelectIndex, 2, `${key} で動いてしまう`);
+        assert.equal(game.gameState, 'stage_select', `${key} で始まってしまう`);
+    }
+});
+
+test('ENTER でその面から始まる', async () => {
     const game = makeGame({
-        storage: storageReached(5), stageSelectIndex: 4, input: fakeInput(['KeyW']),
+        storage: storageReached(5), stageSelectIndex: 4, input: fakeInput(['Enter']),
     });
     game._updateStageSelect();
     assert.equal(game.gameState, 'playing');
@@ -94,23 +105,48 @@ test('Escape でタイトルへ戻る', async () => {
 
 test('面セレクトのランはトライ数 1', async () => {
     const game = makeGame({
-        storage: storageReached(2), stageSelectIndex: 2, input: fakeInput(['KeyW']),
+        storage: storageReached(2), stageSelectIndex: 2, input: fakeInput(['Enter']),
     });
     game._updateStageSelect();
     assert.equal(game.runTries, 1);
 });
 
-test('面セレクト画面は到達した数だけ番号を描く', async () => {
+// 一覧は7行を必ず描き、未到達の面は番号も敵の名前も伏せる。
+// 未到達の面とその敵は驚きとして取っておく方針（面別ランキング画面の
+// 出現ゲートも同じ理由）なので、名前が漏れていないことも見る。
+test('面セレクト画面は到達した面だけ番号と敵の名前を出す', async () => {
     const game = makeGame({ storage: storageReached(4), stageSelectIndex: 2 });
     game.canvas = { width: 960, height: 720 };
+    game.mode = 'normal';
     const ctx = makeFakeCtx();
     new ScreenRenderer(game).drawStageSelect(ctx);
-    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => String(c.args[0]));
+
     for (const n of ['1', '2', '3', '4']) assert.ok(texts.includes(n), `${n} が無い: ${texts.join(' | ')}`);
-    assert.ok(!texts.includes('5'), '未到達の面は出さない');
+    assert.ok(!texts.includes('5'), '未到達の面の番号が出ている');
+    for (const name of ['TANK', 'ATTACKER', 'HEAVY', 'DRONE']) {
+        assert.ok(texts.includes(name), `${name} が無い: ${texts.join(' | ')}`);
+    }
+    for (const name of ['RIVAL', 'ARTILLERY', 'CRUISE MISSILE']) {
+        assert.ok(!texts.includes(name), `未到達の敵 ${name} が漏れている`);
+    }
+    assert.equal(texts.filter((t) => t === '- - -').length, 3, '未到達の3面が伏せられていない');
     assert.ok(texts.some((t) => t.includes('STAGE RANKINGS ONLY')));
-    // 選択中の1つだけ枠が付く
-    assert.equal(ctx.calls.filter((c) => c.name === 'strokeRect').length, 1);
+    assert.ok(texts.includes('STAGE 2'), '選んでいる面の見出しが無い');
+});
+
+test('面セレクト画面は選んでいる面のシーンを描く', async () => {
+    // drawStageScene は本物の敵の draw() を呼ぶ。選んだ面で中身が変わることを、
+    // 描画呼び出しの総数が面ごとに違うことで見る（敵の形が違うため）。
+    const counts = [1, 4].map((pick) => {
+        const game = makeGame({ storage: storageReached(4), stageSelectIndex: pick });
+        game.canvas = { width: 960, height: 720 };
+        game.mode = 'normal';
+        const ctx = makeFakeCtx();
+        new ScreenRenderer(game).drawStageSelect(ctx);
+        return ctx.calls.length;
+    });
+    assert.notEqual(counts[0], counts[1], '面を変えてもシーンが変わっていない');
 });
 
 // stageSelectRun が false に戻るタイミングの回帰テスト。
@@ -121,7 +157,7 @@ test('面セレクト画面は到達した数だけ番号を描く', async () =>
 // (= !stageSelectRun && ...) を見るため C を押しても反応しない、という不整合になっていた。
 test('面セレクトのランを終えてタイトルに戻ると stageSelectRun が false に戻る', () => {
     const storage = storageReached(2);
-    const game = makeGame({ storage, stageSelectIndex: 2, input: fakeInput(['KeyW']) });
+    const game = makeGame({ storage, stageSelectIndex: 2, input: fakeInput(['Enter']) });
     game._updateStageSelect(); // 面セレクトのランを開始
     assert.equal(game.stageSelectRun, true, '前提: 面セレクトのランが始まっている');
 

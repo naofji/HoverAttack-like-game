@@ -62,12 +62,14 @@ test('設定が無くても落ちない', () => {
 
 // --- 呼ぶ場所 ---
 
-test('ゲーム開始で呼ぶ', () => {
+test('タイトルのメニューを決定したときに呼ぶ', () => {
   const g = makeGame({
-    _anyKeyOrClick: () => true,
+    titleMenuItems: () => ['start'],
+    selectedTitleItem: () => 'start',
     stateManager: { restart() {} },
   });
-  assert.equal(g._startGameIfRequested(), true);
+  g._activateTitleMenu();
+  assert.equal(g.gameState, 'playing', 'そもそも始まっていない');
   assert.equal(g.restored, 1);
 });
 
@@ -77,8 +79,9 @@ test('ミッションクリアから次面へ進むときに呼ぶ', () => {
     _updateTimeBonusSlot: () => false,
     stateManager: { nextMission() {} },
     input: {
-      isKeyPressed: (c) => c === 'KeyW',
+      isKeyPressed: (c) => c === 'Enter',
       isLeftClickPressed: () => false,
+      isRightClickPressed: () => false,
       getTypedChars: () => [],
     },
   });
@@ -95,6 +98,7 @@ test('ミッションクリアで入力が無ければ呼ばない', () => {
     input: {
       isKeyPressed: () => false,
       isLeftClickPressed: () => false,
+      isRightClickPressed: () => false,
       getTypedChars: () => [],
     },
   });

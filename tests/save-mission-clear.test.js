@@ -61,12 +61,28 @@ test('スコアが足りなければ S は無反応（次の面へも進まな�
     assert.equal(game.gameState, 'mission_clear');
 });
 
-test('W では従来どおりセーブせずに進む', async () => {
-    const game = makeGame({ input: fakeInput(['KeyW']) });
+test('ENTER でセーブせずに進む', async () => {
+    const game = makeGame({ input: fakeInput(['Enter']) });
     game._updateMissionClear();
     assert.equal(game.score, 34500);
     assert.equal(game.saveManager.save, null);
     assert.equal(game.nextMissionCalls, 1);
+});
+
+test('W も別名として残す（手が覚えているため）', async () => {
+    const game = makeGame({ input: fakeInput(['KeyW']) });
+    game._updateMissionClear();
+    assert.equal(game.score, 34500);
+    assert.equal(game.nextMissionCalls, 1);
+});
+
+test('関係のない文字キーでは進まない', async () => {
+    // 以前は getTypedChars().length > 0 で「任意の文字キー」で進んでいた。
+    // 決定を ENTER に統一したので、暴発しないことを縛る
+    const game = makeGame({ input: fakeInput([], ['x']) });
+    game._updateMissionClear();
+    assert.equal(game.nextMissionCalls, 0);
+    assert.equal(game.gameState, 'mission_clear');
 });
 
 test('S の入力が「任意のキー」として二重に効かない', async () => {
@@ -129,7 +145,7 @@ test('面クリア画面: タイムボーナスが付いた面でも加算後に
     new ScreenRenderer(game).drawMissionClear(ctx);
     const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
     assert.ok(texts.some((t) => t.includes('[S] SAVE & NEXT')), texts.join(' | '));
-    assert.ok(texts.some((t) => t.includes('[W] NEXT STAGE')), texts.join(' | '));
+    assert.ok(texts.some((t) => t.includes('[ENTER] NEXT STAGE')), texts.join(' | '));
     // ボーナスの表示も消えていないこと（案内と排他にしない、が直しの要点）
     assert.ok(texts.some((t) => t.includes('TIME BONUS')), texts.join(' | '));
 });
@@ -149,7 +165,7 @@ test('面クリア画面: 加算アニメ中は操作の案内を出さない', 
     new ScreenRenderer(game).drawMissionClear(ctx);
     const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
     assert.ok(!texts.some((t) => t.includes('[S] SAVE & NEXT')), texts.join(' | '));
-    assert.ok(!texts.some((t) => t.includes('[W] NEXT STAGE')), texts.join(' | '));
+    assert.ok(!texts.some((t) => t.includes('[ENTER] NEXT STAGE')), texts.join(' | '));
     assert.ok(texts.some((t) => t.includes('TIME BONUS')), texts.join(' | '));
 });
 
@@ -166,7 +182,7 @@ test('面クリア画面はセーブ行を出し、払えないときは理由�
         const ctx = makeFakeCtx();
         new ScreenRenderer(game).drawMissionClear(ctx);
         const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
-        assert.ok(texts.some((t) => t.includes('[W] NEXT STAGE')));
+        assert.ok(texts.some((t) => t.includes('[ENTER] NEXT STAGE')));
         assert.ok(texts.some((t) => t.includes(expected)), `${score}: ${texts.join(' | ')}`);
     }
 });

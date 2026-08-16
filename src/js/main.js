@@ -431,14 +431,10 @@ export const Game = {
         this.stateTimer = 0;
         // 面セレクトのランはここで終わったことにする。stageSelectRun を true に
         // するのは _startStageSelectRun() だけで、以前は false に戻すのが
-        // _startGameIfRequested() だけだった。そのため面セレクトのランを
+        // 新しい通しランを始める経路だけだった。そのため面セレクトのランを
         // Escape 等で切り上げてデモ／タイトルへ戻っても true のまま残り、
-        // _drawSaveHints() は sm.save だけを見て「[C] CONTINUE」の行を出すのに、
-        // _updateTitle の C 分岐は canContinueHere()（!stageSelectRun 込み）を見る
-        // ため C が反応しない、という「案内はあるのに押せない」不整合になっていた。
-        // _drawSaveHints 側を canContinueHere() に揃える直し方は取らない――
-        // それだと症状が「押せない」から「行が消える」に変わるだけで、セーブが
-        // あるのに再開できない状態そのものは解消しないため。
+        // タイトルのメニューから CONTINUE が消えたままになる
+        // （titleMenuItems() が canContinueHere() を見るため）。
         this.stageSelectRun = false;
         // ミッションを抜けるので効果音を落とす。ホバー音・母艦のエンジン・
         // 回復ハムは止める指示があるまで鳴り続ける作りで、ここを抜けると
@@ -606,28 +602,48 @@ export const Game = {
     },
 
     /**
-     * デモループの各画面から「ゲームを始める入力」を拾う。
-     * タイトルもランキングも、どの画面から始めても手順は同じなので
-     * ここ1箇所にまとめる（以前は6画面に同じ4行が写されていた）。
-     * @returns {boolean} 開始したら true
+     * デモ画面（遊び方・ランキング4種）から ENTER／クリックでタイトルへ戻す。
+     *
+     * **以前はここが「どの画面からでも即 1面スタート」だった。** コンティニューと
+     * 面セレクトを足したことで、同じ ENTER が画面によって「開始」「決定」と
+     * 意味を変えるようになり分かりにくくなった（ユーザーの判断）。**ゲームを
+     * 始める入口はタイトルのメニュー1箇所だけ**にして、ENTER はどこでも
+     * 「決定」に統一した。デモ画面での決定は「メニューへ戻る」。
+     * @returns {boolean} 戻ったら true
      */
-    _startGameIfRequested() {
+    _returnToTitleIfRequested() {
         if (!this._anyKeyOrClick()) return false;
-        // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
-        // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
-        // 場合しか通らないので、transient activation が生きている
-        this._restoreFullscreen();
-        // 新しい通しラン。**セーブは消さない** — 誤って任意キーを押しても
-        // 続きを失わないように、次にセーブが成立するまで残す
-        this.runTries = 1;
-        this.stageSelectRun = false;
-        this.stateManager.restart();
-        this.gameState = 'playing';
-        audioManager.startBGM(this.missionsCompleted);
+        this._enterDemoState('title');
         return true;
     },
 
+    /**
+     * タイトルのメニューに今並ぶ項目。**使えないものは並べない** —
+     * 出ている＝選べる、を保つため（グレーで出すと「なぜ選べないのか」を
+     * 別途説明する羽目になる）。
+     *
+     * `continue` の条件は `canContinueHere()` と同一にしてある。片方だけ
+     * 変えると「行は出ているのに決定しても何も起きない」が生まれる。
+     */
+    titleMenuItems() {
+        const items = ['start'];
+        if (this.canContinueHere()) items.push('continue');
+        if (this.saveManager && this.saveManager.reached >= 1) items.push('stageSelect');
+        return items;
+    },
+
+    /**
+     * 今選ばれている項目。**毎回 items から引き直す** — 週替わりでセーブが
+     * 消えるなど、項目が減って titleMenuIndex が範囲外に残ることがあるため。
+     */
+    selectedTitleItem() {
+        const items = this.titleMenuItems();
+        return items[Math.min(this.titleMenuIndex, items.length - 1)];
+    },
+
     _updateTitle(deltaTime) {
+        // A/D は横の選択（モード）、W/S は縦の選択（メニュー）、ENTER が決定。
+        // 面セレクト画面も同じ規則で動く
         if (this.input.isKeyPressed('KeyA')) {
             this.mode = cycleMode(this.mode, -1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
@@ -638,37 +654,66 @@ export const Game = {
             this.gameSpeed = MODES[this.mode].gameSpeed;
             return;
         }
-        // セーブがあるときだけ C を見る。_anyKeyOrClick() は Enter と
-        // クリックしか見ないので、セーブが無ければ C は何もしないキーのまま
-        if (this.canContinueHere() && this.input.isKeyPressed('KeyC')) {
-            this._restoreFullscreen();
-            this.continueFromSave();
+
+        const items = this.titleMenuItems();
+        // 端で止める（巡回させない）。項目が3つまでしかなく、巡回すると
+        // 「一番下から下を押したら START に戻った」が事故に見える
+        this.titleMenuIndex = Math.min(this.titleMenuIndex, items.length - 1);
+        if (this.input.isKeyPressed('KeyW')) {
+            this.titleMenuIndex = Math.max(0, this.titleMenuIndex - 1);
             return;
         }
-        // reached が 1 以上、つまり少なくとも1面クリアしていないと選ぶ面が無い。
-        // saveManager の有無も見るのは canContinueHere() に倣った ── 一部の
-        // デモ遷移テストは saveManager 無しで _updateTitle を呼ぶため
-        if (this.saveManager && this.saveManager.reached >= 1 && this.input.isKeyPressed('KeyS')) {
-            this.stageSelectIndex = 1;
-            this.gameState = 'stage_select';
-            this.stateTimer = 0;
+        if (this.input.isKeyPressed('KeyS')) {
+            this.titleMenuIndex = Math.min(items.length - 1, this.titleMenuIndex + 1);
             return;
         }
         if (this._handleDemoJump()) return;
+
+        if (this._anyKeyOrClick()) {
+            this._activateTitleMenu();
+            return;
+        }
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 8000) {
             this._enterDemoState('how_to_play');
             this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
-        } else {
-            this._startGameIfRequested();
+        }
+    },
+
+    /** メニューの決定。全画面へ入れるのはここが入力直後にしか通らないため。 */
+    _activateTitleMenu() {
+        // 開始と同時に全画面へ入る。M キーを押さなくても最大化してほしい、という
+        // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
+        // 場合しか通らないので、transient activation が生きている
+        this._restoreFullscreen();
+        switch (this.selectedTitleItem()) {
+            case 'continue':
+                this.continueFromSave();
+                return;
+            case 'stageSelect':
+                this.stageSelectIndex = 1;
+                this.gameState = 'stage_select';
+                this.stateTimer = 0;
+                return;
+            default:
+                // 新しい通しラン。**セーブは消さない** — 誤って決定しても
+                // 続きを失わないように、次にセーブが成立するまで残す
+                this.runTries = 1;
+                this.stageSelectRun = false;
+                this.stateManager.restart();
+                this.gameState = 'playing';
+                audioManager.startBGM(this.missionsCompleted);
         }
     },
 
     /**
      * 面セレクト。**タイムアタック用**なので、選んだ面だけを単独で遊ぶ。
-     * キーはタイトル（A/D で選ぶ）と面クリア画面（W で進む）に揃えてある
-     * ——新しい決定キーを増やさないため。
+     *
+     * 面は縦に並ぶので W/S で選び、ENTER で決定する——タイトルのメニューと
+     * 同じ手つき。以前は A/D で選んで W で始める形だったが、A/D は
+     * 「横の選択（モード）」、W/S は「縦の選択」、ENTER は「決定」と
+     * 役割を固定した方が覚えることが減る（ユーザーの判断）。
      *
      * Escape は本番では main.js の共通ハンドラ（'title'/'playing'/'settings' 以外は
      * Escape でタイトルへ戻す仕組み）が先に拾うので、この分岐に実際は届かない。
@@ -680,15 +725,15 @@ export const Game = {
             this._enterDemoState('title');
             return;
         }
-        if (this.input.isKeyPressed('KeyA')) {
+        if (this.input.isKeyPressed('KeyW')) {
             this.stageSelectIndex = Math.max(1, this.stageSelectIndex - 1);
             return;
         }
-        if (this.input.isKeyPressed('KeyD')) {
+        if (this.input.isKeyPressed('KeyS')) {
             this.stageSelectIndex = Math.min(max, this.stageSelectIndex + 1);
             return;
         }
-        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed()) {
+        if (this._anyKeyOrClick()) {
             this._startStageSelectRun(this.stageSelectIndex);
         }
     },
@@ -718,7 +763,7 @@ export const Game = {
         if (this.stateTimer > 20000) { // 20 seconds total (10s per page)
             this._enterDemoState('local_ranking_display');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -731,7 +776,7 @@ export const Game = {
             const hasOnline = this.onlineStatus === 'ok' && this.onlineData;
             this._enterDemoState(hasOnline ? 'global_ranking_display' : 'title');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -745,7 +790,7 @@ export const Game = {
             const hasStages = this.maxStageReached() >= 1;
             this._enterDemoState(hasStages ? 'stage_ranking_display' : 'wall_of_fame_display');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -786,7 +831,7 @@ export const Game = {
                 return;
             }
         }
-        this._startGameIfRequested();
+        this._returnToTitleIfRequested();
     },
 
     _updateWallOfFameDisplay(deltaTime) {
@@ -796,7 +841,7 @@ export const Game = {
         if (this.stateTimer > 10000) {
             this._enterDemoState('title');
         } else {
-            this._startGameIfRequested();
+            this._returnToTitleIfRequested();
         }
     },
 
@@ -933,8 +978,7 @@ export const Game = {
     _updateMissionClear() {
         if (this._updateTimeBonusSlot(false)) return;
 
-        // S だけ先に見る。下の「任意のキーで次へ」に混ぜると、getTypedChars に
-        // 's' が乗るぶんセーブと前進が二重に走る。
+        // S だけ先に見る。下の決定の判定に混ぜると、セーブと前進が二重に走る。
         // 払えないときは**無反応**にする（連打で 10000 点を失う事故を防ぐため、
         // 確認ダイアログではなく専用キーにしてある）。
         if (this.input.isKeyPressed('KeyS')) {
@@ -944,7 +988,10 @@ export const Game = {
             return;
         }
 
-        if (this.input.isKeyPressed('KeyW') || this.input.isLeftClickPressed() || this.input.getTypedChars().length > 0) {
+        // 決定は ENTER（＋クリック）。**以前は「任意の文字キーでも進む」だった**が、
+        // タイトルと面セレクトを ENTER 決定に統一したのに合わせて揃えた。
+        // W は手が覚えているので別名として残す。
+        if (this._anyKeyOrClick() || this.input.isKeyPressed('KeyW')) {
             this._advanceToNextMission();
         }
     },

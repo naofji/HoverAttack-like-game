@@ -40,7 +40,15 @@ function countScanlines(draw) {
 }
 
 function makeRenderer() {
-    return new ScreenRenderer({ canvas: { width: W, height: H }, mode: 'normal' });
+    return new ScreenRenderer({
+        canvas: { width: W, height: H },
+        mode: 'normal',
+        // タイトルはメニューを描くので、その判断元も要る。
+        // 描画側で条件を書き直さない（Game 側の1箇所に閉じる）方針なので、
+        // 偽 game でも同じ形の答えを返させる
+        titleMenuItems: () => ['start'],
+        selectedTitleItem: () => 'start',
+    });
 }
 
 const FAME = [{ weekId: '2026-W32', entries: [{ name: 'AAA', score: 100, country: 'JP' }] }];

@@ -32,6 +32,27 @@ const stubGame = {
 // Which enemy is signature / first-introduced per stage (index 0..6 = stage 1..7).
 const STAGE_ENEMY_KEY = ['tank', 'attacker', 'heavy', 'drone', 'rival', 'artillery', 'cruise'];
 
+/**
+ * 面セレクトの一覧に出す敵の名前。**この表と STAGE_ENEMY_KEY を同じファイルに
+ * 置いているのは、「何面には誰が出るか」の対応を1箇所に閉じるため。** 画面側に
+ * 名前だけ持たせると、シーンに描かれる敵と一覧の名前が別々に育って食い違う。
+ * @param {number} stageIndex 0..6
+ * @returns {string} 表示名（未定義の面は空文字）
+ */
+export function stageEnemyLabel(stageIndex) {
+    return ENEMY_LABELS[STAGE_ENEMY_KEY[stageIndex]] || '';
+}
+
+const ENEMY_LABELS = {
+    tank: 'TANK',
+    attacker: 'ATTACKER',
+    heavy: 'HEAVY',
+    drone: 'DRONE',
+    rival: 'RIVAL',
+    artillery: 'ARTILLERY',
+    cruise: 'CRUISE MISSILE',
+};
+
 // What that enemy fires back at the player (matches in-game behaviour):
 //   tank/drone -> bullets, attackers -> missiles, artillery -> homing missile,
 //   cruise missile -> fires nothing; the missile itself flies right -> left.
