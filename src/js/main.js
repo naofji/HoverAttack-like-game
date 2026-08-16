@@ -61,6 +61,7 @@ import { GameStateManager } from './systems/GameStateManager.js';
 import { DeathHold } from './systems/DeathHold.js';
 import { HighScoreManager } from './systems/HighScoreManager.js';
 import { StageRankingManager, pickStageRanking } from './systems/StageRankingManager.js';
+import { SaveManager } from './systems/SaveManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { REPAIR_KIT_HEAL } from './entities/RepairKit.js';
@@ -170,6 +171,8 @@ export const Game = {
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
     missionsCompleted: 0,
+    runTries: 1,          // 今のランがセーブ地点から何回目か。通常スタートは 1
+    stageSelectRun: false, // 面セレクトから始めたランか（週スコアに出さない）
     mode: 'normal',       // 'normal' | 'newtype'
     gameSpeed: MODES.normal.gameSpeed,
     simAccumulator: 0,
@@ -240,6 +243,9 @@ export const Game = {
         this.screenRenderer = new ScreenRenderer(this);
         this.highScoreManager = new HighScoreManager(this.week.weekId);
         this.stageRankingManager = new StageRankingManager(this.week.weekId);
+        // 途中セーブと面セレクトの解放。週IDで無効化されるので、
+        // highScoreManager と同じくここ（週が確定した直後）で作る。
+        this.saveManager = new SaveManager(this);
         this.onlineLeaderboard = new OnlineLeaderboard(LEADERBOARD_URL);
         this.onlineData = null;                       // { weekId, ranking, fame } when loaded
         this.onlineStatus = LEADERBOARD_URL ? 'loading' : 'offline';
@@ -681,6 +687,10 @@ export const Game = {
         } catch (e) {
             /* ignore storage failures */
         }
+        // 面セレクトの解放は**週ごと**に消える。上の旧キーは週非依存のままにする
+        // ——あちらは面別ランキング表示画面の出現ゲート(_availableDemoStates)に
+        // 使われていて、週別にすると週明けにその画面が出なくなる。
+        if (this.saveManager) this.saveManager.recordReached(stage);
     },
 
     _updateStageRankingDisplay(deltaTime) {
