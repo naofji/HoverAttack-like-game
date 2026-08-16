@@ -657,6 +657,19 @@ export const EMERGENCY_WILD_FIRE_SPREAD = 20 * Math.PI / 180;  // ±20度
 // 逆に実機で弾が多すぎる／重い場合は、まずここを上げて間引く
 export const EMERGENCY_WILD_FIRE_INTERVAL_MULT = 1.0;
 
+// ドローンは飛ぶので「通路が無くて基地に辿り着けない」ことは起きない。代わりに
+// **総攻撃中はグレネードを落としやすくする**（ユーザーの提案）。
+// グレネードは map.destroyArea() で面（半径 GRENADE_BLAST_RADIUS = 2タイル）を
+// 吹き飛ばすので、1タイルずつしか削れない単発ミサイルより壁を開ける効率が
+// 桁違いに高い。飛んで地上ユニットが行けない場所の上空まで出られる点でも、
+// 掘る役に向いている。
+//
+// 0.35 の根拠: ドローンは1回の攻撃で ENEMY_DRONE_BURST_COUNT(5) 発撃ち、その
+// 1発ごとにこの抽選を行う。期待値は 0.5個 → 1.75個（約3.5倍）になり、
+// 「落としやすくなった」と体感できる。1.0 にすると弾を一切撃たなくなって
+// ドローンの性格が変わってしまうので上げすぎない
+export const EMERGENCY_DRONE_GRENADE_CHANCE = 0.35;
+
 // --- Per-stage block palettes (stage 1..7) ---
 // Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.
 export const STAGE_PALETTES = [

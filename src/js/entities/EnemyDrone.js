@@ -8,7 +8,7 @@ import {
     ENEMY_DRONE_BURST_COUNT, ENEMY_DRONE_BURST_INTERVAL,
     ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT,
     ENEMY_DRONE_HOVER_DIST_Y, ENEMY_DRONE_HOVER_DIST_X,
-    ENEMY_DRONE_GRENADE_CHANCE,
+    ENEMY_DRONE_GRENADE_CHANCE, EMERGENCY_DRONE_GRENADE_CHANCE,
     ENEMY_DRONE_KAMIKAZE_CHANCE, ENEMY_DRONE_KAMIKAZE_TRIGGER_RANGE,
     ENEMY_DRONE_KAMIKAZE_SPEED, ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER,
     ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER,
@@ -336,7 +336,13 @@ export class EnemyDrone {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
 
-        if (Math.random() < ENEMY_DRONE_GRENADE_CHANCE) {
+        // 総攻撃中はグレネードを落としやすくする。ドローンは飛ぶので地上ユニットの
+        // ような足止めは起きないが、**グレネードは面で地形を吹き飛ばす**ので、
+        // 上空から壁に穴を開ける役として総攻撃に加わる（定数側のコメント参照）
+        const grenadeChance = this.emergencyDefense
+            ? EMERGENCY_DRONE_GRENADE_CHANCE
+            : ENEMY_DRONE_GRENADE_CHANCE;
+        if (Math.random() < grenadeChance) {
             // Drop grenade
             const grenade = new Grenade(this.game, cx, cy, Math.PI / 2);
             audioManager.playWeapon('grenade', cx, cy);
