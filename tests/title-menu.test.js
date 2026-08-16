@@ -136,6 +136,36 @@ test('W/S で上下に動き、両端で止まる', () => {
     assert.equal(g.titleMenuIndex, 1);
 });
 
+// カーソルキーでも同じことができる。設定画面が元から W/S と ↑/↓ の両方を
+// 受けていた（_updateSettings の nav ヘルパー）ので、タイトルだけ WASD 限定なのは
+// 揃っていなかった。←/→ は足さない ── タイトルではデモ画面送り
+// （_handleDemoJump）が使っていて衝突する。
+test('↑/↓ でも上下に動く', () => {
+    const storage = storageReached(3, storageWithSave());
+
+    let g = makeGame({ storage, input: fakeInput(['ArrowDown']) });
+    g._updateTitle(16);
+    assert.equal(g.titleMenuIndex, 1);
+
+    g = makeGame({ storage, titleMenuIndex: 2, input: fakeInput(['ArrowUp']) });
+    g._updateTitle(16);
+    assert.equal(g.titleMenuIndex, 1);
+});
+
+test('←/→ はデモ画面送りのままで、メニューを動かさない', () => {
+    const storage = storageReached(3, storageWithSave());
+    for (const key of ['ArrowLeft', 'ArrowRight']) {
+        let jumped = false;
+        const g = makeGame({
+            storage, titleMenuIndex: 1, input: fakeInput([key]),
+            _handleDemoJump: () => { jumped = true; return true; },
+        });
+        g._updateTitle(16);
+        assert.equal(g.titleMenuIndex, 1, `${key} でメニューが動いた`);
+        assert.ok(jumped, `${key} がデモ画面送りに渡っていない`);
+    }
+});
+
 test('項目が減っても選択位置が範囲外に残らない', () => {
     // セーブがある状態で一番下を選び、セーブが消えた（週替わり）状況を作る
     const g = makeGame({ storage: storageReached(3, storageWithSave()), titleMenuIndex: 2 });

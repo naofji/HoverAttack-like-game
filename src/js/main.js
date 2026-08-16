@@ -492,12 +492,10 @@ export const Game = {
     _updateSettings() {
         const items = visibleSettingsItems(this.settingsReturnTo === 'playing');
 
-        // WASD とカーソルキーを等価に受ける。ゲーム中の移動は既に A/D と ←/→ の
-        // どちらでも動く（Player._updateHorizontal / Carrier）ので、設定画面だけ
-        // WASD 限定なのが揃っていなかった。
-        // ←/→ はデモ画面送り（_handleDemoJump）でも使うが、設定画面は
+        // WASD とカーソルキーを等価に受ける（_nav）。設定画面は ←/→ も使う ──
+        // デモ画面送り（_handleDemoJump）と同じキーだが、設定画面は
         // _updateGameState() の別の分岐で、そちらを通らないので衝突しない
-        const nav = (key, arrow) => this.input.isKeyPressed(key) || this.input.isKeyPressed(arrow);
+        const nav = (key, arrow) => this._nav(key, arrow);
 
         // 操作一覧を読んでいる間は裏の設定を動かさない。カーソルや値が動くと、
         // 閉じたときに知らぬ間に設定が変わっていることになる。
@@ -642,6 +640,17 @@ export const Game = {
         return items[Math.min(this.titleMenuIndex, items.length - 1)];
     },
 
+    /**
+     * WASD とカーソルキーを等価に受ける。ゲーム中の移動が A/D と ←/→ の
+     * どちらでも動くので、メニュー類だけ WASD 限定なのは揃っていなかった。
+     *
+     * **タイトルでは ←/→ を渡さないこと。** あちらはデモ画面送り
+     * （_handleDemoJump）が使っていて衝突する。縦の ↑/↓ だけが空いている。
+     */
+    _nav(key, arrow) {
+        return this.input.isKeyPressed(key) || this.input.isKeyPressed(arrow);
+    },
+
     _updateTitle(deltaTime) {
         // A/D は横の選択（モード）、W/S は縦の選択（メニュー）、ENTER が決定。
         // 面セレクト画面も同じ規則で動く
@@ -660,11 +669,11 @@ export const Game = {
         // 端で止める（巡回させない）。項目が3つまでしかなく、巡回すると
         // 「一番下から下を押したら START に戻った」が事故に見える
         this.titleMenuIndex = Math.min(this.titleMenuIndex, items.length - 1);
-        if (this.input.isKeyPressed('KeyW')) {
+        if (this._nav('KeyW', 'ArrowUp')) {
             this.titleMenuIndex = Math.max(0, this.titleMenuIndex - 1);
             return;
         }
-        if (this.input.isKeyPressed('KeyS')) {
+        if (this._nav('KeyS', 'ArrowDown')) {
             this.titleMenuIndex = Math.min(items.length - 1, this.titleMenuIndex + 1);
             return;
         }
@@ -726,11 +735,11 @@ export const Game = {
             this._enterDemoState('title');
             return;
         }
-        if (this.input.isKeyPressed('KeyW')) {
+        if (this._nav('KeyW', 'ArrowUp')) {
             this.stageSelectIndex = Math.max(1, this.stageSelectIndex - 1);
             return;
         }
-        if (this.input.isKeyPressed('KeyS')) {
+        if (this._nav('KeyS', 'ArrowDown')) {
             this.stageSelectIndex = Math.min(max, this.stageSelectIndex + 1);
             return;
         }

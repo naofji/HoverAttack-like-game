@@ -189,3 +189,16 @@ test('continueFromSave() は stageSelectRun を false に戻す', () => {
 
     assert.equal(game.stageSelectRun, false);
 });
+
+// タイトルのメニューと同じく、カーソルキーでも選べる。
+test('面セレクトも ↑/↓ で選べる', async () => {
+    const storage = storageReached(3);
+
+    let game = makeGame({ storage, stageSelectIndex: 1, input: fakeInput(['ArrowDown']) });
+    game._updateStageSelect();
+    assert.equal(game.stageSelectIndex, 2);
+
+    game = makeGame({ storage, stageSelectIndex: 3, input: fakeInput(['ArrowUp']) });
+    game._updateStageSelect();
+    assert.equal(game.stageSelectIndex, 2);
+});

@@ -141,7 +141,7 @@ export class ScreenRenderer {
         ctx.textAlign = 'center';
         ctx.font = font('small', true);
         ctx.fillStyle = UI.dim;
-        ctx.fillText('[W][S] SELECT    [A][D] MODE    [ENTER] DECIDE', canvas.width / 2, canvas.height - 20);
+        ctx.fillText('[W][S] / [\u2191][\u2193] SELECT    [A][D] MODE    [ENTER] DECIDE', canvas.width / 2, canvas.height - 20);
         ctx.restore();
         ctx.textAlign = 'left';
     }
@@ -211,7 +211,7 @@ export class ScreenRenderer {
         ctx.textAlign = 'center';
         ctx.font = font('small', true);
         ctx.fillStyle = UI.dim;
-        ctx.fillText('[W][S] SELECT    [ENTER] START    [ESC] BACK', W / 2, H - 20);
+        ctx.fillText('[W][S] / [\u2191][\u2193] SELECT    [ENTER] START    [ESC] BACK', W / 2, H - 20);
         ctx.restore();
 
         drawScanlines(ctx, W, H);
