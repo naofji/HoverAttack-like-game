@@ -82,10 +82,23 @@ export class ScreenRenderer {
     _drawTitleMenu(ctx, canvas) {
         const items = this.game.titleMenuItems();
         const selected = this.game.selectedTitleItem();
+        const cx = canvas.width / 2;
         const top = canvas.height - 230;
 
         ctx.save();
         ctx.textAlign = 'center';
+        ctx.font = font('sub', true);
+
+        // 目印の位置は**一番長い項目を実測して**決める。
+        // 当初は中央から ±190px の固定値だったが、CONTINUE 行は
+        // 「CONTINUE - STAGE 7 / NEWTYPE  (TRY 12)」で 38 文字ほどになり、
+        // 18px 等幅だと片側 205px を超えて目印に文字がかぶった（実機の指摘）。
+        // **行ごとの幅に合わせない**のは、上下に動かすたび目印が寄ったり離れたり
+        // して落ち着かないため。一番長い項目に合わせて固定する。
+        const widest = Math.max(...items.map((k) => ctx.measureText(this._titleMenuLabel(k)).width));
+        // 24px は目印と文字の間の余白（font('sub') の1文字幅 ≒ 11px の約2文字分）
+        const markerGap = widest / 2 + 24;
+
         items.forEach((key, i) => {
             const on = key === selected;
             const y = top + i * 28;
@@ -97,12 +110,11 @@ export class ScreenRenderer {
                 ctx.fillStyle = UI.dim;
                 ctx.shadowBlur = 0;
             }
-            ctx.fillText(this._titleMenuLabel(key), canvas.width / 2, y);
+            ctx.fillText(this._titleMenuLabel(key), cx, y);
             if (on) {
-                // 選択中の目印。左右に置くのは、項目の文字数がまちまちで
-                // 下線だと長さが揃わず落ち着かないため
-                ctx.fillText('\u25B6', canvas.width / 2 - 190, y);
-                ctx.fillText('\u25C0', canvas.width / 2 + 190, y);
+                // 左右に置くのは、項目の文字数がまちまちで下線だと長さが揃わないため
+                ctx.fillText('\u25B6', cx - markerGap, y);
+                ctx.fillText('\u25C0', cx + markerGap, y);
             }
         });
         ctx.restore();

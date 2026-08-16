@@ -252,3 +252,51 @@ test('メニューはモードセレクタより上に描かれる', () => {
         assert.ok(y < g.canvas.height - 120, `y=${y} がモードセレクタに近すぎる`);
     }
 });
+
+// 実機で「CONTINUE の文字数が多すぎてカーソルよりはみ出る」と報告されて発覚。
+// ▶ ◀ を中央から ±190px の固定値で置いていたが、CONTINUE 行は
+// 「CONTINUE - STAGE 7 / NEWTYPE  (TRY 12)」で 38 文字ほどになり、
+// font('sub')=18px 等幅（幅係数 0.6）だと片側 205px を超える。
+test('選択中の目印は一番長い項目より外側に置かれる', () => {
+    const g = makeGame({ storage: storageReached(3, storageWithSave()) });
+    // 最長になりうる状態にする（7面 / NEWTYPE / 2桁のトライ数）
+    g.saveManager.progress.save = {
+        ...g.saveManager.save, mode: 'newtype', missionsCompleted: 6, tries: 12,
+    };
+    g.canvas = { width: 960, height: 720 };
+    const ctx = makeFakeCtx();
+    const r = new ScreenRenderer(g);
+    r._drawTitleMenu(ctx, g.canvas);
+
+    const texts = ctx.calls.filter((c) => c.name === 'fillText');
+    const markers = texts.filter((c) => c.args[0] === '▶' || c.args[0] === '◀');
+    assert.equal(markers.length, 2, '目印は左右で2つ');
+
+    const cx = g.canvas.width / 2;
+    // 一番長いラベルの半幅（描画は中央揃えなので、右端は cx + halfWidth）
+    ctx.font = '18px monospace';
+    const halfWidest = Math.max(...g.titleMenuItems()
+        .map((k) => ctx.measureText(r._titleMenuLabel(k)).width)) / 2;
+
+    const right = markers.find((c) => c.args[0] === '◀').args[1];
+    const left = markers.find((c) => c.args[0] === '▶').args[1];
+    assert.ok(right - cx > halfWidest, `◀ が文字に重なる: gap=${right - cx} 半幅=${halfWidest}`);
+    assert.ok(cx - left > halfWidest, `▶ が文字に重なる: gap=${cx - left} 半幅=${halfWidest}`);
+    // 厳密一致にすると cx - (cx - gap) の丸めで 1e-13 ずれる
+    assert.ok(Math.abs((right - cx) - (cx - left)) < 0.001, '左右の間隔が揃っていない');
+});
+
+test('目印の位置は選んでいる行が変わっても動かない', () => {
+    // 行ごとに文字幅へ合わせると、上下に動かすたび目印が寄ったり離れたりして
+    // 落ち着かない。一番長い項目に合わせて固定する
+    const storage = storageReached(3, storageWithSave());
+    const xs = [0, 1, 2].map((i) => {
+        const g = makeGame({ storage, titleMenuIndex: i });
+        g.canvas = { width: 960, height: 720 };
+        const ctx = makeFakeCtx();
+        new ScreenRenderer(g)._drawTitleMenu(ctx, g.canvas);
+        return ctx.calls.find((c) => c.name === 'fillText' && c.args[0] === '▶').args[1];
+    });
+    assert.equal(xs[0], xs[1]);
+    assert.equal(xs[1], xs[2]);
+});
