@@ -574,9 +574,30 @@ export class ScreenRenderer {
         ctx.font = font('sub');
         ctx.fillText(`FINAL SCORE: ${this.game.score}`, canvas.width / 2, canvas.height / 2 + 20);
 
-        ctx.fillStyle = '#888888';
-        ctx.font = font('small');
-        ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 60);
+        if (this.game.canContinueHere && this.game.canContinueHere()) {
+            const save = this.game.saveManager.save;
+            ctx.save();
+            ctx.fillStyle = UI.gold;
+            glow(ctx, UI.gold, 'mid');
+            ctx.font = font('sub', true);
+            ctx.fillText(
+                `CONTINUE FROM STAGE ${save.missionsCompleted + 1}?   [C] YES`,
+                canvas.width / 2, canvas.height / 2 + 60
+            );
+            ctx.restore();
+
+            ctx.fillStyle = UI.ink;
+            ctx.font = font('head', true);
+            ctx.fillText(String(this.game.continueSecondsLeft()), canvas.width / 2, canvas.height / 2 + 96);
+
+            ctx.fillStyle = '#888888';
+            ctx.font = font('small');
+            ctx.fillText(`TRY ${save.tries}`, canvas.width / 2, canvas.height / 2 + 122);
+        } else {
+            ctx.fillStyle = '#888888';
+            ctx.font = font('small');
+            ctx.fillText('PLEASE WAIT...', canvas.width / 2, canvas.height / 2 + 60);
+        }
         ctx.textAlign = 'left';
     }
 

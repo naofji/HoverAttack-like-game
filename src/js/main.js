@@ -32,6 +32,7 @@ import {
     VOLUME_STEP_COARSE, VOLUME_STEP_FINE,
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
     VIEW_CULL_MARGIN,
+    CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS, SAVE_COST,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, saveSettings, stepSetting } from './utils/settings.js';
@@ -798,7 +799,43 @@ export const Game = {
 
     _updateGameOver(deltaTime) {
         this.stateTimer += deltaTime;
-        if (this.stateTimer > 4000) this._tryGoToRanking();
+
+        if (this.canContinueHere()) {
+            if (this.input.isKeyPressed('KeyC')) {
+                this.continueFromSave();
+                return;
+            }
+            // カウントダウンを待ってから従来の流れへ。放置すればランキング登録に
+            // 進むので、見逃しても手順が止まらない（既存の自動遷移の性格を保つ）
+            if (this.stateTimer > CONTINUE_COUNTDOWN_MS) this._tryGoToRanking();
+            return;
+        }
+
+        if (this.stateTimer > GAMEOVER_WAIT_MS) this._tryGoToRanking();
+    },
+
+    /**
+     * ここでコンティニューを出せるか。
+     * **面セレクトのランでは出さない** — セーブは通しラン専用で、単発の
+     * タイムアタックから通しランの続きへ飛べてしまうのは筋が通らない。
+     */
+    canContinueHere() {
+        return !this.stageSelectRun && !!(this.saveManager && this.saveManager.save);
+    },
+
+    /** CONTINUE? の残り秒。描画用（0 未満にはしない）。 */
+    continueSecondsLeft() {
+        return Math.max(0, Math.ceil((CONTINUE_COUNTDOWN_MS - this.stateTimer) / 1000));
+    },
+
+    /** セーブ地点から再開する。トライ数の加算と保存は SaveManager の仕事。 */
+    continueFromSave() {
+        if (!this.saveManager.applyContinue()) return;
+        this._restoreFullscreen();
+        this.gameState = 'playing';
+        // resetScore = false。applyContinue が入れたスコアと累計時間を消さない
+        this.stateManager.resetLevel(false);
+        audioManager.startBGM(this.missionsCompleted);
     },
 
     _updateGameClear(deltaTime) {
