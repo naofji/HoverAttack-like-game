@@ -617,7 +617,12 @@ export class ScreenRenderer {
             this._drawSaveOption(ctx, canvas.width / 2, canvas.height / 2 + 88);
         }
 
-        this._drawStageTop5Notice(ctx, canvas.height / 2 + 90);
+        // [W] NEXT STAGE が +60、[S] SAVE & NEXT が +88(font('sub')=18px)。
+        // 通知を +90 のままにすると [S] 行とベースラインが2pxしか離れず重なって
+        // 読めなくなった（+88 の行を今回足したことによる退行）。+88 の行の下端
+        // (18px)から34px空けた +122 にする。ゲームクリア画面側の呼び出し(+120、
+        // こちらは [S] 行が無い)は触らない。
+        this._drawStageTop5Notice(ctx, canvas.height / 2 + 122);
     }
 
     /**

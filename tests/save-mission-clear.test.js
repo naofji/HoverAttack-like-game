@@ -87,6 +87,29 @@ test('タイムボーナス加算中は何も受け付けない', async () => {
     assert.equal(game.nextMissionCalls, 0);
 });
 
+// [S] SAVE & NEXT (+88, font('sub')=18px) と TOP 5! 通知が、行を足す前は
+// +60/+90 で衝突していなかったのに、+88/+90 の並びでは2pxしか離れておらず
+// ベースラインが重なって読めない。TOP 5! FASTEST TIME は序盤の面で普通に出る。
+test('面クリア画面: [S] SAVE & NEXT と TOP 5! 通知は十分離れている(TOP5通知がある時)', () => {
+    const canvas = { width: 960, height: 720 };
+    const game = makeGame({ score: 34500 });
+    game.canvas = canvas;
+    game.missionTimer = 1000;
+    game.targetTimeBonus = 0;
+    game.currentTimeBonus = 0;
+    game.stageTop5Time = true;
+    game.stageTop5Score = false;
+    const ctx = makeFakeCtx();
+    new ScreenRenderer(game).drawMissionClear(ctx);
+    const saveCall = ctx.calls.find((c) => c.name === 'fillText' && typeof c.args[0] === 'string' && c.args[0].includes('[S] SAVE & NEXT'));
+    const top5Call = ctx.calls.find((c) => c.name === 'fillText' && typeof c.args[0] === 'string' && c.args[0].includes('TOP 5!'));
+    assert.ok(saveCall, '[S] SAVE & NEXT が描かれていない');
+    assert.ok(top5Call, 'TOP 5! 通知が描かれていない');
+    const saveY = saveCall.args[2];
+    const top5Y = top5Call.args[2];
+    assert.ok(top5Y - saveY >= 24, `間隔が足りない: save=${saveY} top5=${top5Y}`);
+});
+
 test('面クリア画面はセーブ行を出し、払えないときは理由を出す', async () => {
     const canvas = { width: 960, height: 720 };
     for (const [score, expected] of [[34500, `-${SAVE_COST} PTS`], [10, 'SCORE TOO LOW']]) {
