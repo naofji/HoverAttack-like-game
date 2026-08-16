@@ -110,6 +110,49 @@ test('面クリア画面: [S] SAVE & NEXT と TOP 5! 通知は十分離れてい
     assert.ok(top5Y - saveY >= 24, `間隔が足りない: save=${saveY} top5=${top5Y}`);
 });
 
+// 実機で「面をクリアしてもセーブするか聞かれない」と報告されて発覚した退行の回帰。
+// 描画が「TIME BONUS を出す」か「操作の案内を出す」かの if/else になっていて、
+// targetTimeBonus は加算アニメが終わってもリセットされないため、ボーナスが付いた面
+// （＝ほとんどの面）では案内が一度も出なかった。
+// 上の描画テストが揃って targetTimeBonus = 0 を置いていたので誰も気づかなかった。
+test('面クリア画面: タイムボーナスが付いた面でも加算後にセーブ行が出る', () => {
+    const game = makeGame({ score: 34500 });
+    game.canvas = { width: 960, height: 720 };
+    game.missionTimer = 1000;
+    // 加算アニメは終わっているが、獲得したボーナスの値は残ったまま（実機の状態）
+    game.targetTimeBonus = 4200;
+    game.currentTimeBonus = 4200;
+    game.slotRunning = false;
+    game.stageTop5Time = false;
+    game.stageTop5Score = false;
+    const ctx = makeFakeCtx();
+    new ScreenRenderer(game).drawMissionClear(ctx);
+    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    assert.ok(texts.some((t) => t.includes('[S] SAVE & NEXT')), texts.join(' | '));
+    assert.ok(texts.some((t) => t.includes('[W] NEXT STAGE')), texts.join(' | '));
+    // ボーナスの表示も消えていないこと（案内と排他にしない、が直しの要点）
+    assert.ok(texts.some((t) => t.includes('TIME BONUS')), texts.join(' | '));
+});
+
+// 加算アニメ中は _updateMissionClear が入力を受けないので、案内も出してはいけない。
+// 「押せるようになった瞬間」と「案内が出る瞬間」を一致させる。
+test('面クリア画面: 加算アニメ中は操作の案内を出さない', () => {
+    const game = makeGame({ score: 34500 });
+    game.canvas = { width: 960, height: 720 };
+    game.missionTimer = 1000;
+    game.targetTimeBonus = 4200;
+    game.currentTimeBonus = 1200;
+    game.slotRunning = true;
+    game.stageTop5Time = false;
+    game.stageTop5Score = false;
+    const ctx = makeFakeCtx();
+    new ScreenRenderer(game).drawMissionClear(ctx);
+    const texts = ctx.calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    assert.ok(!texts.some((t) => t.includes('[S] SAVE & NEXT')), texts.join(' | '));
+    assert.ok(!texts.some((t) => t.includes('[W] NEXT STAGE')), texts.join(' | '));
+    assert.ok(texts.some((t) => t.includes('TIME BONUS')), texts.join(' | '));
+});
+
 test('面クリア画面はセーブ行を出し、払えないときは理由を出す', async () => {
     const canvas = { width: 960, height: 720 };
     for (const [score, expected] of [[34500, `-${SAVE_COST} PTS`], [10, 'SCORE TOO LOW']]) {

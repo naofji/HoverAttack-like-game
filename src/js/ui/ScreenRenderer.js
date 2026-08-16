@@ -606,7 +606,18 @@ export class ScreenRenderer {
         if (this.game.targetTimeBonus > 0 || this.game.slotRunning) {
             ctx.fillStyle = '#FF8800';
             ctx.fillText(`TIME BONUS: ${this.game.currentTimeBonus.toString().padStart(6, '0')}`, canvas.width / 2, canvas.height / 2 + 30);
-        } else {
+        }
+
+        // **操作の案内はタイムボーナスと排他にしない。** 以前はここが if/else で、
+        // targetTimeBonus は加算アニメが終わってもリセットされないため、
+        // ボーナスが付いた面（＝ほとんどの面）では案内が一度も出なかった
+        // （従来の `PRESS ANY KEY TO CONTINUE` も同じ理由で見えていなかった）。
+        // 実機で「セーブするか聞かれない」と報告されて発覚。
+        //
+        // 出す条件は slotRunning だけを見る。_updateMissionClear が
+        // _updateTimeBonusSlot の間は入力を受けないので、**押せるようになった
+        // 瞬間と案内が出る瞬間が一致する。**
+        if (!this.game.slotRunning) {
             ctx.save();
             ctx.fillStyle = UI.ink;
             glow(ctx, UI.info, 'mid');
