@@ -604,6 +604,10 @@ export const Game = {
         // 実機の要望。_anyKeyOrClick() が真＝この更新の直前にキーかクリックがあった
         // 場合しか通らないので、transient activation が生きている
         this._restoreFullscreen();
+        // 新しい通しラン。**セーブは消さない** — 誤って任意キーを押しても
+        // 続きを失わないように、次にセーブが成立するまで残す
+        this.runTries = 1;
+        this.stageSelectRun = false;
         this.stateManager.restart();
         this.gameState = 'playing';
         audioManager.startBGM(this.missionsCompleted);
@@ -619,6 +623,13 @@ export const Game = {
         if (this.input.isKeyPressed('KeyD')) {
             this.mode = cycleMode(this.mode, +1);
             this.gameSpeed = MODES[this.mode].gameSpeed;
+            return;
+        }
+        // セーブがあるときだけ C を見る。_anyKeyOrClick() は Enter と
+        // クリックしか見ないので、セーブが無ければ C は何もしないキーのまま
+        if (this.canContinueHere() && this.input.isKeyPressed('KeyC')) {
+            this._restoreFullscreen();
+            this.continueFromSave();
             return;
         }
         if (this._handleDemoJump()) return;

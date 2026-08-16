@@ -63,6 +63,35 @@ export class ScreenRenderer {
         this._drawStartHint(ctx);
 
         this._drawModeSelector(ctx, canvas);
+
+        this._drawSaveHints(ctx, canvas);
+    }
+
+    /**
+     * タイトル下部の追加ヒント。**行が出ている＝使える**を保つため、
+     * 使えないものは行ごと出さない。どの面から再開するのかとモードを必ず
+     * 書く — タイトルで A/D を触った後、再開時にモードが保存値へ固定される
+     * ことと食い違って見えるため。
+     */
+    _drawSaveHints(ctx, canvas) {
+        const sm = this.game.saveManager;
+        const lines = [];
+        if (sm && sm.save) {
+            const s = sm.save;
+            const modeLabel = MODES[s.mode] ? MODES[s.mode].label : s.mode;
+            lines.push(`[C] CONTINUE - STAGE ${s.missionsCompleted + 1} / ${modeLabel}  (TRY ${s.tries})`);
+        }
+        if (sm && sm.reached >= 1) lines.push('[S] STAGE SELECT');
+        if (lines.length === 0) return;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font('small', true);
+        ctx.fillStyle = UI.gold;
+        glow(ctx, UI.gold, 'mid');
+        lines.forEach((t, i) => ctx.fillText(t, canvas.width / 2, canvas.height - 28 + i * 16));
+        ctx.restore();
+        ctx.textAlign = 'left';
     }
 
     /**
