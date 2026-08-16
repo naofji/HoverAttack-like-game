@@ -10,7 +10,7 @@ import {
   DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
   DRONE_MOVE_DETUNE, DRONE_MOVE_MIN_DISTANCE,
   DRONE_MOVE_GAIN, DRONE_MOVE_SUB_GAIN, DRONE_MOVE_COOLDOWN,
-  ENEMY_HOVER_OFFSCREEN_FADE,
+  AUDIO_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
 
 // --- 鳴る条件 -----------------------------------------------------------------
@@ -307,7 +307,7 @@ test('遠すぎるドローンの音は組み立てない', () => {
   audioManager.setListenerView(view);
   try {
     audioManager.playDroneMove(
-      view.cx + view.halfW + ENEMY_HOVER_OFFSCREEN_FADE + 100, view.cy);
+      view.cx + view.halfW + AUDIO_OFFSCREEN_FADE + 100, view.cy);
     assert.deepEqual(created, [], '聞こえない距離なのに音を組み立てている');
   } finally {
     audioManager.ctx = saved.ctx;

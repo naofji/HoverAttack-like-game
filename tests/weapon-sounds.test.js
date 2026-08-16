@@ -8,7 +8,7 @@ import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
 import { EnemyBase } from '../src/js/entities/EnemyBase.js';
 import { transientLevel, db, whiteNoise, SAMPLE_RATE } from './helpers/dsp.js';
 import {
-  CANVAS_WIDTH, CANVAS_HEIGHT, ENEMY_HOVER_OFFSCREEN_FADE,
+  CANVAS_WIDTH, CANVAS_HEIGHT, AUDIO_OFFSCREEN_FADE,
   ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
 } from '../src/js/utils/Constants.js';
 
@@ -253,7 +253,7 @@ test('画面内で撃てば音が組み立てられる', () => {
 });
 
 test('遠すぎる発砲は組み立てない', () => {
-  const far = playAt('enemyMg', VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE + 100, VIEW.cy);
+  const far = playAt('enemyMg', VIEW.cx + VIEW.halfW + AUDIO_OFFSCREEN_FADE + 100, VIEW.cy);
   assert.deepEqual(far, [], '聞こえない距離なのに音を組み立てている');
 });
 

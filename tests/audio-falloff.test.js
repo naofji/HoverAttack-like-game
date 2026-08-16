@@ -5,7 +5,7 @@ import {
 } from '../src/js/utils/audioFalloff.js';
 import {
   AUDIO_PAN_RANGE, AUDIO_PAN_MAX, CANVAS_WIDTH, CANVAS_HEIGHT,
-  ENEMY_HOVER_OFFSCREEN_GAIN, ENEMY_HOVER_OFFSCREEN_FADE,
+  AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
 
 /** 画面がワールド原点あたりを映している状態。 */
@@ -50,19 +50,19 @@ test('画面に映っている敵は一律で満音量', () => {
 
 test('画面を出た瞬間に半分になる', () => {
   const justOut = positionalVolume(VIEW.cx + VIEW.halfW + 1, VIEW.cy, VIEW);
-  assert.ok(justOut < ENEMY_HOVER_OFFSCREEN_GAIN
-    && justOut > ENEMY_HOVER_OFFSCREEN_GAIN * 0.99,
+  assert.ok(justOut < AUDIO_OFFSCREEN_GAIN
+    && justOut > AUDIO_OFFSCREEN_GAIN * 0.99,
     `半分になっていない: ${justOut}`);
 });
 
 test('画面外はさらに離れるほど小さくなり、1画面ぶんで無音', () => {
   let prev = Infinity;
-  for (let out = 0; out <= ENEMY_HOVER_OFFSCREEN_FADE; out += 64) {
+  for (let out = 0; out <= AUDIO_OFFSCREEN_FADE; out += 64) {
     const v = positionalVolume(VIEW.cx + VIEW.halfW + out, VIEW.cy, VIEW);
     assert.ok(v <= prev, `${out}px で大きくなった: ${prev} -> ${v}`);
     prev = v;
   }
-  assert.equal(positionalVolume(VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE, VIEW.cy, VIEW), 0);
+  assert.equal(positionalVolume(VIEW.cx + VIEW.halfW + AUDIO_OFFSCREEN_FADE, VIEW.cy, VIEW), 0);
 });
 
 test('遠くの敵は完全に無音になる', () => {
@@ -121,7 +121,7 @@ test('画面内に誰もいなければ、いちばん近い画面外の敵を�
   const far = VIEW.halfW + 400;
   const best = nearestHoveringEnemy([hoverer(far), hoverer(near)], VIEW);
   assert.ok(Math.abs(best.x - (VIEW.cx + near)) < 1e-6, '遠い方を選んでいる');
-  assert.ok(best.volume < ENEMY_HOVER_OFFSCREEN_GAIN);
+  assert.ok(best.volume < AUDIO_OFFSCREEN_GAIN);
 });
 
 test('選ばれた敵の位置で左右に振れる', () => {

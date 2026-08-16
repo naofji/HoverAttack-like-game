@@ -8,7 +8,7 @@ import {
   ENEMY_BURST_FREQ_FROM, ENEMY_BURST_FREQ_TO, ENEMY_BURST_GAIN,
   ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
   ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
-  LANDING_MIN_AIRBORNE_FRAMES, ENEMY_HOVER_OFFSCREEN_FADE,
+  LANDING_MIN_AIRBORNE_FRAMES, AUDIO_OFFSCREEN_FADE,
 } from '../src/js/utils/Constants.js';
 
 const FLOOR_TOP = 20 * TILE_SIZE;
@@ -161,7 +161,7 @@ function playAt(method, x, y) {
 
 for (const method of ['playEnemyBurst', 'playEnemyLanding']) {
   test(`${method}: 遠すぎる音源は鳴らさない`, () => {
-    const far = playAt(method, VIEW.cx + VIEW.halfW + ENEMY_HOVER_OFFSCREEN_FADE + 100, VIEW.cy);
+    const far = playAt(method, VIEW.cx + VIEW.halfW + AUDIO_OFFSCREEN_FADE + 100, VIEW.cy);
     const sources = far.filter((n) => n.name === 'bufferSource' || n.name === 'oscillator');
     assert.deepEqual(sources, [], '聞こえない距離なのに音を組み立てている');
   });

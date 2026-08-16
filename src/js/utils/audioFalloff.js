@@ -6,7 +6,7 @@
  */
 import {
     AUDIO_PAN_RANGE, AUDIO_PAN_MAX,
-    ENEMY_HOVER_OFFSCREEN_GAIN, ENEMY_HOVER_OFFSCREEN_FADE,
+    AUDIO_OFFSCREEN_GAIN, AUDIO_OFFSCREEN_FADE,
 } from './Constants.js';
 
 /**
@@ -48,8 +48,8 @@ export function offscreenDistance(sx, sy, view) {
 export function positionalVolume(sx, sy, view) {
     const out = offscreenDistance(sx, sy, view);
     if (out === 0) return 1;
-    const fade = 1 - out / ENEMY_HOVER_OFFSCREEN_FADE;
-    return fade > 0 ? ENEMY_HOVER_OFFSCREEN_GAIN * fade : 0;
+    const fade = 1 - out / AUDIO_OFFSCREEN_FADE;
+    return fade > 0 ? AUDIO_OFFSCREEN_GAIN * fade : 0;
 }
 
 /**
