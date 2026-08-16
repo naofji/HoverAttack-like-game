@@ -127,11 +127,24 @@ function validateStageEntry(entry) {
 function topStagesForWeek(rows, weekId, n) {
   var byStage = [];
   for (var s = 0; s < STAGE_COUNT; s++) byStage.push([]);
+  // コンティニューは applyContinue() で stageResults を丸ごと復元するので、
+  // セーブ地点より前の面の記録は死ぬたびに何度も appendRow される。投稿側は
+  // 止めない設計（「復元した stageResults は投稿済み」と印を付けると、セーブ後に
+  // 一度も投稿せずブラウザを閉じたときセーブ前の面の記録が永久に失われるため）
+  // なので、ここで name+timeMs+score が完全一致する行を1件に畳んでから並べる。
+  // timeMs はミリ秒精度なので、正当な再挑戦がここまで完全一致することは実質ない。
+  var seen = {};
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][1]) !== weekId) continue;
     var stage = Number(rows[i][3]);
     if (stage < 1 || stage > STAGE_COUNT) continue;
-    byStage[stage - 1].push({ name: String(rows[i][2]), timeMs: Number(rows[i][4]), score: Number(rows[i][5]), country: rows[i][6] || '' });
+    var name = String(rows[i][2]);
+    var timeMs = Number(rows[i][4]);
+    var score = Number(rows[i][5]);
+    var dedupKey = stage + '|' + name + '|' + timeMs + '|' + score;
+    if (seen[dedupKey]) continue;
+    seen[dedupKey] = true;
+    byStage[stage - 1].push({ name: name, timeMs: timeMs, score: score, country: rows[i][6] || '' });
   }
   var out = [];
   for (var k = 0; k < STAGE_COUNT; k++) {
@@ -154,7 +167,15 @@ function getSheet_(name) {
 function readRows_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  // 列数を7固定にしていたため、Scores に tries(8列目)を足しても読み戻せなかった
+  // (topNForWeek の rows[i][7] が常に undefined になる)。sheet.getLastColumn() で
+  // その時点の実列数を読む。この関数は Scores(8列)/WallOfFame(7列)/StageScores(7列)
+  // で共用しているので、固定値ではなく実測が必要。
+  // getLastColumn() は空シートで 0 を返すことがあるため、その場合も getRange を
+  // 呼ばず [] を返す(numCols=0 で getRange を呼ぶと例外になる)。
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return [];
+  return sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
 }
 
 function readStageRows_() {

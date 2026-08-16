@@ -209,3 +209,73 @@ test('topStagesForWeek coerces a numeric-looking sheet cell name to a string', (
     assert.equal(typeof out[0].score[0].name, 'string');
     assert.equal(out[0].score[0].name, '42');
 });
+
+// readRows_ 用の偽シート。getLastColumn() をそのまま getRange の numCols に渡す
+// ことを確かめたいので、getRange が要求された列数を記録しておく。
+function makeFakeSheet(lastRow, lastColumn, values) {
+  var requestedNumCols = null;
+  return {
+    getLastRow: function () { return lastRow; },
+    getLastColumn: function () { return lastColumn; },
+    getRange: function (row, col, numRows, numCols) {
+      requestedNumCols = numCols;
+      return { getValues: function () { return values; } };
+    },
+    _requestedNumCols: function () { return requestedNumCols; },
+  };
+}
+
+// コンティニューのたびにセーブ地点より前の面の記録が何度も appendRow されるため、
+// GAS 側も取り込み(集計)時に name+timeMs+score が完全一致する行を1件に畳む。
+test('topStagesForWeek は同一行(name+timeMs+score完全一致)を1件に畳む', () => {
+    const rows = [
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'],
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'], // 完全に同じ行(重複投稿)
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(out[0].time.length, 1, `重複が畳まれていない: ${JSON.stringify(out[0].time)}`);
+    assert.equal(out[0].score.length, 1);
+});
+
+test('topStagesForWeek は timeMs か score が違えば別記録として両方残す', () => {
+    const rows = [
+        [new Date(), 'W1', 'AAA', 1, 5000, 100, 'JP'],
+        [new Date(), 'W1', 'AAA', 1, 5001, 100, 'JP'], // timeMs だけ違う
+        [new Date(), 'W1', 'AAA', 1, 5000, 101, 'JP'], // score だけ違う
+    ];
+    const out = ctx.topStagesForWeek(rows, 'W1', 5);
+    assert.equal(out[0].time.length, 3);
+    assert.equal(out[0].score.length, 3);
+});
+
+test('readRows_ は getLastColumn() が返す列数ぶんだけ読む(8列のScoresシート)', () => {
+  const sheet = makeFakeSheet(3, 8, [
+    ['t', 'W1', 'AAA', 100, 1, '', 'JP', 3],
+    ['t', 'W1', 'BBB', 200, 1, '', 'JP', 1],
+  ]);
+  const rows = ctx.readRows_(sheet);
+  assert.equal(sheet._requestedNumCols(), 8);
+  assert.equal(rows.length, 2);
+});
+
+test('readRows_ は7列のWallOfFame/StageScoresシートでも(getLastColumnに合わせて)読める', () => {
+  const sheet = makeFakeSheet(2, 7, [
+    ['W1', 1, 'AAA', 100, 1, '', 'JP'],
+  ]);
+  const rows = ctx.readRows_(sheet);
+  assert.equal(sheet._requestedNumCols(), 7);
+  assert.equal(rows.length, 1);
+});
+
+test('readRows_ は空シート(getLastRow<2)で[]を返し、getRangeを呼ばない', () => {
+  const sheet = makeFakeSheet(1, 0, []);
+  const rows = ctx.readRows_(sheet);
+  assert.deepEqual(rows, []);
+  assert.equal(sheet._requestedNumCols(), null); // getRange未呼び出し
+});
+
+test('readRows_ はgetLastColumnが0の壊れたシートでも例外を投げず[]を返す', () => {
+  const sheet = makeFakeSheet(5, 0, []);
+  const rows = ctx.readRows_(sheet);
+  assert.deepEqual(rows, []);
+});
