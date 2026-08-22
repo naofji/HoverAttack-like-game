@@ -171,6 +171,11 @@ export const Game = {
     // Game state
     score: 0,
     debugStartMission: 0, // デバッグ用開始ミッション（0=Mission1, 6=Mission7）。本番は 0 に戻す
+    // デバッグ用の無敵モード。true にすると自機と母艦がダメージを受けず、
+    // ミサイルとグレネードも減らない（撃ち放題）。先の面の演出を止めずに
+    // 見て回るためのもので、**本番は false に戻す**。
+    // ON の間は HUD の右上に INVINCIBLE と出るので、戻し忘れには気づける
+    debugInvincible: false,
     missionsCompleted: 0,
     runTries: 1,          // 今のランがセーブ地点から何回目か。通常スタートは 1
     stageSelectRun: false, // 面セレクトから始めたランか（週スコアに出さない）
@@ -1611,7 +1616,7 @@ export const Game = {
                         this._grenadeHeldPx, this._grenadeHeldPy,
                         this._grenadeHeldAngle, this._grenadeHeldSpeed
                     ));
-                    player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
+                    player.consumeGrenade();
                     audioManager.playWeapon('grenade', px, py);
                     this._clearGrenadeHold();
 
@@ -1628,7 +1633,7 @@ export const Game = {
                     // 短押し確定（閾値未満でリリース）: 投擲
                     const grenadeSpeed = this._grenadeSpeedFor(targetWorld, px, py);
                     this.projectiles.push(new Grenade(this, px + Math.cos(angle) * 10, py + Math.sin(angle) * 10, angle, grenadeSpeed));
-                    player.grenades = Math.max(0, Math.floor(player.grenades) - 1);
+                    player.consumeGrenade();
                     audioManager.playWeapon('grenade', px, py);
                 }
                 // 長押しのリリースはキャンセル（左クリックせずに離した場合）
@@ -1671,7 +1676,7 @@ export const Game = {
         if (active >= MISSILE_MAX_ON_SCREEN) return;
 
         this.projectiles.push(new Missile(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, angle, true));
-        player.missiles = Math.max(0, Math.floor(player.missiles) - 1);
+        player.consumeMissile();
         player.missileCooldown = 15;
         audioManager.playWeapon('playerMissile', px, py);
 

@@ -20,6 +20,7 @@ import {
     BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
+import { playRicochet } from '../entities/ricochet.js';
 import { createSparks, ImpactFlash } from '../entities/Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { recordHit } from '../utils/hitPoint.js';
@@ -232,7 +233,9 @@ export class CollisionManager {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
                 recordHit(enemy, proj.x, proj.y);
-                enemy.takeDamage(DAMAGE_PLAYER_MISSILE);
+                // 第2引数の被弾点Xは、6面以降の基地の周回シールドが
+                // 「どちら側から来たか」を見るために要る（他の敵は無視する）
+                enemy.takeDamage(DAMAGE_PLAYER_MISSILE, proj.x);
                 // 着弾点から見て外向きへ吹き飛ばす。反動プロファイルを持たない
                 // 据え付け物（砲台・基地）には何も起きない。
                 applyRecoil(enemy, (enemy.x + enemy.width / 2) - proj.x);
@@ -251,8 +254,22 @@ export class CollisionManager {
             if (!enemy.alive) continue;
             if (pointInRect(proj.x, proj.y, enemy)) {
                 recordHit(enemy, proj.x, proj.y);
-                if (!enemy.isBase) enemy.takeDamage(PLAYER_MG_DAMAGE);
-                playBlast(game, proj.x, proj.y, 'mgHit');
+                // 装甲を持つ敵（mgDamageMult）は MG だけダメージが通りにくい。
+                // 表に行が無い敵は等倍のままなので、既存の敵は何も変わらない
+                const mgMult = enemy.mgDamageMult ?? 1;
+                if (!enemy.isBase) enemy.takeDamage(PLAYER_MG_DAMAGE * mgMult);
+
+                if (enemy.isBase && enemy.isOrbitGuarded && enemy.isOrbitGuarded(proj.x)) {
+                    // MG はもともと基地にダメージが入らない。周回シールドに当たった
+                    // ときだけ、通常の着弾ではなく跳弾として見せる
+                    enemy._deflect(proj.x);
+                } else if (mgMult < 1) {
+                    // 「効いていない感」を伝える跳弾。ダメージは軽減されつつも
+                    // 入っているので、基地のシールド（完全に弾く）とは別の演出にする
+                    playRicochet(game, proj.x, proj.y, proj.vx, proj.vy);
+                } else {
+                    playBlast(game, proj.x, proj.y, 'mgHit');
+                }
                 proj.alive = false;
                 break;
             }

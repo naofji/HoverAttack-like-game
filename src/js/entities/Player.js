@@ -509,12 +509,42 @@ export class Player {
 
     takeDamage(amount) {
         if (!this.alive || this.invincibleTimer > 0) return;
+        // デバッグ用の無敵モード（main.js の debugInvincible）。ダメージの入口は
+        // 弾もミサイルもグレネードも地雷も衝突も最終的にここへ集まるので、
+        // 経路ごとに手当てせずここ1箇所で止められる
+        if (this.game.debugInvincible) return;
 
         this.hp -= amount;
         this.game.spawnHeavyDamage(this.x + this.width / 2, this.y + this.height / 2);
         if (this.hp <= 0) {
             this.die();
         }
+    }
+
+    /**
+     * HP を回復する。最大値で頭打ち、死んでいるときは何もしない。
+     * ドッキング中の自然回復とリペアキットの両方から呼べるよう、
+     * 「HP を増やす」をここ1箇所にまとめてある。
+     */
+    heal(amount) {
+        if (!this.alive) return;
+        this.hp = Math.min(PLAYER_MAX_HP, this.hp + amount);
+    }
+
+    /**
+     * ミサイルを1発消費する。
+     * デバッグ用の無敵モード中は減らさない（撃ち放題）。
+     * 弾数を減らす箇所が main.js に散っていたので、Player 側にまとめた。
+     */
+    consumeMissile(n = 1) {
+        if (this.game.debugInvincible) return;
+        this.missiles = Math.max(0, Math.floor(this.missiles) - n);
+    }
+
+    /** グレネードを1発消費する。無敵モード中は減らさない。 */
+    consumeGrenade(n = 1) {
+        if (this.game.debugInvincible) return;
+        this.grenades = Math.max(0, Math.floor(this.grenades) - n);
     }
 
     die() {

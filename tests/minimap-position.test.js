@@ -6,6 +6,7 @@ import { makeFakeCtx, extractSets, extractFillRectsWithColor } from './helpers/f
 import {
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT, TILE_SIZE,
     MINIMAP_ALPHA, MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
+    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
 } from '../src/js/utils/Constants.js';
 
 const CANVAS_W = 1024;
@@ -210,6 +211,17 @@ test('縮小されたミニマップでも、点の座標がミニマップの�
 // 変えるたびにここも直す必要が出るのは調整の摩擦になる）。
 test('MINIMAP_ALPHA は 0 より大きく 1 未満', () => {
     assert.ok(MINIMAP_ALPHA > 0 && MINIMAP_ALPHA < 1, `MINIMAP_ALPHA が範囲外: ${MINIMAP_ALPHA}`);
+});
+
+// トーニングの2つは 0..1 に収まっていること。ctx.filter が無い環境向けの
+// フォールバック（Map._applyMiniMapToning）は `1 - 値` を globalAlpha に入れるので、
+// 1 を超えると負の globalAlpha になって描画が壊れる。
+// 「見づらいから明るく」で 1 を跨ぐのが一番ありそうな踏み外し方なので縛っておく
+test('MINIMAP_SATURATION / MINIMAP_BRIGHTNESS は 0..1 に収まる', () => {
+    assert.ok(MINIMAP_SATURATION >= 0 && MINIMAP_SATURATION <= 1,
+        `MINIMAP_SATURATION が範囲外: ${MINIMAP_SATURATION}`);
+    assert.ok(MINIMAP_BRIGHTNESS >= 0 && MINIMAP_BRIGHTNESS <= 1,
+        `MINIMAP_BRIGHTNESS が範囲外: ${MINIMAP_BRIGHTNESS}（フォールバックの globalAlpha が負になる）`);
 });
 
 test('最終的な濃さは MINIMAP_ALPHA × miniMapAlpha × 遷移フェードの積', () => {

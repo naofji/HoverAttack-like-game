@@ -113,6 +113,8 @@ test('アイテム取得で音が鳴る', () => {
         game.player = {
             x: 100, y: 100, width: 16, height: 24, alive: true,
             repairKits: 0, hp: 50,
+            // リペアキットは拾うと自機も回復する。式は Player 本体のものを借りる
+            heal: Player.prototype.heal,
         };
         const kit = new RepairKit(game, 100, 100);
         for (let i = 0; i < 5 && kit.alive; i++) kit.update();

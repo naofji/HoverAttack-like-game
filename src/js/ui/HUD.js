@@ -119,6 +119,7 @@ export class HUD {
         this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
         this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
         this._drawRepairKitIcons(ctx, player, row2Y);
+        this._drawDebugInvincibleBadge(ctx, w, row2Y);
         // 母艦の方向矢印はここでは描かない。ミニマップより上の面に出したいため、
         // main.js が _drawOverlays(ミニマップ)の後に drawCarrierArrow() を呼ぶ。
 
@@ -406,6 +407,19 @@ export class HUD {
 
         // フォントを元に戻す
         ctx.font = 'bold 16px "Space Mono", monospace';
+    }
+
+    /**
+     * デバッグ用の無敵モードが ON の間だけ出す札。
+     *
+     * 出しておかないと、戻し忘れたまま調整して「当たってもHPが減らない」と
+     * 悩むことになる。点滅させているのは、HUD の常設表示と見分けるため
+     * （これは一時的な状態であって、ゲームの機能ではない）。
+     */
+    _drawDebugInvincibleBadge(ctx, w, y) {
+        if (!this.game || !this.game.debugInvincible) return;
+        ctx.fillStyle = (Math.floor(Date.now() / 400) % 2 === 0) ? '#FF3333' : '#661111';
+        ctx.fillText('INVINCIBLE', w - 160, y);
     }
 
     // ------------------------------------------

@@ -17,6 +17,7 @@ import {
     EMERGENCY_WILD_FIRE_SPREAD, EMERGENCY_WILD_FIRE_INTERVAL_MULT,
     ENEMY_RECOIL_PROFILES,
     SMOKE_COOLDOWN,
+    ATTACKER_HEAVY_DROP_CHANCE, ATTACKER_RIVAL_DROP_CHANCE, ATTACKER_ARTILLERY_DROP_CHANCE,
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, hasLineOfSight } from '../utils/Physics.js';
 import { Missile } from './Missile.js';
@@ -140,6 +141,10 @@ export class EnemyAttacker {
         // Config-driven stats
         this.config = config;
         this.hp = config.hp;
+        // MG にだけ効くダメージ軽減。表(ENEMY_ATTACKER_TYPES)に行が無ければ等倍。
+        // CollisionManager が敵の種類を知らずに読めるよう、config ではなく
+        // インスタンスの属性として持たせている
+        this.mgDamageMult = config.mgDamageMult ?? 1;
         this.maxHp = this.hp;
         this.maxSpeed = config.speed;
         this.jumpForce = config.jumpForce;
@@ -1103,16 +1108,15 @@ export class EnemyAttacker {
         const cy = this.y + this.height / 2;
         this.game.addScore(this.score);
 
-        // heavy は30%の確率でミサイル・サプライ・キットをドロップ
-        if (this.config.name === 'heavy' && Math.random() < 0.3) {
+        // ドロップ率は Constants.js に置いてある（ATTACKER_*_DROP_CHANCE）。
+        // ライバルは 1.0 ＝ 倒せば必ずリペアキットが出る
+        if (this.config.name === 'heavy' && Math.random() < ATTACKER_HEAVY_DROP_CHANCE) {
             this.game.missileKits.push(new MissileKit(this.game, cx, this.y));
         }
-        // rival は30%の確率でリペアキットをドロップ
-        if (this.config.name === 'rival' && Math.random() < 0.3) {
+        if (this.config.name === 'rival' && Math.random() < ATTACKER_RIVAL_DROP_CHANCE) {
             this.game.repairKits.push(new RepairKit(this.game, cx, this.y));
         }
-        // artillery は50%の確率でオートエイムユニットをドロップ
-        if (this.config.name === 'artillery' && Math.random() < 0.5) {
+        if (this.config.name === 'artillery' && Math.random() < ATTACKER_ARTILLERY_DROP_CHANCE) {
             this.game.autoAimUnits.push(new AutoAimUnit(this.game, cx, this.y));
         }
     }

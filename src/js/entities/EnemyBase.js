@@ -17,8 +17,14 @@ import {
     ENEMY_BASE_MISSILE_COOLDOWN,
     ENEMY_BASE_HOMING_COOLDOWN,
     CRUISE_MISSILE_ACTIVATION_RANGE,
-    FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION
+    FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
+    BASE_ORBIT_SHIELD_MISSION, BASE_ORBIT_SHIELD_PANELS, BASE_ORBIT_SHIELD_RADIUS,
+    BASE_ORBIT_SHIELD_SPEED, BASE_ORBIT_SHIELD_GUARD_HALF, BASE_ORBIT_SHIELD_HEIGHT,
+    BASE_ORBIT_SHIELD_DEPLOY
 } from '../utils/Constants.js';
+import {
+    panelAngles, panelOffsetX, panelDepth, isGuardAngle, guardBlocks, deployEase,
+} from '../utils/orbitShield.js';
 import { BaseLaser } from './BaseLaser.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Missile } from './Missile.js';
@@ -27,6 +33,20 @@ import { EnemyCruiseMissile } from './EnemyCruiseMissile.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playBlast } from './destruction.js';
+import { lerpColor, withAlpha } from '../utils/color.js';
+
+// 周回シールドの羽根の見た目。描画専用のパラメータなので Constants ではなく
+// ここに置いている（EnemyAttacker の LEG_STYLES と同じ扱い）。
+const ORBIT_PANEL = {
+    width: 9,           // 真正面を向いたときの見かけの幅 px
+    // 真横（＝ガード成立）を向いたときに残る厚み。0 にすると一番肝心な瞬間に
+    // 羽根が消えてしまうので、線として必ず残す
+    edge: 2.5,
+    dark: '#3A4450',    // 奥に回ったときの色
+    light: '#E6EEF8',   // 手前に来たときの色
+    perspective: 0.06,  // 手前ほど大きく見せる割合
+    barrierAlpha: 0.35, // ガード中にコアとの間へ引くバリア線の濃さ
+};
 
 export class EnemyBase {
     constructor(game, x, y) {
@@ -80,6 +100,68 @@ export class EnemyBase {
         // Emergency Defense Alert pulse (visual only, one-shot)
         this.emergencyPulseTimer = 0;
         this.emergencyPulseDuration = 45; // ~0.75s of expanding ring
+
+        // 周回シールド（6面以降）。リングが全部割れるまでは存在しない
+        this.orbitShieldActive = false;
+        this.orbitPhase = 0;
+        this.orbitDeployTimer = 0;
+    }
+
+    // ------------------------------------------
+    // 周回シールド（6面以降。むき出しのコアだけを守る）
+    // ------------------------------------------
+
+    /** この基地に周回シールドがあるか（面で決まる）。 */
+    _hasOrbitShield() {
+        return (this.game.missionsCompleted || 0) >= BASE_ORBIT_SHIELD_MISSION;
+    }
+
+    /** 最後のリングが割れたときに呼ぶ。コアの中心から羽根がせり出し始める。 */
+    startOrbitShield() {
+        if (this.orbitShieldActive) return;
+        this.orbitShieldActive = true;
+        this.orbitDeployTimer = 0;
+        this.orbitPhase = 0;
+        // 展開そのものには専用の音を付けていない。展開中の被弾はすべて
+        // 弾かれて shieldDeflect が鳴るので、撃っていれば音の手がかりは出る
+    }
+
+    /** 展開の進み具合 0..1（イージング後）。1 で出きった状態。 */
+    _orbitDeploy() {
+        return deployEase(this.orbitDeployTimer / BASE_ORBIT_SHIELD_DEPLOY);
+    }
+
+    /** 今の軌道半径。展開中は 0 から所定の半径へ伸びる。 */
+    orbitRadius() {
+        if (!this.orbitShieldActive) return 0;
+        return BASE_ORBIT_SHIELD_RADIUS * this._orbitDeploy();
+    }
+
+    /** 全ての羽根の位相。描画と判定で同じものを使う。 */
+    orbitAngles() {
+        return panelAngles(this.orbitPhase, BASE_ORBIT_SHIELD_PANELS);
+    }
+
+    /**
+     * 1 tick ぶん回す。半径と同じイージングで回転も立ち上げるので、
+     * せり出しながら加速していくように見える。
+     */
+    _updateOrbitShield() {
+        if (!this.orbitShieldActive) return;
+        if (this.orbitDeployTimer < BASE_ORBIT_SHIELD_DEPLOY) this.orbitDeployTimer++;
+        this.orbitPhase += BASE_ORBIT_SHIELD_SPEED * this._orbitDeploy();
+    }
+
+    /**
+     * その被弾点がガードされているか。
+     * 展開中は角度に関係なく true（＝完全無敵）。MG の跳弾演出も同じ答えを使う。
+     * @param {number} hitX 被弾点のX。省略時は判定しない
+     */
+    isOrbitGuarded(hitX) {
+        if (!this.orbitShieldActive || hitX === undefined) return false;
+        if (this.orbitDeployTimer < BASE_ORBIT_SHIELD_DEPLOY) return true;
+        const dx = hitX - (this.x + this.width / 2);
+        return guardBlocks(this.orbitAngles(), dx, BASE_ORBIT_SHIELD_GUARD_HALF);
     }
 
     _resetCruiseMissileTimer() {
@@ -102,6 +184,7 @@ export class EnemyBase {
         this._updateBaseMissile();
         this._updateBaseHoming();
         this._updateCruiseMissile();
+        this._updateOrbitShield();
 
         // Keep bounds in sync with position
         this.bounds.x = this.x;
@@ -585,8 +668,21 @@ export class EnemyBase {
     }
 
 
-    takeDamage(amount) {
+    /**
+     * @param {number} amount
+     * @param {number} [hitX] 被弾点のX。周回シールド（6面以降）の左右判定に使う。
+     *   省略した呼び出しは今までどおり素通しするので、他の敵と共通の
+     *   takeDamage(amount) を呼んでいる箇所の挙動は変わらない
+     */
+    takeDamage(amount, hitX) {
         if (!this.alive) return;
+
+        // むき出しのコアへの一撃だけが周回シールドの対象。リングが残っている間は
+        // 今までどおり削れる（全部にタイミングを要求すると難しくなりすぎる）
+        if (this.shields <= 0 && this.isOrbitGuarded(hitX)) {
+            this._deflect(hitX);
+            return; // 緊急防衛アラートも立てない。弾いた攻撃は「当たっていない」扱い
+        }
 
         // Mission 2+ (missionsCompleted 1+): being hit calls in emergency reinforcements,
         // but not while the destruction sequence is already underway (dying window).
@@ -603,6 +699,8 @@ export class EnemyBase {
             this.shields--;
             this.game.score += 50; // Small score for breaking a shield
             this._spawnSparks();
+            // 最後のリングが割れてコアが露出した瞬間に周回シールドがせり出す
+            if (this.shields <= 0 && this._hasOrbitShield()) this.startOrbitShield();
         } else {
             // If shields are gone, damage the core
             this.hp--;
@@ -616,6 +714,18 @@ export class EnemyBase {
 
     _spawnSparks() {
         this.game.spawnSparks(this.x + this.width / 2, this.y + this.height / 2);
+    }
+
+    /**
+     * 周回シールドが弾いたときの手応え。
+     * 無敵なのに何の反応も無いと弾を飲み込まれたように見えるので、
+     * 弾かれた場所に火花と金属音を出す。ダメージもスコアも動かさない。
+     */
+    _deflect(hitX) {
+        const cy = this.y + this.height / 2;
+        const x = hitX === undefined ? this.x + this.width / 2 : hitX;
+        if (this.game.spawnSparks) this.game.spawnSparks(x, cy);
+        audioManager.playWeapon('shieldDeflect', x, cy);
     }
 
     /** One-shot expanding red "rescue pulse" ring shown when the emergency alert first fires. */
@@ -662,7 +772,11 @@ export class EnemyBase {
 
         this._drawStructure(ctx);
         this._drawShields(ctx);
+        // 奥に回っている羽根はコアより先に、手前の羽根はコアより後に描く。
+        // 立体に見えるかどうかはこの順序がほぼ全て
+        this._drawOrbitPanels(ctx, true);
         this._drawCore(ctx);
+        this._drawOrbitPanels(ctx, false);
 
         ctx.restore();
     }
@@ -797,6 +911,59 @@ export class EnemyBase {
             const nx = cx + Math.cos(a) * radius;
             const ny = cy + Math.sin(a) * radius;
             ctx.fillRect(nx - 2, ny - 2, 4, 4);
+        }
+    }
+
+    /**
+     * 周回シールドの羽根を描く。
+     *
+     * 羽根はコア中心を通る鉛直軸のまわりを回る板で、それを真横から見ている。
+     * 見かけの幅は正面を向いたとき最大、真横（＝ガード成立）で最小になる。
+     * 一番守っている瞬間が一番細く見えるという困った性質があるので、
+     * そのときだけコア色で縁を光らせ、コアとの間にバリア線を引いて補っている。
+     *
+     * @param {boolean} behind true なら奥に回っている羽根だけ（コアより先に描く）
+     */
+    _drawOrbitPanels(ctx, behind) {
+        if (!this.orbitShieldActive) return;
+
+        const cx = this.width / 2;
+        const cy = this.height / 2;
+        const r = this.orbitRadius();
+        // 展開が終わるまでは角度に関係なく無敵なので、見た目も全部光らせる
+        const deploying = this.orbitDeployTimer < BASE_ORBIT_SHIELD_DEPLOY;
+        const coreColor = this._getCoreColors().main;
+
+        for (const a of this.orbitAngles()) {
+            const depth = panelDepth(a);
+            if ((depth < 0) !== behind) continue;
+
+            const px = cx + panelOffsetX(a, r);
+            const w = ORBIT_PANEL.edge + ORBIT_PANEL.width * Math.abs(depth);
+            const h = BASE_ORBIT_SHIELD_HEIGHT * (1 + ORBIT_PANEL.perspective * depth);
+            const x = px - w / 2;
+            const y = cy - h / 2;
+
+            // 板の地の色。奥ほど暗く、手前ほど明るい
+            ctx.fillStyle = lerpColor(ORBIT_PANEL.dark, ORBIT_PANEL.light, 0.5 + 0.5 * depth);
+            ctx.fillRect(x, y, w, h);
+
+            const guarding = deploying || isGuardAngle(a, BASE_ORBIT_SHIELD_GUARD_HALF);
+            if (!guarding) continue;
+
+            // ガード中の合図。縁をコア色で光らせる
+            ctx.strokeStyle = coreColor;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+
+            // コアとの間に薄いバリア線。細い羽根だけでは「今は防いでいる」が
+            // 視界の端で拾えないので、面積のある手がかりを足している
+            ctx.strokeStyle = withAlpha(coreColor, ORBIT_PANEL.barrierAlpha);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px, y);
+            ctx.lineTo(px, y + h);
+            ctx.stroke();
         }
     }
 

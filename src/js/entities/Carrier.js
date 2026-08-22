@@ -175,6 +175,9 @@ export class Carrier {
 
     takeDamage(amount) {
         if (!this.alive) return;
+        // デバッグ用の無敵モード。母艦が落ちてもランが終わるので、
+        // 「止めずに先の面まで進めて確認する」には自機と両方が要る
+        if (this.game.debugInvincible) return;
         this.hp -= amount;
         this.damageTimer = 60; // Show alert for 1 second
         this.game.spawnHeavyDamage(this.x + this.width / 2, this.y + this.height / 2);
