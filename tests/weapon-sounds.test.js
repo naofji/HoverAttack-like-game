@@ -174,8 +174,10 @@ test('どの武器も他の効果音と同じ土俵の音量で鳴る', () => {
 test('歪まない', () => {
   // 装填クリックは毎秒6回鳴るフィードバック音なので、単発の発射音より
   // 意図的に小さい。ただし無音・退化した合成出力を捕まえる下限は免除せず、
-  // 実測ピーク（ammoMissile 0.0126 / ammoGrenade 0.0189）に合わせて床だけ下げる
-  const FLOOR = { ammoMissile: 0.008, ammoGrenade: 0.008 };
+  // 実測ピーク（ammoMissile 0.0126 / ammoGrenade 0.0189）に合わせて床だけ下げる。
+  // armorRicochet（装甲の跳弾）も同じ理由。0.2秒に1回まで間引いてもなお
+  // 連続で鳴るので、shieldDeflect より 5.6dB 低く取ってある（実測ピーク 0.017）
+  const FLOOR = { ammoMissile: 0.008, ammoGrenade: 0.008, armorRicochet: 0.008 };
   for (const [kind, p] of Object.entries(WEAPON_SOUNDS)) {
     let peak = 0;
     for (const v of renderWeaponProfile(p)) peak = Math.max(peak, Math.abs(v));

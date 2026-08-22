@@ -102,7 +102,8 @@ export class Grenade {
 
                 if (dist < GRENADE_DAMAGE_RADIUS) {
                     recordHit(enemy, this.x, this.y);
-                    enemy.takeDamage(GRENADE_DAMAGE);
+                    // 炸裂点のXを渡す。6面以降の基地の周回シールドが左右を見る
+                    enemy.takeDamage(GRENADE_DAMAGE, this.x);
                 }
             }
         } else {

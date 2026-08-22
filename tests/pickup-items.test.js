@@ -5,7 +5,9 @@ import { PickupItem, ITEM_SIZE } from '../src/js/entities/PickupItem.js';
 import { RepairKit } from '../src/js/entities/RepairKit.js';
 import { MissileKit } from '../src/js/entities/MissileKit.js';
 import { AutoAimUnit } from '../src/js/entities/AutoAimUnit.js';
-import { MISSILE_INITIAL_COUNT, AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION, ITEM_PICKUP_SCORE }
+import { Player } from '../src/js/entities/Player.js';
+import { MISSILE_INITIAL_COUNT, AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION, ITEM_PICKUP_SCORE,
+    PLAYER_MAX_HP, REPAIR_KIT_PLAYER_HEAL }
     from '../src/js/utils/Constants.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { makeMap, flatFloorRows } from './helpers/enemy-world.js';
@@ -29,6 +31,10 @@ function makePlayer(overrides = {}) {
         x: 100, y: 100, width: 16, height: 24,
         alive: true, docked: false,
         repairKits: 0, missiles: 0, autoAimTimer: 0, autoAimMaxTimer: 0,
+        // リペアキットは拾うと自機も回復する。回復の式は Player 本体のものを
+        // 借りる（ここに書き写すとコード複製になる）
+        hp: PLAYER_MAX_HP,
+        heal: Player.prototype.heal,
         ...overrides,
     };
 }
@@ -138,12 +144,19 @@ test('離れていれば拾わない', () => {
 
 // --- ここからが3種の「違い」。表の1行にあたる部分 ---
 
-test('リペアキットは持ち物が1つ増えるだけ（母艦の回復はドッキング時）', () => {
+test('リペアキットは持ち物が1つ増える（母艦の回復はドッキング時）', () => {
     const player = makePlayer();
     new RepairKit(makeGame(player), 0, 0).onPickup(player);
     assert.equal(player.repairKits, 1);
     assert.equal(player.missiles, 0);
     assert.equal(player.autoAimTimer, 0);
+});
+
+test('リペアキットは拾った場で自機も回復する（キットは消費しない）', () => {
+    const player = makePlayer({ hp: 40 });
+    new RepairKit(makeGame(player), 0, 0).onPickup(player);
+    assert.equal(player.hp, 40 + REPAIR_KIT_PLAYER_HEAL);
+    assert.equal(player.repairKits, 1, '自機を治すとキットが消えている');
 });
 
 test('ミサイル補給は残弾を満タンに戻す（加算ではない）', () => {

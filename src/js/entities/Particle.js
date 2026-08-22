@@ -7,6 +7,8 @@ import {
     PLAYER_DEATH_EXPLOSION_SPREAD, CARRIER_DEATH_EXPLOSION_SPREAD,
     IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS,
     DEATH_FLASH_COUNT, DEATH_FLASH_STAGGER,
+    RICOCHET_STREAK_LENGTH, RICOCHET_STREAK_LIFETIME, RICOCHET_STREAK_WIDTH,
+    COLOR_RICOCHET, COLOR_RICOCHET_FADE,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
 
@@ -84,6 +86,56 @@ export class Particle {
             ? lerpColor(this.color, this.fadeTo, 1 - alpha)
             : this.color;
         ctx.fillRect(this.x - s / 2, this.y - s / 2, s, s);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+/**
+ * 装甲に弾かれた跳弾の光。
+ *
+ * 既存の粒（Particle）は全て「四角い点」で、跳弾には向かない。点だと
+ * 何がどちらへ抜けたのか読めず、当たった場所で光っただけに見えてしまう。
+ * 進行方向へ伸びる線分にすると、跳ね返って飛び去ったことが一目で分かる。
+ *
+ * 重力を掛けていないのは、落ち始めると跳弾ではなく火花に見えるため。
+ * 跳弾は一瞬で視界から消えるものなので、寿命の短さで表現している。
+ */
+export class RicochetStreak {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.maxLifetime = RICOCHET_STREAK_LIFETIME;
+        this.lifetime = this.maxLifetime;
+        this.alive = true;
+    }
+
+    update() {
+        if (!this.alive) return;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.lifetime--;
+        if (this.lifetime <= 0) this.alive = false;
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+
+        const alpha = this.lifetime / this.maxLifetime;
+        // 速度の向きへ一定の長さで伸ばす。速さで長さを変えないのは、
+        // ばらついた跳弾が「群れとして同じもの」に見えるようにするため
+        const speed = Math.hypot(this.vx, this.vy) || 1;
+        const ux = this.vx / speed;
+        const uy = this.vy / speed;
+
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = lerpColor(COLOR_RICOCHET, COLOR_RICOCHET_FADE, 1 - alpha);
+        ctx.lineWidth = RICOCHET_STREAK_WIDTH;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x + ux * RICOCHET_STREAK_LENGTH, this.y + uy * RICOCHET_STREAK_LENGTH);
+        ctx.stroke();
         ctx.globalAlpha = 1.0;
     }
 }

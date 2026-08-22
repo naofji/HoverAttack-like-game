@@ -328,6 +328,10 @@ function makeMissileFireScene(missiles) {
   const player = {
     currentWeapon: 'missile', missiles, missileCooldown: 0,
     mgSwitchedToMG: false,
+    // 弾数の消費は Player 本体のものを借りる。ここに同じ式を書き写すと、
+    // 上のコメントが警告しているコード複製そのものになる
+    game: { debugInvincible: false },
+    consumeMissile: Player.prototype.consumeMissile,
   };
   const g = Object.create(Game);
   g.projectiles = [];

@@ -196,6 +196,14 @@ export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigge
 // ミニマップが透ける程度に留める
 export const CARRIER_ARROW_ALPHA = 0.7;
 
+// --- リペアキット（rival がドロップ。今は 100%）---
+// 拾った瞬間に自機を回復する量。キットは消費されず手元に残り、母艦への
+// ドッキング時に今までどおり母艦を修理する（回復はおまけ）。
+// 母艦側の量は例外的に RepairKit.js の REPAIR_KIT_HEAL(=50) に直書きされている。
+// 30 にしてあるのは、母艦へ帰る必要を残しつつ「もうひとしのぎ」を作るため。
+// rival は必ず落とすので、rival を1体倒すたびに +30 効く
+export const REPAIR_KIT_PLAYER_HEAL = 30;
+
 // --- Docking Resupply (gradual replenishment per frame while docked) ---
 // HP: 100 / 60 ≈ 1.67/frame → full heal in ~3.6 seconds (at 60fps)
 export const DOCK_HP_RATE = 100 / 216; // ~0.46 HP/frame → full in ~3.6s
@@ -310,6 +318,17 @@ export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement ra
 // 2足の3型は背中のバックパック直下だが、artillery は4脚で背中という概念が薄いので
 // 胴体の真下から出す。型ごとにスプライトの形が違う以上、ここは表で持つしかない。
 
+// 撃破時のドロップ率。以前は EnemyAttacker.die() に直書きされていた。
+// 6面以降の敵基地に周回シールドが付いて難度が上がったぶん、補給の供給を厚くして
+// 釣り合いを戻す（2026-08-22 にユーザーの指示で変更）。
+//   ライバル 0.3 → 1.0（倒せば必ずリペアキット）
+//   heavy    0.3 → 0.6（2体倒せばだいたい1個）
+// heavy をライバルと同率にしないのは、「どちらを狙って落とすか」という選択を
+// 残すため。artillery は据え置き。
+export const ATTACKER_HEAVY_DROP_CHANCE = 0.6;      // ミサイル・サプライ・キット
+export const ATTACKER_RIVAL_DROP_CHANCE = 1.0;      // リペアキット
+export const ATTACKER_ARTILLERY_DROP_CHANCE = 0.5;  // オートエイムユニット
+
 export const ENEMY_ATTACKER_TYPES = {
     standard: {
         name: 'standard',
@@ -387,7 +406,14 @@ export const ENEMY_ATTACKER_TYPES = {
     },
     artillery: {
         name: 'artillery',
-        hp: 50,
+        // 50 → 45 → 30。ミサイル(DAMAGE_PLAYER_MISSILE=15)で**2発ちょうど**。
+        // ただし HP を下げただけだと MG でも楽に落ちてしまうので、
+        // mgDamageMult で MG にだけ効く軽減を掛けている
+        // （「ミサイルなら2発、バルカンではなかなか落ちない」2026-08-22 の指示）
+        hp: 30,
+        // MG のダメージ倍率。1発 3 → 1.5 になり、落とすのに 20発＝弾倉(16発)を
+        // 撃ち切ってリロードを1回挟む必要がある。この行が無い型は等倍のまま
+        mgDamageMult: 0.5,
         speed: 0.4,
         jumpForce: -4.5,
         fireInterval: 300,    // 5 seconds between bursts
@@ -448,6 +474,23 @@ export const ENEMY_BASE_WIDTH = 24;
 export const ENEMY_BASE_HEIGHT = 32;
 export const ENEMY_BASE_SHIELDS = 3;            // Layers of defense
 export const ENEMY_BASE_HP = 1;                 // Final core HP
+
+// --- 周回シールド（6面以降。むき出しになったコアだけを守る） ---
+// リング3枚（ENEMY_BASE_SHIELDS）は今までどおり削れる。3枚目が割れて
+// コアが露出した瞬間にコアの中心から羽根がせり出し、鉛直軸まわりを回り始める。
+// 羽根が軌道の左右の端＝プレイヤーとコアのあいだに入っている間だけ弾く。
+// 幾何は utils/orbitShield.js。
+//
+// 難易度は SPEED（チャンスの間隔）と GUARD_HALF（ガード窓の広さ）の2つで動く。
+export const BASE_ORBIT_SHIELD_MISSION = 5;     // 6面以降 = missionsCompleted 5 以上
+export const BASE_ORBIT_SHIELD_PANELS = 2;      // 180°対向。左右が同時に閉じ、同時に開く
+export const BASE_ORBIT_SHIELD_RADIUS = 16;     // コアの実体(半径8〜11)の外、最内リング(25)の内側
+export const BASE_ORBIT_SHIELD_SPEED = 0.030;   // rad/frame。半周 π/0.030 ≈ 105 frame ≈ 1.75秒
+export const BASE_ORBIT_SHIELD_GUARD_HALF = 0.70; // ガード窓の半角 rad(≈40°)。全体の約44%が防御中
+export const BASE_ORBIT_SHIELD_HEIGHT = 34;     // 羽根の縦の長さ px。基地の高さ(32)を少し超える
+// 展開のあいだは角度に関係なく完全無敵。ここが 0 だと、最後のリングを割った
+// 勢いのミサイル連打でシールドが一度も仕事をしないまま基地が落ちる
+export const BASE_ORBIT_SHIELD_DEPLOY = 30;     // frames(約0.5秒)
 
 // --- Flag (Capture Condition) ---
 export const FLAG_WIDTH = 12;
@@ -533,6 +576,33 @@ export const COLOR_BEAM_SPARK_FADE = '#A64DFF';
 // から数十pxまで幅があるので大きさだけでは区別できないが、破片は回転する
 // 多角形で色も機体色なので、紫の正方形とは取り違えない
 export const BEAM_SPARK_SIZE = 4;
+
+// --- 装甲に弾かれた跳弾（artillery のように mgDamageMult を持つ敵に MG が当たったとき）---
+// 「効いていない感」を音と光で伝えるための演出。ダメージは別に入っている
+// （0 ではない）ので、完全に弾く周回シールドの shieldDeflect とは分けてある。
+//
+// 初回の実装（2本・8px・太さ1.5）は実機で「地味すぎる」と言われた。
+// 反射ビームの被弾でまったく同じ指摘を受けたときの手当てをそのまま持ってきて、
+// 本数・長さ・太さを上げたうえで**命中点の閃光**を足してある。線は散らばって
+// 視界の端では拾えないが、1点で光る閃光は拾えるため。
+export const RICOCHET_STREAK_COUNT = 4;      // 1回の命中で走る光の本数（2 → 4）
+export const RICOCHET_STREAK_LENGTH = 8;     // 線の長さ px（8 → 14 → 8 に差し戻し。長いと尾を引いて見えた）
+export const RICOCHET_STREAK_SPEED = 5;      // 飛ぶ速さ px/frame（3.5 → 5）
+export const RICOCHET_STREAK_LIFETIME = 9;   // frames。一瞬で消えないと火花に見える
+export const RICOCHET_STREAK_WIDTH = 2;      // 線の太さ px（1.5 → 2.5 → 2）
+export const RICOCHET_SPREAD = 1.1;          // 跳ね返る向きのばらつき rad
+export const COLOR_RICOCHET = '#FFFFFF';     // 出た瞬間（白く熱い）
+export const COLOR_RICOCHET_FADE = '#FFD11A'; // 冷めた先（黄。#FFE066 だと白に近すぎた）
+// 命中点の閃光。ImpactFlash を使い回す（反射ビームの被弾と同じ部品）。
+// 反射ビームの 14 より大きいのは、あちらが1発ずつなのに対しこちらは
+// 連射の中の1発で、周りに MG の弾道が走っていて埋もれやすいため
+export const RICOCHET_FLASH_RADIUS = 18;
+export const COLOR_RICOCHET_FLASH_CORE = '#FFFFFF';
+export const COLOR_RICOCHET_FLASH_RING = '#FFC400';
+// 音の間引き。MG は PLAYER_MG_BURST_DELAY(4フレーム) ごとに1発＝毎秒15発なので、
+// 当たるたびに鳴らすと雑音になる。0.2秒に1回だと耳には「カン！カン！カン！」と
+// 3〜4連に聞こえる。光の方は間引かない（弾は出続けているので毎発光ってよい）
+export const RICOCHET_SOUND_INTERVAL_MS = 200;
 // 通常のスパークは3〜5個。倍以上にしないと「走った」感じが出なかった。
 // 14 でもまだ「地味すぎて見えない」と実機で指摘されたので 28 へ倍増し、
 // 速度と寿命も上げた（散る範囲が広がるぶん、1粒あたりの見つけやすさが上がる）
@@ -692,10 +762,20 @@ export const COLOR_CAVE_BG = '#1a0a00';
 // --- Mini-map (実際の地形を縮小して焼く。tile cache を drawImage で縮小するだけなので
 // 見た目は本編と一致する。彩度・明度だけここで落として背景に沈める) ---
 export const MINIMAP_SATURATION = 0.55;   // 彩度を落として背景に沈める
-export const MINIMAP_BRIGHTNESS = 0.65;   // 明度も落とす。前景の自機・敵の点を目立たせるため
-// ミニマップ全体の不透明度 (開いたときの半透明さ)。0.85 は地形の上に重ねると
-// 前景が読めなくなるとの実機フィードバックで 0.55 へ下げた
-export const MINIMAP_ALPHA = 0.6;
+// 2026-08-22: 「ミニマップが見づらい」の正体は透明度ではなく明度だった。
+// 先に α を 0.6→0.75→0.85 と上げたが手応えが薄く、実機の判断で明度側へ切り替え。
+// 0.65 → 0.9。1.0 を超えてはいけない（ctx.filter が無い環境のフォールバックが
+// `1 - この値` を globalAlpha に入れるため。tests/minimap-position.test.js が縛る）
+export const MINIMAP_BRIGHTNESS = 0.9;
+// ミニマップ全体の不透明度 (開いたときの半透明さ)。この値が掛かるのは**地形だけ**で、
+// 自機・敵の点には掛けていない（ScreenRenderer の該当箇所を参照）。
+// 0.85 は地形の上に重ねると前景が読めなくなるとの実機フィードバックで 0.55 へ下げ、
+// その後 0.6 に戻していた。2026-08-22 に「見づらい」との指摘で 0.75 へ。
+// そこから 0.85 まで上げても手応えが薄く、原因は透明度ではなく明度
+// （MINIMAP_BRIGHTNESS）だと分かったので 0.75 に戻してある。
+// 上げるほど地形は読みやすく、下の本編は隠れる。1.0 にすると
+// tests/minimap-position.test.js の「0 < α < 1」を緩める必要がある
+export const MINIMAP_ALPHA = 0.75;
 // 画面四隅から置き場所を選ぶときの、画面端／HUD帯からの余白
 export const MINIMAP_MARGIN = 16;
 // 画面幅に対するミニマップの上限。大きいマップ（最大600x300）だと
