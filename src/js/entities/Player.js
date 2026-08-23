@@ -17,7 +17,7 @@ import {
     COLOR_HOVER_EXHAUST,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
-    OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS
+    OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -30,6 +30,23 @@ import { drawThrusterFlame } from './thrusterFlame.js';
  * 歩行4フレーム → 手前脚/奥脚のポーズ番号（_legPose の walkPose に渡す）。
  * フレーム2は直立・停止時。以前は描画と破片生成が同じ表をそれぞれ持っていた。
  */
+/**
+ * オーバードライブの輝きのグラデーション。
+ * [位置, 赤のときのRGB, 金のときのRGB, 不透明度]。
+ * 描画専用のパラメータなので Constants ではなくここに置いている。
+ */
+const OVERDRIVE_GLOW_STOPS = [
+    [0, [255, 70, 40], [255, 215, 60], 0.55],
+    [0.55, [255, 30, 20], [255, 190, 30], 0.22],
+    [1, [255, 0, 0], [255, 180, 0], 0],
+];
+
+/** 2色を t で混ぜて rgba 文字列にする。 */
+function mixRgba([r1, g1, b1], [r2, g2, b2], t, alpha) {
+    const at = (a, b) => Math.round(a + (b - a) * t);
+    return `rgba(${at(r1, r2)}, ${at(g1, g2)}, ${at(b1, b2)}, ${alpha})`;
+}
+
 const WALK_POSES = [
     { near: 0, far: 1 },
     { near: 2, far: 3 },
@@ -761,24 +778,30 @@ export class Player {
     }
 
     /**
-     * オーバードライブ中の赤い輝き。
+     * オーバードライブ中の輝き。
      *
      * HUD の残時間バーだけだと視線を下へ外さないと状態が読めないので、
-     * 機体そのものにも出す。切れる前は点滅させて予告する（HUD バーと同じ
-     * OVERDRIVE_WARN_TICKS を見るので、2つの合図がずれない）。
+     * 機体そのものにも出す。
      *
-     * 色をアイテムの金色ではなく赤にしたのは、機体が過負荷で焼けている絵に
-     * したいため。拾う前の見分け（金＝レア版／赤＝通常の補給）はアイテム側の
-     * 話なので、ここで赤を使っても混同しない。
+     * 効いている間は**金と赤を速く往復**する。金はアイテムの色、赤は過負荷で
+     * 焼けている色で、2色が入れ替わり続けることで「無理をして回っている」絵になる。
+     * 残り3秒（OVERDRIVE_WARN_TICKS）を切ると**金の成分が残り時間に比例して
+     * 抜けていき**、最後は赤だけの明滅になる。効果そのものが色として失われていく
+     * ので、しきい値でいきなり演出が切り替わるより読みやすい。
+     *
+     * 赤一色になっても点滅は続ける必要がある（止まると「切れた」と誤読される）
+     * ので、金が抜けるぶんは濃さの差に振り替えている。
      */
     _drawOverdriveGlow(ctx) {
         if (this.overdriveTimer <= 0) return;
 
-        // 切れかけは速い点滅。それ以外は呼吸のようにゆっくり脈打たせる
-        const ending = this.overdriveTimer <= OVERDRIVE_WARN_TICKS;
-        const pulse = ending
-            ? (Math.floor(Date.now() / 100) % 2 === 0 ? 1 : 0.25)
-            : 0.75 + 0.25 * Math.sin(this.overdriveTimer / 6);
+        // 金の残り具合。しきい値より前は満量、そこから 0 へ落ちる
+        const goldMix = Math.min(1, this.overdriveTimer / OVERDRIVE_WARN_TICKS);
+        // 往復の片側だけを金に寄せる。もう片側は常に赤
+        const goldPhase = Math.floor(Date.now() / OVERDRIVE_BLINK_MS) % 2 === 1;
+        const mix = goldPhase ? goldMix : 0;
+        // 金が抜けきったときに点滅が消えないよう、濃さの差へ振り替える
+        const dim = goldPhase ? 0.35 + 0.65 * goldMix : 1;
 
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
@@ -788,9 +811,9 @@ export class Player {
         // lighter で重ねると地形の上でも色が沈まない（コアの bloom と同じ手）
         ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-        g.addColorStop(0, `rgba(255, 70, 40, ${0.55 * pulse})`);
-        g.addColorStop(0.55, `rgba(255, 30, 20, ${0.22 * pulse})`);
-        g.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        for (const [stop, red, gold, alpha] of OVERDRIVE_GLOW_STOPS) {
+            g.addColorStop(stop, mixRgba(red, gold, mix, alpha * dim));
+        }
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
