@@ -326,6 +326,42 @@ export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement ra
 // heavy をライバルと同率にしないのは、「どちらを狙って落とすか」という選択を
 // 残すため。artillery は据え置き。
 export const ATTACKER_HEAVY_DROP_CHANCE = 0.6;      // ミサイル・サプライ・キット
+
+// heavy のキットのうち、どれだけが「オーバードライブ付き」のレア版になるか。
+// ドロップ率(0.6)は据え置きで、内訳を分けるだけ。ハズレ側も満タン補給として
+// 役に立つので、外れても拾う価値が消えない。
+//
+// 面ごとの実測見込み（アタッカー数はマップ面積から、heavy の割合は spawnWeight から）:
+//        3面   4面   5面   6面以降
+//  heavy 6.5   8.8   10    5      ← 6面から artillery(重み100)が入って半減する
+//  キット 3.9   5.3   6.0   3.0
+//  レア   0.98  1.32  1.50  1.80   ← 6面以降だけ 0.6 にして、進むほど厚くなる形にした
+//
+// 周回シールドが付いて一番きつい6面以降で報酬が一番薄い、という逆進を消すのが狙い。
+// 判定は utils/drops.js の overdriveDropChance()。
+export const ATTACKER_HEAVY_OVERDRIVE_CHANCE = 0.25;      // 5面まで
+export const ATTACKER_HEAVY_OVERDRIVE_CHANCE_LATE = 0.60; // 6面以降
+// 切り替わる面。周回シールド(BASE_ORBIT_SHIELD_MISSION)と同じ境目だが、
+// 別々に動かせるよう定数は分けてある
+export const OVERDRIVE_LATE_MISSION = 5;
+
+// --- オーバードライブ（レア版キットの効果）---
+// 拾ってから一定時間、ミサイルと MG の弾が減らない。グレネードは対象外
+// （「ここぞで使う切り札」の役を残すため）。
+//
+// タイマーは autoAimTimer と同じくシムティックで減る。実時間ではモードで
+// 伸び縮みするが、30〜45秒という狙いは両モードとも満たしている:
+//   newtype (1.0x, 60tick/秒) → 36秒
+//   normal  (0.8x, 48tick/秒) → 45秒
+export const OVERDRIVE_DURATION = 2160;
+// 重ね取りの上限。ちょうど2本ぶん。レア版がそう続けて出ないので実際は稀
+export const OVERDRIVE_MAX_DURATION = 4320;
+// 残りこれを切ったら HUD のバーを点滅させる。無限だと思って撃っていた弾が
+// 予告なく減り始めるのが一番きついので、3秒前から知らせる
+export const OVERDRIVE_WARN_TICKS = 180;
+// 機体まわりの輝きの半径（自機の幅 16px に対する倍率）。2.2 = 半径 35px。
+// 3.0 では洞窟の狭い通路が丸ごと赤くなって地形が読めなくなった
+export const OVERDRIVE_GLOW_RADIUS = 2.2;
 export const ATTACKER_RIVAL_DROP_CHANCE = 1.0;      // リペアキット
 export const ATTACKER_ARTILLERY_DROP_CHANCE = 0.5;  // オートエイムユニット
 

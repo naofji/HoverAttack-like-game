@@ -14,6 +14,7 @@ import { crosshairScreenPos } from './Crosshair.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { AutoAimUnit } from '../entities/AutoAimUnit.js';
 import { MissileKit } from '../entities/MissileKit.js';
+import { OverdriveKit } from '../entities/OverdriveKit.js';
 import { flagEmoji } from '../utils/geo.js';
 import { formatClock } from '../utils/formatTime.js';
 import { volumePercent } from '../utils/bgmVolume.js';
@@ -24,6 +25,20 @@ import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
 import { SAVE_COST, STAGE_PALETTES } from '../utils/Constants.js';
+
+/**
+ * 遊び方画面の ITEMS パネルに並べる拾い物。
+ *
+ * ここが「拾えるもの」の一覧そのもの。アイテムを増やしたらこの表に1行足す。
+ * パネルの高さも行数から求めるので、足すだけでレイアウトが追従する。
+ * アイコンは type で dummyKits を引き、実物のアイテムを描く。
+ */
+const ITEM_GUIDE = [
+    { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
+    { type: 'overdrive', color: '#FFDD22', name: 'OVERDRIVE KIT', desc: 'RARE DROP FROM HEAVY. GRANTS INFINITE AMMO AND NO RELOAD FOR A LIMITED TIME.' },
+    { type: 'autoaim', color: '#FF8800', name: 'AUTO-AIM UNIT', desc: 'ENABLES AUTO-AIM FOR A LIMITED TIME. (DROPPED BY ARTILLERY)' },
+    { type: 'repair', color: '#00FF00', name: 'CARRIER REPAIR KIT', desc: 'REPAIRS CARRIER HP WHEN DOCKED. GRANTS +1 LIFE IF FULL. (DROPPED BY RIVAL)' },
+];
 
 export class ScreenRenderer {
     constructor(game) {
@@ -371,7 +386,7 @@ export class ScreenRenderer {
             const ITEM_H = 64;
             const objectiveH = ScreenRenderer.panelHeight(lineH * 2);
             const rulesH = ScreenRenderer.panelHeight(Math.max(lineH * 6, ILLUST_H));
-            const itemsH = ScreenRenderer.panelHeight(ITEM_H * 3);
+            const itemsH = ScreenRenderer.panelHeight(ITEM_H * ITEM_GUIDE.length);
             const areaTop = 80;
             const areaBottom = H - SPACE.xl;
             const gap = Math.floor(
@@ -435,15 +450,14 @@ export class ScreenRenderer {
             // PANEL 3: ITEMS
             drawPanel(ctx, cx - 400, itemsY, 800, itemsH, 'ITEMS', UI.accent);
 
-            const items = [
-                { type: 'missile', color: '#FF4444', name: 'MISSILE SUPPLY KIT', desc: 'FULLY RESTORES YOUR MISSILE AMMO UPON PICKUP.' },
-                { type: 'autoaim', color: '#FF8800', name: 'AUTO-AIM UNIT', desc: 'ENABLES AUTO-AIM FOR A LIMITED TIME. (DROPPED BY ARTILLERY)' },
-                { type: 'repair', color: '#00FF00', name: 'CARRIER REPAIR KIT', desc: 'REPAIRS CARRIER HP WHEN DOCKED. GRANTS +1 LIFE IF FULL. (DROPPED BY RIVAL)' }
-            ];
+            const items = ITEM_GUIDE;
 
             if (!this.dummyKits) {
+                // 説明用に絵を描き起こさず、実物のアイテムを 2.5倍で描く。
+                // 別に描くと、アイテムの見た目を変えたときに解説だけ古くなる
                 this.dummyKits = {
                     'missile': new MissileKit(this.game, 0, 0),
+                    'overdrive': new OverdriveKit(this.game, 0, 0),
                     'autoaim': new AutoAimUnit(this.game, 0, 0),
                     'repair': new RepairKit(this.game, 0, 0)
                 };

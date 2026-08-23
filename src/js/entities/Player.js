@@ -16,7 +16,8 @@ import {
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
-    DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE
+    DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
+    OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -76,6 +77,10 @@ export class Player {
         // 間だけ存在する状態で、通常状態に戻ったのに残っていると、次に拾った
         // ときの挙動が「いつ切ったか」で決まってしまう）
         this.autoAimPaused = false;
+        // オーバードライブ（heavy のレア版キット）。真の間はミサイルと MG の
+        // 弾が減らない。autoAimTimer と同じ形にしてあるので、HUD も減算も同じ作法
+        this.overdriveTimer = 0;
+        this.overdriveMaxTimer = 0;
 
         // Docking
         this.docked = false;
@@ -531,14 +536,30 @@ export class Player {
         this.hp = Math.min(PLAYER_MAX_HP, this.hp + amount);
     }
 
+    /** オーバードライブが効いているか。判定を1か所に閉じておく。 */
+    get overdriveActive() { return this.overdriveTimer > 0; }
+
     /**
      * ミサイルを1発消費する。
      * デバッグ用の無敵モード中は減らさない（撃ち放題）。
      * 弾数を減らす箇所が main.js に散っていたので、Player 側にまとめた。
      */
     consumeMissile(n = 1) {
-        if (this.game.debugInvincible) return;
+        if (this.game.debugInvincible || this.overdriveActive) return;
         this.missiles = Math.max(0, Math.floor(this.missiles) - n);
+    }
+
+    /**
+     * MG を1発消費する。
+     *
+     * オーバードライブ中は減らさない。**これだけで打ちっぱなしになる** のが要点で、
+     * mgReload.js の6つの規則には一切触っていない。残弾が満タンのままなら
+     * 規則1（弾切れ）も規則4（しきい値）も成立せず、装填が始まらない。
+     * F の手動装填も burstLeft < burstSize が偽になって空振りする。
+     */
+    consumeMGRound(n = 1) {
+        if (this.overdriveActive) return;
+        this.mgBurstLeft = Math.max(0, this.mgBurstLeft - n);
     }
 
     /** グレネードを1発消費する。無敵モード中は減らさない。 */
@@ -575,6 +596,8 @@ export class Player {
         this.autoAimTimer = 0;
         this.autoAimMaxTimer = 0;
         this.autoAimPaused = false;
+        this.overdriveTimer = 0;
+        this.overdriveMaxTimer = 0;
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
@@ -723,6 +746,9 @@ export class Player {
         const isCrouched = this.crouching || this.docked;
         const crouchOffset = isCrouched ? 8 : 0;
 
+        // 機体より先に描いて「背後から漏れる光」にする。手前に描くと
+        // 機体そのものが赤く塗り潰されて、被弾の点滅と紛らわしい
+        this._drawOverdriveGlow(ctx);
         this._drawBody(ctx, x, y, isCrouched, crouchOffset);
         if (!isCrouched) {
             if (this.currentWeapon === 'missile') {
@@ -732,6 +758,44 @@ export class Player {
             }
         }
         this._drawHoverExhaust(ctx);
+    }
+
+    /**
+     * オーバードライブ中の赤い輝き。
+     *
+     * HUD の残時間バーだけだと視線を下へ外さないと状態が読めないので、
+     * 機体そのものにも出す。切れる前は点滅させて予告する（HUD バーと同じ
+     * OVERDRIVE_WARN_TICKS を見るので、2つの合図がずれない）。
+     *
+     * 色をアイテムの金色ではなく赤にしたのは、機体が過負荷で焼けている絵に
+     * したいため。拾う前の見分け（金＝レア版／赤＝通常の補給）はアイテム側の
+     * 話なので、ここで赤を使っても混同しない。
+     */
+    _drawOverdriveGlow(ctx) {
+        if (this.overdriveTimer <= 0) return;
+
+        // 切れかけは速い点滅。それ以外は呼吸のようにゆっくり脈打たせる
+        const ending = this.overdriveTimer <= OVERDRIVE_WARN_TICKS;
+        const pulse = ending
+            ? (Math.floor(Date.now() / 100) % 2 === 0 ? 1 : 0.25)
+            : 0.75 + 0.25 * Math.sin(this.overdriveTimer / 6);
+
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const radius = this.width * OVERDRIVE_GLOW_RADIUS;
+
+        ctx.save();
+        // lighter で重ねると地形の上でも色が沈まない（コアの bloom と同じ手）
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        g.addColorStop(0, `rgba(255, 70, 40, ${0.55 * pulse})`);
+        g.addColorStop(0.55, `rgba(255, 30, 20, ${0.22 * pulse})`);
+        g.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     }
 
     _drawBody(ctx, x, y, isCrouched, crouchOffset) {

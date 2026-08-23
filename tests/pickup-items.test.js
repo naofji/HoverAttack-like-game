@@ -5,6 +5,7 @@ import { PickupItem, ITEM_SIZE } from '../src/js/entities/PickupItem.js';
 import { RepairKit } from '../src/js/entities/RepairKit.js';
 import { MissileKit } from '../src/js/entities/MissileKit.js';
 import { AutoAimUnit } from '../src/js/entities/AutoAimUnit.js';
+import { OverdriveKit } from '../src/js/entities/OverdriveKit.js';
 import { Player } from '../src/js/entities/Player.js';
 import { MISSILE_INITIAL_COUNT, AUTO_AIM_DURATION, AUTO_AIM_MAX_DURATION, ITEM_PICKUP_SCORE,
     PLAYER_MAX_HP, REPAIR_KIT_PLAYER_HEAL }
@@ -14,9 +15,9 @@ import { makeMap, flatFloorRows } from './helpers/enemy-world.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 
 /**
- * 拾い物3種は落下・接地・当たり判定・点滅が全く同じで、違うのは
+ * 拾い物は落下・接地・当たり判定・点滅が全く同じで、違うのは
  * 「拾ったときの効果」と「色とアイコン」だけ。以前は3ファイルに同じ90行が
- * 並んでいた。共通部分を PickupItem に集めたので、3種が本当に同じ振る舞いを
+ * 並んでいた。共通部分を PickupItem に集めたので、各種が本当に同じ振る舞いを
  * 続けていることと、効果だけが別であることをここで縛る。
  */
 
@@ -24,6 +25,7 @@ const KINDS = [
     ['リペアキット', RepairKit],
     ['ミサイル補給', MissileKit],
     ['Auto Aim ユニット', AutoAimUnit],
+    ['オーバードライブ', OverdriveKit],
 ];
 
 function makePlayer(overrides = {}) {
@@ -31,6 +33,7 @@ function makePlayer(overrides = {}) {
         x: 100, y: 100, width: 16, height: 24,
         alive: true, docked: false,
         repairKits: 0, missiles: 0, autoAimTimer: 0, autoAimMaxTimer: 0,
+        overdriveTimer: 0, overdriveMaxTimer: 0,
         // リペアキットは拾うと自機も回復する。回復の式は Player 本体のものを
         // 借りる（ここに書き写すとコード複製になる）
         hp: PLAYER_MAX_HP,
@@ -61,7 +64,7 @@ function withPickupSpy(fn) {
     }
 }
 
-test('3種とも PickupItem を継承している', () => {
+test('どの拾い物も PickupItem を継承している', () => {
     for (const [name, Cls] of KINDS) {
         assert.ok(Cls.prototype instanceof PickupItem, `${name} が PickupItem 由来でない`);
     }
@@ -77,7 +80,7 @@ test('置かれる位置は中心指定（左上に直される）', () => {
     }
 });
 
-test('3種とも同じ落ち方をして、同じ高さで床に着く', () => {
+test('どれも同じ落ち方をして、同じ高さで床に着く', () => {
     const traces = KINDS.map(([, Cls]) => {
         const item = new Cls(makeGame(), 100, 0);
         const trace = [];
@@ -87,8 +90,10 @@ test('3種とも同じ落ち方をして、同じ高さで床に着く', () => {
         }
         return trace.join('|');
     });
-    assert.equal(traces[0], traces[1], 'リペアとミサイルで落ち方が違う');
-    assert.equal(traces[1], traces[2], 'ミサイルと Auto Aim で落ち方が違う');
+    for (let i = 1; i < traces.length; i++) {
+        assert.equal(traces[i - 1], traces[i],
+            `${KINDS[i - 1][0]} と ${KINDS[i][0]} で落ち方が違う`);
+    }
     assert.ok(traces[0].includes('true'), '床に着いていない');
 });
 
@@ -177,10 +182,10 @@ test('Auto Aim は重ね取りで延長できるが上限を超えない', () =>
     assert.equal(player.autoAimTimer, AUTO_AIM_MAX_DURATION, '上限を超えて延びている');
 });
 
-test('3種は見分けがつく（グローの色が違う）', () => {
+test('全種類が見分けがつく（グローの色が違う）', () => {
     const game = makeGame();
     const colors = KINDS.map(([, Cls]) => new Cls(game, 0, 0).glowColor);
-    assert.equal(new Set(colors).size, 3, '同じ色のアイテムがある');
+    assert.equal(new Set(colors).size, KINDS.length, '同じ色のアイテムがある');
 });
 
 test('描画は save/restore が釣り合っている', () => {

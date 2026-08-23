@@ -6,7 +6,8 @@ import {
     HUD_TOP_HEIGHT,
     HUD_FONT, HUD_COLOR, HUD_BG_COLOR,
     HOVER_MAX_FUEL, PLAYER_MAX_HP, CARRIER_MAX_HP, BURST_MIN_FUEL,
-    CARRIER_ARROW_ALPHA
+    CARRIER_ARROW_ALPHA,
+    OVERDRIVE_WARN_TICKS
 } from '../utils/Constants.js';
 
 /**
@@ -116,6 +117,7 @@ export class HUD {
         this._drawWeaponStatus(ctx, player, row2Y);
         this._drawHoverGauge(ctx, player, row2Y);
         this._drawAutoAimBar(ctx, player, row2Y);
+        this._drawOverdriveBar(ctx, player, row2Y);
         this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
         this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
         this._drawRepairKitIcons(ctx, player, row2Y);
@@ -402,6 +404,51 @@ export class HUD {
         ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
 
         ctx.strokeStyle = paused ? '#444444' : '#663300';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
+
+        // フォントを元に戻す
+        ctx.font = 'bold 16px "Space Mono", monospace';
+    }
+
+    // ------------------------------------------
+    // オーバードライブ残り時間バー（A-AIM ゲージのすぐ下）
+    // ------------------------------------------
+    /**
+     * heavy のレア版キットで得た「弾が減らない」効果の残り時間。
+     *
+     * A-AIM ゲージと同じ作法（ラベル＋地＋残量＋枠）で1段下に置く。
+     * 切れる3秒前から点滅させるのは、無限だと思って撃っていた弾が急に
+     * 減り始めるのが一番きついため。バーの分母は上限ではなく
+     * 「そのとき持っていた最大」（OverdriveKit を参照）。
+     */
+    _drawOverdriveBar(ctx, player, y) {
+        if (!player || !player.overdriveTimer || player.overdriveTimer <= 0) return;
+
+        const max = player.overdriveMaxTimer || player.overdriveTimer;
+        const ratio = Math.max(0, Math.min(1, player.overdriveTimer / max));
+        const labelX = 145;
+        const barX = 195;
+        const barW = 220;
+        const barH = 5;
+        const rowY = y + 22; // A-AIM ゲージ(y + 11)のさらに下
+
+        // 残り3秒(180 tick)で点滅。暗い側へ落とすだけで、消灯はしない
+        const ending = player.overdriveTimer <= OVERDRIVE_WARN_TICKS;
+        const dark = ending && Math.floor(Date.now() / 200) % 2 === 1;
+        const fg = dark ? '#665511' : '#FFDD22';
+
+        ctx.font = 'bold 10px "Space Mono", monospace';
+        ctx.fillStyle = fg;
+        ctx.fillText('O-DRIVE', labelX, rowY);
+
+        ctx.fillStyle = 'rgba(70, 55, 0, 0.8)';
+        ctx.fillRect(barX, rowY - barH + 2, barW, barH);
+
+        ctx.fillStyle = fg;
+        ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
+
+        ctx.strokeStyle = '#665511';
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
 

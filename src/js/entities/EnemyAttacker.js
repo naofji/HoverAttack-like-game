@@ -26,6 +26,8 @@ import { EnemyHomingMissile } from './EnemyHomingMissile.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
+import { OverdriveKit } from './OverdriveKit.js';
+import { overdriveDropChance } from '../utils/drops.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -1111,7 +1113,11 @@ export class EnemyAttacker {
         // ドロップ率は Constants.js に置いてある（ATTACKER_*_DROP_CHANCE）。
         // ライバルは 1.0 ＝ 倒せば必ずリペアキットが出る
         if (this.config.name === 'heavy' && Math.random() < ATTACKER_HEAVY_DROP_CHANCE) {
-            this.game.missileKits.push(new MissileKit(this.game, cx, this.y));
+            // 内訳だけを分ける。外れても満タン補給として役に立つので、
+            // 「レア版じゃなかった」でがっかりして終わらない
+            const rare = Math.random() < overdriveDropChance(this.game.missionsCompleted);
+            const Kit = rare ? OverdriveKit : MissileKit;
+            this.game.missileKits.push(new Kit(this.game, cx, this.y));
         }
         if (this.config.name === 'rival' && Math.random() < ATTACKER_RIVAL_DROP_CHANCE) {
             this.game.repairKits.push(new RepairKit(this.game, cx, this.y));

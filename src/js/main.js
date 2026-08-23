@@ -1102,6 +1102,7 @@ export const Game = {
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
         this._updateAutoAim();
+        this._updateOverdrive();
         this.map.update();
         this._updateAndPrune(this.enemies);
         this._updateEnemyHoverSound();
@@ -1289,6 +1290,20 @@ export const Game = {
 
             if (!mine.alive) this.landmines.splice(i, 1);
         }
+    },
+
+    /**
+     * オーバードライブの残り時間を1ティック減らす。
+     *
+     * **_simulationTick() の内側に置くのが要件。** 設定画面を開いている間に
+     * 止まってほしいので（_updateAutoAim() と同じ理由。update() 直下へ出すと
+     * ポーズ中も減り始める）。
+     */
+    _updateOverdrive() {
+        const player = this.player;
+        if (!player || !player.alive || player.overdriveTimer <= 0) return;
+        player.overdriveTimer--;
+        if (player.overdriveTimer <= 0) player.overdriveMaxTimer = 0;
     },
 
     _updateAutoAim() {
@@ -1693,7 +1708,9 @@ export const Game = {
         this.projectiles.push(new PlayerBullet(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, finalAngle));
 
         player.mgFireTimer = PLAYER_MG_BURST_DELAY;
-        player.mgBurstLeft--;
+        // 減算そのものは Player 側。オーバードライブ中に減らさない判定を
+        // consumeMissile と同じ場所に寄せてある
+        player.consumeMGRound();
     },
 
     // ==========================================
