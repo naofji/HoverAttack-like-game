@@ -510,6 +510,15 @@ export const ENEMY_BASE_WIDTH = 24;
 export const ENEMY_BASE_HEIGHT = 32;
 export const ENEMY_BASE_SHIELDS = 3;            // Layers of defense
 export const ENEMY_BASE_HP = 1;                 // Final core HP
+// 構造物の描画が当たり判定の箱より下へはみ出す量 px。
+//
+// 基地の絵はコアを中心に上下 28px（合わせて 56px）で描いてあるのに、箱は
+// 32px しかない。素直に「箱の下端＝床の表面」で置くと、はみ出す下12px＝
+// 土台の支柱と締め具がまるごと床タイルの中に埋まる（実機で「土台がブロックに
+// めり込んでいる」と見えていたのがこれ）。Map はこのぶん基地を持ち上げて置く。
+// 値は _drawStructure の一番下（coreY + 22 の締め具、高さ6）から来ている。
+// tests/base-sits-on-floor.test.js が実際の描画と突き合わせて縛っている
+export const ENEMY_BASE_DRAW_OVERHANG = 12;
 
 // --- 周回シールド（6面以降。むき出しになったコアだけを守る） ---
 // リング3枚（ENEMY_BASE_SHIELDS）は今までどおり削れる。3枚目が割れて

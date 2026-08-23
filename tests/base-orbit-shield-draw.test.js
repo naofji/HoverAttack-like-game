@@ -7,6 +7,7 @@ import { EnemyBase } from '../src/js/entities/EnemyBase.js';
 import {
   ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT,
   BASE_ORBIT_SHIELD_MISSION, BASE_ORBIT_SHIELD_RADIUS, BASE_ORBIT_SHIELD_DEPLOY,
+  ENEMY_BASE_DRAW_OVERHANG,
 } from '../src/js/utils/Constants.js';
 
 function makeGame() {
@@ -151,13 +152,15 @@ test('羽根の縦の中心は奥行きによらず一定', () => {
   }
 });
 
-test('一番大きい羽根でも基地の下端（床の表面）を越えない', () => {
-  // 基地は下端が床タイルにぴったり乗っている。ここを越えると基地ごと
-  // ブロックにめり込んで見える（実際にそう見えた）
+test('一番大きい羽根でも床の表面を越えない', () => {
+  // 床の表面は箱の下端そのものではなく、構造物のはみ出しぶん下にある
+  // （基地はそのぶん持ち上げて置かれている。base-sits-on-floor.test.js 参照）。
+  // ここを越えると羽根がブロックにめり込んで見える
+  const FLOOR = ENEMY_BASE_HEIGHT + ENEMY_BASE_DRAW_OVERHANG;
   for (const { phase, rect } of allPanelRects()) {
     const bottom = rect[1] + rect[3];
-    assert.ok(bottom <= ENEMY_BASE_HEIGHT + 0.001,
-      `位相 ${phase} で羽根が床にめり込んでいる: 下端 ${bottom} > ${ENEMY_BASE_HEIGHT}`);
+    assert.ok(bottom <= FLOOR + 0.001,
+      `位相 ${phase} で羽根が床にめり込んでいる: 下端 ${bottom} > ${FLOOR}`);
   }
 });
 

@@ -11,7 +11,7 @@ import {
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
     ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT,
     ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
-    ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT,
+    ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG,
     COLOR_CAVE_BG, TILE_SIZE,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES,
@@ -637,9 +637,13 @@ export class Map {
         this.blockHP[floorR - 2][centerC - 7] = 999;
 
         // Save spawn location for the Main Base (base rests on the indestructible floor)
+        //
+        // 床に合わせるのは**当たり判定の箱ではなく構造物の描画の下端**。
+        // 基地の絵は箱より下へ ENEMY_BASE_DRAW_OVERHANG(12px) はみ出していて、
+        // 箱の下端を床に合わせると土台がまるごとブロックの中に埋まる。
         this.enemyBaseSpawn = {
             x: centerC * TILE_SIZE - (ENEMY_BASE_WIDTH / 2),
-            y: floorR * TILE_SIZE - ENEMY_BASE_HEIGHT
+            y: floorR * TILE_SIZE - ENEMY_BASE_HEIGHT - ENEMY_BASE_DRAW_OVERHANG
         };
         this.enemyBaseCenter = { r: centerR, c: centerC, floorR: floorR };
     }

@@ -1,6 +1,7 @@
 import {
     ENEMY_BASE_WIDTH,
     ENEMY_BASE_HEIGHT,
+    ENEMY_BASE_DRAW_OVERHANG,
     ENEMY_BASE_SCORE,
     ENEMY_BASE_SHIELDS,
     ENEMY_BASE_HP,
@@ -984,19 +985,22 @@ export class EnemyBase {
         }
     }
 
+    /** 一番大きくなる（手前に来た）羽根の、中心から下端までの距離。 */
+    _orbitMaxHalfHeight() {
+        return (BASE_ORBIT_SHIELD_HEIGHT * (1 + ORBIT_PANEL.perspective)) / 2;
+    }
+
     /**
      * 羽根の縦の中心。奥行きによらず一定に保つ（動かすと板の端がふらつく）。
      *
-     * 基地は下端が床タイルの表面にぴったり乗っている（Map の enemyBaseSpawn が
-     * y = floorR*TILE - ENEMY_BASE_HEIGHT）ので、中心をコアの高さに置くと
-     * 手前で 1.3倍に伸びた羽根が床へ 10px めり込み、基地ごと埋まって見えた。
-     * そこで「一番大きくなる羽根の下端が床にちょうど接する高さ」を中心にする。
-     * 余った分は上（空中）へ伸びるので、めり込みは起きない。
+     * 素直にコアの高さ（箱の中心）でよい。基地は構造物のはみ出し
+     * （ENEMY_BASE_DRAW_OVERHANG）ぶん持ち上げて置いてあるので、床の表面は
+     * 箱の下端より 12px 下にある。手前で 1.3倍に伸びた羽根の下端（箱の下端 +7.4px）
+     * でも届かない。それでも届く大きさにしたときのために、床で頭打ちにしておく。
      */
     _orbitCenterY() {
-        const maxHalf = (BASE_ORBIT_SHIELD_HEIGHT * (1 + ORBIT_PANEL.perspective)) / 2;
-        // 羽根が十分小さいときまでコアより下へ下げる意味はないので、コア中心で頭打ち
-        return Math.min(this.height / 2, this.height - maxHalf);
+        const floorY = this.height + ENEMY_BASE_DRAW_OVERHANG;
+        return Math.min(this.height / 2, floorY - this._orbitMaxHalfHeight());
     }
 
     /**
