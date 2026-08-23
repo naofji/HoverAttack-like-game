@@ -38,13 +38,22 @@ import { lerpColor, withAlpha } from '../utils/color.js';
 // 周回シールドの羽根の見た目。描画専用のパラメータなので Constants ではなく
 // ここに置いている（EnemyAttacker の LEG_STYLES と同じ扱い）。
 const ORBIT_PANEL = {
-    width: 9,           // 真正面を向いたときの見かけの幅 px
+    width: 13,          // 真正面を向いたときの見かけの幅 px
     // 真横（＝ガード成立）を向いたときに残る厚み。0 にすると一番肝心な瞬間に
     // 羽根が消えてしまうので、線として必ず残す
-    edge: 2.5,
-    dark: '#3A4450',    // 奥に回ったときの色
-    light: '#E6EEF8',   // 手前に来たときの色
-    perspective: 0.06,  // 手前ほど大きく見せる割合
+    edge: 3,
+    dark: '#2B3440',    // 奥に回ったときの色
+    light: '#F0F6FF',   // 手前に来たときの色
+    // 手前／奥での拡大率。0.06 では平行投影と見分けがつかず「回っている板」に
+    // 見えなかったので 0.30 まで上げた。手前で 1.3倍・奥で 0.7倍になり、
+    // 幅にも高さにも掛ける（＝相似で大きくなる）
+    perspective: 0.30,
+    // 軌道リング（楕円）の見下ろし量。奥行きは羽根の大きさで見せ、
+    // リングは「どこを回っているか」だけを示す。
+    // 羽根自体はこの分ずらさない — 上下させると板の上端がふらついて落ち着かず、
+    // 中心の高さを固定した方が回転が素直に読めた（ユーザー確認 2026-08-23）
+    tilt: 7,
+    orbitAlpha: 0.22,   // 軌道リングを薄く残す濃さ。羽根の行き先が読める
     barrierAlpha: 0.35, // ガード中にコアとの間へ引くバリア線の濃さ
 };
 
@@ -928,19 +937,27 @@ export class EnemyBase {
         if (!this.orbitShieldActive) return;
 
         const cx = this.width / 2;
-        const cy = this.height / 2;
+        const cy = this._orbitCenterY();
         const r = this.orbitRadius();
         // 展開が終わるまでは角度に関係なく無敵なので、見た目も全部光らせる
         const deploying = this.orbitDeployTimer < BASE_ORBIT_SHIELD_DEPLOY;
         const coreColor = this._getCoreColors().main;
+
+        // 軌道リングを薄い楕円で残す。奥半分は羽根より先に、手前半分は後に
+        // 描くので、コアの前後を線がくぐって見える
+        this._drawOrbitTrail(ctx, cx, cy, r, behind);
 
         for (const a of this.orbitAngles()) {
             const depth = panelDepth(a);
             if ((depth < 0) !== behind) continue;
 
             const px = cx + panelOffsetX(a, r);
-            const w = ORBIT_PANEL.edge + ORBIT_PANEL.width * Math.abs(depth);
-            const h = BASE_ORBIT_SHIELD_HEIGHT * (1 + ORBIT_PANEL.perspective * depth);
+            // 手前ほど相似で大きく。幅は「板を斜めから見た見かけの幅」に
+            // この拡大率を掛ける
+            const scale = 1 + ORBIT_PANEL.perspective * depth;
+            const w = (ORBIT_PANEL.edge + ORBIT_PANEL.width * Math.abs(depth)) * scale;
+            const h = BASE_ORBIT_SHIELD_HEIGHT * scale;
+            // 縦の中心は奥行きによらず一定。拡大は上下へ均等に伸びる
             const x = px - w / 2;
             const y = cy - h / 2;
 
@@ -965,6 +982,38 @@ export class EnemyBase {
             ctx.lineTo(px, y + h);
             ctx.stroke();
         }
+    }
+
+    /**
+     * 羽根の縦の中心。奥行きによらず一定に保つ（動かすと板の端がふらつく）。
+     *
+     * 基地は下端が床タイルの表面にぴったり乗っている（Map の enemyBaseSpawn が
+     * y = floorR*TILE - ENEMY_BASE_HEIGHT）ので、中心をコアの高さに置くと
+     * 手前で 1.3倍に伸びた羽根が床へ 10px めり込み、基地ごと埋まって見えた。
+     * そこで「一番大きくなる羽根の下端が床にちょうど接する高さ」を中心にする。
+     * 余った分は上（空中）へ伸びるので、めり込みは起きない。
+     */
+    _orbitCenterY() {
+        const maxHalf = (BASE_ORBIT_SHIELD_HEIGHT * (1 + ORBIT_PANEL.perspective)) / 2;
+        // 羽根が十分小さいときまでコアより下へ下げる意味はないので、コア中心で頭打ち
+        return Math.min(this.height / 2, this.height - maxHalf);
+    }
+
+    /**
+     * 軌道リングの楕円。rx は周回半径、ry は見下ろしぶん（ORBIT_PANEL.tilt）。
+     * 楕円の媒介変数 t は y = cy + ry*sin t なので、t が π..2π の側が上＝奥、
+     * 0..π の側が下＝手前になる。behind に合わせて半分ずつ描く。
+     */
+    _drawOrbitTrail(ctx, cx, cy, r, behind) {
+        if (r <= 0) return;
+        ctx.save();
+        ctx.strokeStyle = withAlpha(ORBIT_PANEL.light, ORBIT_PANEL.orbitAlpha);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (behind) ctx.ellipse(cx, cy, r, ORBIT_PANEL.tilt, 0, Math.PI, Math.PI * 2);
+        else ctx.ellipse(cx, cy, r, ORBIT_PANEL.tilt, 0, 0, Math.PI);
+        ctx.stroke();
+        ctx.restore();
     }
 
     /** Draw the pulsating energy core with bloom, sparkles, and charge particles. */

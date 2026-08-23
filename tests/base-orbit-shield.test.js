@@ -45,11 +45,13 @@ const FROM_LEFT = CORE_X - 10;
 test('周回シールドの定数が定義されている', () => {
   assert.equal(BASE_ORBIT_SHIELD_MISSION, 5, '6面以降 = missionsCompleted 5 以上');
   assert.equal(BASE_ORBIT_SHIELD_PANELS, 2);
-  assert.equal(BASE_ORBIT_SHIELD_RADIUS, 16);
-  assert.ok(BASE_ORBIT_SHIELD_RADIUS < 25, '最内リング(25)の内側に収まっていない');
+  assert.equal(BASE_ORBIT_SHIELD_RADIUS, 30);
+  // 羽根が出るのはリングが全部割れた後なので、最内リング(25)の外でも重ならない。
+  // コアの実体(最大11)より十分外にあることだけ縛る
+  assert.ok(BASE_ORBIT_SHIELD_RADIUS > 11 * 1.5, 'コアに貼り付いて周回して見えない');
   assert.equal(BASE_ORBIT_SHIELD_SPEED, 0.030);
   assert.equal(BASE_ORBIT_SHIELD_GUARD_HALF, 0.70);
-  assert.equal(BASE_ORBIT_SHIELD_HEIGHT, 34);
+  assert.equal(BASE_ORBIT_SHIELD_HEIGHT, 36);
   assert.equal(BASE_ORBIT_SHIELD_DEPLOY, 30);
 });
 

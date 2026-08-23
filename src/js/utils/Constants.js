@@ -484,10 +484,20 @@ export const ENEMY_BASE_HP = 1;                 // Final core HP
 // 難易度は SPEED（チャンスの間隔）と GUARD_HALF（ガード窓の広さ）の2つで動く。
 export const BASE_ORBIT_SHIELD_MISSION = 5;     // 6面以降 = missionsCompleted 5 以上
 export const BASE_ORBIT_SHIELD_PANELS = 2;      // 180°対向。左右が同時に閉じ、同時に開く
-export const BASE_ORBIT_SHIELD_RADIUS = 16;     // コアの実体(半径8〜11)の外、最内リング(25)の内側
+// 半径はコアの実体(8〜11)より十分外に取る。16 では羽根がコアに貼り付いて見えて
+// 「周回している」感じが出なかったので 30 まで広げた。最内リング(25)より外だが、
+// 羽根が出るのはリングが全部割れた後なので重ならない。
+// ガード判定は dx の符号しか見ない（orbitShield.guardBlocks）ため、
+// ここを動かしても難易度は変わらない
+export const BASE_ORBIT_SHIELD_RADIUS = 30;
 export const BASE_ORBIT_SHIELD_SPEED = 0.030;   // rad/frame。半周 π/0.030 ≈ 105 frame ≈ 1.75秒
 export const BASE_ORBIT_SHIELD_GUARD_HALF = 0.70; // ガード窓の半角 rad(≈40°)。全体の約44%が防御中
-export const BASE_ORBIT_SHIELD_HEIGHT = 34;     // 羽根の縦の長さ px。基地の高さ(32)を少し超える
+// 羽根の基準の縦の長さ px。手前に来た羽根はこれの (1 + ORBIT_PANEL.perspective)
+// 倍まで伸びる（36 → 46.8）。基地は下端が床タイルの表面にぴったり乗っているので、
+// 伸びた羽根が床にめり込まないよう、羽根の縦の中心は EnemyBase 側で
+// 「一番大きい羽根の下端が床に接する高さ」に置いている。
+// ここを大きくすると羽根は**上へ**伸びる
+export const BASE_ORBIT_SHIELD_HEIGHT = 36;
 // 展開のあいだは角度に関係なく完全無敵。ここが 0 だと、最後のリングを割った
 // 勢いのミサイル連打でシールドが一度も仕事をしないまま基地が落ちる
 export const BASE_ORBIT_SHIELD_DEPLOY = 30;     // frames(約0.5秒)
