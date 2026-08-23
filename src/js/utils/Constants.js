@@ -789,18 +789,24 @@ export const EMERGENCY_WILD_FIRE_SPREAD = 20 * Math.PI / 180;  // ±20度
 // 逆に実機で弾が多すぎる／重い場合は、まずここを上げて間引く
 export const EMERGENCY_WILD_FIRE_INTERVAL_MULT = 1.0;
 
-// ドローンは飛ぶので「通路が無くて基地に辿り着けない」ことは起きない。代わりに
-// **総攻撃中はグレネードを落としやすくする**（ユーザーの提案）。
-// グレネードは map.destroyArea() で面（半径 GRENADE_BLAST_RADIUS = 2タイル）を
-// 吹き飛ばすので、1タイルずつしか削れない単発ミサイルより壁を開ける効率が
-// 桁違いに高い。飛んで地上ユニットが行けない場所の上空まで出られる点でも、
-// 掘る役に向いている。
+// 総攻撃中のドローンのグレネード率。**通常時と同じに戻してある。**
 //
-// 0.35 の根拠: ドローンは1回の攻撃で ENEMY_DRONE_BURST_COUNT(5) 発撃ち、その
-// 1発ごとにこの抽選を行う。期待値は 0.5個 → 1.75個（約3.5倍）になり、
-// 「落としやすくなった」と体感できる。1.0 にすると弾を一切撃たなくなって
-// ドローンの性格が変わってしまうので上げすぎない
-export const EMERGENCY_DRONE_GRENADE_CHANCE = 0.35;
+// もとの狙いはこうだった: ドローンは飛ぶので「通路が無くて基地に辿り着けない」
+// ことは起きない。代わりに総攻撃中はグレネードを落としやすくして、上空から壁を
+// 開ける役をやらせる（グレネードは map.destroyArea() で面＝半径2タイルを
+// 吹き飛ばすので、1タイルずつしか削れない単発ミサイルより効率が桁違いに高い）。
+//
+// これを 0.35（通常の3.5倍。1回の攻撃 = ENEMY_DRONE_BURST_COUNT(5) 発ごとに
+// 抽選するので期待値 0.5個 → 1.75個）にしたところ、実機で**マップが壊れて
+// 足場が無くなり、進めなくなった**（2026-08-23 ユーザー報告）。
+// 面で消える攻撃を総攻撃の密度で降らせると、「壁を開ける」を通り越して床まで
+// 消える。壁を掘る役は地上ユニットの流れ弾（EMERGENCY_WILD_FIRE_*）に任せ、
+// ドローンは弾幕だけに戻す。
+//
+// 定数と分岐は残してある。上げたくなったら 0.15 あたりから試すこと。
+// tests/emergency-wild-fire.test.js が「通常時と同率」を縛っているので、
+// 上げるならテストの意図ごと書き換えることになる（＝この判断を踏み直せる）
+export const EMERGENCY_DRONE_GRENADE_CHANCE = ENEMY_DRONE_GRENADE_CHANCE;
 
 // --- Per-stage block palettes (stage 1..7) ---
 // Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.

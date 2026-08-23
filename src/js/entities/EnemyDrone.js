@@ -336,9 +336,9 @@ export class EnemyDrone {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
 
-        // 総攻撃中はグレネードを落としやすくする。ドローンは飛ぶので地上ユニットの
-        // ような足止めは起きないが、**グレネードは面で地形を吹き飛ばす**ので、
-        // 上空から壁に穴を開ける役として総攻撃に加わる（定数側のコメント参照）
+        // 総攻撃中の率は今のところ通常時と同じ。上空から壁を開ける役をやらせて
+        // みたが、面で地形が消えるので足場まで無くなった（定数側のコメント参照）。
+        // 分岐だけ残してあるので、調整するなら定数を動かす
         const grenadeChance = this.emergencyDefense
             ? EMERGENCY_DRONE_GRENADE_CHANCE
             : ENEMY_DRONE_GRENADE_CHANCE;

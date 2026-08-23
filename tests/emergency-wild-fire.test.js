@@ -241,24 +241,25 @@ test('通常時のグレネード率は ENEMY_DRONE_GRENADE_CHANCE のまま（�
   assert.equal(dropsGrenade(false, ENEMY_DRONE_GRENADE_CHANCE + 0.001), false, '境目の外側で落としている');
 });
 
-test('総攻撃中はグレネード率が EMERGENCY_DRONE_GRENADE_CHANCE に上がる', () => {
+test('総攻撃中もグレネード率は同じ', () => {
   assert.equal(dropsGrenade(true, EMERGENCY_DRONE_GRENADE_CHANCE - 0.001), true, '境目の内側で落としていない');
   assert.equal(dropsGrenade(true, EMERGENCY_DRONE_GRENADE_CHANCE + 0.001), false, '境目の外側で落としている');
 });
 
-// 「上がる」ことそのものを縛る。定数を下げてしまったら気づけるように
-test('総攻撃中のグレネード率は通常時より高い', () => {
-  assert.ok(
-    EMERGENCY_DRONE_GRENADE_CHANCE > ENEMY_DRONE_GRENADE_CHANCE,
-    `総攻撃中の方が低い: ${EMERGENCY_DRONE_GRENADE_CHANCE} <= ${ENEMY_DRONE_GRENADE_CHANCE}`,
+// 一度 0.35（通常の3.5倍）まで上げたが、実機で**マップが壊れて足場が無くなり
+// 進めなくなった**ため通常と同率に戻した（2026-08-23 ユーザー報告）。
+// グレネードは面で地形を吹き飛ばすので、総攻撃の密度で降らせると
+// 「壁を開ける」を通り越して床まで消える。上げ直したら気づけるように縛る
+test('総攻撃中のグレネード率を通常時より上げない', () => {
+  assert.equal(
+    EMERGENCY_DRONE_GRENADE_CHANCE, ENEMY_DRONE_GRENADE_CHANCE,
+    `総攻撃中だけ率が違う: ${EMERGENCY_DRONE_GRENADE_CHANCE} vs ${ENEMY_DRONE_GRENADE_CHANCE}`,
   );
-  // 全弾グレネードにするとドローンの性格が変わってしまう
-  assert.ok(EMERGENCY_DRONE_GRENADE_CHANCE < 1.0, 'グレネードしか落とさなくなっている');
 });
 
-// 通常時に落とさない抽選値でも、総攻撃中なら落とす＝率が実際に効いている
-test('通常時は落とさない抽選値でも、総攻撃中なら落とす', () => {
-  const roll = (ENEMY_DRONE_GRENADE_CHANCE + EMERGENCY_DRONE_GRENADE_CHANCE) / 2;
-  assert.equal(dropsGrenade(false, roll), false, '通常時に落としている');
-  assert.equal(dropsGrenade(true, roll), true, '総攻撃中に落としていない');
+// 同じ抽選値なら、総攻撃中かどうかで結果が変わらない
+test('総攻撃中かどうかでグレネードの出方が変わらない', () => {
+  for (const roll of [0.05, 0.2, 0.5, 0.9]) {
+    assert.equal(dropsGrenade(true, roll), dropsGrenade(false, roll), `出目 ${roll}`);
+  }
 });
