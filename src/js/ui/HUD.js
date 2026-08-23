@@ -9,6 +9,7 @@ import {
     CARRIER_ARROW_ALPHA,
     OVERDRIVE_WARN_TICKS
 } from '../utils/Constants.js';
+import { lerpColor } from '../utils/color.js';
 
 /**
  * 母艦の方向を示す矢印の画面座標。表示されないときは null。
@@ -51,6 +52,29 @@ export function carrierArrowScreenPos(game) {
 
     return { x, y, angle };
 }
+
+/**
+ * 時限バフのゲージの配置。2段目の直下に**横並び**で1行だけ置く。
+ *
+ * 以前は A-AIM の下に O-DRIVE を積んでいたが、HUD の帯（HUD_TOP_HEIGHT = 60px）に
+ * 収まらず、2本目が区切り線をまたいでプレイフィールドの上に出ていた。
+ * バーを半分の長さにして横に並べると、1行のまま2本とも帯の中に入る。
+ *
+ * 左右の位置は**効いているかどうかに関わらず固定**。空いた側へ詰めると、
+ * 片方が切れた瞬間にもう片方が飛んで目で追えなくなる。
+ * x はどちらも MISSILE / M-GUN の表示の下に収まる範囲（145〜452）。
+ */
+/** デバッグ札のX。1段目の MISSION と SCORE のあいだ。 */
+const DEBUG_BADGE_X = 640;
+
+const TIMER_BARS = {
+    autoAim:   { labelX: 145, barX: 182, label: 'A-AIM' },
+    overdrive: { labelX: 300, barX: 352, label: 'O-DRIVE' },
+    barW: 100,
+    barH: 5,
+    dy: 11,   // 2段目からの下げ幅。これ以上下げると帯からはみ出す
+    font: 'bold 10px "Space Mono", monospace',
+};
 
 export class HUD {
     constructor(game) {
@@ -121,7 +145,7 @@ export class HUD {
         this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
         this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
         this._drawRepairKitIcons(ctx, player, row2Y);
-        this._drawDebugInvincibleBadge(ctx, w, row2Y);
+        this._drawDebugInvincibleBadge(ctx, w, row1Y);
         // 母艦の方向矢印はここでは描かない。ミニマップより上の面に出したいため、
         // main.js が _drawOverlays(ミニマップ)の後に drawCarrierArrow() を呼ぶ。
 
@@ -379,33 +403,47 @@ export class HUD {
     _drawAutoAimBar(ctx, player, y) {
         if (!player || player.autoAimTimer <= 0) return;
 
-        const ratio = player.autoAimTimer / player.autoAimMaxTimer;
-        const labelX = 145;
-        const barX = 195;
-        const barW = 220;
-        const barH = 5;
-        const rowY = y + 11; // row2Y の直下
-
         // Shift 長押しで解除している間はグレーで出す。**バーは消さないし止めない** —
         // 解除しても残り時間は減り続けるので、消すと「あと何秒あるか」が分からなくなる。
         // グレーにするのは、この HUD が既に武器セレクタで「有効＝色つき／無効＝グレー」
         // という語彙を使っているため（非選択の武器が #444444 / #666666）。そこへ揃える
         const paused = !!player.autoAimPaused;
-        const fg = paused ? '#666666' : '#FF6600';
+        this._drawTimerBar(ctx, TIMER_BARS.autoAim, y, {
+            ratio: player.autoAimTimer / player.autoAimMaxTimer,
+            ink: paused ? '#666666' : '#FF6600',
+            bg: paused ? 'rgba(40,40,40,0.8)' : 'rgba(80,20,0,0.8)',
+            border: paused ? '#444444' : '#663300',
+        });
+    }
 
-        ctx.font = 'bold 10px "Space Mono", monospace';
-        ctx.fillStyle = fg;
-        ctx.fillText('A-AIM', labelX, rowY);
+    /**
+     * 時限バフのゲージ1本。ラベル＋地＋残量＋枠。
+     *
+     * A-AIM と O-DRIVE で形がまったく同じなので1本にまとめてある。
+     * 違うのは色の決め方だけなので、色は呼び出し側が決めて渡す。
+     *
+     * @param {object} slot TIMER_BARS の1エントリ（labelX / barX / label）
+     * @param {number} y 2段目の中心Y
+     */
+    _drawTimerBar(ctx, slot, y, { ratio, ink, bg, border }) {
+        const { barW, barH, dy, font } = TIMER_BARS;
+        const rowY = y + dy;
+        const barY = rowY - barH + 2;
+        const w = barW * Math.max(0, Math.min(1, ratio));
 
-        ctx.fillStyle = paused ? 'rgba(40,40,40,0.8)' : 'rgba(80,20,0,0.8)';
-        ctx.fillRect(barX, rowY - barH + 2, barW, barH);
+        ctx.font = font;
+        ctx.fillStyle = ink;
+        ctx.fillText(slot.label, slot.labelX, rowY);
 
-        ctx.fillStyle = fg;
-        ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
+        ctx.fillStyle = bg;
+        ctx.fillRect(slot.barX, barY, barW, barH);
 
-        ctx.strokeStyle = paused ? '#444444' : '#663300';
+        ctx.fillStyle = ink;
+        ctx.fillRect(slot.barX, barY, w, barH);
+
+        ctx.strokeStyle = border;
         ctx.lineWidth = 1;
-        ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
+        ctx.strokeRect(slot.barX, barY, barW, barH);
 
         // フォントを元に戻す
         ctx.font = 'bold 16px "Space Mono", monospace';
@@ -426,34 +464,21 @@ export class HUD {
         if (!player || !player.overdriveTimer || player.overdriveTimer <= 0) return;
 
         const max = player.overdriveMaxTimer || player.overdriveTimer;
-        const ratio = Math.max(0, Math.min(1, player.overdriveTimer / max));
-        const labelX = 145;
-        const barX = 195;
-        const barW = 220;
-        const barH = 5;
-        const rowY = y + 22; // A-AIM ゲージ(y + 11)のさらに下
 
-        // 残り3秒(180 tick)で点滅。暗い側へ落とすだけで、消灯はしない
-        const ending = player.overdriveTimer <= OVERDRIVE_WARN_TICKS;
-        const dark = ending && Math.floor(Date.now() / 200) % 2 === 1;
-        const fg = dark ? '#665511' : '#FFDD22';
+        // 残り3秒(180 tick)から金色が抜けて赤へ寄っていく。機体まわりの輝き
+        // （Player._drawOverdriveGlow）と同じ考え方で、効果が色として失われていく。
+        // ただし点滅は機体側だけ。HUD は残量を読む道具なので、常時ちらつくと
+        // 数字を追えない。ここで瞬かせるのは切れる直前だけにしてある
+        const goldMix = Math.min(1, player.overdriveTimer / OVERDRIVE_WARN_TICKS);
+        const fg = lerpColor('#FF4433', '#FFDD22', goldMix);
+        const blink = goldMix < 1 && Math.floor(Date.now() / 200) % 2 === 1;
 
-        ctx.font = 'bold 10px "Space Mono", monospace';
-        ctx.fillStyle = fg;
-        ctx.fillText('O-DRIVE', labelX, rowY);
-
-        ctx.fillStyle = 'rgba(70, 55, 0, 0.8)';
-        ctx.fillRect(barX, rowY - barH + 2, barW, barH);
-
-        ctx.fillStyle = fg;
-        ctx.fillRect(barX, rowY - barH + 2, barW * ratio, barH);
-
-        ctx.strokeStyle = '#665511';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, rowY - barH + 2, barW, barH);
-
-        // フォントを元に戻す
-        ctx.font = 'bold 16px "Space Mono", monospace';
+        this._drawTimerBar(ctx, TIMER_BARS.overdrive, y, {
+            ratio: player.overdriveTimer / max,
+            ink: blink ? lerpColor(fg, '#000000', 0.55) : fg,
+            bg: 'rgba(70, 55, 0, 0.8)',
+            border: lerpColor(fg, '#000000', 0.6),
+        });
     }
 
     /**
@@ -466,7 +491,9 @@ export class HUD {
     _drawDebugInvincibleBadge(ctx, w, y) {
         if (!this.game || !this.game.debugInvincible) return;
         ctx.fillStyle = (Math.floor(Date.now() / 400) % 2 === 0) ? '#FF3333' : '#661111';
-        ctx.fillText('INVINCIBLE', w - 160, y);
+        // 1段目の空き地（MISSION の数字 595 と SCORE 864 のあいだ）。
+        // 以前は w-160 の2段目に出していて、CARRIER の残機と重なっていた
+        ctx.fillText('INVINCIBLE', DEBUG_BADGE_X, y);
     }
 
     // ------------------------------------------

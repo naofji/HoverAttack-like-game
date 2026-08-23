@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HUD } from '../src/js/ui/HUD.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { OVERDRIVE_DURATION } from '../src/js/utils/Constants.js';
+import { OVERDRIVE_DURATION, OVERDRIVE_WARN_TICKS } from '../src/js/utils/Constants.js';
 
 // オーバードライブの残時間バー。A-AIM ゲージのすぐ下に同じ作法で出す。
 // 「いつ切れるか」が読めないと、無限だと思って撃っていた弾が急に減り始める。
@@ -50,6 +50,34 @@ test('分母が 0 でもゼロ除算でバーが壊れない', () => {
   for (const b of bars) {
     assert.ok(Number.isFinite(b.args[2]), `バーの幅が数値でない: ${b.args[2]}`);
   }
+});
+
+/** その位相で使われたラベル／バーの色（先頭の1つ）。 */
+function barColor(timer, nowMs) {
+  const realNow = Date.now;
+  Date.now = () => nowMs;
+  try {
+    return drawBar({ overdriveTimer: timer }).fills.find((c) => /^#/.test(c));
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+/** #rrggbb の G 成分。金と赤の見分けに使う。 */
+const greenOf = (hex) => parseInt(hex.slice(3, 5), 16);
+
+test('残り時間が十分なうちは金色のまま点滅しない（ゲージとして読ませる）', () => {
+  // 機体の輝きは常に往復するが、HUD は残量を読む道具なので落ち着かせる
+  assert.equal(barColor(OVERDRIVE_DURATION, 0), barColor(OVERDRIVE_DURATION, 250));
+  assert.ok(greenOf(barColor(OVERDRIVE_DURATION, 0)) >= 170, '金色でない');
+});
+
+test('切れかけると金色が抜けて赤へ寄っていく', () => {
+  const g = (timer) => greenOf(barColor(timer, 0));
+  assert.ok(g(OVERDRIVE_WARN_TICKS) > g(OVERDRIVE_WARN_TICKS / 2),
+    '色が変わっていない');
+  assert.ok(g(OVERDRIVE_WARN_TICKS / 10) <= 110,
+    `最後まで金色が残っている: G=${g(OVERDRIVE_WARN_TICKS / 10)}`);
 });
 
 test('残り3秒を切ると点滅する（切れる予告）', () => {
