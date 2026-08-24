@@ -5,6 +5,27 @@
 export const CANVAS_WIDTH = 1024;
 export const CANVAS_HEIGHT = 768;
 
+// --- 索敵楕円の基準 ---
+// 索敵は「横だけ画面幅に比例する楕円」。横半径は各敵の sightRange
+// (= CANVAS_WIDTH * k) をそのまま使い、縦半径はそれに SIGHT_ASPECT を掛ける。
+//
+// なぜ縦を画面幅に比例させないか:
+// 16:9 化は横に広げる方向なので、CANVAS_WIDTH に紐づけたままだと画面の高さは
+// 768 で変わらないのに索敵円だけ 1.334 倍になり、「真上・真下の見えない敵に
+// 撃たれる」が一律 33% 悪化する。上下移動が主軸のホバー機ではこれが効く。
+//
+// SIGHT_VERTICAL_BASE を 4:3 時代の幅 (1024) に固定すると、
+//   横: 半径/半幅 の比が 4:3 と同じ（0.80 など）
+//   縦: 絶対値が 4:3 と同じ（タンクなら 410px）
+// の両方が同時に成り立つ。4:3 では SIGHT_ASPECT が厳密に 1.0 になり
+// 楕円が真円に退化するので、移行でバランスが動いていないことを証明できる。
+//
+// ここを CANVAS_WIDTH と同じ値にすると SIGHT_ASPECT = 1 に戻り、
+// 「CANVAS_WIDTH を変えただけ」＝縦も等方的に拡大する挙動になる。
+// 実機で縦が緩すぎると感じたときの調整点はここ 1 箇所。
+export const SIGHT_VERTICAL_BASE = 1024;
+export const SIGHT_ASPECT = SIGHT_VERTICAL_BASE / CANVAS_WIDTH;
+
 // --- Tile / Map Base Constants ---
 export const TILE_SIZE = 16;
 export const MIN_MAP_COLS = 150;
