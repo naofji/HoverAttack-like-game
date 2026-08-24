@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS, renderWeaponSound, voiceBreakpoints } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
 import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
 import { EnemyBase } from '../src/js/entities/EnemyBase.js';
+import { Player } from '../src/js/entities/Player.js';
+import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
 import { transientLevel, db, whiteNoise, SAMPLE_RATE } from './helpers/dsp.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, AUDIO_OFFSCREEN_FADE,
@@ -271,24 +272,14 @@ test('部品の数だけノードが作られる', () => {
 
 // --- 呼び出し側 -----------------------------------------------------------------
 
-const SRC = (f) => readFileSync(new URL(`../src/js/${f}`, import.meta.url), 'utf8');
-
-/** ディレクトリ配下の .js を全部つないで返す。ファイル分割で壊れないようにするため。 */
-const SRC_DIR = (d) => {
-  const dir = new URL(`../src/js/${d}/`, import.meta.url);
-  if (!existsSync(dir)) return '';
-  return readdirSync(dir)
-    .filter((f) => f.endsWith('.js'))
-    .map((f) => readFileSync(new URL(f, dir), 'utf8'))
-    .join('\n');
-};
-
 test('古い共用の発射音は残っていない', () => {
-  // audio/ 配下をまとめて見る。AudioManager.js だけを読むと、音の系統ごとに
-  // 分けたファイルへ古い実装が残っていても気づけない
-  const am = SRC('audio/AudioManager.js') + SRC_DIR('audio/sounds') + SRC_DIR('audio/engine');
-  assert.ok(!am.includes('playEnemyFire'), 'playEnemyFire が残っている');
-  assert.ok(!am.includes('playMissile('), 'playMissile が残っている');
+  // 以前はソース文字列を探していた。**オブジェクトを直接見るほうが正確** ──
+  // どのファイルに書いてあっても、コメントに名前が残っていても正しく判定できる
+  // （実際 AudioManager.js には「WEAPON_SOUNDS の表に…」というコメントだけが
+  // 残っていて、未使用 import の自動判定を惑わせたことがある）。
+  for (const gone of ['playEnemyFire', 'playMissile']) {
+    assert.equal(audioManager[gone], undefined, `${gone} が残っている`);
+  }
 });
 
 test('基地の通常弾で音が二重に鳴らない', () => {
@@ -315,22 +306,71 @@ test('基地の通常弾で音が二重に鳴らない', () => {
   }
 });
 
-test('武器ごとに違う種類が渡されている', () => {
-  const base = SRC('entities/EnemyBase.js');
-  for (const kind of ['enemyMissile', 'homing', 'cruise']) {
-    assert.ok(base.includes(`playWeapon('${kind}'`), `基地が ${kind} を鳴らしていない`);
-  }
-  // アタッカーは EnemyAttacker.js と entities/attacker/*.js に分かれているので、
-  // 1ファイルではなくまとめて見る。**どのファイルに書いてあるかは問わない** ──
-  // 以前は EnemyAttacker.js だけを読んでいて、射撃を attacker/combat.js へ
-  // 移しただけで落ちた（振る舞いは変わっていないのに）。
-  const attacker = SRC_DIR('entities/attacker') + SRC('entities/EnemyAttacker.js');
-  for (const kind of ['homing', 'enemyMissile', 'grenade']) {
-    assert.ok(attacker.includes(`playWeapon('${kind}'`),
-      `アタッカーが ${kind} を鳴らしていない`);
+/** playWeapon に渡された種類だけを記録して、必ず元へ戻す。 */
+function recordKinds(fn) {
+  const original = audioManager.playWeapon;
+  const kinds = [];
+  audioManager.playWeapon = (kind) => kinds.push(kind);
+  try { fn(); } finally { audioManager.playWeapon = original; }
+  return kinds;
+}
+
+test('基地は武器ごとに違う種類を鳴らす', () => {
+  // 以前は EnemyBase.js のソースに `playWeapon('homing'` という文字列が
+  // あるかを見ていた。到達不能な行でも通るし、ファイルを分けると読み漏らす。
+  // **実際に撃たせて、渡された種類を見る。**
+  const game = {
+    map: { isSolidAtPixel: () => false, isSolid: () => false, rows: 24, cols: 24 },
+    enemyBullets: [], projectiles: [], particles: [],
+    missionsCompleted: 6, player: null, carrier: null,
+  };
+  const target = { x: 200, y: 100, width: 16, height: 24 };
+  const makeBase = () => {
+    const b = Object.create(EnemyBase.prototype);
+    Object.assign(b, { game, x: 0, y: 0, width: 32, height: 32, alive: true,
+                       preLaunchPath: [{ r: 1, c: 1 }, { r: 2, c: 2 }] });
+    return b;
+  };
+
+  for (const [method, expected] of [
+    ['_fireBaseMissile', 'enemyMissile'],
+    ['_fireBaseHomingVolley', 'homing'],
+    ['_fireCruiseMissile', 'cruise'],
+  ]) {
+    game.enemyBullets.length = 0;
+    const kinds = recordKinds(() => makeBase()[method](target));
+    assert.deepEqual(kinds, [expected], `${method} が鳴らす種類が違う`);
+    assert.ok(game.enemyBullets.length > 0, `${method} が弾を撃っていない`);
   }
 });
 
+test('アタッカーは武器ごとに違う種類を鳴らす', () => {
+  // 型ごとに撃つものが変わる（artillery=誘導弾、grenade 持ち=グレネード、
+  // それ以外=ミサイル）ので、config で分岐を1つずつ確実に通す。
+  const cases = [
+    ['artillery', { usesGrenades: false }, 'homing'],
+    ['heavy', { usesGrenades: true, grenadeChance: 1 }, 'grenade'],
+    ['heavy', { usesGrenades: false }, 'enemyMissile'],
+  ];
+  for (const [typeKey, over, expected] of cases) {
+    const game = makeGame(makeMap(flatFloorRows()));
+    const a = makeAttacker(game, 100, 300, typeKey);
+    // aimAccuracy=1 で狙いのブレを消し、分岐だけを見る
+    a.config = { ...a.config, ...over, aimAccuracy: 1 };
+    const kinds = recordKinds(() => a._fire({ x: 200, y: 300, width: 16, height: 24 }));
+    assert.deepEqual(kinds, [expected], `${typeKey}(${JSON.stringify(over)}) の種類が違う`);
+  }
+});
+
+test('緊急防衛の乱射も、型ごとの種類をそのまま使う', () => {
+  for (const [typeKey, expected] of [['artillery', 'homing'], ['heavy', 'enemyMissile']]) {
+    const game = makeGame(makeMap(flatFloorRows()));
+    const a = makeAttacker(game, 100, 300, typeKey);
+    a.emergencyTargetBase = { x: 300, y: 280, width: 32, height: 32 };
+    const kinds = recordKinds(() => a._fireWild());
+    assert.deepEqual(kinds, [expected], `${typeKey} の乱射の種類が違う`);
+  }
+});
 test('renderWeaponSound は部品が無くても落ちない', () => {
   const ctx = fakeCtx();
   assert.doesNotThrow(() => renderWeaponSound(ctx, {}, {}, null, 1, 0));
@@ -466,9 +506,28 @@ test('リロードは一瞬で終わる（動作を待たされる感じにし�
 });
 
 test('自機のリロードは定位させない（自分の銃なので中央）', () => {
-  const player = readFileSync(new URL('../src/js/entities/Player.js', import.meta.url), 'utf8');
-  assert.ok(player.includes("playWeapon('reload')"), 'リロード音が呼ばれていない');
-  assert.ok(!player.includes("playWeapon('reload',"), '座標を渡していて左右に振れる');
+  // 以前はソースに `playWeapon('reload')` があり `playWeapon('reload',` が
+  // 無いことを見ていた。**引数の渡し方を1文字変えるだけで抜ける**
+  // （変数に入れてから渡す、スプレッドで渡す）。実際にリロードを終わらせて、
+  // 渡された引数そのものを見る。
+  const game = makeGame(makeMap(flatFloorRows()));
+  const p = new Player(game, 100, 300);
+  game.player = p;
+
+  const original = audioManager.playWeapon;
+  const calls = [];
+  audioManager.playWeapon = (...args) => calls.push(args);
+  try {
+    p.mgReloadTimer = 1;   // 装填の残り1フレームから、終わる瞬間まで進める
+    p._updateTimers();
+  } finally {
+    audioManager.playWeapon = original;
+  }
+
+  assert.deepEqual(calls, [['reload']],
+    `リロード音の呼び方が違う: ${JSON.stringify(calls)}`);
+  assert.equal(calls[0].length, 1,
+    '座標を渡していて左右に振れる（自分の銃なので中央で鳴らす）');
 });
 
 // --- Ready ボイス ---------------------------------------------------------------
