@@ -36,16 +36,20 @@ test('parallax factor constant is 0.25', () => {
 test('backdrop canvas is sized for the smallest map', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 2400, 1200);
-  assert.equal(bd.width, 1368);
-  assert.equal(bd.height, 891);
-  assert.equal(bd.canvas.width, 1368);
+  // width は camXMax(= mapW - CANVAS_WIDTH) に視差係数を掛けて CANVAS_WIDTH を足した値。
+  // CANVAS_WIDTH が動くとこの値も動くので、1024 前提の数値を直書きせず式で導く。
+  const expectedWidth = Math.floor((2400 - CANVAS_WIDTH) * FAR_BG_PARALLAX) + CANVAS_WIDTH;
+  assert.equal(bd.width, expectedWidth);
+  assert.equal(bd.height, 891); // 高さは CANVAS_WIDTH に依存しないので変わらない
+  assert.equal(bd.canvas.width, expectedWidth);
   assert.equal(bd.canvas.height, 891);
 });
 
 test('backdrop canvas is sized for the largest map', async () => {
   const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
   const bd = makeBackdrop(CaveBackdrop, 4800, 2400);
-  assert.equal(bd.width, 1968);
+  const expectedWidth = Math.floor((4800 - CANVAS_WIDTH) * FAR_BG_PARALLAX) + CANVAS_WIDTH;
+  assert.equal(bd.width, expectedWidth);
   assert.equal(bd.height, 1191);
 });
 
@@ -213,7 +217,9 @@ test('Map owns a backdrop sized for its own dimensions', async () => {
 
   const map = withNoopDocument(() => new Map({ rng: new SeededRNG(99) }, 0)); // 最小マップ
   assert.ok(map.backdrop instanceof CaveBackdrop, 'map.backdrop should exist');
-  assert.equal(map.backdrop.width, 1368);
+  // マップ自体の幅は CANVAS_WIDTH と無関係に決まるので、backdrop 側の幅だけを式で導く。
+  const expectedWidth = Math.floor((map.width - CANVAS_WIDTH) * FAR_BG_PARALLAX) + CANVAS_WIDTH;
+  assert.equal(map.backdrop.width, expectedWidth);
   assert.equal(map.backdrop.height, 891);
 });
 
