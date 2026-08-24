@@ -23,7 +23,9 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 機体の破壊演出 | `src/js/entities/destruction.js` の `DESTRUCTION_PROFILES` に1行 | `playDestruction()` |
 | 破壊時の破片パーツ | `src/js/entities/debris/` に `xxxParts.js` ＋ `DEBRIS_SPECS` に1行 | `buildDebris()` |
 | 敵アタッカーの型 | `EnemyAttacker.js` の型別 config と `LEG_STYLES` | 既存のステートマシン |
-| 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ScreenRenderer.js` |
+| 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
+| 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
+| 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
 | 調整用の数値 | `src/js/utils/Constants.js` | — |
 
 `Constants.js` はゲームバランスと演出の数値の唯一の置き場。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `EnemyAttacker.js` の `LEG_STYLES`）。
@@ -47,7 +49,9 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 - `entities/` — 自機・敵・弾・アイテム。それぞれ `update()` と `draw(ctx)` を持つ
 - `systems/` — 衝突、スポーン、ゲーム状態、ランキング（ローカル／オンライン）
 - `world/` — マップ生成と描画、カメラ、洞窟の遠景
-- `ui/` — HUD、タイトル／ランキングなどの画面、照準。`ui/flows/` は画面遷移側（描画は `ScreenRenderer`）
+- `ui/` — HUD、照準、各画面。**画面は「更新」と「描画」で置き場が分かれている** — `ui/flows/` が更新側（どのキーで何が起きるか）、`ui/screens/` が描画側
+  - `ScreenRenderer.js` は約170行まで減っていて、**画面をまたぐ共通部品だけ**が残っている（`_drawStartHint` の点滅ヒント、`_metallicText` の見出し文字、`drawDemoCycleDots`、`drawVolumeIndicator`）。ここも `Object.assign(ScreenRenderer.prototype, ...)` で `ui/screens/` の各画面を混ぜる形（`Game` の mixin と同じ理由・同じ作り）。**画面を1つ足すときは `ui/screens/` にファイルを作って末尾の Object.assign に足す。`ScreenRenderer.js` 本体には書かない。**
+  - パネルの寸法とランキング表の列座標は `ui/screens/layout.js`。**実機で見て決めた値なので、動かす前にあそこのコメントを読むこと**
 - `utils/` — 純ロジック。**テストが書きやすいものは積極的にここへ切り出す**（`scoring` / `modes` / `timestep` / `aimLead` / `mgReload` / `geo` など、いずれも `node --test` で直接テストされている）
 - `audio/` — 上記のとおり
 - `gas/` — オンラインランキングの Google Apps Script。**変更したらユーザーが手動で再デプロイする必要がある**
