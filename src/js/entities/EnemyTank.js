@@ -11,7 +11,7 @@ import {
     
     ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
-import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision } from '../utils/Physics.js';
+import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -212,7 +212,7 @@ export class EnemyTank {
         const selfCY = this.y + halfH;
 
         let best    = null;
-        let minDist = ENEMY_TANK_SIGHT_RANGE;
+        let minDist = Infinity;
 
         const check = (entity) => {
             if (!entity || !entity.alive) return;
@@ -220,6 +220,10 @@ export class EnemyTank {
             const dy = (entity.y + entity.height / 2) - selfCY;
             // Only target entities in the forward 180° arc
             if ((this.patrolDir > 0 && dx >= 0) || (this.patrolDir < 0 && dx <= 0)) {
+                // 索敵の内外は楕円で、その中での順位付けはユークリッド距離で。
+                // 正規化距離で順位を付けると、縦のほうが半径が小さいぶん
+                // 横に居る標的が不当に優先されてしまう。
+                if (!withinSight(dx, dy, ENEMY_TANK_SIGHT_RANGE)) return;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist <= minDist) { minDist = dist; best = entity; }
             }
