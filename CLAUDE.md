@@ -22,7 +22,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 効果音（鳴り続けるループ） | `AudioManager` に `_loopSound(key, {build, tune})` で | 同ファイル |
 | 機体の破壊演出 | `src/js/entities/destruction.js` の `DESTRUCTION_PROFILES` に1行 | `playDestruction()` |
 | 破壊時の破片パーツ | `src/js/entities/debris/` に `xxxParts.js` ＋ `DEBRIS_SPECS` に1行 | `buildDebris()` |
-| 敵アタッカーの型 | `EnemyAttacker.js` の型別 config と `LEG_STYLES` | 既存のステートマシン |
+| 敵アタッカーの型 | `Constants.js` の `ENEMY_ATTACKER_TYPES` に1行 ＋ 脚を変えるなら `entities/attacker/legs.js` の `LEG_STYLES` | `EnemyAttacker.js` の `update()` |
 | 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
@@ -47,6 +47,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
   - **`Game` はクラスではなくオブジェクトリテラルで、大きな機能群は別ファイルの同じ形のリテラルを `Object.assign(Game, ...)` で混ぜている**（`main.js` 末尾の Mixins 節）。`this` の意味は変わらないので、テストの `Game._updateSettings.call(fakeGame)` という呼び方がそのまま通る。**新しい mixin を足すときも「`game` を第一引数に取る関数」にはしないこと** — テスト28ファイルの呼び方を全部変えることになる。
   - 現在の mixin: `ui/flows/settingsFlow.js`（設定画面）、`ui/flows/attractFlow.js`（タイトル・デモループ・面セレクト）、`systems/OnlineFlow.js`（ランキングの取得/送信/名前入力）、`systems/CombatActions.js`（ドッキング・射撃・グレネード軌道）、`systems/SpawnEffects.js`（爆発・破片・煙幕の生成）
 - `entities/` — 自機・敵・弾・アイテム。それぞれ `update()` と `draw(ctx)` を持つ
+  - `entities/attacker/` — `EnemyAttacker` を層で分けたもの（`movement` / `combat` / `collision` / `draw` / `legs`）。`ScreenRenderer` と同じ `Object.assign(EnemyAttacker.prototype, ...)` 方式。**`EnemyAttacker.js` 本体に残っているのは `constructor` と `update()`（どの順で何を呼ぶかの唯一の記述）と破壊まわりだけ**なので、挙動を足すときはまず層のどれかに置けないか見る
 - `systems/` — 衝突、スポーン、ゲーム状態、ランキング（ローカル／オンライン）
 - `world/` — マップ生成と描画、カメラ、洞窟の遠景
 - `ui/` — HUD、照準、各画面。**画面は「更新」と「描画」で置き場が分かれている** — `ui/flows/` が更新側（どのキーで何が起きるか）、`ui/screens/` が描画側
