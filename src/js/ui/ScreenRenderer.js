@@ -25,6 +25,11 @@ import { visibleSettingsItems, settingValueText } from './settingsItems.js';
 import { drawControlsDiagram, controlsDiagramHeight } from './controlsDiagram.js';
 import { UI, TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, glow, drawFrame, drawPanel, drawScanlines } from './theme.js';
 import { SAVE_COST, STAGE_PALETTES } from '../utils/Constants.js';
+import {
+    RANKING_COLUMNS, RANKING_TABLE_WIDTH, RANKING_SLOTS,
+    FAME_COLUMNS, FAME_BLOCK_WIDTH,
+    PANEL_HEAD, PANEL_PAD, panelHeight, panelContentTop,
+} from './screens/layout.js';
 
 /**
  * 遊び方画面の ITEMS パネルに並べる拾い物。
@@ -384,9 +389,9 @@ export class ScreenRenderer {
             const lineH = lineHeight('small');
             const ILLUST_H = 115;
             const ITEM_H = 64;
-            const objectiveH = ScreenRenderer.panelHeight(lineH * 2);
-            const rulesH = ScreenRenderer.panelHeight(Math.max(lineH * 6, ILLUST_H));
-            const itemsH = ScreenRenderer.panelHeight(ITEM_H * ITEM_GUIDE.length);
+            const objectiveH = panelHeight(lineH * 2);
+            const rulesH = panelHeight(Math.max(lineH * 6, ILLUST_H));
+            const itemsH = panelHeight(ITEM_H * ITEM_GUIDE.length);
             const areaTop = 80;
             const areaBottom = H - SPACE.xl;
             const gap = Math.floor(
@@ -401,7 +406,7 @@ export class ScreenRenderer {
             drawPanel(ctx, cx - 400, objectiveY, 800, objectiveH, 'MISSION OBJECTIVE', UI.accent);
             ctx.font = font('small');
             ctx.textAlign = 'center';
-            let ty = ScreenRenderer.panelContentTop(objectiveY, lineH);
+            let ty = panelContentTop(objectiveY, lineH);
             ctx.fillStyle = UI.ink;
             ctx.fillText('DESTROY ENEMY ROBOTS, OBLITERATE THE ENEMY BASE CORE, AND CAPTURE THE FLAG.', cx, ty);
             ctx.fillStyle = UI.warn;
@@ -421,12 +426,12 @@ export class ScreenRenderer {
                 '3) IF ATTACKER IS DESTROYED, RESPAWN AT CARRIER.',
                 '   IF CARRIER IS DESTROYED, RESPAWN AT START.',
             ];
-            const rulesTop = ScreenRenderer.panelContentTop(rulesY, lineH);
+            const rulesTop = panelContentTop(rulesY, lineH);
             rules.forEach((line, i) => ctx.fillText(line, cx - 380, rulesTop + i * lineH));
 
             // 右側のイラスト枠。パネルの中身の縦幅に対して中央へ置く。
-            const illustTop = rulesY + ScreenRenderer.PANEL_HEAD
-                + Math.floor((rulesH - ScreenRenderer.PANEL_HEAD - ILLUST_H) / 2);
+            const illustTop = rulesY + PANEL_HEAD
+                + Math.floor((rulesH - PANEL_HEAD - ILLUST_H) / 2);
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.2)';
             ctx.lineWidth = 1;
             drawFrame(ctx, cx + 220, illustTop, 140, ILLUST_H, 'rgba(0, 200, 255, 0.2)', { radius: 6 });
@@ -465,7 +470,7 @@ export class ScreenRenderer {
             // Animate dummy kits
             Object.values(this.dummyKits).forEach(kit => kit.frameCounter++);
 
-            const itemsTop = itemsY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
+            const itemsTop = itemsY + PANEL_HEAD + PANEL_PAD;
             items.forEach((item, i) => {
                 const y = itemsTop + i * ITEM_H + Math.round(ITEM_H / 2);
 
@@ -498,7 +503,7 @@ export class ScreenRenderer {
             // 図にした（controlsDiagram.js）。設定画面のオーバーレイと同じものを
             // 描くので、2画面で見た目も文言もずれない
             const panelW = 800;
-            const panelH = ScreenRenderer.panelHeight(controlsDiagramHeight());
+            const panelH = panelHeight(controlsDiagramHeight());
             const areaTop = 80;
             const areaBottom = H - SPACE.xl;
             const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
@@ -506,9 +511,9 @@ export class ScreenRenderer {
             drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
             drawControlsDiagram(
                 ctx,
-                cx - panelW / 2 + ScreenRenderer.PANEL_PAD + SPACE.md,
-                panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD,
-                panelW - (ScreenRenderer.PANEL_PAD + SPACE.md) * 2,
+                cx - panelW / 2 + PANEL_PAD + SPACE.md,
+                panelY + PANEL_HEAD + PANEL_PAD,
+                panelW - (PANEL_PAD + SPACE.md) * 2,
             );
         }
 
@@ -538,11 +543,11 @@ export class ScreenRenderer {
         ctx.fillRect(0, 0, W, H);
 
         const rowH = 44;
-        const panelH = ScreenRenderer.panelHeight(rowH * items.length + rowH);
+        const panelH = panelHeight(rowH * items.length + rowH);
         const panelY = Math.floor((H - panelH) / 2);
         drawPanel(ctx, cx - 320, panelY, 640, panelH, 'SETTINGS', UI.accent);
 
-        const rowsTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
+        const rowsTop = panelY + PANEL_HEAD + PANEL_PAD;
         ctx.textBaseline = 'middle';
         items.forEach((item, i) => {
             const y = rowsTop + i * rowH + Math.round(rowH / 2);
@@ -610,7 +615,7 @@ export class ScreenRenderer {
     _drawControlsOverlay(ctx, cx, H) {
         const panelW = 720;
         const hintH = 30; // 最下段の「閉じ方」の案内ぶん
-        const panelH = ScreenRenderer.panelHeight(controlsDiagramHeight() + hintH);
+        const panelH = panelHeight(controlsDiagramHeight() + hintH);
         const panelY = Math.floor((H - panelH) / 2);
 
         // 背後の設定パネルを一段沈める。重なった2枚のうちどちらが手前かを
@@ -620,8 +625,8 @@ export class ScreenRenderer {
 
         drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
 
-        const contentTop = panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD;
-        const pad = ScreenRenderer.PANEL_PAD + SPACE.md;
+        const contentTop = panelY + PANEL_HEAD + PANEL_PAD;
+        const pad = PANEL_PAD + SPACE.md;
         const h = drawControlsDiagram(ctx, cx - panelW / 2 + pad, contentTop, panelW - pad * 2);
 
         // 閉じ方の案内。設定画面の最下段の案内と同じ位置関係にする
@@ -940,73 +945,10 @@ export class ScreenRenderer {
         ctx.fillText(text, x, y);
     }
 
-    /**
-     * ランキング表の列。x は表の左端からの相対位置。
-     *
-     * 以前は1本の文字列に padStart/padEnd で桁を詰めて描いていたが、
-     * 見出しと中身が最大4文字ずれていた。さらに国旗の絵文字は等幅フォントでも
-     * 送り幅が一定にならないため、国旗の有無でそれ以降の列が動いていた。
-     * 列ごとに座標と揃えを決めて独立に描けば、絵文字の幅に左右されない。
-     */
-    // 関連する列は寄せ、グループ間だけ空ける（順位＋スコア / 名前＋地域 / 到達＋時間）。
-    // 等間隔に散らすと、どの値がどの値と対になるのか読み取りにくい。
-    static RANKING_COLUMNS = [
-        { key: 'rank', label: 'RANK', x: 31, align: 'right' },
-        { key: 'score', label: 'SCORE', x: 130, align: 'right' },
-        { key: 'name', label: 'NAME', x: 226, align: 'left' },
-        { key: 'flag', label: 'REGION', x: 354, align: 'left' },
-        // TRY は「そのランがどう終わったか」の仲間なので MISSION / TIME と並べる。
-        // 当初は名前と国旗の隙間（x=346・small）に押し込んでいたが、名前列に
-        // ぶら下がって見えて浮いた（実機の指摘）。国旗(354 左揃え)から十分離れた
-        // 470 に右揃えで置くと、470→552→632 と 82/80px のほぼ等間隔になり、
-        // 3列が1つのまとまりとして読める。
-        { key: 'tries', label: 'TRY', x: 470, align: 'right' },
-        { key: 'mission', label: 'MISSION', x: 552, align: 'right' },
-        { key: 'time', label: 'TIME', x: 632, align: 'right' },
-    ];
-
-    static RANKING_TABLE_WIDTH = 632;
-
-    /**
-     * 常にこの数だけ枠を描き、記録が無い行は空欄で埋める。
-     * 記録が少ないと画面下が大きく空いてしまう（3件のとき下に560px、埋まり10%）。
-     * 当時のハイスコア表が固定枠だったのに倣うと、見た目が安定し余白も一定になる。
-     */
-    static RANKING_SLOTS = 20;
-
-    /** Wall of Fame の1週ブロック内の列。ランキング表と同じ理由で座標指定にする。 */
-    static FAME_COLUMNS = [
-        { key: 'rank', x: 24, align: 'right' },
-        { key: 'score', x: 130, align: 'right' },
-        { key: 'name', x: 162, align: 'left' },
-        { key: 'flag', x: 292, align: 'left' },
-        // TRY はブロックの右端。名前(162 左揃え・最大10文字≒258)と
-        // 国旗(292 左揃え)の隙間に入れると、週ランキング表で一度やって
-        // 「名前にぶら下がって浮く」と言われた形になる。国旗の右へ出すために
-        // ブロック幅を 330→366 に広げた（2列で 788px、1024 の画面に収まる）。
-        { key: 'tries', x: 366, align: 'right' },
-    ];
-
-    static FAME_BLOCK_WIDTH = 366;
-
-    /** パネル見出し帯の高さ（theme.drawPanel と揃える）＋内側の余白。 */
-    static PANEL_HEAD = 36;
-    static PANEL_PAD = SPACE.md;
-
-    /** 中身の高さから必要なパネル高を求める。 */
-    static panelHeight(contentH) {
-        return ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD * 2 + contentH;
-    }
-
-    /** パネル内で中身を書き始める y（1行目のベースライン）。 */
-    static panelContentTop(panelY, lineH) {
-        return panelY + ScreenRenderer.PANEL_HEAD + ScreenRenderer.PANEL_PAD + Math.round(lineH * 0.75);
-    }
-
     _drawRankingList(ctx, o) {
         const canvas = this.game.canvas;
-        const cols = ScreenRenderer.RANKING_COLUMNS;
-        const tableW = ScreenRenderer.RANKING_TABLE_WIDTH;
+        const cols = RANKING_COLUMNS;
+        const tableW = RANKING_TABLE_WIDTH;
         const left = Math.round((canvas.width - tableW) / 2);
 
         ctx.fillStyle = o.bg;
@@ -1037,7 +979,7 @@ export class ScreenRenderer {
         ctx.stroke();
 
         const scores = o.scores || [];
-        const slots = ScreenRenderer.RANKING_SLOTS;
+        const slots = RANKING_SLOTS;
         const startY = headerY + SPACE.lg + SPACE.xs;
         const bottom = canvas.height - SPACE.xl;
         const lineH = Math.floor((bottom - startY) / slots);
@@ -1139,8 +1081,8 @@ export class ScreenRenderer {
         } else {
             // 週ブロックを2列に並べる。1列だと画面の横半分以上が空くうえ、
             // 表示できる週数も半分になってしまう。
-            const cols = ScreenRenderer.FAME_COLUMNS;
-            const blockW = ScreenRenderer.FAME_BLOCK_WIDTH;
+            const cols = FAME_COLUMNS;
+            const blockW = FAME_BLOCK_WIDTH;
             const colGap = SPACE.xl + SPACE.md;
             const totalW = blockW * 2 + colGap;
             const left = Math.round((canvas.width - totalW) / 2);
