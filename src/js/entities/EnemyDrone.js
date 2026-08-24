@@ -17,7 +17,7 @@ import {
     ENEMY_RECOIL_PROFILES,
     DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE
 } from '../utils/Constants.js';
-import { collidesWithMap, hasLineOfSight } from '../utils/Physics.js';
+import { collidesWithMap, hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 import { tickRecoil } from '../utils/Recoil.js';
@@ -253,17 +253,18 @@ export class EnemyDrone {
         if (target && target.alive) {
             const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
             const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
-            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            // Defenders notice approaching players from farther away. (Drones'
-            // native sight already exceeds EMERGENCY_DEFENSE_SIGHT_RANGE, so this
-            // Math.max never shrinks it — it only widens, and stays correct if the
-            // native range is ever lowered.)
-            const sightRange = Math.max(
-                ENEMY_DRONE_SIGHT_RANGE,
-                this.emergencyDefense ? EMERGENCY_DEFENSE_SIGHT_RANGE : 0
-            );
-            if (dist < sightRange && this._hasLineOfSight(target)) {
+            // 通常の索敵は楕円（横だけ画面幅に比例する）。総攻撃中の緊急索敵
+            // 250px は画面比と無関係な「至近距離の反応」なので、楕円に混ぜず
+            // 真円のまま OR で足す。Math.max で楕円の横半径ごと広げてしまうと、
+            // 16:9 では縦が 250 * SIGHT_ASPECT = 187 に縮んでしまい、
+            // 意図しないバランス変更になる。
+            // 4:3 では楕円が真円に退化するので、この OR は元の
+            // Math.max(sightRange, 250) と完全に同じ結果になる。
+            const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE)
+                || (this.emergencyDefense
+                    && dx * dx + dy * dy < EMERGENCY_DEFENSE_SIGHT_RANGE ** 2);
+            if (inSight && this._hasLineOfSight(target)) {
                 return target;
             }
         }

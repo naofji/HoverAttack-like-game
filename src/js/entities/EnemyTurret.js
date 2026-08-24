@@ -17,7 +17,7 @@ import {
     COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, COLOR_BEAM_CANNON_LAMP_BACK,
     BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
 } from '../utils/Constants.js';
-import { hasLineOfSight } from '../utils/Physics.js';
+import { hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { ReflectBeam } from './ReflectBeam.js';
 import { turretBaseParts, turretHeadParts } from './debris/turretParts.js';
@@ -252,9 +252,8 @@ export class EnemyTurret {
         if (target && target.alive) {
             const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
             const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
-            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < ENEMY_TURRET_SIGHT_RANGE
+            if (withinSight(dx, dy, ENEMY_TURRET_SIGHT_RANGE)
                 && (this.spec.ignoresLineOfSight || this._hasLineOfSight(target))) {
                 return target;
             }
