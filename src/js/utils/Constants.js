@@ -171,7 +171,10 @@ export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
 export const MISSILE_SPEED = 6;
 export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
-export const MISSILE_LIFETIME = 180; // frames
+// 16:9 化で索敵の横半径が 1.334 倍になったぶん、射程も同じ倍率で伸ばす。
+// 180 * 1.334 = 240.1。速度 6 なので射程 1080 -> 1440px。
+// 画面半幅 683 に対する比 2.11 は 4:3 のときと同じ。
+export const MISSILE_LIFETIME = 240; // frames
 
 export const GRENADE_SPEED = 5;
 export const GRENADE_SPEED_MIN = 0;           // 近距離投擲の最小速度
@@ -194,7 +197,9 @@ export const GRENADE_KNOCKBACK_VX = 2;    // Smaller sideways push than a landmi
 export const PLAYER_MG_SPEED = 4; // a little bit faster than ENEMY_BULLET_SPEED
 export const PLAYER_MG_RADIUS = 1.5;
 export const PLAYER_MG_DAMAGE = 3;
-export const PLAYER_MG_LIFETIME = 180; // 80% of original 240 (192 * 3 = 576px)
+// 16:9 化に合わせて 180 -> 240（元は 240 で、4:3 のとき 80% に詰めた経緯がある）。
+// 速度 4 なので射程 720 -> 960px。画面半幅 683 に対する比 1.41 は 4:3 と同じ。
+export const PLAYER_MG_LIFETIME = 240;
 export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
@@ -305,11 +310,18 @@ export const ENEMY_BULLET_RADIUS = 2;
 // 自機と母艦で同じ値。以前は PLAYER=15 / CARRIER=10 と分けて書いてあったが
 // どちらも読まれておらず、実際には CollisionManager 側の 10 が両方に効いていた
 export const ENEMY_BULLET_DAMAGE = 10;
-export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
+// 16:9 化で伸ばした。速度 3 なので射程 540 -> 720px。
+// 4:3 ではタレットの索敵 512 に対し弾 540 と 5% しか余裕が無く、手で詰めた値
+// だった。16:9 のタレット索敵は横 683 なので、720 で足りる。
+// なお敵のうち EnemyBullet を撃つのはタンク・タレット・ドローンだけで、
+// アタッカーは素の Missile を、artillery は EnemyHomingMissile を撃つ。
+export const ENEMY_BULLET_LIFETIME = 240;    // frames (4s)
 
 export const ENEMY_HOMING_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
 export const ENEMY_HOMING_MISSILE_TURN_RATE = 0.02; // Radians per frame
-export const ENEMY_HOMING_MISSILE_LIFETIME = 300; // Lives longer to find target
+// 16:9 化で伸ばした。300 * 1.334 = 400.2。速度 3 なので射程 900 -> 1200px。
+// artillery の索敵は横 1093 なので、これで届く（4:3 では 819 vs 900 だった）。
+export const ENEMY_HOMING_MISSILE_LIFETIME = 400; // Lives longer to find target
 export const ENEMY_HOMING_MISSILE_DELAY = 30;     // Frames before tracking starts
 export const ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE = 240; // Pixels before tracking starts
 
