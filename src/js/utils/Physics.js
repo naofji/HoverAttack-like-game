@@ -150,18 +150,6 @@ export function centerOf(e) {
 }
 
 /**
- * Calculate distance between the centers of two entities.
- * @param {object} e1 - Must have x, y, width, height
- * @param {object} e2 - Must have x, y, width, height
- * @returns {number} Euclidean distance
- */
-export function distanceBetween(e1, e2) {
-    const dx = (e1.x + e1.width / 2) - (e2.x + e2.width / 2);
-    const dy = (e1.y + e1.height / 2) - (e2.y + e2.height / 2);
-    return Math.sqrt(dx * dx + dy * dy);
-}
-
-/**
  * 線分と矩形が交わるか。反射ビームは帯全体が当たるので、点ではなく線分で見る。
  *
  * 境界を含む判定（辺に接する線分、角だけをかすめる線分も「当たり」）。

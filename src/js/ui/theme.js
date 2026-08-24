@@ -88,11 +88,6 @@ export function glow(ctx, color, level = 'mid') {
     ctx.shadowBlur = GLOW[level];
 }
 
-/** 発光を切る。同じ save() スコープ内で続けて非発光のものを描くとき用。 */
-export function noGlow(ctx) {
-    ctx.shadowBlur = 0;
-}
-
 /**
  * 枠のパス（角丸）。
  * roundRect が無い環境（テストのスタブ等）では矩形パスに落とす。
