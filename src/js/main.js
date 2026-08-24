@@ -18,9 +18,9 @@ import { Input } from './utils/Input.js';
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT,
     COLOR_CAVE_BG,
-    LANDMINE_BLAST_RADIUS, LANDMINE_SCORE,
+    LANDMINE_SCORE,
     CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
-    DEBRIS_MAX_ACTIVE, DEATH_HOLD_FRAMES,
+    DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
     AUTO_AIM_SNAP_RADIUS, AUTO_AIM_CANCEL_THRESHOLD_DEFAULT,
     AUTO_AIM_LEAD_MAX_TICKS, AUTO_AIM_LEAD_STRENGTH,
@@ -41,9 +41,6 @@ import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
-import { createExplosion, createSparks } from './entities/Particle.js';
-import { SmokeScreen } from './entities/SmokeScreen.js';
-import { buildDebris, trimDebris } from './entities/debris/index.js';
 import { Flag } from './entities/Flag.js';
 import { EnemyAttacker } from './entities/EnemyAttacker.js';
 import { EnemyDrone } from './entities/EnemyDrone.js';
@@ -72,6 +69,7 @@ import { SettingsFlow } from './ui/flows/settingsFlow.js';
 import { AttractFlow } from './ui/flows/attractFlow.js';
 import { OnlineFlow } from './systems/OnlineFlow.js';
 import { CombatActions } from './systems/CombatActions.js';
+import { SpawnEffects } from './systems/SpawnEffects.js';
 import { DEMO_CYCLE_STATES, DEMO_SCREEN_DRAWERS } from './ui/flows/demoScreens.js';
 
 // テストと main.js 自身が使う。表の実体は ui/flows/demoScreens.js
@@ -1072,57 +1070,6 @@ export const Game = {
             || this.input.isRightClickPressed();
     },
 
-    /** Spawn explosion particles and chain-detonate nearby landmines */
-    spawnExplosion(x, y, size, opts) {
-        this.particles.push(...createExplosion(x, y, size, opts));
-        audioManager.playExplosion(size > 10, x);
-
-        for (const mine of this.landmines) {
-            if (!mine.alive) continue;
-            const dx = (mine.x + mine.width / 2) - x;
-            const dy = (mine.y + mine.height / 2) - y;
-            if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
-        }
-    },
-
-    /**
-     * 破壊された機体のパーツを破片として撒く。
-     * 当たり判定は持たず、既存の particles 配列に相乗りするだけ。
-     * @param {object} entity 破壊された機体
-     * @param {string} kind DEBRIS_SPECS のキー
-     */
-    spawnDebris(entity, kind) {
-        const debris = buildDebris(entity, kind);
-        if (debris.length === 0) return;
-        this.particles.push(...debris);
-        this._trimDebris();
-    },
-
-    /** 破片の同時存在数を上限内に収める。古い破片から落とす。 */
-    _trimDebris() {
-        trimDebris(this.particles, DEBRIS_MAX_ACTIVE);
-    },
-
-    /** Spawn damage sparks at position */
-    spawnSparks(x, y) {
-        this.particles.push(...createSparks(x, y));
-    },
-
-    /**
-     * 煙幕を張る。artillery が自機に発見されたときに呼ぶ。
-     * 当たり判定は持たず、視界と Auto Aim だけを遮る。
-     */
-    spawnSmokeScreen(x, y) {
-        this.smokeScreens.push(new SmokeScreen(x, y));
-        audioManager.playWeapon('smoke', x, y);
-    },
-
-    /** Spawn heavy damage effect (sparks + sound) */
-    spawnHeavyDamage(x, y) {
-        this.spawnSparks(x, y);
-        audioManager.playHeavyDamage();
-    },
-
     /** Add points to the score */
     addScore(points) {
         this.score += points;
@@ -1277,7 +1224,7 @@ export const Game = {
 // 画面フローなど、ループ本体と関係のないメソッド群は別ファイルに分けて
 // ここで `Game` に混ぜている。`this` の意味は変わらないので、
 // `Game._updateSettings.call(fakeGame)` というテストの呼び方もそのまま通る。
-Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions);
+Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions, SpawnEffects);
 
 // ============================================
 // Start (ES modules are deferred, DOM is ready)
