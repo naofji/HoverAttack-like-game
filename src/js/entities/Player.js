@@ -309,10 +309,40 @@ export class Player {
         }
     }
 
+    /**
+     * 速度を位置へ反映し、ぶつかったものから押し戻す。
+     *
+     * **手順の順番そのものが仕様。** 横をすべて解決してから縦へ入る、
+     * マップを見てから母艦・敵を見る、最後に足元を1px 探る ── どれか1つでも
+     * 入れ替えると、壁際で母艦に押し込まれたり接地がちらついたりする。
+     * 各段は下の private に分けてあるが、**呼ぶ順はここが唯一の記述**。
+     *
+     * 以前は1メソッド215行で、このリポジトリで唯一の200行超だった。
+     * 分けたのは読む範囲を絞るためで、判定そのものは1行も変えていない。
+     */
     _moveAndCollide() {
-        const map = this.game.map;
+        // --- 横 ---
+        const hitHMap = this._moveHorizontalIntoMap();
+        if (!hitHMap) this._pushOutOfCarrierHorizontally();
+        this._pushOutOfEnemiesHorizontally();
 
-        // Horizontal collision
+        // --- 縦 ---
+        this.y += this.vy;
+        this.onGround = false;
+        this._landOnMapOrHitCeiling();
+        this._landOnCarrier();
+        this._liftCarrierFromBelow();
+        this._landOnEnemy();
+        this._probeGroundBelowFeet();
+    }
+
+
+    /**
+     * 横方向。マップにぶつかったら、まず1タイルの段差を乗り上げてみて、
+     * 駄目ならタイル境界へ吸着して止まる。
+     * @returns {boolean} マップに当たって止まったか（母艦の押し出しを飛ばす判断に使う）
+     */
+    _moveHorizontalIntoMap() {
         this.x += this.vx;
 
         let hitHMap = false;
@@ -341,37 +371,45 @@ export class Player {
                 this.vx = 0;
             }
         }
+        return hitHMap;
+    }
 
-        // Horizontal Carrier Collision
-        if (!hitHMap) {
-            const carrier = this.game.carrier;
-            if (carrier && carrier.alive) {
-                // If the player overlaps the carrier horizontally AND vertically
-                if (this.x < carrier.x + carrier.width &&
-                    this.x + this.width > carrier.x &&
-                    this.y < carrier.y + carrier.height &&
-                    this.y + this.height > carrier.y) {
 
-                    // We hit the side of the carrier
-                    // Push out appropriately
-                    if (this.vx > 0 || carrier.vx < 0) {
-                        // Moving right into carrier OR carrier moving left into us
-                        if (this.x + this.width - this.vx <= carrier.x + 4) { // 4px leeway
-                            this.x = carrier.x - this.width;
-                            this.vx = 0;
-                        }
-                    } else if (this.vx < 0 || carrier.vx > 0) {
-                        // Moving left into carrier OR carrier moving right into us
-                        if (this.x - this.vx >= carrier.x + carrier.width - 4) {
-                            this.x = carrier.x + carrier.width;
-                            this.vx = 0;
-                        }
+    /**
+     * 横方向。母艦の側面に当たったら押し出される。母艦が動いてぶつかる場合も含む。
+     * **マップに当たって止まったフレームは呼ばない**（_moveAndCollide 側で判断）。
+     */
+    _pushOutOfCarrierHorizontally() {
+        const carrier = this.game.carrier;
+        if (carrier && carrier.alive) {
+            // If the player overlaps the carrier horizontally AND vertically
+            if (this.x < carrier.x + carrier.width &&
+                this.x + this.width > carrier.x &&
+                this.y < carrier.y + carrier.height &&
+                this.y + this.height > carrier.y) {
+
+                // We hit the side of the carrier
+                // Push out appropriately
+                if (this.vx > 0 || carrier.vx < 0) {
+                    // Moving right into carrier OR carrier moving left into us
+                    if (this.x + this.width - this.vx <= carrier.x + 4) { // 4px leeway
+                        this.x = carrier.x - this.width;
+                        this.vx = 0;
+                    }
+                } else if (this.vx < 0 || carrier.vx > 0) {
+                    // Moving left into carrier OR carrier moving right into us
+                    if (this.x - this.vx >= carrier.x + carrier.width - 4) {
+                        this.x = carrier.x + carrier.width;
+                        this.vx = 0;
                     }
                 }
             }
         }
+    }
 
-        // Horizontal Enemy Collision
+
+    /** 横方向。敵の側面に当たったら押し出される。 */
+    _pushOutOfEnemiesHorizontally() {
         for (const enemy of this.game.enemies) {
             if (!enemy.alive) continue;
             // Check horizontal overlap (assuming vertical is overlapping)
@@ -389,12 +427,11 @@ export class Player {
                 }
             }
         }
+    }
 
-        // Vertical collision
-        this.y += this.vy;
-        this.onGround = false;
 
-        // 1. Check Map Collision
+    /** 縦方向。マップへの着地（強い落下ならスタン）と天井への衝突。 */
+    _landOnMapOrHitCeiling() {
         if (this._collidesWithMap()) {
             if (this.vy > 0) {
                 // Landing on map
@@ -422,8 +459,11 @@ export class Player {
             }
             this.vy = 0;
         }
+    }
 
-        // 2. Check Carrier Collision (only when falling and not already grounded on map)
+
+    /** 縦方向。母艦の甲板に着地する。乗っている間は母艦と一緒に横へ動く。 */
+    _landOnCarrier() {
         if (!this.onGround && this.vy > 0) {
             const carrier = this.game.carrier;
             if (carrier && carrier.alive) {
@@ -456,8 +496,11 @@ export class Player {
                 }
             }
         }
+    }
 
-        // 2b. Lift carrier from below
+
+    /** 縦方向。真下から母艦の底面を押し上げる。 */
+    _liftCarrierFromBelow() {
         if (!this.docked && this.vy < 0) {
             const carrier = this.game.carrier;
             if (carrier && carrier.alive) {
@@ -471,8 +514,11 @@ export class Player {
                 }
             }
         }
+    }
 
-        // 3. Check Enemy Vertical Collision
+
+    /** 縦方向。敵の頭の上に着地する。乗っている間は敵と一緒に横へ動く。 */
+    _landOnEnemy() {
         if (!this.onGround && this.vy > 0) {
             for (const enemy of this.game.enemies) {
                 if (!enemy.alive) continue;
@@ -495,7 +541,11 @@ export class Player {
                 }
             }
         }
+    }
 
+
+    _probeGroundBelowFeet() {
+        const map = this.game.map;
         // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)
         // This prevents the "not grounded" flicker when standing on a surface,
         // but it must NOT trigger when moving upward (vy < 0) otherwise slow hover gets stuck to the ground.
