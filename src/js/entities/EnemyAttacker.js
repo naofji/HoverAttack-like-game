@@ -160,6 +160,13 @@ export class EnemyAttacker {
         // 250 * SIGHT_ASPECT = 187 に縮み、意図しないバランス変更になる。
         // 4:3 では楕円が真円に退化するので、この OR は元の
         // Math.max(config.sightRange, 250) と完全に同じ結果になる。
+        //
+        // 現状、この OR は実質的に効いていない。索敵の縦半径が一番小さい
+        // standard/tank でも sightRange = CANVAS_WIDTH*0.4 ≈ 546.4、
+        // その縦半径は 546.4 * SIGHT_ASPECT ≈ 409.6px あり、緊急索敵の
+        // 250px は実在するどの敵の楕円にも収まってしまう（250/409.6 ≈ 0.61）。
+        // それでも残してあるのは、将来どこかの索敵係数を下げて楕円の縦半径が
+        // 250px を割り込んだときに、この OR が保険として即座に効くようにするため。
         const dx = target ? (target.x + target.width / 2) - (this.x + this.width / 2) : 0;
         const dy = target ? (target.y + target.height / 2) - (this.y + this.height / 2) : 0;
         const inSight = !!target && (

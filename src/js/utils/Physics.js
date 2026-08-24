@@ -122,7 +122,11 @@ export function hasLineOfSight(x1, y1, x2, y2, map) {
  *
  * 横半径は渡された range そのもの（＝ CANVAS_WIDTH に比例する既存の値）で、
  * 縦半径は range * SIGHT_ASPECT。4:3 では SIGHT_ASPECT === 1 なので真円に
- * 退化し、置き換えの前後で挙動が 1 ドットも変わらない。
+ * 退化する。この退化は実数演算では厳密に旧来の円 hypot(dx,dy) < range と
+ * 一致する（tests/sight-ellipse.test.js の総当たりで確認済み）。ただし
+ * 浮動小数では境界ぎりぎりの点で丸め誤差が乗りうるうえ、置き換え前の
+ * 呼び出し側は `<=` を使っていた箇所があり、この関数は `<` なので、
+ * 境界上ちょうどの標的1点だけは判定が変わりうる。
  *
  * range に Infinity を渡すと常に true（dx/Infinity が 0 になり、ry も
  * Infinity になるため）。EnemyBase._findTarget の既定引数がこの形。

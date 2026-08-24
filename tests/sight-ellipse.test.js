@@ -22,7 +22,7 @@ test('SIGHT_ASPECT pins the vertical radius to the 4:3 width of 1024', () => {
 
 test('at SIGHT_ASPECT === 1 the ellipse is exactly the old circle', (t) => {
   if (SIGHT_ASPECT !== 1) {
-    t.skip('16:9 では真円ではない。退化の検査は下の explicit-aspect 版で行う');
+    t.skip('16:9 では真円ではない。楕円式そのものの検査は下の "the ellipse matches an independently-normalized circle" で行う');
     return;
   }
   const range = 410;
@@ -33,6 +33,33 @@ test('at SIGHT_ASPECT === 1 the ellipse is exactly the old circle', (t) => {
       assert.equal(
         withinSight(dx, dy, range), circle,
         `dx=${dx} dy=${dy} で円と楕円が食い違った`
+      );
+    }
+  }
+});
+
+// 上のテストは SIGHT_ASPECT === 1 (4:3) でしか実行されず、現行の 16:9 設定
+// （SIGHT_ASPECT ≈ 0.7496）では常にスキップされる。つまり出荷時の設定では
+// 「移行で挙動が変わっていない」ことの最有力の裏付けが動いていない。
+//
+// ここでは実際の SIGHT_ASPECT（1でも1以外でも）で常時走る検査を足す。
+// withinSight の実装 (dx/range)**2 + (dy/ry)**2 < 1 をそのまま書き写すと
+// 恒真テストになってしまう（実装のバグごと一致してしまい、何も検出できない）。
+// そこで「dy を SIGHT_ASPECT で正規化してから円判定する」という、実装と
+// 独立に導出できる同値な式 hypot(dx, dy/SIGHT_ASPECT) < range で照合する。
+// 楕円の式を代数的に変形すれば同じものだが、コードとしては別の経路を通るため、
+// withinSight 側の実装ミス（例: ry の計算を間違える、不等号を変える）を
+// 拾える。ミューテーション確認済み: ry を range*0.5 に変えるとこのテストは
+// 落ちる（Physics.js は変更していない。確認のためだけに一時的に書き換えて戻した）。
+test('the ellipse matches an independently-normalized circle at the current SIGHT_ASPECT', () => {
+  const range = 410;
+  // 退化テストと同じ格子・同じ range にして、2つが対になって読めるようにする。
+  for (let dx = -500; dx <= 500; dx += 7) {
+    for (let dy = -500; dy <= 500; dy += 7) {
+      const normalizedCircle = Math.hypot(dx, dy / SIGHT_ASPECT) < range;
+      assert.equal(
+        withinSight(dx, dy, range), normalizedCircle,
+        `dx=${dx} dy=${dy} で楕円と正規化円が食い違った`
       );
     }
   }
