@@ -41,11 +41,13 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 
 ## 全体の構造
 
-- `main.js` — `Game` オブジェクト。ループ、状態遷移、各サブシステムの呼び出し順。**1600行超あり、ここに書き足す前に systems/ か utils/ に置けないか考えること。**
+- `main.js` — `Game` オブジェクト。ループ、状態遷移、毎フレームの世界の更新、描画の呼び出し順。**約1200行。ここに書き足す前に、下の mixin か systems/ か utils/ に置けないか考えること。**
+  - **`Game` はクラスではなくオブジェクトリテラルで、大きな機能群は別ファイルの同じ形のリテラルを `Object.assign(Game, ...)` で混ぜている**（`main.js` 末尾の Mixins 節）。`this` の意味は変わらないので、テストの `Game._updateSettings.call(fakeGame)` という呼び方がそのまま通る。**新しい mixin を足すときも「`game` を第一引数に取る関数」にはしないこと** — テスト28ファイルの呼び方を全部変えることになる。
+  - 現在の mixin: `ui/flows/settingsFlow.js`（設定画面）、`ui/flows/attractFlow.js`（タイトル・デモループ・面セレクト）、`systems/OnlineFlow.js`（ランキングの取得/送信/名前入力）、`systems/CombatActions.js`（ドッキング・射撃・グレネード軌道）、`systems/SpawnEffects.js`（爆発・破片・煙幕の生成）
 - `entities/` — 自機・敵・弾・アイテム。それぞれ `update()` と `draw(ctx)` を持つ
 - `systems/` — 衝突、スポーン、ゲーム状態、ランキング（ローカル／オンライン）
 - `world/` — マップ生成と描画、カメラ、洞窟の遠景
-- `ui/` — HUD、タイトル／ランキングなどの画面、照準
+- `ui/` — HUD、タイトル／ランキングなどの画面、照準。`ui/flows/` は画面遷移側（描画は `ScreenRenderer`）
 - `utils/` — 純ロジック。**テストが書きやすいものは積極的にここへ切り出す**（`scoring` / `modes` / `timestep` / `aimLead` / `mgReload` / `geo` など、いずれも `node --test` で直接テストされている）
 - `audio/` — 上記のとおり
 - `gas/` — オンラインランキングの Google Apps Script。**変更したらユーザーが手動で再デプロイする必要がある**
