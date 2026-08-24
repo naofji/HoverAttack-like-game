@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
+import { Game } from '../src/js/main.js';
 import {
   SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_RATIO, SE_COMP_ATTACK,
   SE_FADE_OUT_SECONDS,
@@ -35,6 +36,16 @@ function reaches(node, dst, seen = new Set()) {
   if (seen.has(node)) return false;
   seen.add(node);
   return (node.outputs || []).some((n) => reaches(n, dst, seen));
+}
+
+/**
+ * fn が新しく作ったノードだけを返す。
+ * 「この呼び出しが何を組んだか」を、バスの組み立て分と混ぜずに見るため。
+ */
+function nodesMadeBy(ctx, fn) {
+  const before = ctx.created.length;
+  fn();
+  return ctx.created.slice(before);
 }
 
 // --- バスの組み立て -----------------------------------------------------------
@@ -190,17 +201,85 @@ test('ゲームオーバーの曲はフェード段を通さない（引いて�
     assert.notEqual(audioManager._stingDest(), audioManager.seFade);
     assert.ok(reaches(audioManager._stingDest(), ctx.destination));
   });
-  assert.ok(SOURCE.includes('fnMaster.connect(this._stingDest());'),
-    'playGameOver が効果音のフェード段に繋がっている');
+
+  // ここまでは「バスの形」の確認。**実際に鳴らして経路を辿る**のが本題。
+  //
+  // 以前はソースに `fnMaster.connect(this._stingDest());` という文字列が
+  // あるかを見ていた。実装をファイルごと移しただけで落ちるし（実際に落ちた）、
+  // 逆に文字列だけ残して到達不能になっても気づけない。
+  const ctx2 = fakeAudioCtx();
+  withCtx(ctx2, () => {
+    audioManager._createSeBus();
+    const made = nodesMadeBy(ctx2, () => audioManager.playGameOver());
+    assert.ok(made.length > 0, 'playGameOver が何も鳴らしていない');
+
+    // (1) 曲は効果音のフェード段を通らない ── 通ると fadeOutSe() で一緒に消える
+    for (const n of made) {
+      assert.ok(!reaches(n, audioManager.seFade),
+        '曲がフェード段を通っている（効果音を引くと曲も消える）');
+    }
+    // (2) それでも底上げとリミッタは共有する ── 直結すると音量が揃わず割れる
+    assert.ok(made.some((n) => reaches(n, audioManager.seMaster)),
+      '曲が seMaster を通っていない（底上げとリミッタを共有していない）');
+    // (3) 最終的には出力へ届く
+    assert.ok(made.some((n) => reaches(n, ctx2.destination)),
+      '曲が出力へ届いていない');
+  });
 });
 
+/** audioManager のメソッドを記録用に差し替え、必ず元へ戻す。 */
+function spyAudio(names, fn) {
+  const saved = {};
+  const calls = [];
+  for (const n of names) {
+    saved[n] = audioManager[n];
+    audioManager[n] = (...args) => { calls.push(n); };
+  }
+  try { fn(calls); } finally { Object.assign(audioManager, saved); }
+  return calls;
+}
+
 test('ゲームオーバーで効果音を引いてから曲を鳴らす', () => {
-  const main = readFileSync(new URL('../src/js/main.js', import.meta.url), 'utf8');
-  const fade = main.indexOf('audioManager.fadeOutSe()');
-  const sting = main.indexOf('audioManager.playGameOver()');
-  assert.ok(fade > 0, 'ゲームオーバーで効果音を引いていない');
-  assert.ok(sting > fade, '曲を鳴らしてから引いている');
-  assert.ok(main.includes('audioManager.resumeSe()'), '引いた効果音を戻す処理が無い');
+  // 以前は main.js のソースから文字列の**出現順**を見ていた。行を並べ替えず
+  // 早期 return を1つ足すだけで実際の順序は変わるのに、テストは通ってしまう。
+  // 実際に走らせて呼ばれた順を見る。
+  const g = Object.create(Game);
+  Object.assign(g, { gameState: 'playing', stateTimer: 99 });
+
+  const calls = spyAudio(['stopBGM', 'fadeOutSe', 'playGameOver'], () => {
+    g._triggerGameOver();
+  });
+
+  assert.equal(g.gameState, 'gameover', 'ゲームオーバーに入っていない');
+  assert.ok(calls.includes('fadeOutSe'), 'ゲームオーバーで効果音を引いていない');
+  assert.ok(calls.includes('playGameOver'), '曲を鳴らしていない');
+  assert.ok(calls.indexOf('fadeOutSe') < calls.indexOf('playGameOver'),
+    `曲を鳴らしてから引いている: ${calls.join(' → ')}`);
+});
+
+test('プレイに戻ると、引いた効果音が戻る', () => {
+  // 'playing' に入る経路が8箇所あるので update() がまとめて面倒を見ている。
+  // 「resumeSe という文字列が main.js にある」ではなく、実際に呼ばれるかを見る。
+  for (const [state, expected] of [['playing', true], ['gameover', false]]) {
+    const g = Object.create(Game);
+    Object.assign(g, {
+      gameState: state, settings: { ...DEFAULT_SETTINGS },
+      missionTimer: 0, totalTime: 0, simAccumulator: 0, gameSpeed: 1,
+      camera: { x: 0, y: 0 }, enemies: [], stateTimer: 0,
+      input: {
+        isKeyPressed: () => false, isKeyDown: () => false,
+        isCharPressed: () => false, isLeftClickPressed: () => false,
+        isRightClickPressed: () => false, getTypedChars: () => [],
+        crosshairLocked: false, mouse: { x: 0, y: 0, left: false }, endFrame() {},
+      },
+    });
+    // 状態ごとの更新は本題ではないので黙らせる（resumeSe が呼ばれるかだけ見る）
+    g._updateGameState = () => {};
+
+    const calls = spyAudio(['resumeSe'], () => { g.update(16); });
+    assert.equal(calls.includes('resumeSe'), expected,
+      `${state} のとき resumeSe が ${expected ? '呼ばれていない' : '呼ばれている'}`);
+  }
 });
 
 // --- 置換漏れが無いこと -------------------------------------------------------
