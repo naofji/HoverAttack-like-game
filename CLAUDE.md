@@ -19,7 +19,8 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 足したいもの | 行き先 | 手順を書いているところ |
 |---|---|---|
 | 効果音（単発） | `src/js/audio/weaponSounds.js` の `WEAPON_SOUNDS` に1行 | `renderWeaponSound()` |
-| 効果音（鳴り続けるループ） | `AudioManager` に `_loopSound(key, {build, tune})` で | 同ファイル |
+| 効果音（鳴り続けるループ） | `src/js/audio/sounds/loopSounds.js` に `this._loopSound(key, {build, tune})` で | 同ファイル |
+| 効果音（表に載らない単発） | 系統に合う `src/js/audio/sounds/` のファイル。**`AudioManager.js` 本体には書かない** | 各ファイルの冒頭 |
 | 機体の破壊演出 | `src/js/entities/destruction.js` の `DESTRUCTION_PROFILES` に1行 | `playDestruction()` |
 | 破壊時の破片パーツ | `src/js/entities/debris/` に `xxxParts.js` ＋ `DEBRIS_SPECS` に1行 | `buildDebris()` |
 | 敵アタッカーの型 | `Constants.js` の `ENEMY_ATTACKER_TYPES` に1行 ＋ 脚を変えるなら `entities/attacker/legs.js` の `LEG_STYLES` | `EnemyAttacker.js` の `update()` |
@@ -28,7 +29,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
 | 調整用の数値 | `src/js/utils/Constants.js` | — |
 
-`Constants.js` はゲームバランスと演出の数値の唯一の置き場。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `EnemyAttacker.js` の `LEG_STYLES`）。
+`Constants.js` はゲームバランスと演出の数値の唯一の置き場。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `entities/attacker/legs.js` の `LEG_STYLES`）。
 
 ### 音を足すとき
 
@@ -38,6 +39,9 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 - **`src/js/audio/weaponSounds.js` の `renderWeaponSound()` と `tests/helpers/weapon-render.js` の `renderWeaponProfile()` は同じ音を出す対。** 前者は WebAudio、後者は node で測定するためのオフライン再現。**片方だけ変えない。** 時間設計など両方が要るロジックは純粋関数に切り出して共有する（例: `voiceBreakpoints()`）。
 - **音作りを変えたら A特性で音量を実測する。** `tests/helpers/dsp.js` の `transientLevel` / `aWeightedRms` を使い、既存の音との相対 dB をテストで縛る。これは実際に無音バグを出したことがあるためのルール（敵ホバー音を狭帯域バンドパスに替えて、帯域で捨てられるエネルギーを補正し忘れ、聞こえない音になった）。
 - 試聴用の書き出し: `node tools/render-weapon-sounds.mjs`（表の全項目）、`node tools/render-repair-hum.mjs`（ループ音）。出力は `audio-preview/`（git 管理外）。
+- **`AudioManager` は系統ごとに分かれている。** 本体（`audio/AudioManager.js`、約200行）に残っているのは AudioContext の生死と音量設定の入口だけで、音そのものは `audio/sounds/`（hover / enemySounds / loopSounds / playerSounds / stings）と `audio/engine/`（seBus / output）にある。`Object.assign(AudioManager.prototype, ...)` で混ぜているので `this` の意味は変わらない。**新しい音は系統のファイルへ足す。**
+- **音を「移動しただけ」のときは、鳴らして確かめるより WebAudio グラフを比べるほうが確実。** `tests/helpers/fake-audio-ctx.js` はノード種別・パラメータの予約イベント・接続・start/stop をすべて記録するので、各 `play*` を呼んでグラフを直列化し、変更の前後で diff を取れば「1サンプルも変わっていない」ことを示せる（分割のときに実際に使い、834ノードの一致を毎コミットで確認した）。
+- **効果音が出力へ直結していないかの見張り（`tests/se-bus.test.js`）は `audio/sounds/` と `audio/engine/` も読む。** BGM の2ファイルはわざと対象外（あちらはバスを通さず直結するのが正しい）。
 
 ---
 
