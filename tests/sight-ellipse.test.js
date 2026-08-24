@@ -8,8 +8,14 @@ import { CANVAS_WIDTH, SIGHT_VERTICAL_BASE, SIGHT_ASPECT } from '../src/js/utils
 // なり、楕円が真円に退化する。移行でバランスが 1 ドットも動いていないことは、
 // 最終的にはこの性質に依っている。
 
-test('SIGHT_ASPECT is the ratio of the 4:3 base width to the current width', () => {
-  assert.equal(SIGHT_ASPECT, SIGHT_VERTICAL_BASE / CANVAS_WIDTH);
+test('SIGHT_ASPECT pins the vertical radius to the 4:3 width of 1024', () => {
+  // 1024 は直書きする。SIGHT_VERTICAL_BASE から導くと Constants.js の定義式を
+  // 書き写しただけの恒真テストになり、値を変えても落ちない。
+  // ここが落ちるのは SIGHT_VERTICAL_BASE を 1366 にしたとき、つまり
+  // 「縦も等方的に拡大する」案へ切り替えたとき。意図的な変更なので、
+  // そのときはこのテストごと見直すことになる。
+  assert.equal(SIGHT_VERTICAL_BASE, 1024);
+  assert.equal(SIGHT_ASPECT, 1024 / CANVAS_WIDTH);
 });
 
 test('at SIGHT_ASPECT === 1 the ellipse is exactly the old circle', (t) => {
