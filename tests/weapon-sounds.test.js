@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS, renderWeaponSound, voiceBreakpoints } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
@@ -273,6 +273,15 @@ test('部品の数だけノードが作られる', () => {
 
 const SRC = (f) => readFileSync(new URL(`../src/js/${f}`, import.meta.url), 'utf8');
 
+/** ディレクトリ配下の .js を全部つないで返す。ファイル分割で壊れないようにするため。 */
+const SRC_DIR = (d) => {
+  const dir = new URL(`../src/js/${d}/`, import.meta.url);
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => readFileSync(new URL(f, dir), 'utf8'))
+    .join('\n');
+};
+
 test('古い共用の発射音は残っていない', () => {
   const am = SRC('audio/AudioManager.js');
   assert.ok(!am.includes('playEnemyFire'), 'playEnemyFire が残っている');
@@ -308,7 +317,11 @@ test('武器ごとに違う種類が渡されている', () => {
   for (const kind of ['enemyMissile', 'homing', 'cruise']) {
     assert.ok(base.includes(`playWeapon('${kind}'`), `基地が ${kind} を鳴らしていない`);
   }
-  const attacker = SRC('entities/EnemyAttacker.js');
+  // アタッカーは EnemyAttacker.js と entities/attacker/*.js に分かれているので、
+  // 1ファイルではなくまとめて見る。**どのファイルに書いてあるかは問わない** ──
+  // 以前は EnemyAttacker.js だけを読んでいて、射撃を attacker/combat.js へ
+  // 移しただけで落ちた（振る舞いは変わっていないのに）。
+  const attacker = SRC_DIR('entities/attacker') + SRC('entities/EnemyAttacker.js');
   for (const kind of ['homing', 'enemyMissile', 'grenade']) {
     assert.ok(attacker.includes(`playWeapon('${kind}'`),
       `アタッカーが ${kind} を鳴らしていない`);
