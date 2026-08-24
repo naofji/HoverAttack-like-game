@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS, renderWeaponSound, voiceBreakpoints } from '../src/js/audio/weaponSounds.js';
 import { renderWeaponProfile, profileDuration } from './helpers/weapon-render.js';
@@ -276,6 +276,7 @@ const SRC = (f) => readFileSync(new URL(`../src/js/${f}`, import.meta.url), 'utf
 /** ディレクトリ配下の .js を全部つないで返す。ファイル分割で壊れないようにするため。 */
 const SRC_DIR = (d) => {
   const dir = new URL(`../src/js/${d}/`, import.meta.url);
+  if (!existsSync(dir)) return '';
   return readdirSync(dir)
     .filter((f) => f.endsWith('.js'))
     .map((f) => readFileSync(new URL(f, dir), 'utf8'))
@@ -283,7 +284,9 @@ const SRC_DIR = (d) => {
 };
 
 test('古い共用の発射音は残っていない', () => {
-  const am = SRC('audio/AudioManager.js');
+  // audio/ 配下をまとめて見る。AudioManager.js だけを読むと、音の系統ごとに
+  // 分けたファイルへ古い実装が残っていても気づけない
+  const am = SRC('audio/AudioManager.js') + SRC_DIR('audio/sounds') + SRC_DIR('audio/engine');
   assert.ok(!am.includes('playEnemyFire'), 'playEnemyFire が残っている');
   assert.ok(!am.includes('playMissile('), 'playMissile が残っている');
 });

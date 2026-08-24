@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import {
   SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_RATIO, SE_COMP_ATTACK,
@@ -9,7 +9,25 @@ import {
 import { fakeAudioCtx, withCtx } from './helpers/fake-audio-ctx.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 
-const SOURCE = readFileSync(new URL('../src/js/audio/AudioManager.js', import.meta.url), 'utf8');
+/**
+ * 効果音の実装が置いてあるファイル一式。**AudioManager.js だけを見ない。**
+ *
+ * 音の系統ごとに audio/sounds/ と audio/engine/ へ分けたので、1ファイルだけを
+ * 読むと「移した先は見張りの外」になる（実際、ジングルを移しただけで下の
+ * fnMaster のテストが落ちた）。BGM の2ファイルは**わざと外している** ──
+ * あちらは効果音バスを通さず出力へ直結するのが正しい。
+ */
+const seSourceFiles = () => {
+  const files = [new URL('../src/js/audio/AudioManager.js', import.meta.url)];
+  for (const dir of ['sounds', 'engine']) {
+    const d = new URL(`../src/js/audio/${dir}/`, import.meta.url);
+    if (!existsSync(d)) continue;
+    for (const f of readdirSync(d)) if (f.endsWith('.js')) files.push(new URL(f, d));
+  }
+  return files.map((u) => ({ label: u.pathname.split('/').pop(), text: readFileSync(u, 'utf8') }));
+};
+
+const SOURCE = seSourceFiles().map((f) => f.text).join('\n');
 
 /** dst まで辿り着けるか（間に何が挟まっていてもよい）。 */
 function reaches(node, dst, seen = new Set()) {
@@ -196,12 +214,13 @@ test('効果音の実装が出力へ直結していない', () => {
     'return this.seFade || this.ctx.destination;',
     'return this.seMaster || this.ctx.destination;',
   ];
-  const lines = SOURCE.split('\n')
-    .map((l, i) => ({ n: i + 1, text: l.trim() }))
+  // ファイルごとに見る（連結して数えると行番号が意味を失うため）
+  const lines = seSourceFiles().flatMap((f) => f.text.split('\n')
+    .map((l, i) => ({ where: `${f.label}:${i + 1}`, text: l.trim() }))
     .filter((l) => l.text.includes('this.ctx.destination'))
-    .filter((l) => !allowed.includes(l.text));
+    .filter((l) => !allowed.includes(l.text)));
   assert.deepEqual(lines, [],
-    `効果音がバスを通らず出力へ直結している:\n${lines.map((l) => `  ${l.n}: ${l.text}`).join('\n')}`);
+    `効果音がバスを通らず出力へ直結している:\n${lines.map((l) => `  ${l.where}: ${l.text}`).join('\n')}`);
 });
 
 // --- ゲームオーバーのジングルが全体音量に従うこと ---------------------------
