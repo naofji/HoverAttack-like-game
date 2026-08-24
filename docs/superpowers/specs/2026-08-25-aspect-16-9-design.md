@@ -60,16 +60,25 @@ HUD 上部 60px を除いたプレイ領域は 4:3 で 1024×708、その半分�
 索敵を楕円にし、**横だけを画面幅に比例させ、縦は 4:3 時代の絶対値を据え置く**。
 
 ```
-rx = k * CANVAS_WIDTH        // 横は画面幅に比例
-ry = k * SIGHT_VERTICAL_BASE // 縦は 4:3 時代の絶対値（= 1024）
+SIGHT_VERTICAL_BASE = 1024                      // 4:3 時代の幅
+SIGHT_ASPECT = SIGHT_VERTICAL_BASE / CANVAS_WIDTH  // 4:3 では 1.0、16:9 では 0.7496
+
+rx = 既存の sightRange（= CANVAS_WIDTH * k。表は 1 行も変えない）
+ry = rx * SIGHT_ASPECT
 
 判定: (dx/rx)^2 + (dy/ry)^2 < 1
 ```
 
-| 解像度 | rx (k=0.4) | ry (k=0.4) | 形 |
-|---|---|---|---|
-| 1024×768 (4:3) | 410 | 410 | **真円。現行と数学的に完全一致** |
-| 1366×768 (16:9) | 546 | 410 | 横にだけ伸びた楕円 |
+**既存の `sightRange` を rx としてそのまま受け取り、ry を内部で導く**形にする。
+こうすると `Constants.js` の表（`sightRange: CANVAS_WIDTH * 0.4` など）も、
+`ENEMY_TANK_SIGHT_RANGE` などの export 名も一切変えずに済み、
+呼び出し側は `dist < range` を `withinSight(dx, dy, range)` に置き換えるだけになる。
+テスト側の偽 config（`sightRange: 100` を直接書いている 4 ファイル）もそのまま通る。
+
+| 解像度 | SIGHT_ASPECT | rx (k=0.4) | ry (k=0.4) | 形 |
+|---|---|---|---|---|
+| 1024×768 (4:3) | 1.0 | 410 | 410 | **真円。現行と数学的に完全一致** |
+| 1366×768 (16:9) | 0.7496 | 546 | 410 | 横にだけ伸びた楕円 |
 
 - 横の比 546/683 = 0.80 ＝ 4:3 と同じ
 - 縦の絶対値 410 ＝ 4:3 と同じ
@@ -90,8 +99,8 @@ ry = k * SIGHT_VERTICAL_BASE // 縦は 4:3 時代の絶対値（= 1024）
 
 ### 案A（何もしない）への戻し方
 
-`SIGHT_VERTICAL_BASE` を 1024 から 1366 に変えると ry = rx となり、
-「`CANVAS_WIDTH` を変えただけ」＝縦も 1.334 倍の円に戻る。
+`SIGHT_VERTICAL_BASE` を 1024 から 1366 に変えると `SIGHT_ASPECT` が 1.0 に戻り、
+ry = rx ＝「`CANVAS_WIDTH` を変えただけ」＝縦も 1.334 倍の円になる。
 実機で縦の悪化が気にならなければ、**この定数 1 つで案A に切り替えられる**。
 
 ### 実装
@@ -102,18 +111,21 @@ ry = k * SIGHT_VERTICAL_BASE // 縦は 4:3 時代の絶対値（= 1024）
 
 ```js
 /**
- * 楕円の索敵判定。横は画面幅に比例し、縦は 4:3 時代の絶対値に固定されている。
- * 4:3 では rx === ry になり真円に退化するので、移行でバランスは動かない。
+ * 楕円の索敵判定。横は画面幅に比例し（= 渡された range そのもの）、
+ * 縦は 4:3 時代の絶対値に固定される。
+ * 4:3 では SIGHT_ASPECT === 1 で真円に退化するので、移行でバランスは動かない。
  */
-export function withinSight(dx, dy, rx, ry) {
-    return (dx / rx) ** 2 + (dy / ry) ** 2 < 1;
+export function withinSight(dx, dy, range) {
+    const ry = range * SIGHT_ASPECT;
+    return (dx / range) ** 2 + (dy / ry) ** 2 < 1;
 }
 ```
 
-半径のペアは `Constants.js` 側で係数から導出して export する。
-`ENEMY_ATTACKER_TYPES` の各行は `sightRange: CANVAS_WIDTH * 0.4` を
-`sight: 0.4`（係数そのもの）に置き換え、rx/ry は読み出し側で導く。
-**表は 1 行 1 係数のまま**にして、CLAUDE.md の「機体ごとの違いは表の 1 行に出る」を崩さない。
+`range = Infinity` を渡すと `dx/Infinity = 0`、`ry = Infinity` で常に真を返す。
+`EnemyBase._findTarget` の既定引数がこの形なので、そのまま使える。
+
+**`Constants.js` の表は 1 行も変えない。** CLAUDE.md の「機体ごとの違いは表の
+1 行に出る」をそのまま保つ。
 
 差し替える呼び出し箇所:
 
@@ -123,7 +135,7 @@ export function withinSight(dx, dy, rx, ry) {
 | `entities/EnemyTurret.js:257` | `dist < ENEMY_TURRET_SIGHT_RANGE` |
 | `entities/EnemyDrone.js:266` | `dist < sightRange` |
 | `entities/EnemyAttacker.js:160` | `targetDist <= sightRange` |
-| `entities/EnemyBase.js` | `_findTarget(BASE_LASER_RANGE)` 4 箇所。引数を rx/ry のペアにする |
+| `entities/EnemyBase.js` | `_findTarget(BASE_LASER_RANGE)` 4 箇所。引数は rx のまま、内部の距離判定を `withinSight` に |
 
 `EnemyTank._findTarget` は「前方 180° の最近接」を選ぶために距離の大小比較を
 しているので、単純な真偽値の差し替えでは済まない。楕円の内外は `withinSight` で
@@ -203,11 +215,36 @@ export function withinSight(dx, dy, rx, ry) {
   画面幅と無関係
 - `CRUISE_MISSILE_LIFETIME = 1800` — 30 秒。活性化範囲 2400px と桁が違う
 
-### artillery の射程不足は「元からある仕様」
+### どの敵が何を撃つか（実装を読んで確定させた対応）
 
-アタッカー artillery は索敵 k=0.8 で、4:3 の時点で索敵 819 に対し弾 540 と
-279px 足りていない。**これは既存の設計**（狙撃型が遠くから発見して寄ってくる）
-なので、16:9 でも比を保ったまま残す（rx 1093 / 弾 720）。バグとして直さない。
+「敵バレット 540px」は全部の敵に効くわけではない。実際の対応はこうなっている。
+
+| 敵 | rx (16:9) | 撃つもの | 射程(現) | 射程(新) | 判定 |
+|---|---|---|---|---|---|
+| タンク (0.4) | 546 | `EnemyBullet` 3×180 | 540 | 720 | ✓ |
+| タレット (0.5) | 683 | `EnemyBullet` | 540 | 720 | ✓ |
+| ドローン (0.7) | 956 | `EnemyBullet` | 540 | 720 | **✗ 236px 不足** |
+| attacker standard (0.4) | 546 | `Missile` 6×180 | 1080 | 1440 | ✓ |
+| attacker rival (0.5) | 683 | `Missile` / `Grenade` | 1080 | 1440 | ✓ |
+| attacker heavy (0.6) | 819 | `Missile` | 1080 | 1440 | ✓ |
+| attacker artillery (0.8) | 1093 | `EnemyHomingMissile` 3×300 | 900 | 1200 | ✓ |
+| 基地レーザー (0.55) | 751 | `BaseLaser`（range 判定） | 751 | 751 | ✓ 自動 |
+
+**アタッカーは `EnemyBullet` を撃たない。** 素の `Missile`（1080px）か、artillery だけ
+`EnemyHomingMissile`（900px）を撃つ（`attacker/combat.js:_fire()`）。
+発砲は `aiState === 'chase'` でゲートされていて（`combat.js:50`）、その state は
+`EnemyAttacker.update()` の索敵判定で決まるので、手を入れるのは索敵の 1 箇所だけでよい。
+
+### ドローンの射程不足は「元からある仕様」
+
+唯一カバーしきれないのがドローン。**これは 4:3 の時点で既にそうなっている**
+（索敵 717 に対し弾 540 で 177px 不足）。
+
+実害が無いのは、ドローンが索敵範囲いっぱいから撃たずに、
+`ENEMY_DRONE_HOVER_DIST_X = 180` / `ENEMY_DRONE_HOVER_DIST_Y = 120` の
+ホバー定位置まで寄ってから撃つため（実効の交戦距離は約 216px）。
+**既存の設計なので直さない。** 射程カバーのテストでは既知の例外として除外し、
+理由をコメントに書く。
 
 ---
 
@@ -251,9 +288,11 @@ export function withinSight(dx, dy, rx, ry) {
 `SIGHT_VERTICAL_BASE` の設計上、**4:3 では楕円が真円に退化する**。これを
 テストで押さえる:
 
-1. `CANVAS_WIDTH === SIGHT_VERTICAL_BASE` のとき、全敵種で `rx === ry` になる
-2. `withinSight(dx, dy, r, r)` が `Math.hypot(dx,dy) < r` と全一致する
+1. `SIGHT_ASPECT === 1` のとき（＝`CANVAS_WIDTH === SIGHT_VERTICAL_BASE`）、
+   `withinSight(dx, dy, r)` が `Math.hypot(dx, dy) < r` と全一致する
    （境界付近を含む格子点で総当たり）
+2. `SIGHT_ASPECT < 1` のとき、真横は range のまま・真上真下は `range * SIGHT_ASPECT`
+   に縮む
 3. 既存の索敵まわりのテストが、係数を 4:3 相当に戻した状態で緑のまま通る
 
 これで「移行でバランスは 1 ドットも動いていない」と言い切れる。
@@ -263,7 +302,8 @@ export function withinSight(dx, dy, rx, ry) {
 4. 各敵種で `rx / 半幅` が 4:3 の値と一致する（横の力関係の保存）
 5. 各敵種で `ry` が 4:3 の絶対値と一致する（縦の力関係の保存）
 6. 弾の射程（`速度 × 寿命`）が、対応する索敵 rx 以上ある
-   — ただし artillery は既知の例外として除外し、理由をコメントに書く
+   — ただしドローンは既知の例外として除外し、理由（ホバー定位置まで寄ってから
+   撃つので実効交戦距離は約 216px）をコメントに書く
 7. 緊急防衛（250px）の OR 判定が、楕円の外・円の内の点で真を返す
 
 ### やらないこと
