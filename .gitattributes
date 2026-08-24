@@ -1,0 +1,25 @@
+# 改行コードをリポジトリ側で LF に固定する。
+#
+# **なぜ要るか:** これを置く前は HUD.js / Crosshair.js / Input.js / Camera.js /
+# BaseLaser.js / Flag.js の6ファイルが CRLF のままリポジトリに入っていた。
+# エディタや変換を挟むツールでその1行を直すと**全行が差分に出て**、本当の変更が
+# 埋もれる。実際にやらかしたことがある。
+#
+# text=auto でテキストと判断したものは、コミット時に LF へ正規化される。
+# 作業ツリー側の改行は eol=lf で LF に揃える（Windows で開いても LF のまま）。
+* text=auto eol=lf
+
+# 明示しておくもの（拡張子から判断を誤らせない）
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.gs   text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
+*.svg  text eol=lf
+
+# バイナリ。改行変換をかけると壊れる
+*.mp3  binary
+*.png  binary
+*.pptx binary
