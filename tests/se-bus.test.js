@@ -1,34 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { Game } from '../src/js/main.js';
+import { BGMManager } from '../src/js/audio/BGMManager.js';
 import {
   SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_RATIO, SE_COMP_ATTACK,
   SE_FADE_OUT_SECONDS,
 } from '../src/js/utils/Constants.js';
 import { fakeAudioCtx, withCtx } from './helpers/fake-audio-ctx.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
-
-/**
- * 効果音の実装が置いてあるファイル一式。**AudioManager.js だけを見ない。**
- *
- * 音の系統ごとに audio/sounds/ と audio/engine/ へ分けたので、1ファイルだけを
- * 読むと「移した先は見張りの外」になる（実際、ジングルを移しただけで下の
- * fnMaster のテストが落ちた）。BGM の2ファイルは**わざと外している** ──
- * あちらは効果音バスを通さず出力へ直結するのが正しい。
- */
-const seSourceFiles = () => {
-  const files = [new URL('../src/js/audio/AudioManager.js', import.meta.url)];
-  for (const dir of ['sounds', 'engine']) {
-    const d = new URL(`../src/js/audio/${dir}/`, import.meta.url);
-    if (!existsSync(d)) continue;
-    for (const f of readdirSync(d)) if (f.endsWith('.js')) files.push(new URL(f, d));
-  }
-  return files.map((u) => ({ label: u.pathname.split('/').pop(), text: readFileSync(u, 'utf8') }));
-};
-
-const SOURCE = seSourceFiles().map((f) => f.text).join('\n');
 
 /** dst まで辿り着けるか（間に何が挟まっていてもよい）。 */
 function reaches(node, dst, seen = new Set()) {
@@ -284,22 +265,44 @@ test('プレイに戻ると、引いた効果音が戻る', () => {
 
 // --- 置換漏れが無いこと -------------------------------------------------------
 
+/**
+ * BGM 系は**このスキャンの対象外**。あちらは効果音バスを通さず出力へ直結するのが
+ * 正しい（BGM 音量と効果音音量を独立させるため）。下の専用テストで見ている。
+ */
+const BGM_METHODS = ['startBGM', 'stopBGM', 'playTitleBGM', 'playRankingBGM', 'stopRankingBGM'];
+
 test('効果音の実装が出力へ直結していない', () => {
-  // 29箇所を機械的に置換したので、取りこぼしをここで止める。
-  // ctx.destination を名指ししてよいのはバスの組み立てと素通しの箇所だけ。
-  const allowed = [
-    'comp.connect(this.ctx.destination);',
-    'this.seMaster.connect(this.ctx.destination);',
-    'return this.seFade || this.ctx.destination;',
-    'return this.seMaster || this.ctx.destination;',
-  ];
-  // ファイルごとに見る（連結して数えると行番号が意味を失うため）
-  const lines = seSourceFiles().flatMap((f) => f.text.split('\n')
-    .map((l, i) => ({ where: `${f.label}:${i + 1}`, text: l.trim() }))
-    .filter((l) => l.text.includes('this.ctx.destination'))
-    .filter((l) => !allowed.includes(l.text)));
-  assert.deepEqual(lines, [],
-    `効果音がバスを通らず出力へ直結している:\n${lines.map((l) => `  ${l.where}: ${l.text}`).join('\n')}`);
+  // 以前はソースの全行から `this.ctx.destination` を探し、許可リストに無い行を
+  // 落としていた。**書き方を変えるだけで抜ける**（別名に代入してから繋ぐ、
+  // ヘルパー越しに繋ぐ、など）し、ファイルを分けると読み漏らす（実際に漏れた）。
+  // 実際に全部鳴らして、出力へ直に繋がったノードを数える。
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager._createSeBus();
+    // バスの組み立てで作られたノードは、出力へ繋がってよい側
+    const busNodes = new Set(ctx.created);
+
+    const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(audioManager))
+      .filter((n) => /^(play|start|stop)/.test(n))
+      .filter((n) => !BGM_METHODS.includes(n));
+    assert.ok(methods.length > 15, `対象メソッドが少なすぎる: ${methods.length}`);
+
+    const before = ctx.created.length;
+    for (const name of methods) {
+      // 位置を取る音のために聞き手を置く。引数なしでも例外を投げない約束
+      audioManager.listenerX = 500;
+      audioManager.listenerView = { x: 0, y: 0, width: 1024, height: 720 };
+      audioManager[name]();
+      audioManager[name](0.5, 300, 200);
+    }
+    const made = ctx.created.slice(before);
+    // スキャンが素通りしていないこと（何も鳴っていなければ意味がない）
+    assert.ok(made.length > 50, `鳴っていない。作られたノードが ${made.length} 個しかない`);
+
+    const direct = made.filter((n) => !busNodes.has(n) && (n.outputs || []).includes(ctx.destination));
+    assert.deepEqual(direct.map((n) => n.name), [],
+      '効果音がバスを通らず出力へ直結している');
+  });
 });
 
 // --- ゲームオーバーのジングルが全体音量に従うこと ---------------------------
@@ -347,10 +350,30 @@ test('applySettings がマスター単体を stingMasterVolume に覚える', ()
 });
 
 test('BGM は効果音のバスを通さない（BGM 音量と独立させるため）', () => {
-  for (const file of ['BGMManager.js', 'MP3BGMManager.js']) {
-    const src = readFileSync(new URL(`../src/js/audio/${file}`, import.meta.url), 'utf8');
-    assert.ok(!src.includes('seFade') && !src.includes('seMaster'),
-      `${file} が効果音のバスを参照している`);
-    assert.ok(src.includes('this.ctx.destination'), `${file} が出力へ繋がっていない`);
-  }
+  // 以前は BGMManager.js のソースに 'seFade'/'seMaster' という文字列が無いことを
+  // 見ていた。別名で受け取れば素通りするし、逆に文字列があっても実際には
+  // 繋がっていないことがある。**実際に組み立てて経路を辿る。**
+  const ctx = fakeAudioCtx();
+  withCtx(ctx, () => {
+    audioManager._createSeBus();      // 先に効果音バスを作っておく
+    const bgm = new BGMManager(ctx);
+    bgm._init();
+
+    assert.ok(bgm.masterGain, 'BGM のグラフが組まれていない');
+    assert.ok(reaches(bgm.masterGain, ctx.destination), 'BGM が出力へ繋がっていない');
+    assert.ok(!reaches(bgm.masterGain, audioManager.seFade),
+      'BGM が効果音のフェード段を通っている（ゲームオーバーで BGM まで消える）');
+    assert.ok(!reaches(bgm.masterGain, audioManager.seMaster),
+      'BGM が効果音の底上げ段を通っている（SE 音量に引きずられる）');
+  });
+});
+
+// MP3BGMManager は createMediaElementSource と <audio> 要素を要り、node では
+// グラフを組めない。ソースを読むしかないので、ここだけは文字列で見る。
+// **見るのは「効果音バスを名指ししていない」ことだけ**にして、繋ぎ方そのものは
+// 上の BGMManager と同じ作りであることに委ねる。
+test('MP3 の BGM も効果音のバスを名指ししていない', () => {
+  const src = readFileSync(new URL('../src/js/audio/MP3BGMManager.js', import.meta.url), 'utf8');
+  assert.ok(!src.includes('seFade') && !src.includes('seMaster'),
+    'MP3BGMManager が効果音のバスを参照している');
 });

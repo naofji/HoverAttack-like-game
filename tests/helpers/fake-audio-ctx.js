@@ -52,6 +52,19 @@ export function fakeAudioCtx() {
       });
     },
     createStereoPanner() { return ctx._node('panner', { pan: ctx._param(0) }); },
+    // BGMManager が使う3つ。効果音側は使わないが、BGM が効果音バスを通って
+    // いないことを実際に組み立てて確かめるために要る
+    createDelay(maxTime = 1) {
+      return ctx._node('delay', { delayTime: ctx._param(0), maxDelayTime: maxTime });
+    },
+    createConvolver() { return ctx._node('convolver', { buffer: null, normalize: true }); },
+    createBuffer(channels, length, sampleRate) {
+      const data = Array.from({ length: channels }, () => new Float32Array(length));
+      return {
+        name: 'buffer', numberOfChannels: channels, length, sampleRate,
+        getChannelData: (i) => data[i],
+      };
+    },
     createWaveShaper() { return ctx._node('shaper', { curve: null, oversample: 'none' }); },
     createDynamicsCompressor() {
       return ctx._node('compressor', {
