@@ -53,26 +53,83 @@ export function carrierArrowScreenPos(game) {
     return { x, y, angle };
 }
 
+// ============================================
+// レイアウト
+// ============================================
+//
+// HUD は「進行 / 武装 / 機体 / 得点」の4ゾーンに割る。
+//
+// **なぜゾーンにしたか。** 元は要素ごとに絶対Xを直書きしていた（12 / 250 / 510 /
+// 600 / 800 …）。あれは 1024 幅で詰めて決めた値なので、16:9 で 1366 になったとき
+// 右端揃えの SCORE だけが右へ移動し、CARRIER の右端(955)と SCORE の左端(1206)の
+// あいだに 251px の穴が空いた。増えた横幅がまるごと1箇所の空白になっていた。
+// ゾーンの原点を CANVAS_WIDTH から導いておけば、次に解像度を動かしても同じ穴は
+// 空かない。
+//
+// 前3つは内容から決めた固定幅で左から詰め、**余りは得点ゾーンが受ける**。
+// 得点だけを可変にしたのは、スコアが右端揃えで桁数も固定（7桁ゼロ詰め）なので、
+// 余白がどれだけ増えても字面が動かない唯一のゾーンだから。
+const HUD_PAD = 18;          // ゾーンの内側の余白
+const HUD_RULE_COLOR = '#2a2a2a';
+const HUD_RULE_INSET = 10;   // 区切り線の上下を帯から空ける量
+
+/** 前3ゾーンの幅。中身の実測（等幅なので字数×フォント×0.6）から決めた。 */
+const HUD_ZONE_W = { progress: 236, weapons: 476, units: 290 };
+
 /**
- * 時限バフのゲージの配置。2段目の直下に**横並び**で1行だけ置く。
+ * 得点ゾーンが要る最小幅。SCORE の値(26px×7桁=110) ＋ 見出し ＋ 余白。
+ * ここを割ると得点が機体ゾーンに食い込む。
+ */
+const HUD_SCORE_MIN_W = 166;
+
+/**
+ * HUD が成立する最小の画面幅。CANVAS_WIDTH を下げるときの見張りとして
+ * tests/hud-layout.test.js が参照する。
+ */
+export const HUD_MIN_WIDTH =
+    HUD_ZONE_W.progress + HUD_ZONE_W.weapons + HUD_ZONE_W.units + HUD_SCORE_MIN_W;
+
+/** 各ゾーンの左端と、区切り線を引くX。 */
+function hudZones(w) {
+    const progress = 0;
+    const weapons  = progress + HUD_ZONE_W.progress;
+    const units    = weapons  + HUD_ZONE_W.weapons;
+    const score    = units    + HUD_ZONE_W.units;
+    return { progress, weapons, units, score, right: w - HUD_PAD };
+}
+
+/** 武装ゾーンの中の列。ゾーン内容の左端からの相対X。 */
+const WEAPON_COLS = { missile: 0, missileVal: 76, mg: 116, mgVal: 178, gren: 260, grenVal: 312 };
+
+/**
+ * 機体ゾーンの中の列。ATTACKER と CARRIER を1本の表として組むための固定列。
  *
- * 以前は A-AIM の下に O-DRIVE を積んでいたが、HUD の帯（HUD_TOP_HEIGHT = 60px）に
- * 収まらず、2本目が区切り線をまたいでプレイフィールドの上に出ていた。
- * バーを半分の長さにして横に並べると、1行のまま2本とも帯の中に入る。
+ * ラベルの字数が違っても（ATTACKER=8 / CARRIER=7）バーの左端と幅が縦に揃う。
+ * バー幅は元の 40 / 60 から 56 で統一した。40:60 は HP 比（100:120 なら 40:48）
+ * でも何でもなく、単に場所が空いていただけの値で根拠のコメントも無かった。
+ *
+ * kits に列を確保してあるので、リペアキットが 0 個でも他の要素は動かない。
+ */
+const UNIT_COLS = { label: 0, lives: 76, bar: 92, barW: 56, kits: 156 };
+
+/** デバッグ札のX。得点ゾーンの左側の余りに置く（右端揃えのスコアとは重ならない）。 */
+const DEBUG_BADGE_DX = HUD_PAD;
+
+/**
+ * 時限バフのゲージの配置。**武装ゾーンの2段目**に、HOVER ゲージと横並びで置く。
+ *
+ * 以前は2段目のさらに下（+11px）のサブ行に置いていた。帯（60px）の下端まで
+ * 5px しか残らない綱渡りで、O-DRIVE を足したときは実際にはみ出して区切り線を
+ * またいだ。ゾーンに割って横幅に余裕ができたぶん、2段目の中に並べられる。
  *
  * 左右の位置は**効いているかどうかに関わらず固定**。空いた側へ詰めると、
  * 片方が切れた瞬間にもう片方が飛んで目で追えなくなる。
- * x はどちらも MISSILE / M-GUN の表示の下に収まる範囲（145〜452）。
  */
-/** デバッグ札のX。1段目の MISSION と SCORE のあいだ。 */
-const DEBUG_BADGE_X = 640;
-
 const TIMER_BARS = {
-    autoAim:   { labelX: 145, barX: 182, label: 'A-AIM' },
-    overdrive: { labelX: 300, barX: 352, label: 'O-DRIVE' },
+    autoAim:   { dx: 140, barDx: 178, label: 'A-AIM' },
+    overdrive: { dx: 290, barDx: 340, label: 'O-DRIVE' },
     barW: 100,
     barH: 5,
-    dy: 11,   // 2段目からの下げ幅。これ以上下げると帯からはみ出す
     font: 'bold 10px "Space Mono", monospace',
 };
 
@@ -95,17 +152,62 @@ export class HUD {
         ctx.fillRect(0, 0, w, HUD_TOP_HEIGHT);
         ctx.font = HUD_FONT;
 
-        // --- ROW 1 ---
+        const z = hudZones(w);
+
+        // --- 進行ゾーン: 経過時間 / ミッション番号 ---
         const row1Y = HUD_TOP_HEIGHT * 0.3;
+        const row2Y = HUD_TOP_HEIGHT * 0.7;
+        const pX = z.progress + HUD_PAD;
 
         // Per-stage elapsed time (not the whole run).
         const elapsed = this.game.missionTimer;
         const minutes  = Math.floor(elapsed / 60000);
         const seconds  = Math.floor((elapsed % 60000) / 1000);
         const centis   = Math.floor((elapsed % 1000) / 10);
-        const timeStr  = `TIME ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
+        // 'TIME' のラベルは落とした。時計の書式そのものが何かを説明しているので
+        // ラベルの3割ぶんの幅を字の大きさに回したほうが読みやすい。
+        ctx.font = 'bold 19px "Space Mono", monospace';
         ctx.fillStyle = HUD_COLOR;
-        ctx.fillText(timeStr, 12, row1Y);
+        ctx.fillText(
+            `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(centis).padStart(2,'0')}`,
+            pX, row1Y);
+        ctx.font = HUD_FONT;
+
+        ctx.fillStyle = '#FFCC00';
+        ctx.fillText('MISSION', pX, row2Y);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(String(this.game.missionsCompleted + 1 || 1), pX + 90, row2Y);
+
+        // --- 武装ゾーン ---
+        const wX = z.weapons + HUD_PAD;
+        ctx.fillStyle = '#FFCC00';
+        ctx.fillText('GREN', wX + WEAPON_COLS.gren, row1Y);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(String(player ? Math.floor(player.grenades) : 0).padStart(3, ' '),
+                     wX + WEAPON_COLS.grenVal, row1Y);
+
+        this._drawWeaponStatus(ctx, player, row1Y, wX);
+        this._drawHoverGauge(ctx, player, row2Y, wX);
+        this._drawAutoAimBar(ctx, player, row2Y, wX);
+        this._drawOverdriveBar(ctx, player, row2Y, wX);
+
+        // --- 機体ゾーン ---
+        const uX = z.units + HUD_PAD;
+        this._drawUnitHpBar(ctx, player,  PLAYER_MAX_HP,  'ATTACKER', uX, row1Y);
+        this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  uX, row2Y);
+        this._drawRepairKitIcons(ctx, player, row2Y, uX);
+
+        // --- 得点ゾーン: 右端揃え ---
+        // BONUS を SCORE の直下に置く。どちらも得点の話なのに、以前は BONUS が
+        // 左から 250px、SCORE が右端と画面の端どうしに離れていて視線が往復していた。
+        ctx.textAlign = 'right';
+
+        ctx.fillStyle = '#8a9a8a';
+        ctx.font = 'bold 11px "Space Mono", monospace';
+        ctx.fillText('SCORE', z.right - 116, row1Y);
+        ctx.font = 'bold 26px "Space Mono", monospace';
+        ctx.fillStyle = HUD_COLOR;
+        ctx.fillText(String(this.game.score).padStart(7, '0'), z.right, row1Y);
 
         // Live time bonus: decays as the stage drags on. Colour shifts
         // green -> yellow -> red (blinking near zero) to convey urgency.
@@ -119,33 +221,24 @@ export class HUD {
         } else {
             bonusColor = (Math.floor(Date.now() / 250) % 2 === 0) ? '#FF3333' : '#992222';
         }
+        ctx.fillStyle = '#8a9a8a';
+        ctx.font = 'bold 11px "Space Mono", monospace';
+        ctx.fillText('BONUS', z.right - 64, row2Y);
+        ctx.font = HUD_FONT;
         ctx.fillStyle = bonusColor;
-        ctx.fillText('BONUS ' + String(tb.current).padStart(6, '0'), 250, row1Y);
+        ctx.fillText(String(tb.current).padStart(6, '0'), z.right, row2Y);
 
-        ctx.fillStyle = '#FFCC00';
-        ctx.fillText('MISSION', 510, row1Y);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(this.game.missionsCompleted + 1 || 1), 585, row1Y);
+        ctx.textAlign = 'left';
 
-        ctx.fillStyle = HUD_COLOR;
-        ctx.fillText('SCORE ' + String(this.game.score).padStart(7, '0'), w - 160, row1Y);
-
-        // --- ROW 2 ---
-        const row2Y = HUD_TOP_HEIGHT * 0.7;
-
-        ctx.fillStyle = '#FFCC00';
-        ctx.fillText('GRENADE', 12, row2Y);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(player ? Math.floor(player.grenades) : 0).padStart(3, ' '), 90, row2Y);
-
-        this._drawWeaponStatus(ctx, player, row2Y);
-        this._drawHoverGauge(ctx, player, row2Y);
-        this._drawAutoAimBar(ctx, player, row2Y);
-        this._drawOverdriveBar(ctx, player, row2Y);
-        this._drawUnitHpBar(ctx, player, PLAYER_MAX_HP, 'ATTACKER', 600, 685, 705, row2Y);
-        this._drawUnitHpBar(ctx, carrier, CARRIER_MAX_HP, 'CARRIER',  800, 875, 895, row2Y, 60);
-        this._drawRepairKitIcons(ctx, player, row2Y);
         this._drawDebugInvincibleBadge(ctx, w, row1Y);
+
+        // --- ゾーンの区切り線 ---
+        // 増えた横幅をゾーン幅として配ったので、境界を出しておかないと
+        // 「ただ間延びした」ようにしか見えない。
+        ctx.fillStyle = HUD_RULE_COLOR;
+        for (const x of [z.weapons, z.units, z.score]) {
+            ctx.fillRect(x, HUD_RULE_INSET, 1, HUD_TOP_HEIGHT - HUD_RULE_INSET * 2);
+        }
         // 母艦の方向矢印はここでは描かない。ミニマップより上の面に出したいため、
         // main.js が _drawOverlays(ミニマップ)の後に drawCarrierArrow() を呼ぶ。
 
@@ -303,7 +396,7 @@ export class HUD {
     // ------------------------------------------
     // Weapon status (MISSILE / M-GUN)
     // ------------------------------------------
-    _drawWeaponStatus(ctx, player, y) {
+    _drawWeaponStatus(ctx, player, y, zoneX = 0) {
         if (!player) return;
 
         const isMissile = player.currentWeapon === 'missile';
@@ -311,33 +404,36 @@ export class HUD {
 
         // --- Missile Status ---
         ctx.fillStyle = isMissile ? '#FFCC00' : '#444444';
-        ctx.fillText('MISSILE', 145, y);
+        ctx.fillText('MISSILE', zoneX + WEAPON_COLS.missile, y);
         ctx.fillStyle = isMissile ? '#FFFFFF' : '#666666';
-        ctx.fillText(String(Math.floor(player.missiles)).padStart(3, ' '), 220, y);
+        ctx.fillText(String(Math.floor(player.missiles)).padStart(3, ' '),
+                     zoneX + WEAPON_COLS.missileVal, y);
 
         // --- Machine Gun Status ---
         ctx.fillStyle = isMG ? '#FFCC00' : '#444444';
-        ctx.fillText('M-GUN', 270, y);
+        ctx.fillText('M-GUN', zoneX + WEAPON_COLS.mg, y);
         ctx.fillStyle = isMG ? '#FFFFFF' : '#666666';
-        
+
         if (player.mgReloadTimer > 0) {
-            ctx.fillText('RELOAD', 330, y);
+            ctx.fillText('RELOAD', zoneX + WEAPON_COLS.mgVal, y);
         } else {
-            ctx.fillText(`RDY ${player.mgBurstLeft}`, 330, y);
+            ctx.fillText(`RDY ${player.mgBurstLeft}`, zoneX + WEAPON_COLS.mgVal, y);
         }
     }
 
     // ------------------------------------------
     // Hover fuel triangle gauge
     // ------------------------------------------
-    _drawHoverGauge(ctx, player, y) {
+    _drawHoverGauge(ctx, player, y, zoneX = 0) {
+        ctx.font = 'bold 13px "Space Mono", monospace';
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText('HOVER', 420, y);
+        ctx.fillText('HOVER', zoneX, y);
+        ctx.font = HUD_FONT;
 
         const fuelRatio = player ? player.hoverFuel / HOVER_MAX_FUEL : 0;
         const barW = 80;
         const barH = 12;
-        const barX = 485;
+        const barX = zoneX + 46;
         const barY = y + 6; // Anchor to bottom of row
 
         // Color by fuel level — cyan when burst jump is available
@@ -400,7 +496,7 @@ export class HUD {
     // ------------------------------------------
     // Auto-Aim remaining time bar (MISSILE/M-GUN エリアの下に小さく表示)
     // ------------------------------------------
-    _drawAutoAimBar(ctx, player, y) {
+    _drawAutoAimBar(ctx, player, y, zoneX = 0) {
         if (!player || player.autoAimTimer <= 0) return;
 
         // Shift 長押しで解除している間はグレーで出す。**バーは消さないし止めない** —
@@ -408,7 +504,7 @@ export class HUD {
         // グレーにするのは、この HUD が既に武器セレクタで「有効＝色つき／無効＝グレー」
         // という語彙を使っているため（非選択の武器が #444444 / #666666）。そこへ揃える
         const paused = !!player.autoAimPaused;
-        this._drawTimerBar(ctx, TIMER_BARS.autoAim, y, {
+        this._drawTimerBar(ctx, TIMER_BARS.autoAim, y, zoneX, {
             ratio: player.autoAimTimer / player.autoAimMaxTimer,
             ink: paused ? '#666666' : '#FF6600',
             bg: paused ? 'rgba(40,40,40,0.8)' : 'rgba(80,20,0,0.8)',
@@ -425,25 +521,26 @@ export class HUD {
      * @param {object} slot TIMER_BARS の1エントリ（labelX / barX / label）
      * @param {number} y 2段目の中心Y
      */
-    _drawTimerBar(ctx, slot, y, { ratio, ink, bg, border }) {
-        const { barW, barH, dy, font } = TIMER_BARS;
-        const rowY = y + dy;
-        const barY = rowY - barH + 2;
+    _drawTimerBar(ctx, slot, y, zoneX, { ratio, ink, bg, border }) {
+        const { barW, barH, font } = TIMER_BARS;
+        const labelX = zoneX + slot.dx;
+        const barX = zoneX + slot.barDx;
+        const barY = y - barH / 2;
         const w = barW * Math.max(0, Math.min(1, ratio));
 
         ctx.font = font;
         ctx.fillStyle = ink;
-        ctx.fillText(slot.label, slot.labelX, rowY);
+        ctx.fillText(slot.label, labelX, y);
 
         ctx.fillStyle = bg;
-        ctx.fillRect(slot.barX, barY, barW, barH);
+        ctx.fillRect(barX, barY, barW, barH);
 
         ctx.fillStyle = ink;
-        ctx.fillRect(slot.barX, barY, w, barH);
+        ctx.fillRect(barX, barY, w, barH);
 
         ctx.strokeStyle = border;
         ctx.lineWidth = 1;
-        ctx.strokeRect(slot.barX, barY, barW, barH);
+        ctx.strokeRect(barX, barY, barW, barH);
 
         // フォントを元に戻す
         ctx.font = 'bold 16px "Space Mono", monospace';
@@ -460,7 +557,7 @@ export class HUD {
      * 減り始めるのが一番きついため。バーの分母は上限ではなく
      * 「そのとき持っていた最大」（OverdriveKit を参照）。
      */
-    _drawOverdriveBar(ctx, player, y) {
+    _drawOverdriveBar(ctx, player, y, zoneX = 0) {
         if (!player || !player.overdriveTimer || player.overdriveTimer <= 0) return;
 
         const max = player.overdriveMaxTimer || player.overdriveTimer;
@@ -473,7 +570,7 @@ export class HUD {
         const fg = lerpColor('#FF4433', '#FFDD22', goldMix);
         const blink = goldMix < 1 && Math.floor(Date.now() / 200) % 2 === 1;
 
-        this._drawTimerBar(ctx, TIMER_BARS.overdrive, y, {
+        this._drawTimerBar(ctx, TIMER_BARS.overdrive, y, zoneX, {
             ratio: player.overdriveTimer / max,
             ink: blink ? lerpColor(fg, '#000000', 0.55) : fg,
             bg: 'rgba(70, 55, 0, 0.8)',
@@ -491,21 +588,21 @@ export class HUD {
     _drawDebugInvincibleBadge(ctx, w, y) {
         if (!this.game || !this.game.debugInvincible) return;
         ctx.fillStyle = (Math.floor(Date.now() / 400) % 2 === 0) ? '#FF3333' : '#661111';
-        // 1段目の空き地（MISSION の数字 595 と SCORE 864 のあいだ）。
-        // 以前は w-160 の2段目に出していて、CARRIER の残機と重なっていた
-        ctx.fillText('INVINCIBLE', DEBUG_BADGE_X, y);
+        // 得点ゾーンの左側の余り。スコアは右端揃えなので、ここへ置けば
+        // 画面幅が変わっても重ならない
+        ctx.fillText('INVINCIBLE', hudZones(w).score + DEBUG_BADGE_DX, y);
     }
 
     // ------------------------------------------
     // Repair kit icons below CARRIER display
     // ------------------------------------------
-    _drawRepairKitIcons(ctx, player, y) {
+    _drawRepairKitIcons(ctx, player, y, zoneX = 0) {
         if (!player || player.repairKits <= 0) return;
 
         const count = Math.min(player.repairKits, 10); // 最大10個表示
         const S = 7;   // アイコンサイズ
         const gap = 2; // アイコン間隔
-        const startX = 800;
+        const startX = zoneX + UNIT_COLS.kits;
         const iconY = y + 8;
         const r = 2;   // 角丸半径
 
@@ -547,14 +644,20 @@ export class HUD {
     // ------------------------------------------
     // Unit label + lives count + HP bar
     // ------------------------------------------
-    _drawUnitHpBar(ctx, unit, maxHp, label, labelX, livesX, barX, y, barW = 40) {
+    _drawUnitHpBar(ctx, unit, maxHp, label, zoneX, y) {
         const hpH = 8;
         const barY = y - hpH / 2;
+        const barX = zoneX + UNIT_COLS.bar;
+        const barW = UNIT_COLS.barW;
 
+        // ラベルだけ 13px。ATTACKER は8文字あって、16px のままだと
+        // 残機の列(76px)に食い込む
+        ctx.font = 'bold 13px "Space Mono", monospace';
         ctx.fillStyle = '#FFCC00';
-        ctx.fillText(label, labelX, y);
+        ctx.fillText(label, zoneX + UNIT_COLS.label, y);
+        ctx.font = HUD_FONT;
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(unit ? unit.lives : 0), livesX, y);
+        ctx.fillText(String(unit ? unit.lives : 0), zoneX + UNIT_COLS.lives, y);
 
         if (unit && unit.alive) {
             const hpRatio = unit.hp / maxHp;
