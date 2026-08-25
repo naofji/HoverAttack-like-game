@@ -26,6 +26,7 @@ import {
 import {
     panelAngles, panelOffsetX, panelDepth, isGuardAngle, guardBlocks, deployEase,
 } from '../utils/orbitShield.js';
+import { withinSight } from '../utils/Physics.js';
 import { BaseLaser } from './BaseLaser.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Missile } from './Missile.js';
@@ -371,7 +372,7 @@ export class EnemyBase {
         if (this.game.carrier && this.game.carrier.alive) candidates.push(this.game.carrier);
 
         let bestTarget = null;
-        let minDist = maxRange;
+        let minDist = Infinity;
 
         const centerX = this.x + this.width / 2;
         const centerY = this.y + this.height / 2;
@@ -379,6 +380,9 @@ export class EnemyBase {
         for (const c of candidates) {
             const dx = c.x + c.width / 2 - centerX;
             const dy = c.y + c.height / 2 - centerY;
+            // タンクと同じく、索敵の内外は楕円で、順位付けはユークリッド距離で。
+            // maxRange の既定は Infinity で、withinSight はそのとき常に true を返す。
+            if (!withinSight(dx, dy, maxRange)) continue;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDist) {
                 minDist = dist;

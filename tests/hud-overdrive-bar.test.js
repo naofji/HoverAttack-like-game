@@ -2,15 +2,30 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HUD } from '../src/js/ui/HUD.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { OVERDRIVE_DURATION, OVERDRIVE_WARN_TICKS } from '../src/js/utils/Constants.js';
+import { OVERDRIVE_DURATION, OVERDRIVE_WARN_TICKS, OVERDRIVE_MAX_DURATION } from '../src/js/utils/Constants.js';
+import { BUFF_SPECS } from '../src/js/ui/HUD.js';
 
 // オーバードライブの残時間バー。A-AIM ゲージのすぐ下に同じ作法で出す。
 // 「いつ切れるか」が読めないと、無限だと思って撃っていた弾が急に減り始める。
 
+
+/**
+ * 旧 API の形で1本だけ描くヘルパー。
+ *
+ * 実装は「残量と色を決める」(_autoAimState / _overdriveState) と「1本描く」
+ * (_drawBuffBar) に分かれたので、テスト側でその2つを繋いでいる。
+ * こうしておけば、色・残量・点滅の検査はこれまでどおりの書き方で残せる。
+ */
+function drawOne(hud, ctx, kind, player, y = 100) {
+  const state = kind === 'autoAim' ? hud._autoAimState(player) : hud._overdriveState(player);
+  if (!state) return;
+  hud._drawBuffBar(ctx, y, 0, BUFF_SPECS[kind], state);
+}
+
 function drawBar({ overdriveTimer = OVERDRIVE_DURATION, maxTimer = OVERDRIVE_DURATION } = {}) {
   const ctx = makeFakeCtx();
   const hud = Object.create(HUD.prototype);
-  hud._drawOverdriveBar(ctx, { overdriveTimer, overdriveMaxTimer: maxTimer }, 100);
+  drawOne(hud, ctx, 'overdrive', { overdriveTimer, overdriveMaxTimer: maxTimer });
   return {
     ctx,
     fills: ctx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]),
@@ -21,14 +36,18 @@ function drawBar({ overdriveTimer = OVERDRIVE_DURATION, maxTimer = OVERDRIVE_DUR
 
 test('効いている間はラベルとバーが出る', () => {
   const { texts, bars } = drawBar();
-  assert.ok(texts.includes('O-DRIVE'), `ラベルが出ていない: ${texts.join(' / ')}`);
+  assert.ok(texts.includes('OVERDRIVE'), `ラベルが出ていない: ${texts.join(' / ')}`);
   assert.ok(bars.length >= 2, `バーが描かれていない: ${bars.length} 個`);
 });
 
+// 分母は「そのとき持っていた最大」から**上限**へ変えた。刻みが入ったことで
+// 「刻みちょうどまで＝1個ぶん」と読めるようになり、1個でも満タンに見せていた
+// 当時の意図は刻みが引き継いでいる。
 test('残量がバーの長さに出る', () => {
-  const widthOf = (bars) => bars[bars.length - 1].args[2];
-  const full = drawBar({ overdriveTimer: OVERDRIVE_DURATION }).bars;
-  const half = drawBar({ overdriveTimer: OVERDRIVE_DURATION / 2 }).bars;
+  // 0枚目は地(常に満幅)、1枚目が残量、その後が先端と刻み
+  const widthOf = (bars) => bars[1].args[2];
+  const full = drawBar({ overdriveTimer: OVERDRIVE_MAX_DURATION }).bars;
+  const half = drawBar({ overdriveTimer: OVERDRIVE_MAX_DURATION / 2 }).bars;
   assert.ok(widthOf(full) > widthOf(half), '残量がバーの長さに出ていない');
 });
 
@@ -40,7 +59,7 @@ test('持っていなければ何も描かない', () => {
 test('自機がいなくても落ちない', () => {
   const ctx = makeFakeCtx();
   const hud = Object.create(HUD.prototype);
-  hud._drawOverdriveBar(ctx, null, 100);
+  drawOne(hud, ctx, 'overdrive', null);
   assert.equal(ctx.calls.length, 0);
 });
 
@@ -123,15 +142,20 @@ test('HUD の通常描画からも呼ばれる', () => {
     camera: { x: 0, y: 0 },
     missionsCompleted: 0, base: null,
     baseEmergencyAlert: false, proximityAlertActive: false,
-    liveTimeBonus: () => 0,
+    liveTimeBonus: () => ({ current: 0, max: 1 }),
   };
-  let called = 0;
-  const original = HUD.prototype._drawOverdriveBar;
-  HUD.prototype._drawOverdriveBar = function (...args) { called++; return original.apply(this, args); };
+  // draw() は AUTO AIM と OVERDRIVE の2本を通す。オーバードライブぶんが
+  // 出ているかを、渡された spec で見分ける
+  const seen = [];
+  const original = HUD.prototype._drawBuffBar;
+  HUD.prototype._drawBuffBar = function (ctx, y, x, spec, state) {
+    seen.push(spec.label);
+    return original.call(this, ctx, y, x, spec, state);
+  };
   try {
     hud.draw(makeFakeCtx());
   } finally {
-    HUD.prototype._drawOverdriveBar = original;
+    HUD.prototype._drawBuffBar = original;
   }
-  assert.equal(called, 1, 'draw() から呼ばれていない');
+  assert.ok(seen.includes('OVERDRIVE'), `draw() から呼ばれていない: ${seen.join(' / ')}`);
 });

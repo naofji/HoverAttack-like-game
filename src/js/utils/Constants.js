@@ -2,8 +2,34 @@
 // Game Constants
 // ============================================
 
-export const CANVAS_WIDTH = 1024;
+// 16:9。高さ 768 を保つ真の 16:9 は幅 1365.33 で整数にならないので、
+// WXGA の実標準 1366 を採る（1366/768 = 1.7786、16:9 の 1.7778 との差は 0.05%）。
+// style.css の黒帯計算をこの比で書けば歪みは出ない。
+// TILE_SIZE(16) の倍数である必要はない。カメラは px 単位の任意位置を取り、
+// 地形描画は startCol/endCol で切っているため。
+export const CANVAS_WIDTH = 1366;
 export const CANVAS_HEIGHT = 768;
+
+// --- 索敵楕円の基準 ---
+// 索敵は「横だけ画面幅に比例する楕円」。横半径は各敵の sightRange
+// (= CANVAS_WIDTH * k) をそのまま使い、縦半径はそれに SIGHT_ASPECT を掛ける。
+//
+// なぜ縦を画面幅に比例させないか:
+// 16:9 化は横に広げる方向なので、CANVAS_WIDTH に紐づけたままだと画面の高さは
+// 768 で変わらないのに索敵円だけ 1.334 倍になり、「真上・真下の見えない敵に
+// 撃たれる」が一律 33% 悪化する。上下移動が主軸のホバー機ではこれが効く。
+//
+// SIGHT_VERTICAL_BASE を 4:3 時代の幅 (1024) に固定すると、
+//   横: 半径/半幅 の比が 4:3 と同じ（0.80 など）
+//   縦: 絶対値が 4:3 と同じ（タンクなら 410px）
+// の両方が同時に成り立つ。4:3 では SIGHT_ASPECT が厳密に 1.0 になり
+// 楕円が真円に退化するので、移行でバランスが動いていないことを証明できる。
+//
+// ここを CANVAS_WIDTH と同じ値にすると SIGHT_ASPECT = 1 に戻り、
+// 「CANVAS_WIDTH を変えただけ」＝縦も等方的に拡大する挙動になる。
+// 実機で縦が緩すぎると感じたときの調整点はここ 1 箇所。
+export const SIGHT_VERTICAL_BASE = 1024;
+export const SIGHT_ASPECT = SIGHT_VERTICAL_BASE / CANVAS_WIDTH;
 
 // --- Tile / Map Base Constants ---
 export const TILE_SIZE = 16;
@@ -145,7 +171,10 @@ export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
 export const MISSILE_SPEED = 6;
 export const MISSILE_INITIAL_COUNT = 24;
 export const MISSILE_MAX_ON_SCREEN = 10;
-export const MISSILE_LIFETIME = 180; // frames
+// 16:9 化で索敵の横半径が 1.334 倍になったぶん、射程も同じ倍率で伸ばす。
+// 180 * 1.334 = 240.1。速度 6 なので射程 1080 -> 1440px。
+// 画面半幅 683 に対する比 2.11 は 4:3 のときと同じ。
+export const MISSILE_LIFETIME = 240; // frames
 
 export const GRENADE_SPEED = 5;
 export const GRENADE_SPEED_MIN = 0;           // 近距離投擲の最小速度
@@ -168,7 +197,9 @@ export const GRENADE_KNOCKBACK_VX = 2;    // Smaller sideways push than a landmi
 export const PLAYER_MG_SPEED = 4; // a little bit faster than ENEMY_BULLET_SPEED
 export const PLAYER_MG_RADIUS = 1.5;
 export const PLAYER_MG_DAMAGE = 3;
-export const PLAYER_MG_LIFETIME = 180; // 80% of original 240 (192 * 3 = 576px)
+// 16:9 化に合わせて 180 -> 240（元は 240 で、4:3 のとき 80% に詰めた経緯がある）。
+// 速度 4 なので射程 720 -> 960px。画面半幅 683 に対する比 1.41 は 4:3 と同じ。
+export const PLAYER_MG_LIFETIME = 240;
 export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
@@ -279,11 +310,18 @@ export const ENEMY_BULLET_RADIUS = 2;
 // 自機と母艦で同じ値。以前は PLAYER=15 / CARRIER=10 と分けて書いてあったが
 // どちらも読まれておらず、実際には CollisionManager 側の 10 が両方に効いていた
 export const ENEMY_BULLET_DAMAGE = 10;
-export const ENEMY_BULLET_LIFETIME = 180;    // frames (3s)
+// 16:9 化で伸ばした。速度 3 なので射程 540 -> 720px。
+// 4:3 ではタレットの索敵 512 に対し弾 540 と 5% しか余裕が無く、手で詰めた値
+// だった。16:9 のタレット索敵は横 683 なので、720 で足りる。
+// なお敵のうち EnemyBullet を撃つのはタンク・タレット・ドローンだけで、
+// アタッカーは素の Missile を、artillery は EnemyHomingMissile を撃つ。
+export const ENEMY_BULLET_LIFETIME = 240;    // frames (4s)
 
 export const ENEMY_HOMING_MISSILE_MAX_SPEED = 3; // Matches player's MISSILE_SPEED
 export const ENEMY_HOMING_MISSILE_TURN_RATE = 0.02; // Radians per frame
-export const ENEMY_HOMING_MISSILE_LIFETIME = 300; // Lives longer to find target
+// 16:9 化で伸ばした。300 * 1.334 = 400.2。速度 3 なので射程 900 -> 1200px。
+// artillery の索敵は横 1093 なので、これで届く（4:3 では 819 vs 900 だった）。
+export const ENEMY_HOMING_MISSILE_LIFETIME = 400; // Lives longer to find target
 export const ENEMY_HOMING_MISSILE_DELAY = 30;     // Frames before tracking starts
 export const ENEMY_HOMING_MISSILE_ENGAGE_DISTANCE = 240; // Pixels before tracking starts
 
@@ -847,11 +885,14 @@ export const MINIMAP_MARGIN = 16;
 // 画面幅に対するミニマップの上限。大きいマップ（最大600x300）だと
 // 画面の大半を覆ってしまうため、焼く解像度は変えずに描画時だけ縮小する。
 // 外枠を無くして薄く見えるようになったぶん、1/3 だと小さすぎるとの
-// フィードバックで引き上げた。1/2（画面幅1024に対して512px）だと、
-// 四隅に置いても左右の候補が完全に重なり（512×2＝1024＝画面幅）実質
+// フィードバックで引き上げた。1/2（画面幅1366に対して683px）だと、
+// 四隅に置いても左右の候補が完全に重なり（683×2＝1366＝画面幅）実質
 // 「上か下か」の2択になってしまう。避ける対象が3つ（自機・クロスヘア・
 // 母艦の方向矢印）ある状況では上下とも塞がってフォールバックに落ちる場面が
-// 増えるため、0.4（約410px）にして左右の候補にずれを残した
+// 増えるため、0.4（約546px）にして左右の候補にずれを残した
+// （16:9化 (1366px) での再計算: 0.4×1366＝546、546×2＝1093＜1366。
+// 左右の候補が重ならないという狙いは、4:3 のとき (410×2＝820<1024) より
+// むしろ余裕を持って成立している）
 export const MINIMAP_MAX_WIDTH_RATIO = 0.4;
 // 隅から隅への切り替えを「消える→切り替わる→現れる」でつなぐときの
 // 1フレームあたりのフェード量。0.08 で消えて現れるまで約0.4秒
@@ -888,7 +929,11 @@ export const MINIMAP_AVOID_PADDING_UNIT = 64;
 // ミニマップは「カーソルがいる側の反対側」に置く。その左右／上下を切り替える
 // 中心線に置く不感帯の幅（隅と隅の間隔に対する比）。カーソルが中心付近で
 // 揺れるたびにミニマップが往復しないようにするためのヒステリシス。
-// 0.15 で 1024x768 のとき横 ±87px / 縦 ±71px。0.3 まで上げると今度は
+// 0.15 で 1366x768 のとき横 ±118px / 縦 ±60px（4:3 の 1024x768 では
+// 横 ±87px / 縦 ±71px だった。横はミニマップ幅が画面幅に比例して広がった
+// ぶん拡大し、縦はミニマップの縦幅（cols:rows は常に 2:1 なので横幅の半分）
+// も一緒に広がった影響で縮んでいる。HUD帯を除いた縦の使える範囲そのものは
+// CANVAS_HEIGHT が変わっていないので変化していない）。0.3 まで上げると今度は
 // 「カーソルを反対側へ振っても付いてこない」と感じる領域が広くなりすぎた
 export const MINIMAP_SIDE_HYSTERESIS = 0.15;
 
@@ -910,9 +955,11 @@ export const FAR_BG_PARALLAX = 0.25;
 // 最初 64 にして書いたテストが、まさにこのパルスのポップを捕まえた。
 // 他はもっと小さい: アタッカーの脚、ホバーとスラスターの炎、頭上のHPバー。
 //
-// 広げる側に倒すのが安全で、費用もほぼ無い。1024x768 の視界に対し
-// 64→128 で判定矩形の面積は約1.27倍にしかならず、間引ける敵の割合は
-// 実測の 89% から数ポイント落ちるだけ。逆に切り詰めると縁で部品がちらつく。
+// 広げる側に倒すのが安全で、費用もほぼ無い。1366x768 の視界に対し
+// 64→128 で判定矩形の面積は約1.24倍にしかならず（4:3 の 1024x768 では
+// 約1.27倍だった。画面が横に広がったぶん、margin を広げたときの相対的な
+// 面積増加率がわずかに薄まる）、間引ける敵の割合は実測の 89% から
+// 数ポイント落ちるだけ。逆に切り詰めると縁で部品がちらつく。
 export const VIEW_CULL_MARGIN = 128;
 
 export const COLOR_CROSSHAIR = 'rgba(255, 255, 0, 0.8)';

@@ -2,7 +2,7 @@
 // Physics Utilities - Shared collision helpers
 // ============================================
 
-import { TILE_SIZE } from './Constants.js';
+import { TILE_SIZE, SIGHT_ASPECT } from './Constants.js';
 
 /**
  * Check if an entity's bounding box collides with the map.
@@ -115,6 +115,30 @@ export function hasLineOfSight(x1, y1, x2, y2, map) {
         }
     }
     return true;
+}
+
+/**
+ * 楕円の索敵判定。`dist < sightRange` の置き換え。
+ *
+ * 横半径は渡された range そのもの（＝ CANVAS_WIDTH に比例する既存の値）で、
+ * 縦半径は range * SIGHT_ASPECT。4:3 では SIGHT_ASPECT === 1 なので真円に
+ * 退化する。この退化は実数演算では厳密に旧来の円 hypot(dx,dy) < range と
+ * 一致する（tests/sight-ellipse.test.js の総当たりで確認済み）。ただし
+ * 浮動小数では境界ぎりぎりの点で丸め誤差が乗りうるうえ、置き換え前の
+ * 呼び出し側は `<=` を使っていた箇所があり、この関数は `<` なので、
+ * 境界上ちょうどの標的1点だけは判定が変わりうる。
+ *
+ * range に Infinity を渡すと常に true（dx/Infinity が 0 になり、ry も
+ * Infinity になるため）。EnemyBase._findTarget の既定引数がこの形。
+ *
+ * @param {number} dx 標的中心までの横距離
+ * @param {number} dy 標的中心までの縦距離
+ * @param {number} range 横半径（各敵の sightRange）
+ * @returns {boolean}
+ */
+export function withinSight(dx, dy, range) {
+    const ry = range * SIGHT_ASPECT;
+    return (dx / range) ** 2 + (dy / ry) ** 2 < 1;
 }
 
 /**

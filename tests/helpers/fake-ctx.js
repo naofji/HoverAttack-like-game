@@ -16,17 +16,17 @@ const METHODS = [
 // font を含めているのは、fillText の**文字幅**を後から復元するため。文字の
 // 右端がパネルに収まっているかを見るには、その fillText の時点のフォントが要る
 // （extractTextsWithFont を参照）。
-const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'font'];
+// textAlign も同じ理由で記録する。右端揃えの文字は fillText に渡る x が
+// **右端**なので、揃えを知らないと左端を復元できない（得点ゾーンがそれ）。
+const TRACKED_PROPS = ['strokeStyle', 'fillStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'font', 'textAlign'];
 
 /** @returns {object} calls 配列を持つ疑似 ctx */
 export function makeFakeCtx() {
   const calls = [];
-  const ctx = {
-    calls,
-    textAlign: '',
-  };
+  const ctx = { calls };
   const values = {
-    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1, font: '',
+    strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: '', lineJoin: '', globalAlpha: 1,
+    font: '', textAlign: '',
   };
   for (const prop of TRACKED_PROPS) {
     Object.defineProperty(ctx, prop, {

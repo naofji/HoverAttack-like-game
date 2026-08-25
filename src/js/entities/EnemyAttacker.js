@@ -20,6 +20,7 @@ import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
+import { withinSight } from '../utils/Physics.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
@@ -153,11 +154,26 @@ export class EnemyAttacker {
 
         // --- AI state decision ---
         this.currentTarget = target;
-        // While defending the base, notice approaching players from farther away.
-        const sightRange = this.emergencyDefense
-            ? Math.max(this.config.sightRange, EMERGENCY_DEFENSE_SIGHT_RANGE)
-            : this.config.sightRange;
-        if (target && targetDist <= sightRange) {
+        // 通常の索敵は楕円（横だけ画面幅に比例する）。総攻撃中の緊急索敵 250px は
+        // 画面比と無関係な「至近距離の反応」なので、楕円に混ぜず真円のまま OR で
+        // 足す。Math.max で楕円の横半径ごと広げると、16:9 では縦が
+        // 250 * SIGHT_ASPECT = 187 に縮み、意図しないバランス変更になる。
+        // 4:3 では楕円が真円に退化するので、この OR は元の
+        // Math.max(config.sightRange, 250) と完全に同じ結果になる。
+        //
+        // 現状、この OR は実質的に効いていない。索敵の縦半径が一番小さい
+        // standard/tank でも sightRange = CANVAS_WIDTH*0.4 ≈ 546.4、
+        // その縦半径は 546.4 * SIGHT_ASPECT ≈ 409.6px あり、緊急索敵の
+        // 250px は実在するどの敵の楕円にも収まってしまう（250/409.6 ≈ 0.61）。
+        // それでも残してあるのは、将来どこかの索敵係数を下げて楕円の縦半径が
+        // 250px を割り込んだときに、この OR が保険として即座に効くようにするため。
+        const dx = target ? (target.x + target.width / 2) - (this.x + this.width / 2) : 0;
+        const dy = target ? (target.y + target.height / 2) - (this.y + this.height / 2) : 0;
+        const inSight = !!target && (
+            withinSight(dx, dy, this.config.sightRange)
+            || (this.emergencyDefense && targetDist < EMERGENCY_DEFENSE_SIGHT_RANGE)
+        );
+        if (inSight) {
             this.aiState = 'chase';
             this.returning = false;
         } else {
