@@ -6,7 +6,7 @@
 // 「HUD の中に収まっているか」を機械的に縛る。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HUD, HUD_MIN_WIDTH } from '../src/js/ui/HUD.js';
+import { HUD, HUD_MIN_WIDTH, HUD_BUFF_TICK_COLOR, HUD_HP_DAMAGE_COLOR } from '../src/js/ui/HUD.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
   HUD_TOP_HEIGHT, PLAYER_MAX_HP, CARRIER_MAX_HP, HOVER_MAX_FUEL,
@@ -87,28 +87,28 @@ function textX(ctx, label) {
   return c ? { x: c.args[1], y: c.args[2] } : null;
 }
 
-test('A-AIM と O-DRIVE は同じ段に横並びで出る', () => {
+test('AUTO AIM と OVERDRIVE は同じ段に横並びで出る', () => {
   const { ctx } = drawHud();
-  const a = textX(ctx, 'A-AIM');
-  const o = textX(ctx, 'O-DRIVE');
+  const a = textX(ctx, 'AUTO AIM');
+  const o = textX(ctx, 'OVERDRIVE');
   assert.ok(a && o, '両方のラベルが出ていない');
   assert.equal(a.y, o.y, '同じ段になっていない');
-  assert.ok(a.x < o.x, 'A-AIM が O-DRIVE の右にある');
+  assert.ok(a.x < o.x, 'AUTO AIM が OVERDRIVE の右にある');
 });
 
 test('2本のバーは横に重ならない', () => {
-  // サブ行に描かれた矩形だけを集めて、左右の塊が交差しないことを見る
   const { ctx } = drawHud();
-  const subRowY = textX(ctx, 'A-AIM').y;
-  const rects = ctx.calls
-    .filter((c) => c.name === 'fillRect' && Math.abs(c.args[1] + c.args[3] / 2 - subRowY) < 6)
+  const a = textX(ctx, 'AUTO AIM');
+  const o = textX(ctx, 'OVERDRIVE');
+  const barsNear = (x0, x1) => ctx.calls
+    .filter((c) => c.name === 'fillRect' && Math.abs(c.args[1] + c.args[3] / 2 - a.y) < 8
+                   && c.args[0] >= x0 && c.args[0] < x1)
     .map((c) => ({ left: c.args[0], right: c.args[0] + c.args[2] }));
-  assert.ok(rects.length >= 4, `サブ行のバーが足りない: ${rects.length}`);
-
-  const aaimRight = Math.max(...rects.filter((r) => r.left < 300).map((r) => r.right));
-  const odriveLeft = Math.min(...rects.filter((r) => r.left >= 300).map((r) => r.left));
-  assert.ok(aaimRight < odriveLeft,
-    `A-AIM(右端 ${aaimRight}) と O-DRIVE(左端 ${odriveLeft}) が重なっている`);
+  const aa = barsNear(a.x, o.x);
+  const od = barsNear(o.x, Infinity);
+  assert.ok(aa.length && od.length, 'バーが見つからない');
+  assert.ok(Math.max(...aa.map((r) => r.right)) < Math.min(...od.map((r) => r.left)),
+    'AUTO AIM と OVERDRIVE のバーが重なっている');
 });
 
 test('片方だけ効いているときも、それぞれの位置は動かない', () => {
@@ -165,7 +165,7 @@ test('ATTACKER と CARRIER の HP バーは左端も幅も揃う', () => {
   // 元は 40px と 60px だった。HP の比(100:120 なら 40:48)でもなく、
   // 単に場所が空いていただけの値で、根拠のコメントも無かった。
   const { ctx } = drawHud();
-  const bars = rectsByFill(ctx, '#DD0000');
+  const bars = rectsByFill(ctx, HUD_HP_DAMAGE_COLOR);
   assert.equal(bars.length, 2, `HP バーが2本ない: ${bars.length}`);
   const [a, b] = bars;
   assert.equal(a.x, b.x, `左端が揃っていない: ${a.x} と ${b.x}`);
@@ -187,7 +187,7 @@ test('リペアキットの数が変わっても、機体ゾーンの他の要�
   assert.deepEqual(texts(none.ctx), texts(many.ctx),
     'キットの数で文字の位置が動いている');
 
-  for (const fill of ['#DD0000', '#00DD00']) {
+  for (const fill of [HUD_HP_DAMAGE_COLOR, '#12D64A']) {
     assert.deepEqual(rectsByFill(none.ctx, fill), rectsByFill(many.ctx, fill),
       `キットの数で HP バー(${fill})の位置が動いている`);
   }
@@ -218,15 +218,11 @@ test('HUD の描画はすべて画面幅の内側に収まる', () => {
   }
 });
 
-test('ゾーンの区切り線は帯の中に3本あり、左から右へ並ぶ', () => {
+test('縦の区切り線は引かない（塊は間隔だけで出す）', () => {
+  // 実機で「機械的でデザインされていない」と却下された。塊は
+  // ゾーン間の余白と段の揃えだけで表す。
   const { ctx } = drawHud();
-  const rules = rectsByFill(ctx, '#2a2a2a');
-  assert.equal(rules.length, 3, `区切り線が3本ない: ${rules.length}`);
-  for (const r of rules) {
-    assert.ok(r.y > 0 && r.y + r.h <= HUD_TOP_HEIGHT, `区切り線が帯からはみ出している: ${JSON.stringify(r)}`);
-  }
-  const xs = rules.map((r) => r.x);
-  assert.deepEqual(xs, [...xs].sort((a, b) => a - b), '区切り線の順序が入れ替わっている');
+  assert.equal(rectsByFill(ctx, '#2a2a2a').length, 0, '区切り線が残っている');
 });
 
 test('いまの CANVAS_WIDTH は HUD が要る最小幅を満たしている', () => {
@@ -234,4 +230,146 @@ test('いまの CANVAS_WIDTH は HUD が要る最小幅を満たしている', (
   // ここを下回ると得点が機体ゾーンに食い込む。CANVAS_WIDTH を下げるときの見張り。
   assert.ok(CANVAS_WIDTH >= HUD_MIN_WIDTH,
     `CANVAS_WIDTH(${CANVAS_WIDTH}) が HUD の最小幅(${HUD_MIN_WIDTH})を下回っている`);
+});
+
+
+// ============================================
+// 作り直した HUD の不変条件
+// ============================================
+
+/** 描かれた文字を、その時点のフォントと揃えごと拾う。 */
+function texts(ctx) {
+  const out = [];
+  let font = '', align = 'left';
+  for (const c of ctx.calls) {
+    if (c.name === 'set:font') font = c.args[0];
+    else if (c.name === 'set:textAlign') align = c.args[0];
+    else if (c.name === 'fillText') {
+      const px = parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? '16');
+      out.push({ text: String(c.args[0]), x: c.args[1], y: c.args[2], px, align });
+    }
+  }
+  return out;
+}
+const find = (ctx, t) => texts(ctx).find((e) => e.text === t);
+
+// --- 段の揃え ---
+
+test('3つのゾーンで、段の中心の高さが揃う', () => {
+  // 各ゾーンを縦中央に置いていた頃は、段の高さの違いで下段が
+  // 43.0 / 46.5 / 47.5 とバラバラになり、TIME と BONUS が沈んで見えた。
+  const { ctx } = drawHud();
+  const rows = ['ATTACKER', 'MISSILE', 'MISSION'].map((t) => find(ctx, t));
+  const rows2 = ['CARRIER', 'HOVER', 'TIME'].map((t) => find(ctx, t));
+  for (const r of [...rows, ...rows2]) assert.ok(r, '基準の文字が出ていない');
+  assert.equal(new Set(rows.map((r) => r.y)).size, 1, `上段が揃っていない: ${rows.map((r) => r.y)}`);
+  assert.equal(new Set(rows2.map((r) => r.y)).size, 1, `下段が揃っていない: ${rows2.map((r) => r.y)}`);
+});
+
+test('武装ゾーンは1段目と2段目の左端が揃う', () => {
+  const { ctx } = drawHud();
+  assert.equal(find(ctx, 'MISSILE').x, find(ctx, 'HOVER').x,
+    'MISSILE と HOVER の左端がずれている');
+});
+
+// --- ラベルとバーの間隔 ---
+
+test('HOVER / AUTO AIM / OVERDRIVE は、字の右端からバーの左端までが同じ', () => {
+  // 等間隔にしていた頃は、ラベルがどちらのバーに属するか目で決められなかった。
+  const { ctx } = drawHud();
+  const gaps = [];
+  for (const label of ['HOVER', 'AUTO AIM', 'OVERDRIVE']) {
+    const t = find(ctx, label);
+    assert.ok(t, `${label} が出ていない`);
+    const right = t.x + t.text.length * t.px * 0.6;
+    // そのラベルより右で、いちばん近い矩形の左端
+    // HOVER は三角形なので fillRect ではなく moveTo で始まる
+    const lefts = ctx.calls
+      .filter((c) => (c.name === 'fillRect' && c.args[0] > right - 1
+                      && Math.abs(c.args[1] + c.args[3] / 2 - t.y) < 14)
+                  || (c.name === 'moveTo' && c.args[0] > right - 1 && Math.abs(c.args[1] - t.y) < 14))
+      .map((c) => c.args[0]);
+    assert.ok(lefts.length, `${label} の右にバーが無い`);
+    gaps.push(Math.round(Math.min(...lefts) - right));
+  }
+  assert.equal(new Set(gaps).size, 1, `間隔が揃っていない: ${gaps.join(' / ')}`);
+});
+
+// --- 武器の3状態 ---
+
+test('武器を切り替えても、ラベルの位置は動かない', () => {
+  // 選択中だけ左の余白が違うと、切り替えるたびに字が横に飛ぶ。
+  const mg = drawHud();
+  const missile = drawHud({ player: { ...makePlayer(), currentWeapon: 'missile' } });
+  for (const label of ['MISSILE', 'MACHINE GUN', 'GRENADE']) {
+    assert.deepEqual(
+      { x: find(mg.ctx, label).x, y: find(mg.ctx, label).y },
+      { x: find(missile.ctx, label).x, y: find(missile.ctx, label).y },
+      `${label} が武器の切り替えで動いている`);
+  }
+});
+
+test('GRENADE は選択の対象ではないので暗くしない', () => {
+  // いつでも撃てるものなので、非選択の武器と同じ扱いにはしない。
+  const { ctx } = drawHud();
+  const inks = [];
+  let cur = '';
+  for (const c of ctx.calls) {
+    if (c.name === 'set:fillStyle') cur = c.args[0];
+    else if (c.name === 'fillText' && c.args[0] === 'GRENADE') inks.push(cur);
+  }
+  assert.equal(inks.length, 1, 'GRENADE が1回だけ描かれていない');
+  assert.equal(inks[0], '#FFCC00', `暗い色で描かれている: ${inks[0]}`);
+});
+
+// --- 省略しない ---
+
+test('ラベルは省略形を使わない', () => {
+  const { ctx } = drawHud();
+  const all = texts(ctx).map((t) => t.text);
+  for (const full of ['MISSILE', 'MACHINE GUN', 'GRENADE', 'AUTO AIM', 'OVERDRIVE']) {
+    assert.ok(all.includes(full), `${full} が出ていない`);
+  }
+  for (const abbr of ['GREN', 'M-GUN', 'A-AIM', 'O-DRIVE', 'O-DRV']) {
+    assert.equal(all.includes(abbr), false, `省略形 ${abbr} が残っている`);
+  }
+});
+
+// --- 得点エリア ---
+
+test('TIME は得点エリアにあり、白系で描かれる', () => {
+  const { ctx } = drawHud();
+  const time = find(ctx, 'TIME');
+  const score = find(ctx, 'SCORE');
+  assert.ok(time && score, 'TIME か SCORE が出ていない');
+  assert.ok(time.x > CANVAS_WIDTH / 2, 'TIME が得点エリアに無い');
+  // 直前に置かれた塗り色を見る
+  let ink = '';
+  for (const c of ctx.calls) {
+    if (c.name === 'set:fillStyle') ink = c.args[0];
+    if (c.name === 'fillText' && /^\d\d:\d\d\.\d\d$/.test(String(c.args[0]))) break;
+  }
+  assert.match(ink, /^#[EF]/i, `時計が白系でない: ${ink}`);
+});
+
+test('数字の大きさは SCORE > MISSION > BONUS > TIME の順', () => {
+  const { ctx } = drawHud();
+  const px = (t) => texts(ctx).find((e) => e.text === t).px;
+  const score = texts(ctx).find((e) => /^\d{7}$/.test(e.text)).px;
+  const mission = texts(ctx).find((e) => e.text === '3' && e.x > CANVAS_WIDTH / 2).px;
+  const bonus = texts(ctx).find((e) => /^\d{6}$/.test(e.text)).px;
+  const time = texts(ctx).find((e) => /^\d\d:\d\d\.\d\d$/.test(e.text)).px;
+  void px;
+  assert.ok(score > mission, `SCORE(${score}) > MISSION(${mission})`);
+  assert.ok(mission > bonus, `MISSION(${mission}) > BONUS(${bonus})`);
+  assert.ok(bonus > time, `BONUS(${bonus}) > TIME(${time})`);
+});
+
+// --- バフのバーの刻み ---
+
+test('AUTO AIM は3個ぶん、OVERDRIVE は2個ぶんの刻みが入る', () => {
+  // 刻みの数 = 何個まで重ねられるか。1個ぶんの長さは両方で同じにする。
+  const { ctx } = drawHud();
+  const ticks = rectsByFill(ctx, HUD_BUFF_TICK_COLOR);
+  assert.equal(ticks.length, 3, `刻みは AUTO AIM 2本 + OVERDRIVE 1本 のはず: ${ticks.length}`);
 });
