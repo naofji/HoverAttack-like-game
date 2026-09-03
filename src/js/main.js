@@ -39,7 +39,7 @@ import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { toggleFullscreen } from './utils/fullscreen.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
-import { sightScaleFor } from './world/StageEnvironment.js';
+import { StageEnvironment, sightScaleFor } from './world/StageEnvironment.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Flag } from './entities/Flag.js';
@@ -194,6 +194,8 @@ export const Game = {
         this.rng = new SeededRNG(stageSeed(this.weekSeed, this.missionsCompleted));
 
         this.map = new Map(this, this.missionsCompleted);
+        // 面の環境（霧・雪・地底湖）。map の後（水タイルを読む）、Carrier/Player の前
+        this.env = new StageEnvironment(this, this.missionsCompleted);
         this.camera = new Camera(this);
         this.hud = new HUD(this);
         this.crosshair = new Crosshair(this);
@@ -530,6 +532,7 @@ export const Game = {
         this._updateAndPrune(this.missileKits);
         this._updateAutoAim();
         this._updateOverdrive();
+        this.env.update();
         this.map.update();
         this._updateAndPrune(this.enemies);
         this._updateEnemyHoverSound();
@@ -945,6 +948,8 @@ export const Game = {
         }
 
         this._drawWorld(ctx);
+        // 環境の画面描画（霧の層・降雪）。ワールドの上、HUD の下
+        this.env.drawOverlay(ctx);
         this.hud.draw(ctx);
         this.crosshair.draw(ctx);
         this._drawOverlays(ctx);
@@ -1016,6 +1021,9 @@ export const Game = {
 
         for (const bullet of this.enemyBullets) bullet.draw(ctx);
         if (this.flag) this.flag.draw(ctx);
+
+        // 環境のワールド描画（水の塗りと水面）。機体と弾の上、煙幕の下
+        this.env.drawOverWorld(ctx, camX, camY);
 
         // 煙は敵とHPバーの上に重ねる（隠すのが仕事なので最後に描く）
         for (const screen of this.smokeScreens) screen.draw(ctx);

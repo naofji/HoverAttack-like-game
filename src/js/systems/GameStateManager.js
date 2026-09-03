@@ -3,6 +3,7 @@
 // ============================================
 
 import { Map } from '../world/Map.js';
+import { StageEnvironment } from '../world/StageEnvironment.js';
 import { Player } from '../entities/Player.js';
 import { Carrier } from '../entities/Carrier.js';
 import { HUD } from '../ui/HUD.js';
@@ -62,6 +63,7 @@ export class GameStateManager {
         // Regenerate map (seeded per week + mission for reproducibility)
         game.rng = new SeededRNG(stageSeed(game.weekSeed, game.missionsCompleted));
         game.map = new Map(game, game.missionsCompleted);
+        game.env = new StageEnvironment(game, game.missionsCompleted);
         game.hud = new HUD(game);
 
         const spawnPos = game.spawnManager.findSpawnPosition(5, 5, 12, 10);

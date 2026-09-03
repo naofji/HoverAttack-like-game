@@ -16,6 +16,9 @@ function makeGame() {
     g.canvas = { width: 1024, height: 768 };
     const calls = [];
     g._drawWorld = () => calls.push('drawWorld');
+    // Game.env は Task 8 で追加された環境（霧・雪・地底湖）。この画面は
+    // draw() 全体の呼び出し順だけを見るのでスタブでよい。
+    g.env = { update() {}, drawOverWorld() {}, drawOverlay() {} };
     g.hud = {
         draw: () => calls.push('hud.draw'),
         drawCarrierArrow: () => calls.push('hud.drawCarrierArrow'),
