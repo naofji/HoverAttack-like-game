@@ -16,7 +16,8 @@
 import {
     STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, ICE_SLIDE, FOG_SIGHT_SCALE,
 } from '../utils/Constants.js';
-import { createNoneRenderer } from './environment/none.js';
+import { createNoneRenderer, canvasAvailable } from './environment/none.js';
+import { createFogRenderer } from './environment/fog.js';
 
 /** 陸上。陸上の面では全エンティティがこれを受け取り、掛けても値が変わらない。 */
 export const LAND_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: 0 });
@@ -24,6 +25,13 @@ const WATER_MOTION = Object.freeze({ speed: WATER_SPEED_SCALE, gravity: WATER_GR
 const SNOW_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: ICE_SLIDE });
 
 const NONE_ROW = Object.freeze({ kind: 'none', backdrop: 'cave', terrain: 'cave' });
+
+/** 描画側の実装を kind から選ぶ。document が無い（node のテスト）なら none に落とす。 */
+function createRenderer(kind, env) {
+    if (!canvasAvailable()) return createNoneRenderer();
+    if (kind === 'fog') return createFogRenderer();
+    return createNoneRenderer();
+}
 
 /**
  * 座標の物理係数。game.env が無い（テストの簡易 game）なら陸上。
@@ -49,8 +57,7 @@ export class StageEnvironment {
         this.kind = row.kind;
         this.backdrop = row.backdrop;
         this.sightScale = this.kind === 'fog' ? FOG_SIGHT_SCALE : 1;
-        // 描画は後のタスク（霧・水・雪）で kind ごとに差し替える。ここではまだ全部 none。
-        this.renderer = createNoneRenderer();
+        this.renderer = createRenderer(this.kind, this);
     }
 
     motionAt(x, y) {
