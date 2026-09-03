@@ -10,6 +10,7 @@ import {
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
+import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 
@@ -24,6 +25,8 @@ export class Carrier {
         this.height = CARRIER_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        // 環境の物理係数。update() で毎フレーム引き直す（Player と同じ手順）。
+        this.motion = LAND_MOTION;
         this.alive = true;
 
         this.hp = CARRIER_MAX_HP;
@@ -56,7 +59,8 @@ export class Carrier {
         // Friction & Gravity
         this.vx *= FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
-        this.vy += GRAVITY;
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
+        this.vy += GRAVITY * this.motion.gravity;
         if (this.vy > CARRIER_MAX_FALLING_SPEED) this.vy = CARRIER_MAX_FALLING_SPEED;
 
         // Movement with collision
@@ -80,7 +84,7 @@ export class Carrier {
 
     _moveAndCollide() {
         // --- Horizontal ---
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
         if (this._collidesWithMap()) {
             // Check if it's a 1-tile step
             this.y -= TILE_SIZE;
@@ -88,11 +92,11 @@ export class Carrier {
             this.y += TILE_SIZE;
 
             if (canClimb) {
-                this.x -= this.vx;
+                this.x -= this.vx * this.motion.speed;
                 this.y -= 3;
                 this.vy = 0;
             } else {
-                this.x -= this.vx;
+                this.x -= this.vx * this.motion.speed;
                 this.vx = 0;
             }
         }
@@ -101,7 +105,7 @@ export class Carrier {
         this._pushPlayer();
 
         // --- Vertical ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         if (this._collidesWithMap()) {
             if (this.vy > 0) {
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height - 0.01;

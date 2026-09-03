@@ -21,6 +21,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
+import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
@@ -36,6 +37,9 @@ export class EnemyAttacker {
         this.height = PLAYER_HEIGHT; // Same size as player (24px)
         this.vx = 0;
         this.vy = 0;
+        // 環境の物理係数。update() で毎フレーム引き直し、
+        // _moveAndCollide()（attacker/collision.js）が同じ値を読む。
+        this.motion = LAND_MOTION;
         this.recoilProfile = ENEMY_RECOIL_PROFILES[config.name] || ENEMY_RECOIL_PROFILES.standard;
         this.recoilTimer = 0;
         this.alive = true;
@@ -196,7 +200,8 @@ export class EnemyAttacker {
         }
 
         // --- Physics ---
-        this.vy += GRAVITY;
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
+        this.vy += GRAVITY * this.motion.gravity;
         if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
 
         if (!this.onGround && this.aiState === 'patrol') {
@@ -280,3 +285,8 @@ Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
 );
+
+// プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で
+// constructor を通さずインスタンスを作る（emergency-wild-fire.test.js など）ため、
+// constructor 内の `this.motion = LAND_MOTION;` だけでは救えない（Player.js と同じ理由）。
+EnemyAttacker.prototype.motion = LAND_MOTION;

@@ -12,6 +12,7 @@ import {
     ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
+import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -26,6 +27,8 @@ export class EnemyTank {
         this.height = ENEMY_TANK_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        // 環境の物理係数（水中で重力・速度を落とす等）。update() で毎フレーム引き直す。
+        this.motion = LAND_MOTION;
         this.recoilProfile = ENEMY_RECOIL_PROFILES.tank;
         this.recoilTimer = 0;
         this.alive = true;
@@ -55,7 +58,10 @@ export class EnemyTank {
         if (!recoiling) this.vx = this.patrolDir * ENEMY_TANK_SPEED;
 
         // --- Gravity (hover tanks float but are affected by gravity) ---
-        this.vy += GRAVITY;
+        // 中心座標で環境を引く。_moveAndCollide はこの後に呼ばれるので、
+        // そちら側にも同じ値を持たせて速度への掛け目を揃える（Player と同じ手順）。
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
+        this.vy += GRAVITY * this.motion.gravity;
         if (this.vy > ENEMY_TANK_MAX_FALLING_SPEED) this.vy = ENEMY_TANK_MAX_FALLING_SPEED;
 
         // --- Friction ---
@@ -122,11 +128,11 @@ export class EnemyTank {
         }
 
         // --- Apply Horizontal Movement ---
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
 
         // Safety Fallback (in case of strange map overlaps)
         if (this._collidesWithMap()) {
-            this.x -= this.vx;
+            this.x -= this.vx * this.motion.speed;
             this.vx = 0;
             if (!isRecoiling(this)) this.patrolDir *= -1;
         }
@@ -135,7 +141,7 @@ export class EnemyTank {
         this._checkHorizontalEntities();
 
         // --- Vertical ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         if (this._collidesWithMap()) {
             if (this.vy > 0) {
                 // Landing
@@ -296,3 +302,8 @@ export class EnemyTank {
         ctx.restore();
     }
 }
+
+// プロトタイプ既定値。既存テストの一部は `Object.create(EnemyTank.prototype)` で
+// constructor を通さずインスタンスを作る（sight-ellipse.test.js など）ため、
+// constructor 内の `this.motion = LAND_MOTION;` だけでは救えない（Player.js と同じ理由）。
+EnemyTank.prototype.motion = LAND_MOTION;
