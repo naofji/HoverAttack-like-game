@@ -11,6 +11,7 @@ import {
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -29,21 +30,22 @@ export class Grenade {
         if (!this.alive) return;
 
         const map = this.game.map;
+        const motion = motionFor(this.game, this.x, this.y);
 
         // Apply gravity
-        this.vy += GRENADE_GRAVITY;
+        this.vy += GRENADE_GRAVITY * motion.gravity;
         if (this.vy > GRENADE_MAX_FALLING_SPEED) this.vy = GRENADE_MAX_FALLING_SPEED;
 
         // Calculate next position
-        let nextX = this.x + this.vx;
-        let nextY = this.y + this.vy;
+        let nextX = this.x + this.vx * motion.speed;
+        let nextY = this.y + this.vy * motion.speed;
 
         // --- Map collision (2D Bouncing) ---
 
         // Horizontal Movement & Collision
         if (map.isSolidAtPixel(nextX, this.y)) {
             this.vx *= -GRENADE_BOUNCE;
-            nextX = this.x + this.vx;
+            nextX = this.x + this.vx * motion.speed;
         }
         this.x = nextX;
 
@@ -57,7 +59,7 @@ export class Grenade {
                 this.vy = 0;
                 this.vx *= GRENADE_FRICTION;
             }
-            nextY = this.y + this.vy;
+            nextY = this.y + this.vy * motion.speed;
         }
         this.y = nextY;
 

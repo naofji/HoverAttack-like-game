@@ -5,6 +5,7 @@
 import { MISSILE_SPEED, MISSILE_LIFETIME, PARTICLE_LIFETIME } from '../utils/Constants.js';
 import { TrailParticle } from './Particle.js';
 import { playBlast } from './destruction.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export class Missile {
     constructor(game, x, y, angle, isPlayerOwned = true, isRival = false) {
@@ -31,8 +32,9 @@ export class Missile {
             this.game.particles.push(new TrailParticle(this.x, this.y, PARTICLE_LIFETIME));
         }
 
-        this.x += this.vx;
-        this.y += this.vy;
+        const motion = motionFor(this.game, this.x, this.y);
+        this.x += this.vx * motion.speed;
+        this.y += this.vy * motion.speed;
         this.lifetime--;
 
         if (this.lifetime <= 0) {
