@@ -856,6 +856,92 @@ export const STAGE_PALETTES = [
     { fill: '#483D8B', border: '#2e2759' }, // 7: DarkSlateBlue
 ];
 
+// --- 面ごとの環境（霧・雪・地底湖） ---
+// 設計: docs/superpowers/specs/2026-09-04-stage-environments-design.md
+// 面に固定する（面別ランキングがタイムアタックなので、同じ面は常に同じ条件）。
+// kind = 動きと画面に重ねる描画、backdrop = 遠景の装飾（kind から導けない行がある:
+// 7面は動きは今のままで遠景だけ機械）、terrain = 地形の生成規則（7面の要塞化のために
+// 予約。今は全行 'cave' で、読む側もまだ無い）。
+export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
+export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
+export const STAGE_ENVIRONMENTS = [
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 1
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 3
+    { kind: 'water', backdrop: 'wet',     terrain: 'cave' }, // 4: 地底湖
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
+    { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
+    { kind: 'none',  backdrop: 'machine', terrain: 'cave' }, // 7: 洞窟を改造した要塞（遠景だけ）
+];
+
+// 水中の動き。speed は位置更新と推力に掛ける倍率、gravity は重力の倍率。
+// 浮力は持たない（重力が弱いだけで、沈めば底を歩く）。実機で詰める前の初期値。
+export const WATER_SPEED_SCALE = 0.5;
+export const WATER_GRAVITY_SCALE = 0.3;
+// 雪の地上で入力を離したときの速度の残存率（陸上は 0 = 即停止）。
+export const ICE_SLIDE = 0.9;
+export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
+export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ毎フレーム下り方向へ
+export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
+// 霧で索敵の横半径に掛ける倍率（縦は SIGHT_ASPECT 経由で同じ比率で縮む）。自機の Auto Aim も同じ。
+export const FOG_SIGHT_SCALE = 0.5;
+
+// 地底湖の生成。低い位置のチャンバーを選び、部屋の底から数段を水にする。
+export const WATER_POOL_COUNT = 3;
+export const WATER_POOL_DEPTH_MIN = 3;      // 段（タイル）
+export const WATER_POOL_DEPTH_RANGE = 3;    // 3〜5段
+export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
+// 地底湖の描画。塗りは半透明（機体が水の色をかぶる）。水面は区間ごとに sin で上下。
+export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
+export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.9)';
+export const WATER_WAVE_AMPLITUDE = 2.5;    // px。当たり判定は波打たない
+export const WATER_WAVE_LENGTH = 48;        // px。3タイル
+export const WATER_WAVE_SPEED = 0.05;       // rad/frame
+export const WATER_RIPPLE_DECAY = 0.94;     // しぶきが落ちた場所の波の減衰（毎フレーム）
+export const WATER_RIPPLE_MIN = 0.2;        // これ未満になった波紋は捨てる
+// しぶき。粒の数は |vy| に比例（速く落ちるほど盛大）。
+export const SPLASH_PARTICLES_PER_VY = 3;
+export const SPLASH_MAX_PARTICLES = 24;
+export const SPLASH_LIFETIME = 28;
+
+// 降雪。板（オフスクリーン）を層ごとにスクロールする。粒を個別に描かないのは
+// 縮尺（タイル16px）に見合う 1〜2px の粒を数千出したいから。
+export const SNOW_SHEET_SIZE = 512;
+export const SNOW_LAYERS = [
+    { count: 260, size: 1, speed: 0.6, sway: 0.25, alpha: 0.55 }, // 遠い
+    { count: 140, size: 2, speed: 1.2, sway: 0.5,  alpha: 0.8 },
+    { count: 50,  size: 3, speed: 2.0, sway: 0.9,  alpha: 1.0 },  // 近い
+];
+export const SNOW_COLOR = '#F4F8FF';
+// 舞う雪。既存の TrailParticle と同じ fillRect 1回の粒。
+export const SNOW_KICK_WALK = 1;     // 雪の地上を動いているあいだ、毎フレーム
+export const SNOW_KICK_LAND = 10;    // 着地
+export const SNOW_KICK_SLIDE = 3;    // 斜面を滑っているあいだ、毎フレーム
+export const SNOW_KICK_LIFETIME = 30;
+// 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
+export const SNOW_CAP_THICKNESS = 5;
+export const SNOW_CAP_COLOR = '#EEF4FB';
+// 雪の面の階段。部屋の縁に意図的に作り、滑れる長さを保証する。
+export const SNOW_STAIRS_COUNT = 8;
+export const SNOW_STAIRS_LENGTH_MIN = 5;
+export const SNOW_STAIRS_LENGTH_RANGE = 5;  // 5〜9段
+
+// 霧。層は事前に描いた板を視差付きでずらすだけ。粒は出さない。
+export const FOG_COLOR = '#8A96A8';
+export const FOG_OVERLAY_ALPHA = 0.22;      // 全画面の薄塗り
+// 板は画面（1366×768）より大きくして、継ぎ目が横方向にだけ1回入る形にする
+// （drawImage が層×2回で済む。1024×512 だと横2×縦2＝層×4回になる）
+export const FOG_SHEET_WIDTH = 2048;
+export const FOG_SHEET_HEIGHT = 1024;
+export const FOG_BLOB_COUNT = 160;          // 板1枚あたりの雲の塊
+export const FOG_LAYERS = [
+    { speed: 0.12, alpha: 0.30 },
+    { speed: 0.28, alpha: 0.22 },
+];
+
+// デモ画面（面別ランキング・面セレクト・タイトル）では文字の可読性のために薄くする。
+export const DEMO_OVERLAY_ALPHA_SCALE = 0.5;
+
 // --- Colors ---
 export const COLOR_HARD_BLOCK = '#555555';
 export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
