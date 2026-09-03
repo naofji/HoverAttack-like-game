@@ -14,7 +14,7 @@ import {
     ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG,
     COLOR_CAVE_BG, TILE_SIZE,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    STAGE_PALETTES,
+    STAGE_PALETTES, STAGE_ENVIRONMENTS,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -198,7 +198,9 @@ export class Map {
         this.backdrop = new CaveBackdrop(
             this.width, this.height,
             this.blockStyles[BLOCK_NORMAL].fill,
-            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0)
+            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0),
+            // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
+            STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].backdrop,
         );
     }
 
