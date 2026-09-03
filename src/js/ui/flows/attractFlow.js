@@ -60,9 +60,27 @@ export const AttractFlow = {
      * タイトル曲）は以前この関数と自動送りの両方に書かれていて、
      * 自動送りで入ったときだけ処理が抜ける形になりやすかった。
      */
+    /**
+     * オンラインの記録を、まだ持っていなければ取りに行く。
+     *
+     * 以前はタイトルを8秒放置して how_to_play へ自動で送られる経路にしか
+     * 取得の呼び出しが無かった。←/→ で画面を飛ばす、ゲームを終えてランキングへ
+     * 戻る、といった経路では最後まで onlineData が null のままで、面別
+     * ランキングの下段が延々 OFFLINE と出ていた（実機で発覚）。取得は
+     * 「デモ画面に入ったら」に紐づけるのが正しく、放置時間には依存しない。
+     *
+     * 'offline'（前回失敗）も取り直す。デモは10秒ごとに画面が変わるので、
+     * これがそのまま再挑戦の間隔になる（1回のリクエストは5秒で諦める）。
+     */
+    _ensureOnlineData() {
+        if (this.onlineStatus === 'loading' || this.onlineStatus === 'ok') return;
+        this._refreshOnline();
+    },
+
     _enterDemoState(state) {
         this.gameState = state;
         this.stateTimer = 0;
+        this._ensureOnlineData();
         // 面セレクトのランはここで終わったことにする。stageSelectRun を true に
         // するのは _startStageSelectRun() だけで、以前は false に戻すのが
         // 新しい通しランを始める経路だけだった。そのため面セレクトのランを
@@ -174,8 +192,9 @@ export const AttractFlow = {
 
         this.stateTimer += deltaTime;
         if (this.stateTimer > 8000) {
+            // 取得は _enterDemoState が始める。ここで別途呼んでいたのが
+            // **唯一の取得経路だった**のが OFFLINE 出っぱなしの原因。
             this._enterDemoState('how_to_play');
-            this._refreshOnline(); // prefetch online data during how_to_play + local so GLOBAL/FAME are ready
         }
     },
 

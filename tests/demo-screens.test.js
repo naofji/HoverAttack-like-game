@@ -95,6 +95,55 @@ test('オンラインの記録が未取得でも描画は落ちない（読み�
 });
 
 /**
+ * 面別ランキングは上段がローカル・下段がグローバルの2段。**画面に渡す前の
+ * 配線**（どちらの記録をどちらの段に入れるか、通信できているかの印）を縛る。
+ * 描画側で段を取り違えていないかは tests/stage-ranking-screen.test.js。
+ */
+test('面別ランキングにはローカルとグローバルの両方が渡る', () => {
+    const drawn = [];
+    const localData = { time: [{ name: 'MINE', timeMs: 90000 }], score: [] };
+    const game = {
+        screenRenderer: new Proxy({}, {
+            get: (_t, name) => (...args) => drawn.push({ name, args }),
+        }),
+        stateTimer: 0,
+        stageDisplayIndex: 2,   // 3面
+        onlineData: {
+            stageRankings: [{ stage: 3, time: [{ name: 'WORLD', timeMs: 60000 }], score: [] }],
+        },
+        week: { weekId: '2026-W33' },
+        stageRankingManager: { getStage: (n) => (n === 3 ? localData : { time: [], score: [] }) },
+    };
+
+    DEMO_SCREEN_DRAWERS.stage_ranking_display(game, makeFakeCtx());
+
+    const data = drawn[0].args[2];
+    assert.deepStrictEqual(data.local, localData, '上段に手元の記録が渡っていない');
+    assert.strictEqual(data.global.time[0].name, 'WORLD', '下段に世界の記録が渡っていない');
+    assert.strictEqual(data.online, true);
+});
+
+test('面別ランキングはオンライン未取得を online:false で伝える', () => {
+    // 「まだ誰も出していない」と「通信できていない」は画面の文言が違う
+    const drawn = [];
+    const game = {
+        screenRenderer: new Proxy({}, {
+            get: (_t, name) => (...args) => drawn.push({ name, args }),
+        }),
+        stateTimer: 0,
+        stageDisplayIndex: 0,
+        onlineData: null,
+        week: { weekId: '2026-W33' },
+        stageRankingManager: { getStage: () => ({ time: [], score: [] }) },
+    };
+
+    DEMO_SCREEN_DRAWERS.stage_ranking_display(game, makeFakeCtx());
+
+    assert.strictEqual(drawn[0].args[2].online, false);
+    assert.deepStrictEqual(drawn[0].args[2].global, { time: [], score: [] });
+});
+
+/**
  * HOW TO PLAY の 2 ページ目（CONTROLS）は、実際に使えるキーの一覧そのもの。
  * キーを足したのに載せ忘れると、プレイヤーからは存在しない機能になる
  * （M キーの全画面が実際にその状態だった）。
@@ -106,7 +155,9 @@ test('オンラインの記録が未取得でも描画は落ちない（読み�
  */
 test('HOW TO PLAY の CONTROLS が画面に収まる', () => {
     const ctx = makeFakeCtx();
-    const renderer = new ScreenRenderer({ canvas: { width: 1024, height: 768 } });
+    // 実機の内部解像度で見る（1024 のままだと、16:9 前提で広げたパネルを
+    // 狭い画面で測ることになり、はみ出しの判定が現実と食い違う）
+    const renderer = new ScreenRenderer({ canvas: { width: 1366, height: 768 } });
     renderer.drawHowToPlay(ctx, 1);
 
     // 行が増えてもパネルが画面に収まっていること

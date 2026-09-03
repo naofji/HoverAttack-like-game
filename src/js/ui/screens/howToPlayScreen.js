@@ -30,12 +30,34 @@ const ITEM_GUIDE = [
     { type: 'repair', color: '#00FF00', name: 'CARRIER REPAIR KIT', desc: 'REPAIRS CARRIER HP WHEN DOCKED. GRANTS +1 LIFE IF FULL. (DROPPED BY RIVAL)' },
 ];
 
+/**
+ * 両ページ共通のパネル幅。**2ページは10秒ごとに入れ替わるので、幅が違うと
+ * 枠が伸び縮みして見える。** 4:3 のころの 800 が 16:9 (1366px) でも残っていて
+ * 画面の 58% しか使っていなかった（実機の指摘）。1140 で左右の余白は 113px ずつ。
+ */
+const PANEL_W = 1140;
+
+/**
+ * パネルの内側、本文の左端までの余白。**2ページで同じ値**を使う
+ * （切り替わったときに本文の左端が動くと、枠まで動いたように見える）。
+ * 値は2ページ目の図がもともと使っていた PANEL_PAD + SPACE.md と同じ。
+ */
+const TEXT_PAD = PANEL_PAD + SPACE.md;
+
+/** 2ページ目の操作図の倍率。1.0 は設定画面のオーバーレイの大きさ。 */
+const CONTROLS_SCALE = 1.5;
+
 export const HowToPlayScreen = {
     drawHowToPlay(ctx, page) {
         const canvas = this.game.canvas;
         const W = canvas.width;
         const H = canvas.height;
         const cx = W / 2;
+        // パネルの左右。中身の座標はすべてここからの相対で置く（以前は
+        // cx ± 400/380/320/220 と 800 幅前提の数値が直書きされていた）
+        const panelX = cx - PANEL_W / 2;
+        const panelRight = panelX + PANEL_W;
+        const textLeft = panelX + TEXT_PAD;
 
         // Rich Background
         const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -69,6 +91,7 @@ export const HowToPlayScreen = {
             // 以前はパネル間15pxに対して最終パネルの下が108px空いていた。
             const lineH = lineHeight('small');
             const ILLUST_H = 115;
+            const ILLUST_W = 140;
             const ITEM_H = 64;
             const objectiveH = panelHeight(lineH * 2);
             const rulesH = panelHeight(Math.max(lineH * 6, ILLUST_H));
@@ -84,7 +107,7 @@ export const HowToPlayScreen = {
             const itemsY = rulesY + rulesH + gap;
 
             // PANEL 1: OBJECTIVE
-            drawPanel(ctx, cx - 400, objectiveY, 800, objectiveH, 'MISSION OBJECTIVE', UI.accent);
+            drawPanel(ctx, panelX, objectiveY, PANEL_W, objectiveH, 'MISSION OBJECTIVE', UI.accent);
             ctx.font = font('small');
             ctx.textAlign = 'center';
             let ty = panelContentTop(objectiveY, lineH);
@@ -94,7 +117,7 @@ export const HowToPlayScreen = {
             ctx.fillText('* GAME OVER IF THE CARRIER LOSES ALL ITS LIVES.', cx, ty + lineH);
 
             // PANEL 2: BASIC RULES
-            drawPanel(ctx, cx - 400, rulesY, 800, rulesH, 'BASIC RULES', UI.accent);
+            drawPanel(ctx, panelX, rulesY, PANEL_W, rulesH, 'BASIC RULES', UI.accent);
             ctx.fillStyle = UI.dim;
             ctx.font = font('small');
             ctx.textAlign = 'left';
@@ -108,17 +131,20 @@ export const HowToPlayScreen = {
                 '   IF CARRIER IS DESTROYED, RESPAWN AT START.',
             ];
             const rulesTop = panelContentTop(rulesY, lineH);
-            rules.forEach((line, i) => ctx.fillText(line, cx - 380, rulesTop + i * lineH));
+            rules.forEach((line, i) => ctx.fillText(line, textLeft, rulesTop + i * lineH));
 
             // 右側のイラスト枠。パネルの中身の縦幅に対して中央へ置く。
             const illustTop = rulesY + PANEL_HEAD
                 + Math.floor((rulesH - PANEL_HEAD - ILLUST_H) / 2);
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.2)';
             ctx.lineWidth = 1;
-            drawFrame(ctx, cx + 220, illustTop, 140, ILLUST_H, 'rgba(0, 200, 255, 0.2)', { radius: 6 });
+            // 枠はパネルの右端の内側へ。本文は左端から始まるので、広いパネルでは
+            // 図を右へ寄せないと本文との間だけが空いて図が中央に取り残される
+            const illustX = panelRight - TEXT_PAD - 20 - ILLUST_W;
+            drawFrame(ctx, illustX, illustTop, ILLUST_W, ILLUST_H, 'rgba(0, 200, 255, 0.2)', { radius: 6 });
 
             // Draw illustration: Player docking onto Carrier
-            const illustMidX = cx + 290;
+            const illustMidX = illustX + ILLUST_W / 2;
             this._drawMiniPlayer(ctx, illustMidX, illustTop + 22);
             this._drawMiniCarrier(ctx, illustMidX, illustTop + 82);
 
@@ -134,7 +160,7 @@ export const HowToPlayScreen = {
             ctx.stroke();
 
             // PANEL 3: ITEMS
-            drawPanel(ctx, cx - 400, itemsY, 800, itemsH, 'ITEMS', UI.accent);
+            drawPanel(ctx, panelX, itemsY, PANEL_W, itemsH, 'ITEMS', UI.accent);
 
             const items = ITEM_GUIDE;
 
@@ -159,7 +185,7 @@ export const HowToPlayScreen = {
                 ctx.save();
                 const dummy = this.dummyKits[item.type];
                 if (dummy) {
-                    ctx.translate(cx - 380, y - 20);
+                    ctx.translate(textLeft, y - 20);
                     ctx.scale(2.5, 2.5); // 16 * 2.5 = 40
                     dummy.x = 0;
                     dummy.y = 0;
@@ -171,11 +197,11 @@ export const HowToPlayScreen = {
                 ctx.textAlign = 'left';
                 ctx.fillStyle = item.color;
                 ctx.font = font('body', true);
-                ctx.fillText(item.name, cx - 320, y - 8);
+                ctx.fillText(item.name, textLeft + 60, y - 8);
 
                 ctx.fillStyle = UI.dim;
                 ctx.font = font('small');
-                ctx.fillText(item.desc, cx - 320, y + 15);
+                ctx.fillText(item.desc, textLeft + 60, y + 15);
             });
 
         } else {
@@ -183,8 +209,11 @@ export const HowToPlayScreen = {
             // キー名と説明を並べた表では「手をどこに置くのか」が読めなかったので
             // 図にした（controlsDiagram.js）。設定画面のオーバーレイと同じものを
             // 描くので、2画面で見た目も文言もずれない
-            const panelW = 800;
-            const panelH = panelHeight(controlsDiagramHeight());
+            // 16:9 (1366px) では 4:3 時代の 800 幅だと中身が 642px しか使わず、
+            // 左右に 315/409px の余白が残って「中央に小さく置かれている」形だった。
+            // 幅は1ページ目と共通、図はここだけ 1.5 倍（設定画面のほうは 1.0 のまま）。
+            const panelW = PANEL_W;
+            const panelH = panelHeight(controlsDiagramHeight(CONTROLS_SCALE));
             const areaTop = 80;
             const areaBottom = H - SPACE.xl;
             const panelY = areaTop + Math.floor(((areaBottom - areaTop) - panelH) / 2);
@@ -192,9 +221,10 @@ export const HowToPlayScreen = {
             drawPanel(ctx, cx - panelW / 2, panelY, panelW, panelH, 'CONTROLS', UI.accent);
             drawControlsDiagram(
                 ctx,
-                cx - panelW / 2 + PANEL_PAD + SPACE.md,
+                textLeft,
                 panelY + PANEL_HEAD + PANEL_PAD,
-                panelW - (PANEL_PAD + SPACE.md) * 2,
+                panelW - TEXT_PAD * 2,
+                CONTROLS_SCALE,
             );
         }
 

@@ -15,25 +15,32 @@ function emptyStages() {
 }
 
 /**
- * Choose which per-stage ranking to display: prefer the online list when it has
- * records, otherwise fall back to local — decided independently for the time and
- * score lists. This keeps a device's own records visible when the online board
- * has no entries yet (e.g. the StageScores sheet is empty / not yet created).
+ * 面別ランキング画面に渡す1面ぶんのデータ。**ローカルとグローバルを両方返す。**
  *
- * @param {Array|null} onlineStageRankings - onlineData.stageRankings ([] / null when offline)
+ * 以前は「オンラインに記録があればオンライン、無ければローカル」と片方だけを
+ * 選んで出していたが、ブラウザで遊ぶゲームである以上つながっているのが普通なので、
+ * 実質いつもグローバルしか見えず、自分の記録が画面から消えていた。上下2段に
+ * 並べれば画面を増やさずに両方見せられる。
+ *
+ * `online` は「取得できたか」であって「記録があるか」ではない。空欄の文言を
+ * OFFLINE と NO RECORDS YET で出し分けるために要る（記録が0件なのと通信できて
+ * いないのとでは、プレイヤーが取る行動が違う）。
+ *
+ * @param {{stageRankings?: Array}|null} onlineData - game.onlineData（未取得なら null）
  * @param {number} stage - 1..7
  * @param {{time:Array, score:Array}} localData - StageRankingManager.getStage(stage)
+ * @returns {{local:{time:Array,score:Array}, global:{time:Array,score:Array}, online:boolean}}
  */
-export function pickStageRanking(onlineStageRankings, stage, localData) {
-    const entry = Array.isArray(onlineStageRankings)
-        ? onlineStageRankings.find((e) => e && e.stage === stage)
-        : null;
-    const onlineTime = entry && Array.isArray(entry.time) ? entry.time : [];
-    const onlineScore = entry && Array.isArray(entry.score) ? entry.score : [];
-    const local = localData || { time: [], score: [] };
+export function stageRankingView(onlineData, stage, localData) {
+    const list = onlineData && Array.isArray(onlineData.stageRankings) ? onlineData.stageRankings : null;
+    const entry = list ? list.find((e) => e && e.stage === stage) : null;
     return {
-        time: onlineTime.length ? onlineTime : (local.time || []),
-        score: onlineScore.length ? onlineScore : (local.score || []),
+        local: localData || { time: [], score: [] },
+        global: {
+            time: (entry && Array.isArray(entry.time)) ? entry.time : [],
+            score: (entry && Array.isArray(entry.score)) ? entry.score : [],
+        },
+        online: !!onlineData,
     };
 }
 

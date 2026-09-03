@@ -21,6 +21,7 @@ import { TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, drawScanlines } from '../
 import {
     RANKING_COLUMNS, RANKING_TABLE_WIDTH, RANKING_SLOTS,
     FAME_COLUMNS, FAME_BLOCK_WIDTH,
+    STAGE_SCREEN,
 } from './layout.js';
 
 export const RankingScreens = {
@@ -222,10 +223,20 @@ export const RankingScreens = {
         ctx.textAlign = 'left';
     },
 
+    /**
+     * 面別ランキング。**上段がローカル（この端末）、下段がグローバル。**
+     *
+     * 片方だけを選んで出していたときは、オンラインに1件でも記録があれば自分の
+     * 記録が画面から消えていた。ブラウザで遊ぶ以上つながっているのが普通なので、
+     * それでは自分の記録がほぼ見られない。段を2つにすれば画面は増えない。
+     *
+     * @param {{local:{time:Array,score:Array}, global:{time:Array,score:Array}, online:boolean}} stageData
+     */
     drawStageRankings(ctx, stageIndex, stageData, palette) {
         const canvas = this.game.canvas;
         const W = canvas.width;
         const H = canvas.height;
+        const L = STAGE_SCREEN;
         const stageNo = stageIndex + 1;
         // Brighten the (often dark) stage colour into a legible accent.
         const accent = lerpColor(palette.fill, '#ffffff', 0.55);
@@ -242,19 +253,21 @@ export const RankingScreens = {
         ctx.fillText('THIS WEEK · TOP 5', W / 2, 70);
 
         // Scene strip (full width)
-        drawStageScene(ctx, 40, 84, W - 80, 150, stageIndex, palette, Date.now());
+        drawStageScene(ctx, 40, L.sceneTop, W - 80, L.sceneHeight, stageIndex, palette, Date.now());
 
-        // Two side-by-side lists.
-        this._drawStageColumn(ctx, 'FASTEST TIME', stageData.time || [], W * 0.27, 258, accent, true);
-        this._drawStageColumn(ctx, 'HIGH SCORE', stageData.score || [], W * 0.73, 258, accent, false);
-
-        // Divider between columns
-        ctx.strokeStyle = lerpColor(palette.fill, '#000000', 0.1);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(W / 2, 250);
-        ctx.lineTo(W / 2, 250 + 200);
-        ctx.stroke();
+        const local = stageData.local || { time: [], score: [] };
+        const global = stageData.global || { time: [], score: [] };
+        // 上段は手元の記録なので、通信の成否に関わらず「まだ無い」しかない。
+        // 下段だけは、0件なのか繋がっていないのかで文言を変える（プレイヤーが
+        // 取る行動が違う: 走れば載るのか、通信を疑うのか）。
+        this._drawStageTier(ctx, L.tierTop, {
+            label: '▌ LOCAL — THIS DEVICE', labelColor: TIER.local.title,
+            data: local, accent, emptyText: 'NO RECORDS YET',
+        });
+        this._drawStageTier(ctx, L.tierTop + L.tierGap, {
+            label: '◍ GLOBAL — WORLDWIDE 🌐', labelColor: TIER.global.title,
+            data: global, accent, emptyText: stageData.online ? 'NO RECORDS YET' : 'OFFLINE',
+        });
 
         drawScanlines(ctx, canvas.width, canvas.height);
 
@@ -263,21 +276,65 @@ export const RankingScreens = {
         ctx.textAlign = 'left';
     },
 
-    _drawStageColumn(ctx, label, rows, centerX, topY, accent, isTime) {
+    /** 段（LOCAL / GLOBAL）1つぶん: 見出しの帯と、その下のタイム／スコアの2列。 */
+    _drawStageTier(ctx, headY, o) {
+        const W = this.game.canvas.width;
+        const L = STAGE_SCREEN;
+        const [leftRatio, rightRatio] = L.columnCenters;
+        const tableLeft = W * leftRatio - L.columnHalfWidth;
+        const tableRight = W * rightRatio + L.columnHalfWidth;
+
+        // 見出しは中央に置き、左右へ罫を伸ばして段の切れ目にする。
+        // 罫だけ・文字だけのどちらでも「どこからが下段か」が読み取りにくかった。
+        ctx.textAlign = 'center';
+        ctx.font = font('small', true);
+        ctx.fillStyle = o.labelColor;
+        ctx.fillText(o.label, W / 2, headY);
+
+        const half = ctx.measureText(o.label).width / 2 + SPACE.md;
+        ctx.strokeStyle = lerpColor(o.labelColor, '#000000', 0.5);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tableLeft, headY - 5.5);
+        ctx.lineTo(W / 2 - half, headY - 5.5);
+        ctx.moveTo(W / 2 + half, headY - 5.5);
+        ctx.lineTo(tableRight, headY - 5.5);
+        ctx.stroke();
+
+        const colHeadY = headY + L.headerOffset;
+        this._drawStageColumn(ctx, {
+            label: 'FASTEST TIME', rows: o.data.time || [], centerX: W * leftRatio,
+            topY: colHeadY, accent: o.accent, isTime: true, emptyText: o.emptyText,
+        });
+        this._drawStageColumn(ctx, {
+            label: 'HIGH SCORE', rows: o.data.score || [], centerX: W * rightRatio,
+            topY: colHeadY, accent: o.accent, isTime: false, emptyText: o.emptyText,
+        });
+
+        // 2列の間の縦罫。段ごとに引く（1本で通すと段の切れ目を跨いでしまう）
+        ctx.strokeStyle = lerpColor(o.accent, '#000000', 0.75);
+        ctx.beginPath();
+        ctx.moveTo(W / 2, colHeadY - SPACE.md);
+        ctx.lineTo(W / 2, colHeadY + L.rowHeight * 5);
+        ctx.stroke();
+    },
+
+    _drawStageColumn(ctx, o) {
+        const { label, rows, centerX, topY, accent, isTime } = o;
         // Header
         ctx.textAlign = 'center';
         ctx.fillStyle = accent;
         ctx.font = font('sub', true);
         ctx.fillText(label, centerX, topY);
 
-        const startY = topY + 30;
-        const lineH = 30;
-        const left = centerX - 150;
+        const startY = topY + STAGE_SCREEN.rowHeight;
+        const lineH = STAGE_SCREEN.rowHeight;
+        const left = centerX - STAGE_SCREEN.columnHalfWidth;
         if (rows.length === 0) {
             ctx.textAlign = 'center';
             ctx.fillStyle = '#666666';
             ctx.font = font('body');
-            ctx.fillText('NO RECORDS YET', centerX, startY + 16);
+            ctx.fillText(o.emptyText, centerX, startY + 16);
             ctx.textAlign = 'left';
             return;
         }

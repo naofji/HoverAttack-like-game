@@ -5,7 +5,7 @@ import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 import {
     CONTROLS_ROWS, LEFT_HAND_KEYS, MOUSE_BUTTONS, OFF_MOUSE_KEYS,
 } from '../src/js/ui/controlsList.js';
-import { drawControlsDiagram, DIAGRAM_COLORS } from '../src/js/ui/controlsDiagram.js';
+import { drawControlsDiagram, controlsDiagramHeight, DIAGRAM_COLORS } from '../src/js/ui/controlsDiagram.js';
 import { DEFAULT_SETTINGS } from '../src/js/utils/settings.js';
 
 /**
@@ -259,6 +259,72 @@ test('図は渡した幅の内側に収まる', () => {
     }
 });
 
+// ---- 倍率（16:9 の横幅を使うために HOW TO PLAY だけ拡大する） ----
+//
+// 4:3 のころのパネル幅 800 のままだったので、1366px の画面で図の中身が
+// 642px しか使わず「中央に小さく置かれている」状態だった（実機の指摘）。
+// 図に倍率を持たせ、HOW TO PLAY の2ページ目だけ 1.5 倍で描く。
+// 設定画面のオーバーレイは倍率 1.0 のまま＝見た目が変わらない。
+
+/** キーキャップの縦のピッチ。W と S は同じ列の上下の段なので、その差がピッチ。 */
+function keyPitch(texts) {
+    const at = (t) => texts.find((x) => x.text === t);
+    return at('S').y - at('W').y;
+}
+
+test('倍率を上げると図が実際に大きくなる', () => {
+    const one = drawDiagram();
+    const ctx = makeFakeCtx();
+    drawControlsDiagram(ctx, 100, 100, 1076, 1.5);
+    const big = { texts: extractTextsWithFont(ctx.calls) };
+
+    const p1 = keyPitch(one.texts);
+    const p15 = keyPitch(big.texts);
+    assert.ok(p15 >= p1 * 1.4, `キーの間隔が広がっていない: ${p1} → ${p15}`);
+
+    // 文字も上の段へ上げる（キーが大きいのに文字だけ据え置きだと間延びする）
+    const sizeOf = (texts, t) => texts.find((x) => x.text === t).size;
+    assert.ok(sizeOf(big.texts, rowFor('W').label) > sizeOf(one.texts, rowFor('W').label),
+        '説明の文字が大きくなっていない');
+
+    assert.ok(controlsDiagramHeight(1.5) > controlsDiagramHeight(1) * 1.4,
+        '図の高さが倍率に追従していない');
+});
+
+test('右手の列は使える幅の半分から始まる', () => {
+    // 「左の最長行の右端」と「いちばん狭いパネルに収まる上限」の両方を
+    // 自動で満たす規則。幅にも倍率にも追従する
+    const ctx = makeFakeCtx();
+    drawControlsDiagram(ctx, 100, 100, 1076, 1.5);
+    const texts = extractTextsWithFont(ctx.calls);
+    const rightX = texts.find((t) => t.text === 'L-CLICK').x;
+    assert.equal(rightX, 100 + 1076 / 2);
+});
+
+test('倍率 1.5 でも渡した幅の内側に収まる', () => {
+    const ctx = makeFakeCtx();
+    drawControlsDiagram(ctx, 100, 100, 1076, 1.5);
+    for (const t of extractTextsWithFont(ctx.calls)) {
+        assert.ok(t.x >= 100, `左へはみ出す: ${t.text} (${t.x})`);
+        assert.ok(t.x + t.width <= 100 + 1076,
+            `右へはみ出す: ${t.text} (${Math.round(t.x + t.width)})`);
+    }
+});
+
+test('左右の列は倍率を上げても重ならない', () => {
+    const ctx = makeFakeCtx();
+    drawControlsDiagram(ctx, 100, 100, 1076, 1.5);
+    const texts = extractTextsWithFont(ctx.calls);
+    const at = (t) => texts.find((x) => x.text === t);
+    const leftRight = Math.max(
+        ...['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R']
+            .map((k) => at(rowFor(k).label))
+            .map((t) => t.x + t.width),
+    );
+    const rightLeft = at('L-CLICK').x;
+    assert.ok(rightLeft > leftRight, `右の列が左の列に重なる: ${Math.round(leftRight)} > ${rightLeft}`);
+});
+
 // ---- 2つの画面が同じ図を出すこと ----
 
 function drawnTexts(fn) {
@@ -282,4 +348,36 @@ test('HOW TO PLAY と設定画面のどちらにも同じ図が出る', () => {
         assert.ok(howTo.includes(row.label), `HOW TO PLAY に ${row.key} のラベルが無い`);
         assert.ok(settings.includes(row.label), `設定画面に ${row.key} のラベルが無い`);
     }
+});
+
+// HOW TO PLAY だけを拡大し、設定画面は今までの大きさのまま。同じ関数を
+// 2画面で共有しているので、片方を大きくしたつもりでもう片方まで動く事故を防ぐ
+test('HOW TO PLAY の図は拡大され、設定画面の図は元の大きさのまま', () => {
+    const draw = (fn) => {
+        const ctx = makeFakeCtx();
+        const renderer = new ScreenRenderer({ canvas: { width: 1366, height: 768 } });
+        fn(renderer, ctx);
+        return extractTextsWithFont(ctx.calls);
+    };
+    const howTo = draw((r, ctx) => r.drawHowToPlay(ctx, 1));
+    const settings = draw((r, ctx) => r.drawSettings(ctx, {
+        settings: DEFAULT_SETTINGS, index: 0, fromPlaying: true,
+        confirmingQuit: false, showingControls: true,
+    }));
+
+    const plain = drawDiagram().texts;   // 倍率 1.0 の基準
+    assert.equal(keyPitch(settings), keyPitch(plain), '設定画面の図の大きさが変わっている');
+    assert.ok(keyPitch(howTo) > keyPitch(plain), 'HOW TO PLAY の図が拡大されていない');
+});
+
+// 1366px の画面で中身が中央に小さく寄っていた（左に315px・右に409px 空き）のが
+// 発端。横をどれだけ使えているかを直接縛る
+test('HOW TO PLAY の図が画面の横幅を使う', () => {
+    const ctx = makeFakeCtx();
+    new ScreenRenderer({ canvas: { width: 1366, height: 768 } }).drawHowToPlay(ctx, 1);
+    const texts = extractTextsWithFont(ctx.calls);
+    const left = Math.min(...texts.map((t) => t.x));
+    const right = Math.max(...texts.map((t) => t.x + t.width));
+    assert.ok(right - left >= 900, `図の横幅が狭い: ${Math.round(right - left)}px`);
+    assert.ok(right <= 1366, `画面右端をはみ出す: ${Math.round(right)}`);
 });

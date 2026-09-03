@@ -209,7 +209,10 @@ export const Game = {
         this.saveManager = new SaveManager(this);
         this.onlineLeaderboard = new OnlineLeaderboard(LEADERBOARD_URL);
         this.onlineData = null;                       // { weekId, ranking, fame } when loaded
-        this.onlineStatus = LEADERBOARD_URL ? 'loading' : 'offline';
+        // 'idle' = まだ一度も取りに行っていない。以前はここが 'loading' で、
+        // 何も走っていないのに「取得中」を名乗っていた（_ensureOnlineData が
+        // 取得中と区別できなくなる）。
+        this.onlineStatus = LEADERBOARD_URL ? 'idle' : 'offline';
 
         const spawnPos = this.spawnManager.findSpawnPosition(5, 5, 12, 10);
         this.carrier = new Carrier(this, spawnPos.x, spawnPos.y);

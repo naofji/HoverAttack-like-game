@@ -10,7 +10,7 @@
 // import することになり循環参照になる。表そのものを下ろすほうが素直。
 
 import { STAGE_PALETTES } from '../../utils/Constants.js';
-import { pickStageRanking } from '../../systems/StageRankingManager.js';
+import { stageRankingView } from '../../systems/StageRankingManager.js';
 
 
 /** Screens that make up the title/attract-mode loop, in cycle order. */
@@ -45,8 +45,8 @@ export const DEMO_SCREEN_DRAWERS = {
 
     stage_ranking_display: (g, ctx) => {
         const idx = g.stageDisplayIndex;
-        const online = g.onlineData ? g.onlineData.stageRankings : null;
-        const data = pickStageRanking(online, idx + 1, g.stageRankingManager.getStage(idx + 1));
+        // ローカルとグローバルの両方を渡す（画面が上下2段で両方出す）
+        const data = stageRankingView(g.onlineData, idx + 1, g.stageRankingManager.getStage(idx + 1));
         g.screenRenderer.drawStageRankings(ctx, idx, data, STAGE_PALETTES[idx]);
     },
 

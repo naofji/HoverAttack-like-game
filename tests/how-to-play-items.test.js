@@ -8,9 +8,17 @@ import assert from 'node:assert/strict';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 
+// 実機の内部解像度。16:9 化でパネルを 800 → 1140 に広げたので、1024 の画面で
+// 測ると「本当は収まっているのにはみ出す」判定になる
+const CANVAS = { width: 1366, height: 768 };
+const PANEL_W = 1140;
+const PANEL_LEFT = Math.round((CANVAS.width - PANEL_W) / 2);
+const TEXT_PAD = 32;              // パネルの内側、本文の左端まで
+const ITEM_TEXT_LEFT = PANEL_LEFT + TEXT_PAD + 60;  // アイコンの右に文字が始まる
+
 function drawItemsPanel() {
   const ctx = makeFakeCtx();
-  const renderer = new ScreenRenderer({ canvas: { width: 1024, height: 768 } });
+  const renderer = new ScreenRenderer({ canvas: CANVAS });
   renderer.drawHowToPlay(ctx, 0);
   return {
     ctx,
@@ -37,8 +45,8 @@ test('オーバードライブの説明に効果と入手先が書いてある',
 test('どの説明文もパネルの幅に収まる', () => {
   // 説明は1行で描く（折り返さない）。長いとパネルの枠を越えて切れる
   const { ctx } = drawItemsPanel();
-  const PANEL_RIGHT = 512 + 400 - 16; // cx + 幅の半分 - 余白
-  const TEXT_LEFT = 512 - 320;
+  const PANEL_RIGHT = PANEL_LEFT + PANEL_W - 16; // パネルの右端 - 余白
+  const TEXT_LEFT = ITEM_TEXT_LEFT;
   for (const c of ctx.calls.filter((c) => c.name === 'fillText')) {
     if (c.args[1] !== TEXT_LEFT) continue; // ITEMS パネルの行だけ見る
     const width = String(c.args[0]).length * 14 * 0.6; // small フォントの概算
@@ -50,10 +58,10 @@ test('どの説明文もパネルの幅に収まる', () => {
 test('3枚のパネルが縦に重ならない（行を増やしても破綻しない）', () => {
   // 縦の配分は「残りを3等分して隙間にする」式。行を増やすと隙間が縮み、
   // 増やしすぎると負になって隣のパネルへ食い込む。
-  // パネルの枠は幅 800 の roundRect なので、それだけを拾って並びを見る
+  // パネルの枠は幅 PANEL_W の roundRect なので、それだけを拾って並びを見る
   const { ctx } = drawItemsPanel();
   const panels = ctx.calls
-    .filter((c) => c.name === 'roundRect' && Math.round(c.args[2]) === 800)
+    .filter((c) => c.name === 'roundRect' && Math.round(c.args[2]) === PANEL_W)
     .map((c) => ({ top: c.args[1], bottom: c.args[1] + c.args[3] }))
     .sort((a, b) => a.top - b.top);
 

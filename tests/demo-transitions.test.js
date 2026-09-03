@@ -81,6 +81,44 @@ function advance(fromState, overrides = {}) {
     }
 }
 
+/**
+ * **オンラインの記録の取得は、デモ画面に入るたびに「まだなら」始まる。**
+ *
+ * 以前はタイトルを8秒放置して how_to_play へ自動で送られる経路にしか
+ * 取得の呼び出しが無かった。←/→ で画面を飛ばす・ゲームを終えてランキングへ
+ * 戻る、といった経路ではオンラインの記録が最後まで null のままで、面別
+ * ランキングの下段が延々 OFFLINE と出ていた（実機で発覚）。
+ *
+ * 取得中('loading')と取得済み('ok')のときだけ何もしない。前回失敗('offline')は
+ * 画面が変わるたびに取り直す＝10秒おきの再挑戦になる。
+ */
+function enterDemo(state, onlineStatus) {
+    const calls = [];
+    const savedRefresh = Game._refreshOnline;
+    try {
+        Game._refreshOnline = async () => { calls.push(state); };
+        Object.assign(Game, { onlineStatus, onlineData: null, gameState: 'title' });
+        Game._enterDemoState(state);
+    } finally {
+        Game._refreshOnline = savedRefresh;
+    }
+    return calls.length;
+}
+
+test('画面を飛ばして入っても、未取得ならオンラインの記録を取りに行く', () => {
+    assert.equal(enterDemo('stage_ranking_display', 'idle'), 1);
+    assert.equal(enterDemo('how_to_play', 'idle'), 1);
+});
+
+test('前回の取得に失敗していたら、画面が変わるたびに取り直す', () => {
+    assert.equal(enterDemo('stage_ranking_display', 'offline'), 1);
+});
+
+test('取得中・取得済みなら重ねて取りに行かない', () => {
+    assert.equal(enterDemo('stage_ranking_display', 'loading'), 0);
+    assert.equal(enterDemo('stage_ranking_display', 'ok'), 0);
+});
+
 test('タイトルは時間切れで遊び方へ送る', () => {
     const r = advance('title');
     assert.equal(r.state, 'how_to_play');
