@@ -39,6 +39,7 @@ import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { toggleFullscreen } from './utils/fullscreen.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
+import { sightScaleFor } from './world/StageEnvironment.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Flag } from './entities/Flag.js';
@@ -803,7 +804,8 @@ export const Game = {
         // ロック対象なし: マウスのワールド座標に最も近い敵を新規検索
         const mouseWorld = this.input.getMouseWorld(this.camera);
         let bestEnemy = null;
-        let bestDist = AUTO_AIM_SNAP_RADIUS;
+        // 霧では Auto Aim の索敵も縮む（敵の索敵と同じ倍率）
+        let bestDist = AUTO_AIM_SNAP_RADIUS * sightScaleFor(this);
         for (const enemy of this.enemies) {
             if (!enemy.alive) continue;
             if (isEnemyConcealed(enemy, this.smokeScreens)) continue;  // 煙の中は見えない

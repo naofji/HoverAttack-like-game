@@ -12,7 +12,7 @@ import {
     ENEMY_RECOIL_PROFILES
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
-import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
+import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -229,7 +229,8 @@ export class EnemyTank {
                 // 索敵の内外は楕円で、その中での順位付けはユークリッド距離で。
                 // 正規化距離で順位を付けると、縦のほうが半径が小さいぶん
                 // 横に居る標的が不当に優先されてしまう。
-                if (!withinSight(dx, dy, ENEMY_TANK_SIGHT_RANGE)) return;
+                // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）
+                if (!withinSight(dx, dy, ENEMY_TANK_SIGHT_RANGE * sightScaleFor(this.game))) return;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist <= minDist) { minDist = dist; best = entity; }
             }

@@ -18,6 +18,7 @@ import {
     DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight, withinSight } from '../utils/Physics.js';
+import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 import { tickRecoil } from '../utils/Recoil.js';
@@ -268,7 +269,9 @@ export class EnemyDrone {
             // 250px は実在するどの敵の楕円にも収まってしまう（250/409.6 ≈ 0.61）。
             // それでも残してあるのは、将来どこかの索敵係数を下げて楕円の縦半径が
             // 250px を割り込んだときに、この OR が保険として即座に効くようにするため。
-            const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE)
+            // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）。
+            // 緊急防衛用の EMERGENCY_DEFENSE_SIGHT_RANGE は保険の即応距離なので対象外。
+            const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE * sightScaleFor(this.game))
                 || (this.emergencyDefense
                     && dx * dx + dy * dy < EMERGENCY_DEFENSE_SIGHT_RANGE ** 2);
             if (inSight && this._hasLineOfSight(target)) {

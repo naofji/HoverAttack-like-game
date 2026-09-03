@@ -21,7 +21,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
+import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
@@ -173,8 +173,10 @@ export class EnemyAttacker {
         // 250px を割り込んだときに、この OR が保険として即座に効くようにするため。
         const dx = target ? (target.x + target.width / 2) - (this.x + this.width / 2) : 0;
         const dy = target ? (target.y + target.height / 2) - (this.y + this.height / 2) : 0;
+        // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）。
+        // 緊急防衛用の EMERGENCY_DEFENSE_SIGHT_RANGE は保険の即応距離なので対象外。
         const inSight = !!target && (
-            withinSight(dx, dy, this.config.sightRange)
+            withinSight(dx, dy, this.config.sightRange * sightScaleFor(this.game))
             || (this.emergencyDefense && targetDist < EMERGENCY_DEFENSE_SIGHT_RANGE)
         );
         if (inSight) {
