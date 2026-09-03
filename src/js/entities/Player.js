@@ -21,6 +21,7 @@ import {
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
+import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
@@ -75,6 +76,9 @@ export class Player {
         this.onGround = false;
         this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
         this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
+        // 今フレームの環境係数。update() が毎フレーム引き直すが、docked 中や
+        // 描画など update() を通らない経路でも undefined にならないよう陸上で初期化
+        this.motion = LAND_MOTION;
         this.facingRight = true;
         this.alive = true;
 
@@ -142,10 +146,13 @@ export class Player {
 
         const input = this.game.input;
         this._updateMGReload(input);
+        // 今フレームの環境の係数。中心で1回引いて、この後の重力・推力・位置更新が
+        // 全部同じ値を使う（途中で水面をまたいでも同一フレーム内で係数が変わらない）
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this._updateCrouching(input);
         this._updateHorizontal(input);
 
-        this.vy += GRAVITY;
+        this.vy += GRAVITY * this.motion.gravity;
 
         this._updateBurstHover(input);
         this._updateFuelRecovery(input);
@@ -231,7 +238,9 @@ export class Player {
         } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
             this.vx = PLAYER_MAX_SPEED;
         } else if (this.onGround) {
-            this.vx = 0;
+            // 陸上は slide=0 で従来どおり即停止。氷では残存率ぶん滑る
+            this.vx *= this.motion.slide;
+            if (Math.abs(this.vx) < 0.05) this.vx = 0;
         } else {
             this.vx *= AIR_FRICTION;
             if (Math.abs(this.vx) < 0.1) this.vx = 0;
@@ -256,7 +265,7 @@ export class Player {
                 // Hover (dynamic thrust based on remaining fuel)
                 const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
                 const thrust = HOVER_THRUST_MIN + (HOVER_THRUST - HOVER_THRUST_MIN) * fuelRatio;
-                this.vy += thrust;
+                this.vy += thrust * this.motion.speed; // 水中では浮上がゆっくり
                 this.hoverFuel = Math.max(0, this.hoverFuel - HOVER_FUEL_CONSUMPTION);
                 this.hovering = true;
                 audioManager.playHover(fuelRatio);
@@ -327,7 +336,7 @@ export class Player {
         this._pushOutOfEnemiesHorizontally();
 
         // --- 縦 ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         this.onGround = false;
         this._landOnMapOrHitCeiling();
         this._landOnCarrier();
@@ -343,7 +352,7 @@ export class Player {
      * @returns {boolean} マップに当たって止まったか（母艦の押し出しを飛ばす判断に使う）
      */
     _moveHorizontalIntoMap() {
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
 
         let hitHMap = false;
         if (this._collidesWithMap()) {
@@ -362,7 +371,7 @@ export class Player {
 
             if (!steppedUp) {
                 hitHMap = true;
-                this.x -= this.vx;
+                this.x -= this.vx * this.motion.speed;
                 if (this.vx > 0) {
                     this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
                 } else if (this.vx < 0) {
@@ -1163,3 +1172,10 @@ export class Player {
         });
     }
 }
+
+// プロトタイプ既定値。既存テストの一部は `Object.create(Player.prototype)` で
+// constructor を通さずインスタンスを作る（carrier-lift.test.js）ため、
+// constructor 内の `this.motion = LAND_MOTION;` だけでは救えない。
+// プロトタイプ側にも既定を置き、update() を一度も呼んでいない・constructor も
+// 通っていない経路でも motion が undefined にならないようにする。
+Player.prototype.motion = LAND_MOTION;
