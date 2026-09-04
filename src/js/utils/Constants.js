@@ -912,11 +912,13 @@ export const SPLASH_LIFETIME = 28;
 export const SNOW_SHEET_SIZE = 512;
 export const SNOW_LAYERS = [
     { count: 320, size: 1, speed: 0.5, sway: 0.25, alpha: 0.55 }, // 遠い
-    { count: 180, size: 1, speed: 0.9, sway: 0.5,  alpha: 0.7 },
-    { count: 90,  size: 2, speed: 1.4, sway: 0.9,  alpha: 0.85 }, // 近い
+    { count: 180, size: 2, speed: 0.9, sway: 0.5,  alpha: 0.7 },
+    { count: 90,  size: 3, speed: 1.4, sway: 0.9,  alpha: 0.85 }, // 近い
 ];
-// 実機: 白だと弾と紛れる。輝度の低い灰色にして、岩の奥（遠景と地形の間）に降らせる
-export const SNOW_COLOR = '#8A9098';
+// 実機: 岩の奥（遠景と地形の間）に降るので弾とは層が違う。暗すぎたので明るくした（輝度 143 → 190。白 255 には寄せない）
+export const SNOW_COLOR = '#B6BFCB';
+// 足元で舞う雪。手前で短時間しか出ないので、降る雪より明るくする（輝度 220）。実機の指摘
+export const SNOW_KICK_COLOR = '#D5DDE8';
 // 舞う雪。既存の TrailParticle と同じ fillRect 1回の粒。
 export const SNOW_KICK_WALK = 1;     // 雪の地上を動いているあいだ、毎フレーム
 export const SNOW_KICK_LAND = 10;    // 着地

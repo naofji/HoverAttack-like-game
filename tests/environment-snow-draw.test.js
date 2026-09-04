@@ -1,7 +1,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { SNOW_LAYERS, SNOW_COLOR, SNOW_SHEET_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT } from '../src/js/utils/Constants.js';
+import { SNOW_LAYERS, SNOW_COLOR, SNOW_KICK_COLOR, SNOW_SHEET_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT } from '../src/js/utils/Constants.js';
 
 before(() => {
   globalThis.document = {
@@ -59,8 +59,18 @@ test('demo overlay still scrolls snow in screen space', async () => {
   assert.ok(alphas.includes(0.5));
 });
 
-test('snow flakes are small and dim grey so they read apart from bullets', async () => {
+test('falling snow is bright but never white, kicked snow is brighter still, and flakes grow with depth', async () => {
   const lum = (hex) => { const s = hex.slice(1); return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16)).reduce((a, b, i) => a + b * [0.2126, 0.7152, 0.0722][i], 0); };
-  assert.ok(lum(SNOW_COLOR) < 160, `snow colour too bright: ${SNOW_COLOR}`); // 弾（白）と見分ける
-  for (const layer of SNOW_LAYERS) assert.ok(layer.size <= 2, `flake size ${layer.size}`);
+  // 雪は地形の奥へ移したので、弾（手前・白）とは層で見分けられる。暗さで見分ける必要がなくなった
+  const snowLum = lum(SNOW_COLOR);
+  const kickLum = lum(SNOW_KICK_COLOR);
+  assert.ok(170 < snowLum && snowLum < 210, `falling snow luminance ${snowLum} out of range for ${SNOW_COLOR}`);
+  assert.ok(kickLum > snowLum, `kicked snow must be brighter than falling snow: ${SNOW_KICK_COLOR} (${kickLum}) vs ${SNOW_COLOR} (${snowLum})`);
+  assert.ok(kickLum < 235, `kicked snow luminance ${kickLum} must stay below pure white`);
+  for (const layer of SNOW_LAYERS) assert.ok(layer.size <= 3, `flake size ${layer.size} exceeds max 3`);
+  // 奥から手前へ大きく速く
+  for (let i = 1; i < SNOW_LAYERS.length; i++) {
+    assert.ok(SNOW_LAYERS[i].size >= SNOW_LAYERS[i - 1].size, `size must be non-decreasing at layer ${i}`);
+    assert.ok(SNOW_LAYERS[i].speed > SNOW_LAYERS[i - 1].speed, `speed must increase at layer ${i}`);
+  }
 });

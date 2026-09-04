@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { EnemyTank } from '../src/js/entities/EnemyTank.js';
 import { SpawnEffects } from '../src/js/systems/SpawnEffects.js';
+import { SnowKickParticle } from '../src/js/entities/Particle.js';
+import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
 import {
   TILE_SIZE, ICE_SLIDE, SLOPE_UPHILL_SCALE, PLAYER_MAX_SPEED,
-  SNOW_KICK_LAND, SNOW_KICK_WALK, SNOW_KICK_SLIDE,
+  SNOW_KICK_LAND, SNOW_KICK_WALK, SNOW_KICK_SLIDE, SNOW_KICK_COLOR,
 } from '../src/js/utils/Constants.js';
 
 const SNOW = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
@@ -183,4 +185,13 @@ test('an airborne tank does not kick snow', () => {
   for (let i = 0; i < 5; i++) t.update();
   assert.equal(t.grounded, false);
   assert.deepEqual(game.snowKicks, []);
+});
+
+test('SnowKickParticle is drawn with SNOW_KICK_COLOR', () => {
+  const p = new SnowKickParticle(10, 20, 1, -2);
+  const ctx = makeFakeCtx();
+  p.draw(ctx);
+  const fillStyleCalls = ctx.calls.filter((c) => c.name === 'set:fillStyle');
+  assert.ok(fillStyleCalls.length > 0, 'fillStyle should be set');
+  assert.equal(fillStyleCalls[0].args[0], SNOW_KICK_COLOR, `fillStyle should be SNOW_KICK_COLOR`);
 });

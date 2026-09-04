@@ -10,7 +10,7 @@ import {
     RICOCHET_STREAK_LENGTH, RICOCHET_STREAK_LIFETIME, RICOCHET_STREAK_WIDTH,
     COLOR_RICOCHET, COLOR_RICOCHET_FADE,
     SPLASH_LIFETIME,
-    SNOW_COLOR, SNOW_KICK_LIFETIME,
+    SNOW_KICK_COLOR, SNOW_KICK_LIFETIME,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
 
@@ -229,7 +229,7 @@ export class SnowKickParticle {
     draw(ctx) {
         if (!this.alive) return;
         ctx.globalAlpha = Math.max(0.15, this.lifetime / SNOW_KICK_LIFETIME);
-        ctx.fillStyle = SNOW_COLOR;
+        ctx.fillStyle = SNOW_KICK_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
         ctx.globalAlpha = 1.0;
     }
