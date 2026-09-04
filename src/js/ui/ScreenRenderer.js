@@ -171,7 +171,7 @@ export class ScreenRenderer {
     _drawDemoEnvironment(ctx, stageIndex) {
         const env = this._demoEnv(stageIndex);
         env.update();
-        env.drawOverlay(ctx, DEMO_OVERLAY_ALPHA_SCALE);
+        env.drawDemoOverlay(ctx, DEMO_OVERLAY_ALPHA_SCALE);
     }
 
     /** タイトルの背景に使う面。CONTINUE があればその面、無ければ 1 面。 */

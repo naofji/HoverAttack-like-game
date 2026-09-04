@@ -879,7 +879,7 @@ export const STAGE_ENVIRONMENTS = [
 export const WATER_SPEED_SCALE = 0.5;
 export const WATER_GRAVITY_SCALE = 0.3;
 // 雪の地上で入力を離したときの速度の残存率（陸上は 0 = 即停止）。
-export const ICE_SLIDE = 0.9;
+export const ICE_SLIDE = 0.94;  // 実機: もう少し滑る（0.9 → 0.94。止まるまでの距離が約1.7倍）
 export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
 export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ毎フレーム下り方向へ
 export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
@@ -911,11 +911,12 @@ export const SPLASH_LIFETIME = 28;
 // 縮尺（タイル16px）に見合う 1〜2px の粒を数千出したいから。
 export const SNOW_SHEET_SIZE = 512;
 export const SNOW_LAYERS = [
-    { count: 260, size: 1, speed: 0.6, sway: 0.25, alpha: 0.55 }, // 遠い
-    { count: 140, size: 2, speed: 1.2, sway: 0.5,  alpha: 0.8 },
-    { count: 50,  size: 3, speed: 2.0, sway: 0.9,  alpha: 1.0 },  // 近い
+    { count: 320, size: 1, speed: 0.5, sway: 0.25, alpha: 0.55 }, // 遠い
+    { count: 180, size: 1, speed: 0.9, sway: 0.5,  alpha: 0.7 },
+    { count: 90,  size: 2, speed: 1.4, sway: 0.9,  alpha: 0.85 }, // 近い
 ];
-export const SNOW_COLOR = '#F4F8FF';
+// 実機: 白だと弾と紛れる。輝度の低い灰色にして、岩の奥（遠景と地形の間）に降らせる
+export const SNOW_COLOR = '#8A9098';
 // 舞う雪。既存の TrailParticle と同じ fillRect 1回の粒。
 export const SNOW_KICK_WALK = 1;     // 雪の地上を動いているあいだ、毎フレーム
 export const SNOW_KICK_LAND = 10;    // 着地

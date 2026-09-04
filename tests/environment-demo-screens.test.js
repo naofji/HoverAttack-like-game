@@ -51,6 +51,14 @@ test('stage ranking screen for stage 6 draws the fog overlay thinned for the dem
   assert.ok(lastOverlayIndex < firstTierHeadingIndex, 'overlay must be drawn before (under) the tier heading text');
 });
 
+test('stage ranking screen for stage 5 (snow) draws the demo overlay', () => {
+  const sr = renderer();
+  const ctx = makeFakeCtx();
+  sr.drawStageRankings(ctx, 4, { local: { time: [], score: [] }, global: { time: [], score: [] } }, STAGE_PALETTES[4]);
+  const draws = ctx.calls.filter((c) => c.name === 'drawImage');
+  assert.ok(draws.length > 0, 'snow demo overlay drawImage missing');
+});
+
 test('stage ranking screen for stage 1 draws no environment overlay', () => {
   const sr = renderer();
   const ctx = makeFakeCtx();

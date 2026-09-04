@@ -33,7 +33,7 @@ function makeWorld({ enemies = [], landmines = [] } = {}) {
         map: { backdrop: null, draw: noop },
         // Game.env は Task 8 で追加された環境（霧・雪・地底湖）。この画面は
         // 画面外カリングだけを見るのでスタブでよい。
-        env: { update: noop, drawOverWorld: noop, drawOverlay: noop },
+        env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
         carrier: null,
         player: null,
         flag: null,

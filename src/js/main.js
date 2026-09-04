@@ -981,6 +981,9 @@ export const Game = {
             ctx.fillRect(camX, camY, this.canvas.width, this.canvas.height);
         }
 
+        // 環境の「岩の奥」の描画（雪）。遠景の上、地形の下＝空洞の向こうで降っている
+        this.env.drawBehindTerrain(ctx, camX, camY);
+
         this.map.draw(ctx);
         if (this.carrier) this.carrier.draw(ctx);
         if (this.player) this.player.draw(ctx);

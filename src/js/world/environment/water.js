@@ -106,7 +106,9 @@ export function createWaterRenderer(env) {
             }
             ctx.stroke();
         },
+        drawBehindTerrain() {},
         drawOverlay() {},
+        drawDemoOverlay() {},
     };
     return renderer;
 }

@@ -9,8 +9,10 @@
 export function createNoneRenderer() {
     return {
         update() {},
+        drawBehindTerrain() {},
         drawOverWorld() {},
         drawOverlay() {},
+        drawDemoOverlay() {},
     };
 }
 

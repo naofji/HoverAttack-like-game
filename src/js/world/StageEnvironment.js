@@ -111,13 +111,23 @@ export class StageEnvironment {
         for (const p of g.particles) if (p.isDebris) check(p);
     }
 
+    /** ワールド座標（translate 済み）。遠景の直後、地形タイルの前（雪が岩の奥に見える）。 */
+    drawBehindTerrain(ctx, camX, camY) {
+        this.renderer.drawBehindTerrain(ctx, camX, camY);
+    }
+
     /** ワールド座標（translate 済み）。地形と機体の後、煙幕の前。 */
     drawOverWorld(ctx, camX, camY) {
         this.renderer.drawOverWorld(ctx, camX, camY);
     }
 
-    /** 画面座標。HUD の直前。alphaScale はデモ画面で薄くするため。 */
+    /** 画面座標。HUD の直前。alphaScale はデモ画面で薄くするため。本編用（霧だけが使う）。 */
     drawOverlay(ctx, alphaScale = 1) {
         this.renderer.drawOverlay(ctx, alphaScale);
+    }
+
+    /** デモ画面（面別ランキングなど）用の画面重ね。雪はここで画面スクロールに戻す。 */
+    drawDemoOverlay(ctx, alphaScale = 1) {
+        this.renderer.drawDemoOverlay(ctx, alphaScale);
     }
 }

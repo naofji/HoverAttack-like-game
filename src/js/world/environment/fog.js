@@ -44,8 +44,9 @@ function buildSheet(seed) {
 export function createFogRenderer() {
     const sheets = FOG_LAYERS.map((_, i) => buildSheet(0x0F06 + i * 977));
     let t = 0;
-    return {
+    const renderer = {
         update() { t++; },
+        drawBehindTerrain() {},
         drawOverWorld() {},
         drawOverlay(ctx, alphaScale = 1) {
             ctx.save();
@@ -66,5 +67,9 @@ export function createFogRenderer() {
             ctx.globalAlpha = 1;
             ctx.restore();
         },
+        // デモ画面（面別ランキングなど）でも霧は画面重ねのまま。雪と違い
+        // 世界に固定する必要が無いので、本編と同じ描画を使い回す
+        drawDemoOverlay(ctx, alphaScale = 1) { renderer.drawOverlay(ctx, alphaScale); },
     };
+    return renderer;
 }

@@ -67,6 +67,10 @@ test('horizontal input on ice keeps full speed, releasing it slides instead of s
   assert.equal(p.vx, 0); // いずれ止まる
 });
 
+test('ice slide is tuned to slide further (real-device: もう少し滑る)', () => {
+  assert.ok(ICE_SLIDE >= 0.94, `ICE_SLIDE ${ICE_SLIDE}`);
+});
+
 test('on land releasing input still stops instantly', () => {
   const game = makeGame(makeMap(flatFloorRows()));
   const p = new Player(game, 5 * TILE_SIZE, 20 * TILE_SIZE - 24);

@@ -38,7 +38,33 @@ export function createSnowRenderer() {
     return {
         update() { t++; },
         drawOverWorld() {},
-        drawOverlay(ctx, alphaScale = 1) {
+        // 本編では雪は「岩の奥」（drawBehindTerrain）に降らせる。画面重ねの
+        // drawOverlay は HUD の直前に呼ばれるので、ここで雪を描くと弾やHPバーより
+        // 手前に浮いて見えてしまう（レビュー指摘）。本編用には何もしない
+        drawOverlay() {},
+        drawBehindTerrain(ctx, camX, camY) {
+            // ワールド座標で、カメラの可視矩形に掛かる板だけを敷く。落下と横揺れは
+            // 画面版と同じだが、板はワールドに固定されるので歩くと地形と一緒に流れる
+            // （空洞の向こうで降っている雪を岩の穴から見る形）
+            ctx.save();
+            SNOW_LAYERS.forEach((layer, i) => {
+                const S = SNOW_SHEET_SIZE;
+                const oy = ((t * layer.speed) % S + S) % S;
+                const ox = ((Math.sin(t * 0.02 + i) * layer.sway * 40) % S + S) % S;
+                const x0 = Math.floor((camX - ox) / S) * S + ox - S;
+                const y0 = Math.floor((camY - oy) / S) * S + oy - S;
+                for (let y = y0; y < camY + CANVAS_HEIGHT; y += S) {
+                    for (let x = x0; x < camX + CANVAS_WIDTH; x += S) {
+                        if (x + S <= camX || y + S <= camY) continue;
+                        ctx.drawImage(sheets[i], x, y);
+                    }
+                }
+            });
+            ctx.restore();
+        },
+        // デモ画面（面別ランキングなど）用。ワールドに固定する必要が無く、
+        // カメラも無いので旧来どおり画面座標でスクロールさせる
+        drawDemoOverlay(ctx, alphaScale = 1) {
             ctx.save();
             SNOW_LAYERS.forEach((layer, i) => {
                 const S = SNOW_SHEET_SIZE;

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/js/main.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../src/js/utils/Constants.js';
 
 // _simulationTick が env.update() を呼ぶこと、draw() が
 // world → env.drawOverlay → hud の順で呼ぶことを、記録用のダミーで確かめる。
@@ -10,6 +11,7 @@ function countingEnv() {
   return {
     n,
     update() { n.update++; },
+    drawBehindTerrain() {},
     drawOverWorld() { n.over++; },
     drawOverlay() { n.overlay++; },
   };
@@ -43,4 +45,20 @@ test('draw() paints world, then the environment overlay, then the HUD (in that o
   };
   Game.draw.call(fake);
   assert.deepEqual(order, ['world', 'overlay', 'hud']);
+});
+
+test('world pass draws snow behind the terrain: backdrop → env.behind → map', () => {
+  const order = [];
+  const fake = {
+    gameState: 'playing', simAlpha: 1,
+    camera: { renderX: () => 0, renderY: () => 0 },
+    canvas: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+    _applyRenderInterpolation() {}, _restoreRenderInterpolation() {},
+    map: { backdrop: { draw() { order.push('backdrop'); } }, draw() { order.push('map'); } },
+    env: { drawBehindTerrain() { order.push('behind'); }, drawOverWorld() { order.push('over'); }, drawOverlay() {} },
+    carrier: null, player: null, projectiles: [], particles: [], landmines: [], repairKits: [], autoAimUnits: [], missileKits: [],
+    grenadeTrajectory: null, _drawHpBarIfDamaged() {}, enemies: [], enemyBullets: [], flag: null, smokeScreens: [],
+  };
+  Game._drawWorld.call(fake, makeFakeCtx());
+  assert.deepEqual(order, ['backdrop', 'behind', 'map', 'over']);
 });
