@@ -163,14 +163,15 @@ export class CaveBackdrop {
         const isSnow = style === 'snow';
         const spikeHalfWidth = isSnow ? SPIKE_HALF_WIDTH_SNOW : SPIKE_HALF_WIDTH;
         // 雪はハイライト帯を積雪の白へ寄せる（SNOW_CAP_COLOR に近い色）。
-        // 実機の指摘: 5〜7面の遠景が目立ちすぎる。白い帯は前景と競合するため
-        // 明度・彩度を大きく落とす（0.5 → 仕様書指定の 0.12）。だが
-        // tests/environment-backdrop.test.js の「装飾色は前景輝度の0.45倍以下」を
-        // 7パレット×5backdropの全組み合わせで検証すると、0.12 はおろか 0.006 を
-        // 超えた時点で Brown(#4B3621) と DarkSlateBlue(#483D8B) の2パレットで超過する
-        // （この2つは rockLight 自体がすでに上限ぎりぎりのため、白へ寄せる余地がほぼ無い）。
-        // 全パレットで確実に通る 0.005 まで下げた（Brown: lum 24.7 ≤ cap 25.6）。
-        const highlightColor = isSnow ? lerpColor(rockLight, '#FFFFFF', 0.005) : rockLight;
+        // 実機の指摘: 5面の遠景が目立ちすぎる。白い帯は前景と競合するため
+        // 明度・彩度を落とす（0.5 → 仕様書指定の 0.12）。
+        // fix round 1: 装飾色の輝度ルールは「backdrop × 全パレット」の総当たりではなく
+        // 「実際にその backdrop を使う面のパレットに対してだけ」縛るのが正しい
+        // （STAGE_ENVIRONMENTS[i].backdrop は STAGE_PALETTES[i] としか組まない）。
+        // 雪(snow)を使うのは5面 SteelBlue(#4682B4) だけなので、それに対して詰め直す:
+        // 0.12 では前景輝度0.45倍の上限(54.4)を超える(輝度65.96)ため、
+        // 上限ぎりぎりまで戻して 0.06（輝度53.75 ≤ cap 54.38）にした。
+        const highlightColor = isSnow ? lerpColor(rockLight, '#FFFFFF', 0.06) : rockLight;
         const segCount = Math.ceil(this.width / SEGMENT_WIDTH) + 1;
         const thickness = BAND_THICKNESS_MIN + rng.next() * BAND_THICKNESS_RANGE;
 
@@ -227,10 +228,12 @@ export class CaveBackdrop {
         ctx.fillStyle = lerpColor(this.colors.voidColor, '#000000', 0.5);
         ctx.fillRect(0, H * 0.8, W, H * 0.2);
         // 実機の指摘: 滴りの水色が明るすぎて前景と競合する。#4FA3E0 寄せ 0.4 から
-        // 仕様書指定の #3A6A90 寄せ 0.3 へ変更したが、7パレット×5backdropの全数テストで
-        // Sienna(#8B4513) 系の複数パレットが前景輝度0.45倍の上限を超えたため、
-        // 全パレットで通る 0.05 まで下げた。
-        ctx.fillStyle = lerpColor(this.colors.rockLight, '#3A6A90', 0.05);
+        // 仕様書指定の #3A6A90 寄せ 0.3 へ変更。
+        // fix round 1: wet(滴り)を使うのは4面 SeaGreen(#2E8B57) だけなので、それに
+        // 対して詰め直す（backdrop×全パレットの総当たりは過剰だった）。
+        // 0.3 では前景輝度0.45倍の上限(52.0)を超える(輝度53.28)ため、
+        // 上限ぎりぎりまで戻して 0.27（輝度51.42 ≤ cap 51.96）にした。
+        ctx.fillStyle = lerpColor(this.colors.rockLight, '#3A6A90', 0.27);
         for (let x = 0; x < W; x += 96) {
             if (rng.next() < 0.5) continue;
             const len = 30 + rng.next() * 80;
@@ -241,16 +244,18 @@ export class CaveBackdrop {
     /** 洞窟を改造した要塞: 岩層の間に配管・隔壁パネル・桁・ランプの列。岩は残す。 */
     _drawMachineDecor(ctx, rng, W, H, bandCount) {
         // 実機の指摘: 配管・ランプが明るすぎて前景と競合する。
-        // 仕様書指定の steel #2A2E35 / steelDark #1C1F25 / lamp #6E5A2E は
-        // 単色としては暗いが、7パレット×5backdropの全数テストでは最も暗いパレット
-        // Brown(#4B3621, 前景輝度の0.45倍 = 25.6) を全部が超過した
-        // （lamp は特に G 成分が輝度計算の重み0.7152を占めるため、素朴な琥珀色は
-        // 見た目以上に「明るい」と判定される）。全パレットで通るところまで
-        // さらに暗く・無彩色寄りに詰めた: steel #14161A(lum 21.9) /
-        // steelDark #0C0D10(lum 13.0) / lamp #1F1404(lum 21.2、暗い焦茶寄りの琥珀)。
-        const steel = '#14161A';
-        const steelDark = '#0C0D10';
-        const lamp = '#1F1404';
+        // 仕様書指定は steel #3A4250 / steelDark #262C36 / lamp #6E5A2E だが、
+        // fix round 1: machine を使うのは7面 DarkSlateBlue(#483D8B) だけなので、
+        // それに対して詰め直す（backdrop×全パレットの総当たりは過剰だった。
+        // 特に lamp は G 成分の輝度重み0.7152のため、素朴な琥珀色は見た目以上に
+        // 「明るい」と判定され、Brown 等の暗いパレットを基準にすると必要以上に
+        // 暗くなってしまっていた）。前景輝度0.45倍の上限(31.0)に対し、
+        // 各色を仕様書の値からスケールダウンして上限ぎりぎりまで詰めた:
+        // steel #1A1E24(lum 29.6, 仕様書比45%) / steelDark #111418(lum 19.7, 同45%) /
+        // lamp #251C0C(lum 28.8, 仕様書比16%)。
+        const steel = '#1A1E24';
+        const steelDark = '#111418';
+        const lamp = '#251C0C';
         for (let b = 0; b < bandCount - 1; b++) {
             // 層と層の間の空洞の中心
             const gapY = ((b + 1) / bandCount) * H;
