@@ -28,12 +28,18 @@ test('stairDirection is 0 on flat ground and on a single ledge', () => {
   assert.equal(stairDirection(ledge, 2, 4), 0); // 上りだけで下りが無い
 });
 
-test('slopeDrawOffset interpolates 0..-TILE across a rising step and 0 on flat', () => {
+// 坂の絵（Map._drawRockyBlock の対角線の面取り）は段の上端より1タイル低いので、
+// 描画オフセットは**下向き（正）**。段の低い側の端で +TILE_SIZE、高い側の端で 0。
+test('slopeDrawOffset interpolates +TILE..0 down a rising step and 0 on flat', () => {
   assert.equal(slopeDrawOffset(0, 100), 0);
-  assert.equal(slopeDrawOffset(1, 3 * TILE_SIZE), 0);
-  assert.equal(slopeDrawOffset(1, 3 * TILE_SIZE + TILE_SIZE / 2), -TILE_SIZE / 2);
-  assert.equal(slopeDrawOffset(-1, 3 * TILE_SIZE + TILE_SIZE / 2), -TILE_SIZE / 2);
-  assert.equal(slopeDrawOffset(-1, 4 * TILE_SIZE - 0.001) > -0.1, true);
+  // dir=+1（右上がり）: 段の左端が低い側
+  assert.equal(slopeDrawOffset(1, 3 * TILE_SIZE), TILE_SIZE);
+  assert.equal(slopeDrawOffset(1, 3 * TILE_SIZE + TILE_SIZE / 2), TILE_SIZE / 2);
+  assert.ok(slopeDrawOffset(1, 4 * TILE_SIZE - 0.001) < 0.1, 'right edge of a rising-right step is the high side');
+  // dir=-1（左上がり）は鏡像: 段の右端が低い側
+  assert.equal(slopeDrawOffset(-1, 3 * TILE_SIZE), 0);
+  assert.equal(slopeDrawOffset(-1, 3 * TILE_SIZE + TILE_SIZE / 2), TILE_SIZE / 2);
+  assert.ok(slopeDrawOffset(-1, 4 * TILE_SIZE - 0.001) > TILE_SIZE - 0.1, 'right edge of a rising-left step is the low side');
 });
 
 test('supportColumn picks the column whose top surface is at row r, not just any solid one', () => {

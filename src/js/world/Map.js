@@ -1135,10 +1135,33 @@ export class Map {
         const expRight = c === this.cols - 1 || this.grid[r][c + 1] === BLOCK_EMPTY;
 
         // 凸角：両隣が空洞 → 面取りサイズを決定論的に選ぶ
-        const cTL = (expTop && expLeft) ? (4 + Math.floor(rng(90) * 6)) : 0;
-        const cTR = (expTop && expRight) ? (4 + Math.floor(rng(91) * 6)) : 0;
-        const cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
-        const cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
+        // （雪の面だけ下で書き換えるので let。他の面では値も rng の消費順も従来どおり）
+        let cTL = (expTop && expLeft) ? (4 + Math.floor(rng(90) * 6)) : 0;
+        let cTR = (expTop && expRight) ? (4 + Math.floor(rng(91) * 6)) : 0;
+        let cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
+        let cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
+
+        // 雪の面だけ形を変える（実機の指摘。当たり判定は階段のまま）:
+        // - 階段の段（上と片側が露出、下は岩、露出側の反対の斜め上が岩）は面取りを
+        //   対角線いっぱいまで伸ばし、階段全体を45度の坂に見せる。自機の描画オフセット
+        //   （utils/slope.js）はこの斜辺の上に足が乗るよう向きを合わせてある
+        // - 板状の突出（上下と片側が露出した高さ1の先端）は上下から中心まで面取りし、
+        //   頂点が中心に来るくの字の三角にする
+        let rampTL = false, rampTR = false, chevronL = false, chevronR = false;
+        if (this.envKind === 'snow') {
+            const solid = (rr, cc) => rr >= 0 && rr < this.rows && cc >= 0 && cc < this.cols && this.grid[rr][cc] !== BLOCK_EMPTY;
+            if (expTop && expLeft && !expBottom && solid(r - 1, c + 1)) { cTL = S; rampTL = true; }
+            else if (expTop && expRight && !expBottom && solid(r - 1, c - 1)) { cTR = S; rampTR = true; }
+            else if (expTop && expBottom && expLeft && !expRight) { cTL = S / 2; cBL = S / 2; chevronL = true; }
+            else if (expTop && expBottom && expRight && !expLeft) { cTR = S / 2; cBR = S / 2; chevronR = true; }
+        }
+
+        // くの字の三角のときだけ、側面の頂点をタイルの**中心**へ寄せる。
+        // 汎用の面取りの列挙だと辺の中点（x, y+S/2）になり、頂点が中心に来ない。
+        // 中心へ寄せると上下の面取り線と1本に揃うので、先端は半タイルぶん引っ込んだ
+        // 縦の切り口になる（＝板の先が細くならずに短くなる）。実機の見えを優先した選択
+        const sideLX = chevronL ? x + S / 2 : x;
+        const sideRX = chevronR ? x + S / 2 : x + S;
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
         const notchTL = !expTop && !expLeft && r > 0 && c > 0 && this.grid[r - 1][c - 1] === BLOCK_EMPTY;
@@ -1151,12 +1174,12 @@ export class Map {
         ctx.beginPath();
         ctx.moveTo(x + cTL, y);           // 上辺：左端（TL面取り分だけ右へ）
         ctx.lineTo(x + S - cTR, y);           // 上辺：右端
-        if (cTR) ctx.lineTo(x + S, y + cTR); // TR面取り斜線
-        ctx.lineTo(x + S, y + S - cBR);       // 右辺：下端
+        if (cTR) ctx.lineTo(sideRX, y + cTR); // TR面取り斜線
+        ctx.lineTo(sideRX, y + S - cBR);       // 右辺：下端
         if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
         ctx.lineTo(x + cBL, y + S);       // 下辺：左端
-        if (cBL) ctx.lineTo(x, y + S - cBL); // BL面取り斜線
-        ctx.lineTo(x, y + cTL);     // 左辺：上端
+        if (cBL) ctx.lineTo(sideLX, y + S - cBL); // BL面取り斜線
+        ctx.lineTo(sideLX, y + cTL);     // 左辺：上端
         if (cTL) ctx.lineTo(x + cTL, y);     // TL面取り斜線（→ closePath と一致）
         ctx.closePath();
 
@@ -1206,8 +1229,19 @@ export class Map {
 
             // 積雪の帯（5面）。生成時に露出していた上面にだけ。
             if (this.envKind === 'snow' && this.exposedAtGen && this.exposedAtGen[r * this.cols + c]) {
-                ctx.fillStyle = SNOW_CAP_COLOR;
-                ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
+                if (rampTL || rampTR) {
+                    // 坂の段には水平な上面が無いので、帯も斜辺に沿わせる。
+                    // 線幅を倍にして clip の内側に残る半分だけを積雪の厚みとして使う
+                    ctx.strokeStyle = SNOW_CAP_COLOR;
+                    ctx.lineWidth = SNOW_CAP_THICKNESS * 2;
+                    ctx.beginPath();
+                    if (rampTL) { ctx.moveTo(x, y + S); ctx.lineTo(x + S, y); }
+                    else { ctx.moveTo(x + S, y + S); ctx.lineTo(x, y); }
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = SNOW_CAP_COLOR;
+                    ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
+                }
             }
         }
 

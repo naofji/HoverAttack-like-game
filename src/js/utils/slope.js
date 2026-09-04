@@ -51,14 +51,17 @@ export function supportColumn(map, r, leftX, rightX, centerX) {
 }
 
 /**
- * 足の中心 x が段の中でどこにいるかから、45度の線に乗せる描画の縦オフセット。
- * 段の低い側の端で 0、高い側の端で -TILE_SIZE。
+ * 足の中心 x が段の中でどこにいるかから、坂の斜辺に足を乗せるための描画の縦オフセット。
+ * 当たり判定は段の上端（水平）なので、絵だけを斜辺まで下げる。
+ * 段の低い側の端で +TILE_SIZE（斜辺はそこで1段下の上端と同じ高さ）、高い側の端で 0。
+ *
+ * 第1ラウンドでは段の上端どうしを結ぶ線（負のオフセット＝絵を上げる）だったが、
+ * 実機で坂の絵（Map._drawRockyBlock の対角線の面取り）と向きが逆だったので反転した。
+ * 描いている斜辺は段の上端より1タイル低いところを通る。
  */
 export function slopeDrawOffset(dir, feetCenterX) {
     if (dir === 0) return 0;
     const frac = (feetCenterX - Math.floor(feetCenterX / TILE_SIZE) * TILE_SIZE) / TILE_SIZE;
     const t = dir > 0 ? frac : 1 - frac;
-    // `-(t * TILE_SIZE)` だと段の端（t=0）で -0 を返し、呼び出し側の比較や
-    // テストの Object.is 判定で 0 と別物になる。0 から引いて +0 に寄せる
-    return 0 - t * TILE_SIZE;
+    return (1 - t) * TILE_SIZE;
 }
