@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { stairDirection, slopeDrawOffset } from '../src/js/utils/slope.js';
+import { stairDirection, slopeDrawOffset, supportColumn } from '../src/js/utils/slope.js';
 import { makeMap } from './helpers/enemy-world.js';
 import { TILE_SIZE } from '../src/js/utils/Constants.js';
 
@@ -34,4 +34,13 @@ test('slopeDrawOffset interpolates 0..-TILE across a rising step and 0 on flat',
   assert.equal(slopeDrawOffset(1, 3 * TILE_SIZE + TILE_SIZE / 2), -TILE_SIZE / 2);
   assert.equal(slopeDrawOffset(-1, 3 * TILE_SIZE + TILE_SIZE / 2), -TILE_SIZE / 2);
   assert.equal(slopeDrawOffset(-1, 4 * TILE_SIZE - 0.001) > -0.1, true);
+});
+
+test('supportColumn picks the column whose top surface is at row r, not just any solid one', () => {
+  const map = makeMap(stairsRows());
+  // 段 (r=8) の上面は列 3。左の列 2 は行 8 では空、右の列 4 は行 8 も岩だが上面は行 7。
+  // 足が列 3 と 4 にまたがっていても、乗っているのは列 3
+  assert.equal(supportColumn(map, 8, 3 * TILE_SIZE + 8, 4 * TILE_SIZE + 7, 4 * TILE_SIZE), 3);
+  // 中心の列がその行に上面を持つならそちらを優先する
+  assert.equal(supportColumn(map, 8, 3 * TILE_SIZE, 3 * TILE_SIZE + 15, 3 * TILE_SIZE + 8), 3);
 });

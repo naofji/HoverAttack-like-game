@@ -19,11 +19,11 @@ import {
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
     SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED,
-    SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE
+    SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
-import { stairDirection, slopeDrawOffset } from '../utils/slope.js';
+import { stairDirection, slopeDrawOffset, supportColumn } from '../utils/slope.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -83,6 +83,7 @@ export class Player {
         // 描画など update() を通らない経路でも undefined にならないよう陸上で初期化
         this.motion = LAND_MOTION;
         this.slopeDir = 0;      // 今フレームに足が乗っている階段の向き（雪面のみ）
+        this.slopeCoyote = 0;   // 段を踏み外した直後、まだ階段の上とみなす残りフレーム
         this.drawOffsetY = 0;   // 45度の線に乗せるための描画だけの縦ずらし
         this.facingRight = true;
         this.alive = true;
@@ -260,14 +261,22 @@ export class Player {
      * onGround は前フレームの結果（_moveAndCollide が毎フレーム冒頭で倒す）。
      */
     _applySnowSlope(input) {
+        if (this.motion.slide === 0) { this.slopeDir = 0; this.slopeCoyote = 0; return; }
+        if (!this.onGround) {
+            // 段を踏み外した直後の数フレームは階段の上のままにしておく。
+            // 接地判定は足を4px内側で見るため、体が前の段に数px重なったまま「空中」に
+            // なる。ここで slopeDir を 0 に落とすと下の吸着が二度と成立せず、
+            // 1段16pxの落下を10フレーム待つ動きに戻ってしまう（実測）
+            if (this.slopeCoyote > 0) this.slopeCoyote--; else this.slopeDir = 0;
+            return;
+        }
         this.slopeDir = 0;
-        if (this.motion.slide === 0 || !this.onGround) return;
         const map = this.game.map;
-        const feetX = this.x + this.width / 2;
         const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
-        const c = Math.floor(feetX / TILE_SIZE);
+        const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
         this.slopeDir = stairDirection(map, r, c);
-        if (this.slopeDir === 0) return;
+        if (this.slopeDir === 0) { this.slopeCoyote = 0; return; }
+        this.slopeCoyote = SLOPE_SNAP_COYOTE;
         const downhill = -this.slopeDir;
         const held = (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) ? -1
             : (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) ? 1 : 0;
@@ -275,6 +284,8 @@ export class Player {
             // 上り: 入力の最高速を落とす（_updateHorizontal が ±MAX にした直後）
             this.vx = held * PLAYER_MAX_SPEED * SLOPE_UPHILL_SCALE;
         }
+        // しゃがみ中もここへ来る（_updateHorizontal が vx=0 にした後に加速が乗る）。
+        // 雪の斜面では屈んだまま滑り降りるのが意図した挙動
         this.vx += downhill * SLOPE_DOWNHILL_ACCEL;
         this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
     }
@@ -603,10 +614,17 @@ export class Player {
             const probeY = this.y + this.height + TILE_SIZE + 1;
             const cx = this.x + this.width / 2;
             if (map.isSolidAtPixel(cx, probeY) && !map.isSolidAtPixel(cx, probeY - TILE_SIZE)) {
-                this.onGround = true;
-                this.vy = 0;
+                // 吸着先で地形にめり込まないことを確かめてから移す。中心の1点だけ見て
+                // 落とすと、体の左半分がまだ1段高い段に乗っているうちに下ろしてしまい、
+                // 次のフレームに押し戻されて 184⇔200 と16px往復する（実測）
+                const prevY = this.y;
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
-                return;
+                if (!this._collidesWithMap()) {
+                    this.onGround = true;
+                    this.vy = 0;
+                    return;
+                }
+                this.y = prevY;
             }
         }
         // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)

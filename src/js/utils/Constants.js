@@ -883,6 +883,7 @@ export const ICE_SLIDE = 0.9;
 export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
 export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ毎フレーム下り方向へ
 export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
+export const SLOPE_SNAP_COYOTE = 6;        // 段を踏み外してから下りの吸着を諦めるまでのフレーム
 // 霧で索敵の横半径に掛ける倍率（縦は SIGHT_ASPECT 経由で同じ比率で縮む）。自機の Auto Aim も同じ。
 export const FOG_SIGHT_SCALE = 0.5;
 

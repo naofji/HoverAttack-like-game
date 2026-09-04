@@ -82,7 +82,11 @@ export const SpawnEffects = {
         if (r && r.addRipple) r.addRipple(x, Math.min(6, Math.abs(vy)));
     },
 
-    /** 舞う雪。足元から count 粒。 */
+    /**
+     * 舞う雪。足元から count 粒。
+     * spawnSplash と違って上限を設けていないのは、SNOW_KICK_LIFETIME（30F）で
+     * 必ず消えるうえ 1 フレームあたり最大 SNOW_KICK_SLIDE 粒しか出ないため。
+     */
     spawnSnowKick(x, y, count) {
         for (let i = 0; i < (count | 0); i++) {
             this.particles.push(new SnowKickParticle(

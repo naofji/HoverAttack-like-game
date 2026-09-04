@@ -14,7 +14,7 @@ import {
     SNOW_KICK_WALK, SNOW_KICK_SLIDE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
-import { stairDirection } from '../utils/slope.js';
+import { stairDirection, supportColumn } from '../utils/slope.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -33,6 +33,8 @@ export class EnemyTank {
         this.vy = 0;
         // 環境の物理係数（水中で重力・速度を落とす等）。update() で毎フレーム引き直す。
         this.motion = LAND_MOTION;
+        // 前フレームの接地。雪の粒を接地中だけに絞るのに使う（自機の onGround と対）
+        this.grounded = false;
         this.recoilProfile = ENEMY_RECOIL_PROFILES.tank;
         this.recoilTimer = 0;
         this.alive = true;
@@ -96,13 +98,16 @@ export class EnemyTank {
     _applySnowSlope() {
         const map = this.game.map;
         const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
-        const c = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
         const dir = stairDirection(map, r, c);
         if (dir !== 0) {
             this.vx += -dir * SLOPE_DOWNHILL_ACCEL;
             this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
         }
-        if (this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
+        // 粒は接地しているときだけ。_applySnowSlope は _moveAndCollide より前に走るので
+        // this.grounded は前フレームの結果（自機が this.onGround を同じ順で見ているのと対）。
+        // 接地を条件にしないと、崖から落ちる戦車が空中で雪を撒く
+        if (this.grounded && this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
             && this.game.camera && isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) {
             this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, dir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
         }
@@ -115,6 +120,7 @@ export class EnemyTank {
         this.y += 1;
         const grounded = this._collidesWithMap();
         this.y -= 1;
+        this.grounded = grounded;
 
         // --- Predictive Navigation (User Rules) ---
         if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
