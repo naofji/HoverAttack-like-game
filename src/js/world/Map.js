@@ -886,8 +886,11 @@ export class Map {
         return destroyed;
     }
 
-    /** 水になったセルの通知フック（Task 13 で描画キャッシュの更新を差し込む）。 */
-    onWaterChanged(cells) {}
+    /** 流入で水が増えたとき。描画キャッシュ（環境側）に伝える。 */
+    onWaterChanged(cells) {
+        const env = this.game && this.game.env;
+        if (env && env.renderer && env.renderer.invalidate) env.renderer.invalidate(cells);
+    }
 
     // ------------------------------------------
     // Tile Render Cache

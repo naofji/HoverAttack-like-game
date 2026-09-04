@@ -18,6 +18,7 @@ import {
 } from '../utils/Constants.js';
 import { createNoneRenderer, canvasAvailable } from './environment/none.js';
 import { createFogRenderer } from './environment/fog.js';
+import { createWaterRenderer } from './environment/water.js';
 
 /** 陸上。陸上の面では全エンティティがこれを受け取り、掛けても値が変わらない。 */
 export const LAND_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: 0 });
@@ -30,6 +31,7 @@ const NONE_ROW = Object.freeze({ kind: 'none', backdrop: 'cave', terrain: 'cave'
 function createRenderer(kind, env) {
     if (!canvasAvailable()) return createNoneRenderer();
     if (kind === 'fog') return createFogRenderer();
+    if (kind === 'water' && env.game && env.game.map && env.game.map.water) return createWaterRenderer(env);
     return createNoneRenderer();
 }
 
