@@ -10,6 +10,7 @@ import {
     RICOCHET_STREAK_LENGTH, RICOCHET_STREAK_LIFETIME, RICOCHET_STREAK_WIDTH,
     COLOR_RICOCHET, COLOR_RICOCHET_FADE,
     SPLASH_LIFETIME,
+    SNOW_COLOR, SNOW_KICK_LIFETIME,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
 
@@ -201,6 +202,34 @@ export class SplashParticle {
         if (!this.alive) return;
         ctx.globalAlpha = Math.max(0.15, this.lifetime / SPLASH_LIFETIME);
         ctx.fillStyle = '#BFE3FF';
+        ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --------------------------------------------
+// Snow Kick - 足元から舞い上がる雪
+// --------------------------------------------
+//
+// SplashParticle と同じ形（fillRect 1回、save/restore なし）。違うのは色と
+// 重力だけで、雪は水しぶきより軽く落ちるので 0.18 ではなく 0.12 にしてある。
+export class SnowKickParticle {
+    constructor(x, y, vx, vy) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.lifetime = SNOW_KICK_LIFETIME;
+        this.alive = true;
+    }
+    update() {
+        if (!this.alive) return;
+        this.vy += 0.12;
+        this.x += this.vx;
+        this.y += this.vy;
+        if (--this.lifetime <= 0) this.alive = false;
+    }
+    draw(ctx) {
+        if (!this.alive) return;
+        ctx.globalAlpha = Math.max(0.15, this.lifetime / SNOW_KICK_LIFETIME);
+        ctx.fillStyle = SNOW_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
         ctx.globalAlpha = 1.0;
     }

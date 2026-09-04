@@ -9,9 +9,13 @@ import {
     ENEMY_TANK_FIRE_INTERVAL, ENEMY_TANK_SCORE,
     ENEMY_TANK_MAX_FALLING_SPEED,
     
-    ENEMY_RECOIL_PROFILES
+    ENEMY_RECOIL_PROFILES,
+    VIEW_CULL_MARGIN, SLOPE_DOWNHILL_ACCEL, ICE_MAX_SLIDE_SPEED,
+    SNOW_KICK_WALK, SNOW_KICK_SLIDE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
+import { stairDirection } from '../utils/slope.js';
+import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
@@ -68,6 +72,9 @@ export class EnemyTank {
         this.vx *= FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
 
+        // 雪の階段では下りに加速し、雪を蹴る（自機と同じ規則。ホバー戦車なので45度の補間は無し）
+        if (this.motion.slide > 0) this._applySnowSlope();
+
         // --- Movement with collision (carrier-style) ---
         this._moveAndCollide();
 
@@ -81,6 +88,25 @@ export class EnemyTank {
     // ------------------------------------------
     // Physics (similar to Carrier)
     // ------------------------------------------
+
+    /**
+     * 雪の階段の下りで加速し、動いているあいだ雪を蹴る。
+     * 粒は画面内の戦車だけ（画面外の 9 割で撒くと particles を食い潰す）。
+     */
+    _applySnowSlope() {
+        const map = this.game.map;
+        const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
+        const c = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const dir = stairDirection(map, r, c);
+        if (dir !== 0) {
+            this.vx += -dir * SLOPE_DOWNHILL_ACCEL;
+            this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+        }
+        if (this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
+            && this.game.camera && isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) {
+            this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, dir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
+        }
+    }
 
     _moveAndCollide() {
         const map = this.game.map;

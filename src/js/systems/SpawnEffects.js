@@ -10,7 +10,7 @@
 // オブジェクトリテラルで、`this` は Game を指す。
 
 import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY } from '../utils/Constants.js';
-import { createExplosion, createSparks, SplashParticle } from '../entities/Particle.js';
+import { createExplosion, createSparks, SplashParticle, SnowKickParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -80,5 +80,15 @@ export const SpawnEffects = {
         }
         const r = this.env && this.env.renderer;
         if (r && r.addRipple) r.addRipple(x, Math.min(6, Math.abs(vy)));
+    },
+
+    /** 舞う雪。足元から count 粒。 */
+    spawnSnowKick(x, y, count) {
+        for (let i = 0; i < (count | 0); i++) {
+            this.particles.push(new SnowKickParticle(
+                x + (Math.random() - 0.5) * 12, y,
+                (Math.random() - 0.5) * 2, -(1 + Math.random() * 1.5),
+            ));
+        }
     },
 };
