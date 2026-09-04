@@ -93,18 +93,30 @@ test('on a non-snow stage the same step keeps the small chamfer', async () => {
   assert.ok(topLeft[0] > x && topLeft[0] < x + 10 && topLeft[1] === y, `chamfer ${topLeft}`);
 });
 
+/** 頂点列を順序に依存しない集合として比べる（時計回りの開始点は実装の都合）。 */
+function pointSet(pts) {
+  return new Set(pts.map(([px, py]) => `${px},${py}`));
+}
+
 // 板状の突出: (1,1) は上下と左が露出、右(1,2)は岩
 const PLATE = ['....', '.###', '....', '####'];
 
-test('on the snow stage a 1-high plate tip is drawn as a chevron meeting at the tile centre', async () => {
+test('on the snow stage a 1-high plate tip is a triangle: attached edge as base, apex at the tile centre', async () => {
   const m = await blockDrawer(PLATE, 'snow');
   const ctx = makeFakeCtx();
   m._drawRockyBlock(ctx, 1, 1, BLOCK_NORMAL);
   const x = TILE_SIZE, y = TILE_SIZE, S = TILE_SIZE;
   const pts = basePolygon(ctx);
-  assert.ok(pts.some(([px, py]) => px === x + S / 2 && py === y + S / 2), 'apex at the tile centre');
-  assert.ok(!pts.some(([px, py]) => px === x && (py === y || py === y + S)), 'left corners cut away');
-  // 坂ではないので帯は斜辺の stroke ではなく、従来どおり水平の fillRect（clip で右半分だけ残る）
+  // 岩に接しているのは右辺。底辺＝右辺、頂点＝タイル中心のちょうど3頂点
+  assert.equal(pts.length, 3, `exactly 3 vertices, got ${JSON.stringify(pts)}`);
+  assert.deepEqual(
+    pointSet(pts),
+    pointSet([[x + S, y], [x + S, y + S], [x + S / 2, y + S / 2]]),
+    `attached-edge corners + centre, got ${JSON.stringify(pts)}`
+  );
+  // 露出している左辺の上には頂点が1つも無い（先が尖っている）
+  assert.ok(pts.every(([px]) => px !== x), 'no vertex on the exposed edge');
+  // 坂ではないので斜辺に沿う帯は引かない
   const strokedBand = ctx.calls.some((c) => c.name === 'set:strokeStyle' && c.args[0] === SNOW_CAP_COLOR);
   assert.equal(strokedBand, false, 'a plate tip is not a ramp: no diagonal band');
 });
@@ -112,12 +124,17 @@ test('on the snow stage a 1-high plate tip is drawn as a chevron meeting at the 
 // 鏡像の板状の突出: (1,2) は上下と右が露出、左(1,1)は岩
 const PLATE_MIRROR = ['....', '###.', '....', '####'];
 
-test('the mirrored plate tip meets at the tile centre from the right', async () => {
+test('the mirrored plate tip is the mirrored triangle (base on the left edge)', async () => {
   const m = await blockDrawer(PLATE_MIRROR, 'snow');
   const ctx = makeFakeCtx();
   m._drawRockyBlock(ctx, 1, 2, BLOCK_NORMAL);
   const x = 2 * TILE_SIZE, y = TILE_SIZE, S = TILE_SIZE;
   const pts = basePolygon(ctx);
-  assert.ok(pts.some(([px, py]) => px === x + S / 2 && py === y + S / 2), 'apex at the tile centre');
-  assert.ok(!pts.some(([px, py]) => px === x + S && (py === y || py === y + S)), 'right corners cut away');
+  assert.equal(pts.length, 3, `exactly 3 vertices, got ${JSON.stringify(pts)}`);
+  assert.deepEqual(
+    pointSet(pts),
+    pointSet([[x, y], [x, y + S], [x + S / 2, y + S / 2]]),
+    `attached-edge corners + centre, got ${JSON.stringify(pts)}`
+  );
+  assert.ok(pts.every(([px]) => px !== x + S), 'no vertex on the exposed edge');
 });

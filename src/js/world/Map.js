@@ -1145,23 +1145,17 @@ export class Map {
         // - 階段の段（上と片側が露出、下は岩、露出側の反対の斜め上が岩）は面取りを
         //   対角線いっぱいまで伸ばし、階段全体を45度の坂に見せる。自機の描画オフセット
         //   （utils/slope.js）はこの斜辺の上に足が乗るよう向きを合わせてある
-        // - 板状の突出（上下と片側が露出した高さ1の先端）は上下から中心まで面取りし、
-        //   頂点が中心に来るくの字の三角にする
+        // - 板状の突出（上下と片側が露出した高さ1の先端）は、岩に接している辺を底辺に、
+        //   タイルの中心を頂点にした三角にする。切り口の2本が接している側の角から
+        //   中心へ向かうので「上下から面取りして中心で交わるくの字」になり、板の先が尖る
         let rampTL = false, rampTR = false, chevronL = false, chevronR = false;
         if (this.envKind === 'snow') {
             const solid = (rr, cc) => rr >= 0 && rr < this.rows && cc >= 0 && cc < this.cols && this.grid[rr][cc] !== BLOCK_EMPTY;
             if (expTop && expLeft && !expBottom && solid(r - 1, c + 1)) { cTL = S; rampTL = true; }
             else if (expTop && expRight && !expBottom && solid(r - 1, c - 1)) { cTR = S; rampTR = true; }
-            else if (expTop && expBottom && expLeft && !expRight) { cTL = S / 2; cBL = S / 2; chevronL = true; }
-            else if (expTop && expBottom && expRight && !expLeft) { cTR = S / 2; cBR = S / 2; chevronR = true; }
+            else if (expTop && expBottom && expLeft && !expRight) chevronL = true; // 左が露出＝右辺で繋がっている
+            else if (expTop && expBottom && expRight && !expLeft) chevronR = true; // 鏡像
         }
-
-        // くの字の三角のときだけ、側面の頂点をタイルの**中心**へ寄せる。
-        // 汎用の面取りの列挙だと辺の中点（x, y+S/2）になり、頂点が中心に来ない。
-        // 中心へ寄せると上下の面取り線と1本に揃うので、先端は半タイルぶん引っ込んだ
-        // 縦の切り口になる（＝板の先が細くならずに短くなる）。実機の見えを優先した選択
-        const sideLX = chevronL ? x + S / 2 : x;
-        const sideRX = chevronR ? x + S / 2 : x + S;
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
         const notchTL = !expTop && !expLeft && r > 0 && c > 0 && this.grid[r - 1][c - 1] === BLOCK_EMPTY;
@@ -1172,15 +1166,22 @@ export class Map {
         // 1. 面取り多角形でベース塗り（時計回りで頂点列挙）
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(x + cTL, y);           // 上辺：左端（TL面取り分だけ右へ）
-        ctx.lineTo(x + S - cTR, y);           // 上辺：右端
-        if (cTR) ctx.lineTo(sideRX, y + cTR); // TR面取り斜線
-        ctx.lineTo(sideRX, y + S - cBR);       // 右辺：下端
-        if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
-        ctx.lineTo(x + cBL, y + S);       // 下辺：左端
-        if (cBL) ctx.lineTo(sideLX, y + S - cBL); // BL面取り斜線
-        ctx.lineTo(sideLX, y + cTL);     // 左辺：上端
-        if (cTL) ctx.lineTo(x + cTL, y);     // TL面取り斜線（→ closePath と一致）
+        if (chevronL || chevronR) {
+            // 板の先端だけは面取りの列挙では書けない（頂点が辺の上ではなく中心にある）。
+            // 接している辺を底辺にした三角を直接引く
+            if (chevronL) { ctx.moveTo(x + S, y); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S / 2, y + S / 2); }
+            else { ctx.moveTo(x, y); ctx.lineTo(x + S / 2, y + S / 2); ctx.lineTo(x, y + S); }
+        } else {
+            ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
+            ctx.lineTo(x + S - cTR, y);              // 上辺：右端
+            if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
+            ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
+            if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
+            ctx.lineTo(x + cBL, y + S);              // 下辺：左端
+            if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
+            ctx.lineTo(x, y + cTL);                  // 左辺：上端
+            if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
+        }
         ctx.closePath();
 
         ctx.fillStyle = style.fill;
