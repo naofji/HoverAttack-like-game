@@ -190,11 +190,13 @@ export class Map {
         if (this.envKind === 'water') this._generateWater();
 
         // Step 9c: 雪の面の階段（派生ストリーム）。exposedAtGen を記録する前に盛るので
-        // 段の上面にも雪が積もる
+        // 段の上面にも雪が積もる。開始の部屋・基地の部屋は水と同じ除外矩形で弾く
+        // （レビュー指摘: 除外せずに実装すると、開始直後や基地の部屋に階段が生えうる）
         this.stairs = [];
         if (this.envKind === 'snow') {
             this.stairs = carveSnowStairs({
                 grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols, rooms: this.rooms,
+                excludeRects: this._reservedRects(),
                 rng: new SeededRNG((this.game.rng.state ^ 0x51A1E5) >>> 0),
                 count: SNOW_STAIRS_COUNT, lengthMin: SNOW_STAIRS_LENGTH_MIN, lengthRange: SNOW_STAIRS_LENGTH_RANGE,
             });
@@ -240,13 +242,19 @@ export class Map {
         );
     }
 
-    _generateWater() {
-        const rng = new SeededRNG((this.game.rng.state ^ 0x5DEECE66) >>> 0);
+    // 開始の部屋・基地の部屋を避けるための矩形。水（_generateWater）と雪の階段
+    // （carveSnowStairs）の両方が使う。別々に計算すると数値がずれて食い違う恐れがある
+    // ため、値をここ1箇所にまとめる（レビュー指摘で追加）。
+    _reservedRects() {
         const b = this.enemyBaseCenter;
-        const excludeRects = [
+        return [
             { r0: 0, r1: 3 + 16 + 2, c0: 0, c1: 3 + 20 + 2 },
             { r0: b.r - 12, r1: b.floorR + 2, c0: b.c - 10, c1: this.cols - 1 },
         ];
+    }
+    _generateWater() {
+        const rng = new SeededRNG((this.game.rng.state ^ 0x5DEECE66) >>> 0);
+        const excludeRects = this._reservedRects();
         const pools = generateWaterPools({
             grid: this.grid, rows: this.rows, cols: this.cols, rooms: this.rooms, excludeRects, rng,
             count: WATER_POOL_COUNT, depthMin: WATER_POOL_DEPTH_MIN, depthRange: WATER_POOL_DEPTH_RANGE,
