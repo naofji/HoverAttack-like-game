@@ -315,6 +315,20 @@
 | 7 | 遠景の機械の密度と色 | `CaveBackdrop._drawMachineDecor` のモジュール定数 |
 | デモ | 面別ランキング・面セレクト・タイトルの重ねの薄さ | `DEMO_OVERLAY_ALPHA_SCALE` |
 
+### 第2ラウンド（2026-09-05 の実機指摘への対応）
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 4 | 波の細かさと水面の線の淡さ、しぶきの波紋の穏やかさ | `WATER_WAVE_LENGTH`（24）`WATER_WAVE_AMPLITUDE`（1.5）`WATER_SURFACE_LINE_WIDTH`（1）`WATER_SURFACE_COLOR` `WATER_RIPPLE_MAX`（2.5） |
+| 5 | 雪が岩の奥（遠景と地形の間）で降っているか。灰色の粒が弾と見分けられるか | `SNOW_COLOR`（#8A9098）`SNOW_LAYERS`（粒径 1〜2px） |
+| 5 | 滑りの長さ | `ICE_SLIDE`（0.94） |
+| 5 | 階段が45度の坂に見えるか。板状の突出が中心で交わるくの字か。坂の斜辺の積雪の帯の太さ | `Map._drawRockyBlock` の雪の分岐、`SNOW_CAP_THICKNESS` |
+| 5 | 坂の上で自機の足が斜辺に乗っているか（描画オフセットの向きを反転した） | `utils/slope.js` の `slopeDrawOffset` |
+| 6 | 霧が雲形に見えるか、濃淡のムラ、雲の大きさと横長さ | `FOG_BLOB_COUNT` `FOG_BLOB_RADIUS_MIN/RANGE` `FOG_BLOB_ASPECT` `FOG_BLOB_ALPHA_MIN/RANGE` |
+| 5〜7 | 遠景の装飾が前景より目立たないか（全装飾色を前景の輝度の 0.45 倍以下に落とした） | `CaveBackdrop.js` の `_drawRockBand`（雪のハイライト）`_drawWetDecor` `_drawMachineDecor` |
+
+7面の地形タイルを人工物のパターンにする件は、要塞化の設計（別計画）で扱う。
+
 ### 計測
 
 雪の面（5面）と霧の面（6面）で1回ずつ。2026-08-16 と同じ方式で JSON に吐く:
