@@ -442,7 +442,7 @@ export class EnemyDrone {
 
         // 水には入らない。次の位置の底が水なら、水面の1つ上で止める
         // （水中の自機を水面すれすれで待つ形になる。設計どおり）
-        if (this.vy > 0 && map.isWaterAtPixel) {
+        if (this.vy > 0) {
             const nextBottom = this.y + this.height + this.vy;
             if (map.isWaterAtPixel(this.x + this.width / 2, nextBottom)) {
                 const surfaceY = Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
