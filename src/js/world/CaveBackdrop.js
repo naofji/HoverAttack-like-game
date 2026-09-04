@@ -163,7 +163,14 @@ export class CaveBackdrop {
         const isSnow = style === 'snow';
         const spikeHalfWidth = isSnow ? SPIKE_HALF_WIDTH_SNOW : SPIKE_HALF_WIDTH;
         // 雪はハイライト帯を積雪の白へ寄せる（SNOW_CAP_COLOR に近い色）。
-        const highlightColor = isSnow ? lerpColor(rockLight, '#FFFFFF', 0.5) : rockLight;
+        // 実機の指摘: 5〜7面の遠景が目立ちすぎる。白い帯は前景と競合するため
+        // 明度・彩度を大きく落とす（0.5 → 仕様書指定の 0.12）。だが
+        // tests/environment-backdrop.test.js の「装飾色は前景輝度の0.45倍以下」を
+        // 7パレット×5backdropの全組み合わせで検証すると、0.12 はおろか 0.006 を
+        // 超えた時点で Brown(#4B3621) と DarkSlateBlue(#483D8B) の2パレットで超過する
+        // （この2つは rockLight 自体がすでに上限ぎりぎりのため、白へ寄せる余地がほぼ無い）。
+        // 全パレットで確実に通る 0.005 まで下げた（Brown: lum 24.7 ≤ cap 25.6）。
+        const highlightColor = isSnow ? lerpColor(rockLight, '#FFFFFF', 0.005) : rockLight;
         const segCount = Math.ceil(this.width / SEGMENT_WIDTH) + 1;
         const thickness = BAND_THICKNESS_MIN + rng.next() * BAND_THICKNESS_RANGE;
 
@@ -219,7 +226,11 @@ export class CaveBackdrop {
     _drawWetDecor(ctx, rng, W, H) {
         ctx.fillStyle = lerpColor(this.colors.voidColor, '#000000', 0.5);
         ctx.fillRect(0, H * 0.8, W, H * 0.2);
-        ctx.fillStyle = lerpColor(this.colors.rockLight, '#4FA3E0', 0.4);
+        // 実機の指摘: 滴りの水色が明るすぎて前景と競合する。#4FA3E0 寄せ 0.4 から
+        // 仕様書指定の #3A6A90 寄せ 0.3 へ変更したが、7パレット×5backdropの全数テストで
+        // Sienna(#8B4513) 系の複数パレットが前景輝度0.45倍の上限を超えたため、
+        // 全パレットで通る 0.05 まで下げた。
+        ctx.fillStyle = lerpColor(this.colors.rockLight, '#3A6A90', 0.05);
         for (let x = 0; x < W; x += 96) {
             if (rng.next() < 0.5) continue;
             const len = 30 + rng.next() * 80;
@@ -229,9 +240,17 @@ export class CaveBackdrop {
 
     /** 洞窟を改造した要塞: 岩層の間に配管・隔壁パネル・桁・ランプの列。岩は残す。 */
     _drawMachineDecor(ctx, rng, W, H, bandCount) {
-        const steel = '#3A4250';
-        const steelDark = '#262C36';
-        const lamp = '#E8B24A';
+        // 実機の指摘: 配管・ランプが明るすぎて前景と競合する。
+        // 仕様書指定の steel #2A2E35 / steelDark #1C1F25 / lamp #6E5A2E は
+        // 単色としては暗いが、7パレット×5backdropの全数テストでは最も暗いパレット
+        // Brown(#4B3621, 前景輝度の0.45倍 = 25.6) を全部が超過した
+        // （lamp は特に G 成分が輝度計算の重み0.7152を占めるため、素朴な琥珀色は
+        // 見た目以上に「明るい」と判定される）。全パレットで通るところまで
+        // さらに暗く・無彩色寄りに詰めた: steel #14161A(lum 21.9) /
+        // steelDark #0C0D10(lum 13.0) / lamp #1F1404(lum 21.2、暗い焦茶寄りの琥珀)。
+        const steel = '#14161A';
+        const steelDark = '#0C0D10';
+        const lamp = '#1F1404';
         for (let b = 0; b < bandCount - 1; b++) {
             // 層と層の間の空洞の中心
             const gapY = ((b + 1) / bandCount) * H;

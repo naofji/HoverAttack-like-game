@@ -51,3 +51,18 @@ test('Map passes the stage backdrop to CaveBackdrop', async () => {
   const map = new Map({ rng: new SeededRNG(3) }, 6); // 7面
   assert.equal(map.backdrop.backdrop, 'machine');
 });
+
+test('backdrop decoration colours never compete with the foreground (≤ 0.45 × palette luminance)', async () => {
+  const { CaveBackdrop } = await import('../src/js/world/CaveBackdrop.js');
+  const { STAGE_PALETTES, ENV_BACKDROPS } = await import('../src/js/utils/Constants.js');
+  const lum = (hex) => { const s = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16)).reduce((a, b, i) => a + b * [0.2126, 0.7152, 0.0722][i], 0); };
+  for (const backdrop of ENV_BACKDROPS) {
+    for (const palette of STAGE_PALETTES) {
+      new CaveBackdrop(2400, 1200, palette.fill, new SeededRNG(3), backdrop);
+      const used = new Set(fills(lastCtx).filter((c) => typeof c === 'string' && c.startsWith('#')));
+      for (const c of used) {
+        assert.ok(lum(c) <= lum(palette.fill) * 0.45, `${backdrop}/${palette.fill}: ${c} (${lum(c).toFixed(1)}) too bright`);
+      }
+    }
+  }
+});
