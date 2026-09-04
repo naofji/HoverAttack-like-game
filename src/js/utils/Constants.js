@@ -894,11 +894,13 @@ export const WATER_POOL_DEPTH_RANGE = 2;    // 3〜5段（depthMin + floor(rng*(
 export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
 // 地底湖の描画。塗りは半透明（機体が水の色をかぶる）。水面は区間ごとに sin で上下。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
-export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.9)';
-export const WATER_WAVE_AMPLITUDE = 2.5;    // px。当たり判定は波打たない
-export const WATER_WAVE_LENGTH = 48;        // px。3タイル
+export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
+export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
+export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない
+export const WATER_WAVE_LENGTH = 24;        // 実機: 波を細かく（48 → 24。1.5 タイル）
 export const WATER_WAVE_SPEED = 0.05;       // rad/frame
 export const WATER_RIPPLE_DECAY = 0.94;     // しぶきが落ちた場所の波の減衰（毎フレーム）
+export const WATER_RIPPLE_MAX = 2.5;        // しぶきの波紋の強さの上限（実機: 爆発の波動は穏やかに。6 → 2.5）
 export const WATER_RIPPLE_MIN = 0.2;        // これ未満になった波紋は捨てる
 // しぶき。粒の数は |vy| に比例（速く落ちるほど盛大）。
 export const SPLASH_PARTICLES_PER_VY = 3;

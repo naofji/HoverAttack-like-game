@@ -62,3 +62,19 @@ test('ripples fade every update', async () => {
   env.update();
   assert.ok(Math.abs(env.renderer.ripples[0].strength - s0 * WATER_RIPPLE_DECAY) < 1e-9);
 });
+
+test('surface line is thin and the wave is fine', async () => {
+  const { WATER_WAVE_LENGTH, WATER_WAVE_AMPLITUDE, WATER_SURFACE_LINE_WIDTH } = await import('../src/js/utils/Constants.js');
+  // 実機の指摘: 波は細かく、線は細く淡く。設計時の 48 / 2.5 / 2 から下げた値を固定する
+  assert.ok(WATER_WAVE_LENGTH <= 24, `wave length ${WATER_WAVE_LENGTH}`);
+  assert.ok(WATER_WAVE_AMPLITUDE <= 1.5, `amplitude ${WATER_WAVE_AMPLITUDE}`);
+  assert.equal(WATER_SURFACE_LINE_WIDTH, 1);
+
+  const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
+  const game = { map: mapWithPool(), enemies: [], projectiles: [], enemyBullets: [], particles: [], player: null, carrier: null };
+  const env = new StageEnvironment(game, 3);
+  const ctx = makeFakeCtx();
+  env.drawOverWorld(ctx, 0, 0);
+  const widths = ctx.calls.filter((c) => c.name === 'set:lineWidth').map((c) => c.args[0]);
+  assert.deepEqual(widths, [WATER_SURFACE_LINE_WIDTH]);
+});

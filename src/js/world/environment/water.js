@@ -9,7 +9,7 @@
 
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
-    WATER_FILL, WATER_SURFACE_COLOR, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
+    WATER_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
     WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
 } from '../../utils/Constants.js';
 
@@ -32,7 +32,7 @@ export function surfaceOffset(x, t, ripples) {
 /** 水面の線を x0..x1 に描く。8px 刻みの折れ線。 */
 export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
     ctx.strokeStyle = WATER_SURFACE_COLOR;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = WATER_SURFACE_LINE_WIDTH;
     ctx.beginPath();
     for (let x = x0; x <= x1; x += 8) {
         const y = surfaceY + surfaceOffset(x, t, ripples);
@@ -94,10 +94,10 @@ export function createWaterRenderer(env) {
 
             // 水面。画面内の区間だけを1本のパスにまとめる（区間ごとに stroke しない）
             ctx.strokeStyle = WATER_SURFACE_COLOR;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = WATER_SURFACE_LINE_WIDTH;
             ctx.beginPath();
             for (const s of surfaces.values()) {
-                // 波紋(最大6)+波(2.5px)で水面は最大8.5px動くので、カリング余白は12に広げてある
+                // 波紋(最大2.5)+波(1.5px)で水面は最大4px動くので、カリング余白は十分に広げてある
                 if (s.x1 < camX || s.x0 > camX + CANVAS_WIDTH || s.y < camY - 12 || s.y > camY + CANVAS_HEIGHT + 12) continue;
                 for (let x = s.x0; x <= s.x1; x += 8) {
                     const y = s.y + surfaceOffset(x, this.t, this.ripples);

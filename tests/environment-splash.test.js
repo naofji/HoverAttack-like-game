@@ -58,3 +58,12 @@ test('a null game does not throw when the environment is water', () => {
   const env = new StageEnvironment(null, 3);
   assert.doesNotThrow(() => env.update());
 });
+
+test('ripple strength is capped at WATER_RIPPLE_MAX', async () => {
+  const { WATER_RIPPLE_MAX } = await import('../src/js/utils/Constants.js');
+  const ripples = [];
+  const game = { particles: [], env: { renderer: { addRipple: (x, s) => ripples.push(s) } } };
+  SpawnEffects.spawnSplash.call(game, 10, 100, 50);
+  assert.deepEqual(ripples, [WATER_RIPPLE_MAX]);
+  assert.ok(WATER_RIPPLE_MAX <= 2.5);
+});

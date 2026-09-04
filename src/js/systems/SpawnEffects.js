@@ -9,7 +9,7 @@
 // settingsFlow.js と同じく **Object.assign で Game に混ぜる前提**の
 // オブジェクトリテラルで、`this` は Game を指す。
 
-import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY } from '../utils/Constants.js';
+import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY, WATER_RIPPLE_MAX } from '../utils/Constants.js';
 import { createExplosion, createSparks, SplashParticle, SnowKickParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
@@ -79,7 +79,7 @@ export const SpawnEffects = {
             this.particles.push(new SplashParticle(x, surfaceY, Math.cos(a) * s, Math.sin(a) * s));
         }
         const r = this.env && this.env.renderer;
-        if (r && r.addRipple) r.addRipple(x, Math.min(6, Math.abs(vy)));
+        if (r && r.addRipple) r.addRipple(x, Math.min(WATER_RIPPLE_MAX, Math.abs(vy)));
     },
 
     /**
