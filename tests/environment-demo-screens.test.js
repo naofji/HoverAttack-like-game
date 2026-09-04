@@ -36,6 +36,19 @@ test('stage ranking screen for stage 6 draws the fog overlay thinned for the dem
   sr.drawStageRankings(ctx, 5, { local: { time: [], score: [] }, global: { time: [], score: [] } }, STAGE_PALETTES[5]);
   const alphas = ctx.calls.filter((c) => c.name === 'set:globalAlpha').map((c) => c.args[0]);
   assert.ok(alphas.some((a) => Math.abs(a - FOG_OVERLAY_ALPHA * DEMO_OVERLAY_ALPHA_SCALE) < 1e-9), 'fog overlay missing');
+
+  // 見出しと表は霧より後（＝上）に描く。手前に文字、奥に霧という重なりを
+  // 維持する — 逆だと文字が霧の下に沈んで読めなくなる（レビュー指摘）。
+  const drawImageIndices = ctx.calls
+    .map((c, i) => (c.name === 'drawImage' ? i : -1))
+    .filter((i) => i >= 0);
+  const lastOverlayIndex = drawImageIndices[drawImageIndices.length - 1];
+  const firstTierHeadingIndex = ctx.calls.findIndex(
+    (c) => c.name === 'fillText' && c.args[0] === '▌ LOCAL — THIS DEVICE',
+  );
+  assert.ok(lastOverlayIndex >= 0, 'overlay drawImage missing');
+  assert.ok(firstTierHeadingIndex >= 0, 'LOCAL tier heading missing');
+  assert.ok(lastOverlayIndex < firstTierHeadingIndex, 'overlay must be drawn before (under) the tier heading text');
 });
 
 test('stage ranking screen for stage 1 draws no environment overlay', () => {

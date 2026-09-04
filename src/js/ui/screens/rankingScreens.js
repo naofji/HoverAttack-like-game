@@ -255,6 +255,9 @@ export const RankingScreens = {
         // Scene strip (full width)
         drawStageScene(ctx, 40, L.sceneTop, W - 80, L.sceneHeight, stageIndex, palette, Date.now());
 
+        // 文字の上に霧や雪が乗らないよう、シーン帯の直後（見出しと表の前）に重ねる（本編の「HUD の直前」と同じ関係）。
+        this._drawDemoEnvironment(ctx, stageIndex);
+
         const local = stageData.local || { time: [], score: [] };
         const global = stageData.global || { time: [], score: [] };
         // 上段は手元の記録なので、通信の成否に関わらず「まだ無い」しかない。
@@ -268,8 +271,6 @@ export const RankingScreens = {
             label: '◍ GLOBAL — WORLDWIDE 🌐', labelColor: TIER.global.title,
             data: global, accent, emptyText: stageData.online ? 'NO RECORDS YET' : 'OFFLINE',
         });
-
-        this._drawDemoEnvironment(ctx, stageIndex);
 
         drawScanlines(ctx, canvas.width, canvas.height);
 
