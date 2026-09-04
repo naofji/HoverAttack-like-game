@@ -7,14 +7,13 @@ import {
     PLAYER_HEIGHT, PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED,
     LANDING_MIN_AIRBORNE_FRAMES, HOVER_MAX_FUEL, HOVER_FUEL_RECOVERY,
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
-    ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN, ATTACKER_HEAVY_DROP_CHANCE,
-    ATTACKER_RIVAL_DROP_CHANCE, ATTACKER_ARTILLERY_DROP_CHANCE,
+    ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
 } from '../utils/Constants.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { OverdriveKit } from './OverdriveKit.js';
-import { overdriveDropChance } from '../utils/drops.js';
+import { decideAttackerDrop } from '../utils/drops.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -54,6 +53,11 @@ export class EnemyAttacker {
         // CollisionManager が敵の種類を知らずに読めるよう、config ではなく
         // インスタンスの属性として持たせている
         this.mgDamageMult = config.mgDamageMult ?? 1;
+        // 撃破ドロップはスポーンした瞬間に確定させる（ユーザーの要望: 戦略性を
+        // 高めるため、同じ週なら何度遊んでも同じ場所に同じ物が置かれるように
+        // したい）。die() の時点で乱数を引くと、倒す順番やタイミングで結果が
+        // 変わってしまい「配置を覚えて狙う」という戦略が成立しない。
+        this.dropKind = decideAttackerDrop(game, x, y, config.name);
         this.maxHp = this.hp;
         this.maxSpeed = config.speed;
         this.jumpForce = config.jumpForce;
@@ -248,20 +252,23 @@ export class EnemyAttacker {
         const cy = this.y + this.height / 2;
         this.game.addScore(this.score);
 
-        // ドロップ率は Constants.js に置いてある（ATTACKER_*_DROP_CHANCE）。
-        // ライバルは 1.0 ＝ 倒せば必ずリペアキットが出る
-        if (this.config.name === 'heavy' && Math.random() < ATTACKER_HEAVY_DROP_CHANCE) {
-            // 内訳だけを分ける。外れても満タン補給として役に立つので、
-            // 「レア版じゃなかった」でがっかりして終わらない
-            const rare = Math.random() < overdriveDropChance(this.game.missionsCompleted);
-            const Kit = rare ? OverdriveKit : MissileKit;
-            this.game.missileKits.push(new Kit(this.game, cx, this.y));
-        }
-        if (this.config.name === 'rival' && Math.random() < ATTACKER_RIVAL_DROP_CHANCE) {
-            this.game.repairKits.push(new RepairKit(this.game, cx, this.y));
-        }
-        if (this.config.name === 'artillery' && Math.random() < ATTACKER_ARTILLERY_DROP_CHANCE) {
-            this.game.autoAimUnits.push(new AutoAimUnit(this.game, cx, this.y));
+        // ドロップの中身はスポーン時（decideAttackerDrop）で既に確定している。
+        // ここでは乱数を一切引かず、決まった物を出すだけ
+        switch (this.dropKind) {
+            case 'missile':
+                this.game.missileKits.push(new MissileKit(this.game, cx, this.y));
+                break;
+            case 'overdrive':
+                this.game.missileKits.push(new OverdriveKit(this.game, cx, this.y));
+                break;
+            case 'repair':
+                this.game.repairKits.push(new RepairKit(this.game, cx, this.y));
+                break;
+            case 'autoaim':
+                this.game.autoAimUnits.push(new AutoAimUnit(this.game, cx, this.y));
+                break;
+            default:
+                break;
         }
     }
 

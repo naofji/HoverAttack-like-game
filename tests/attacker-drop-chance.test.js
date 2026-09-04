@@ -6,21 +6,27 @@ import {
   ENEMY_ATTACKER_TYPES, DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, PLAYER_MG_BURST_SIZE,
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
+import { rollAttackerDrop } from '../src/js/utils/drops.js';
 
 const FLOOR_Y = 20 * 16 - 24;
 
-/** Math.random を固定して die() を回す。確率の境界を跨いだかどうかだけを見る。 */
-function dieWith(typeKey, roll) {
+/**
+ * ドロップは decideAttackerDrop がスポーン時に決めるようになったので、
+ * ここでは rollAttackerDrop（純関数）にスタブの rng を渡して確率の境界を確かめる。
+ * die() 自体はもう乱数を引かないので、境界テストの主役ではなくなった
+ * （die() が dropKind どおりに出すことは overdrive-kit.test.js 側で見る）。
+ */
+function rollWith(typeKey, roll, missionsCompleted) {
+  return rollAttackerDrop(typeKey, missionsCompleted, { next: () => roll });
+}
+
+/** die() が dropKind をそのまま出すことだけを見る（乱数は使わない）。 */
+function dieWithKind(typeKey, dropKind) {
   const game = makeGame(makeMap(flatFloorRows()));
   game.spawnDebris = () => { }; // die() は破壊演出を通る。共有ヘルパーには生えていない
   const e = makeAttacker(game, 64, FLOOR_Y, typeKey);
-  const original = Math.random;
-  Math.random = () => roll;
-  try {
-    e.die();
-  } finally {
-    Math.random = original;
-  }
+  e.dropKind = dropKind;
+  e.die();
   return game;
 }
 
@@ -40,24 +46,34 @@ test('artillery のドロップ率は据え置き', () => {
 
 test('ライバルは倒せば必ずリペアキットを落とす', () => {
   // 100% なので、最も外れやすい出目でも落ちること
-  const game = dieWith('rival', 0.999999);
+  assert.equal(rollWith('rival', 0.999999), 'repair');
+  const game = dieWithKind('rival', 'repair');
   assert.equal(game.repairKits.length, 1, 'リペアキットが落ちていない');
 });
 
 test('heavy は出目次第でミサイルキットを落とす', () => {
-  assert.equal(dieWith('heavy', 0.5).missileKits.length, 1);
-  assert.equal(dieWith('heavy', 0.7).missileKits.length, 0);
+  assert.equal(rollWith('heavy', 0.5, 0), 'missile');
+  assert.equal(rollWith('heavy', 0.7, 0), null);
+  assert.equal(dieWithKind('heavy', 'missile').missileKits.length, 1);
 });
 
 test('artillery は出目次第でオートエイムユニットを落とす（率は変えていない）', () => {
-  assert.equal(dieWith('artillery', 0.4).autoAimUnits.length, 1);
-  assert.equal(dieWith('artillery', 0.6).autoAimUnits.length, 0);
+  assert.equal(rollWith('artillery', 0.4), 'autoaim');
+  assert.equal(rollWith('artillery', 0.6), null);
+  assert.equal(dieWithKind('artillery', 'autoaim').autoAimUnits.length, 1);
 });
 
 test('ライバルはミサイルキットもオートエイムも落とさない', () => {
-  const game = dieWith('rival', 0.1);
+  const game = dieWithKind('rival', 'repair');
   assert.equal(game.missileKits.length, 0);
   assert.equal(game.autoAimUnits.length, 0);
+});
+
+test('rollAttackerDrop は該当しない型では乱数を引かずに null を返す', () => {
+  let calls = 0;
+  const rng = { next: () => { calls++; return 0; } };
+  assert.equal(rollAttackerDrop('standard', 0, rng), null);
+  assert.equal(calls, 0, '型に該当しないのに乱数を消費している');
 });
 
 // ------------------------------------------

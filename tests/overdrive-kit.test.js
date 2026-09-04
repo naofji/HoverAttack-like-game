@@ -10,10 +10,11 @@ import { OverdriveKit } from '../src/js/entities/OverdriveKit.js';
 import { Player } from '../src/js/entities/Player.js';
 import {
   MISSILE_INITIAL_COUNT, OVERDRIVE_DURATION, OVERDRIVE_MAX_DURATION,
-  ATTACKER_HEAVY_DROP_CHANCE, ATTACKER_HEAVY_OVERDRIVE_CHANCE,
+  ATTACKER_HEAVY_OVERDRIVE_CHANCE,
   ATTACKER_HEAVY_OVERDRIVE_CHANCE_LATE, OVERDRIVE_LATE_MISSION,
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
+import { rollAttackerDrop } from '../src/js/utils/drops.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS } from '../src/js/audio/weaponSounds.js';
@@ -110,52 +111,48 @@ test('アイコンを描く（真っ黒のまま出ない）', () => {
 // ------------------------------------------
 
 /**
- * Math.random を固定して die() を回す（既存の attacker-drop-chance.test.js と同じ形）。
- *
- * 出目を「列」で与えないのは、die() が先に破壊演出を回して Math.random を
- * 何度も消費するから。何番目の引きが確率判定に当たるかは当てにできない。
- * 固定なら「落とすか」も「レア版か」も同じ出目としきい値の比較になる。
+ * dropKind を直接与えて die() を回す（決定は decideAttackerDrop がスポーン時に
+ * 済ませている前提なので、ここでは die() が dropKind どおりの物を出すことだけを見る）。
  */
-function dieWith(roll, missionsCompleted = 0) {
+function dieWithKind(dropKind) {
   const game = makeGame(makeMap(flatFloorRows()));
-  game.missionsCompleted = missionsCompleted;
   game.spawnDebris = () => { };
   const e = makeAttacker(game, 64, FLOOR_Y, 'heavy');
-  const original = Math.random;
-  Math.random = () => roll;
-  try {
-    e.die();
-  } finally {
-    Math.random = original;
-  }
+  e.dropKind = dropKind;
+  e.die();
   return game;
 }
 
+/** 固定した出目の列を返す rng スタブ（rollAttackerDrop は heavy で最大2回引く）。 */
+function stubRng(...rolls) {
+  let i = 0;
+  return { next: () => rolls[i++] };
+}
+
 test('レア版に当たるとオーバードライブキットが落ちる', () => {
-  const game = dieWith(ATTACKER_HEAVY_OVERDRIVE_CHANCE - 0.01);
+  const game = dieWithKind('overdrive');
   assert.equal(game.missileKits.length, 1);
   assert.ok(game.missileKits[0] instanceof OverdriveKit);
 });
 
 test('レア版を外すと通常のミサイルキットが落ちる', () => {
-  const roll = (ATTACKER_HEAVY_OVERDRIVE_CHANCE + ATTACKER_HEAVY_DROP_CHANCE) / 2;
-  const game = dieWith(roll); // ドロップはする／レア版は外す出目
+  const game = dieWithKind('missile');
   assert.equal(game.missileKits.length, 1);
   assert.ok(game.missileKits[0] instanceof MissileKit);
   assert.ok(!(game.missileKits[0] instanceof OverdriveKit), 'レア版が出てしまっている');
 });
 
 test('ドロップ自体を外せば何も落ちない（ドロップ率は変えていない）', () => {
-  assert.equal(dieWith(ATTACKER_HEAVY_DROP_CHANCE + 0.01).missileKits.length, 0);
+  assert.equal(dieWithKind(null).missileKits.length, 0);
 });
 
-test('6面以降はレア版の窓が広い', () => {
+test('6面以降はレア版の窓が広い（rollAttackerDrop の分岐）', () => {
   // 5面までなら外れ、6面以降なら当たる出目
   const roll = (ATTACKER_HEAVY_OVERDRIVE_CHANCE + ATTACKER_HEAVY_OVERDRIVE_CHANCE_LATE) / 2;
-  const early = dieWith(roll, OVERDRIVE_LATE_MISSION - 1);
-  const late = dieWith(roll, OVERDRIVE_LATE_MISSION);
-  assert.ok(!(early.missileKits[0] instanceof OverdriveKit), '5面でレア版が出ている');
-  assert.ok(late.missileKits[0] instanceof OverdriveKit, '6面でレア版が出ていない');
+  const early = rollAttackerDrop('heavy', OVERDRIVE_LATE_MISSION - 1, stubRng(0, roll));
+  const late = rollAttackerDrop('heavy', OVERDRIVE_LATE_MISSION, stubRng(0, roll));
+  assert.equal(early, 'missile', '5面でレア版が出ている');
+  assert.equal(late, 'overdrive', '6面でレア版が出ていない');
 });
 
 test('OverdriveKit は MissileKit を継承している（配列も判定も共用できる）', () => {
