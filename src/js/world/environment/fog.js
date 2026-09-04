@@ -6,14 +6,39 @@
 // 視差付きでずらして drawImage するだけ。最後に全画面を薄く塗る。
 // 砲兵の煙幕はワールド座標で先に描かれているので、この層の下に入って霧に溶ける。
 //
-// 板の中身はフラットな円の重なり。createRadialGradient を毎フレーム作る案は
-// 費用が桁で変わるので採らない（板の生成時にも使わない: 遠景と同じ描画言語）。
+// 板の中身は砲兵の煙幕と同じ瘤の並び（SMOKE_SHAPES）を重ねたもの。フラットな円を
+// 並べると幾何学的に見える（実機の指摘）ので、瘤ごとの放射グラデーションで
+// 有機的な輪郭にし、横に FOG_BLOB_ASPECT 倍潰して雲らしい形にする。
+// createRadialGradient は板の生成時（起動時に一度）だけで、毎フレームは使わない。
 
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT,
     FOG_COLOR, FOG_OVERLAY_ALPHA, FOG_SHEET_WIDTH, FOG_SHEET_HEIGHT, FOG_BLOB_COUNT, FOG_LAYERS,
+    FOG_BLOB_RADIUS_MIN, FOG_BLOB_RADIUS_RANGE, FOG_BLOB_ASPECT, FOG_BLOB_ALPHA_MIN, FOG_BLOB_ALPHA_RANGE,
 } from '../../utils/Constants.js';
 import { SeededRNG } from '../../utils/SeededRNG.js';
+import { SMOKE_SHAPES } from '../../entities/smokeSprites.js';
+import { withAlpha } from '../../utils/color.js';
+
+/**
+ * 雲を1つ描く。瘤（SMOKE_SHAPES の1形）を放射グラデーションで重ねる。
+ * 横方向だけ ctx.scale で潰すので、瘤の座標は正円のまま扱える。
+ */
+function drawCloud(ctx, shape, cx, cy, r, alpha) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(FOG_BLOB_ASPECT, 1);
+    for (const lobe of shape) {
+        const lx = lobe.dx * r, ly = lobe.dy * r, lr = lobe.r * r;
+        const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+        g.addColorStop(0, withAlpha(FOG_COLOR, alpha * lobe.a));
+        g.addColorStop(0.6, withAlpha(FOG_COLOR, alpha * lobe.a * 0.5));
+        g.addColorStop(1, withAlpha(FOG_COLOR, 0));
+        ctx.fillStyle = g;
+        ctx.fillRect(lx - lr, ly - lr, lr * 2, lr * 2);
+    }
+    ctx.restore();
+}
 
 /** 雲の板を1枚描く。端が継ぎ目なく並ぶよう、右端・下端にはみ出す塊は反対側にも描く。 */
 function buildSheet(seed) {
@@ -22,22 +47,19 @@ function buildSheet(seed) {
     canvas.height = FOG_SHEET_HEIGHT;
     const ctx = canvas.getContext('2d');
     const rng = new SeededRNG(seed);
-    ctx.fillStyle = FOG_COLOR;
     for (let i = 0; i < FOG_BLOB_COUNT; i++) {
         const x = rng.next() * FOG_SHEET_WIDTH;
         const y = rng.next() * FOG_SHEET_HEIGHT;
-        const r = 40 + rng.next() * 90;
-        // 濃さは塊ごとに変え、重なりで雲の濃淡を作る
-        ctx.globalAlpha = 0.10 + rng.next() * 0.16;
+        const r = FOG_BLOB_RADIUS_MIN + rng.next() * FOG_BLOB_RADIUS_RANGE;
+        // 濃さは雲ごとに変え、重なりで濃淡のムラを作る
+        const alpha = FOG_BLOB_ALPHA_MIN + rng.next() * FOG_BLOB_ALPHA_RANGE;
+        const shape = SMOKE_SHAPES[i % SMOKE_SHAPES.length];
         for (const dx of [0, -FOG_SHEET_WIDTH, FOG_SHEET_WIDTH]) {
             for (const dy of [0, -FOG_SHEET_HEIGHT, FOG_SHEET_HEIGHT]) {
-                ctx.beginPath();
-                ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
-                ctx.fill();
+                drawCloud(ctx, shape, x + dx, y + dy, r, alpha);
             }
         }
     }
-    ctx.globalAlpha = 1;
     return canvas;
 }
 

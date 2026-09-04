@@ -937,7 +937,14 @@ export const FOG_OVERLAY_ALPHA = 0.22;      // 全画面の薄塗り
 // （drawImage が層×2回で済む。1024×512 だと横2×縦2＝層×4回になる）
 export const FOG_SHEET_WIDTH = 2048;
 export const FOG_SHEET_HEIGHT = 1024;
-export const FOG_BLOB_COUNT = 160;          // 板1枚あたりの雲の塊
+export const FOG_BLOB_COUNT = 220;          // 実機: ムラを増やす（160 → 220。雲は小さくする）
+// 実機の指摘: 円を並べると幾何学的に見える。煙幕と同じ瘤の並び（SMOKE_SHAPES）で
+// 雲形にし、横に押し潰して有機的に見せる
+export const FOG_BLOB_RADIUS_MIN = 18;      // 実機: 小さめ（40〜130 → 18〜60）
+export const FOG_BLOB_RADIUS_RANGE = 42;
+export const FOG_BLOB_ASPECT = 2.0;         // 横長。円だと幾何学的に見える（実機の指摘）
+export const FOG_BLOB_ALPHA_MIN = 0.05;     // 雲ごとの濃さの幅でムラを出す
+export const FOG_BLOB_ALPHA_RANGE = 0.30;
 export const FOG_LAYERS = [
     { speed: 0.12, alpha: 0.30 },
     { speed: 0.28, alpha: 0.22 },

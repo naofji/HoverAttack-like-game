@@ -3,10 +3,15 @@ import assert from 'node:assert/strict';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, FOG_LAYERS, FOG_OVERLAY_ALPHA } from '../src/js/utils/Constants.js';
 
+// buildSheet が作る板ごとの fake ctx を集める（板の生成そのものを検証したいテスト用）。
+// 各テストの冒頭でリセットする。
+let sheets = [];
+
 before(() => {
   globalThis.document = {
     createElement: () => {
       const ctx = makeFakeCtx();
+      sheets.push(ctx);
       return { width: 0, height: 0, getContext: () => ctx, _ctx: ctx };
     },
   };
@@ -45,4 +50,22 @@ test('demo alpha scale thins the fog', async () => {
   env.drawOverlay(ctx, 0.5);
   const alphas = ctx.calls.filter((c) => c.name === 'set:globalAlpha').map((c) => c.args[0]);
   assert.ok(alphas.some((a) => Math.abs(a - FOG_OVERLAY_ALPHA * 0.5) < 1e-9));
+});
+
+test('fog sheets are built from organic smoke-shaped clouds, squashed horizontally', async () => {
+  const { FOG_BLOB_COUNT, FOG_BLOB_ASPECT } = await import('../src/js/utils/Constants.js');
+  const { SMOKE_SHAPES } = await import('../src/js/entities/smokeSprites.js');
+  sheets = [];
+  const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
+  new StageEnvironment(null, 5);
+  assert.ok(sheets.length >= 2, 'two sheets built');
+  for (const s of sheets) {
+    const grads = s.calls.filter((c) => c.name === 'createRadialGradient').length;
+    const minLobes = Math.min(...SMOKE_SHAPES.map((sh) => sh.length));
+    assert.ok(grads >= FOG_BLOB_COUNT * minLobes, `expected ≥ ${FOG_BLOB_COUNT * minLobes} lobes, got ${grads}`);
+    const scales = s.calls.filter((c) => c.name === 'scale');
+    assert.ok(scales.length >= FOG_BLOB_COUNT && scales.every((c) => c.args[0] === FOG_BLOB_ASPECT && c.args[1] === 1));
+    assert.equal(s.calls.filter((c) => c.name === 'arc').length, 0, 'no plain circles');
+  }
+  assert.ok(FOG_BLOB_ASPECT >= 1.8);
 });

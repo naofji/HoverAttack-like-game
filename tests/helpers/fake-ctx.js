@@ -43,12 +43,19 @@ export function makeFakeCtx() {
   }
   // 実物のグラデーションは比較できないので、生成引数とカラーストップを持つ
   // プレーンオブジェクトを返す。fillStyle に代入されると set:fillStyle として記録される。
-  ctx.createRadialGradient = (...args) => ({
-    type: 'radialGradient',
-    args,
-    stops: [],
-    addColorStop(offset, color) { this.stops.push([offset, color]); },
-  });
+  // 生成そのもの（何個作ったか、どんな引数か）を数えるテストがあるので calls にも積む
+  // （霧の板の生成テストなど。従来は fillStyle 経由でしか見えず、生成回数を直接
+  // 検証できなかった）。
+  ctx.createRadialGradient = (...args) => {
+    const grad = {
+      type: 'radialGradient',
+      args,
+      stops: [],
+      addColorStop(offset, color) { this.stops.push([offset, color]); },
+    };
+    calls.push({ name: 'createRadialGradient', args, grad });
+    return grad;
+  };
   // 文字幅の実測は node には無いので、フォントサイズ×文字数の概算を返す。
   // レイアウトが実測幅に依存する箇所（キーキャップの幅、ロゴの拡大率、モード表の
   // 桁揃え）を通すためのもので、px 単位の正しさは求めない。等幅フォント前提の
