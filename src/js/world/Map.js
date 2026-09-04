@@ -15,10 +15,12 @@ import {
     COLOR_CAVE_BG, TILE_SIZE,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES, STAGE_ENVIRONMENTS,
-    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS
+    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
+    WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
+import { generateWaterPools } from './waterPools.js';
 
 
 // --- Map generation constants ---
@@ -82,6 +84,11 @@ export class Map {
         this.enemyDroneSpawns = [];
         this.enemyTurretSpawns = [];
         this.enemyBaseSpawn = null;
+
+        this.water = null;          // Uint8Array(rows*cols)。1 = 水。水の無い面は null のまま
+        this.waterSurface = null;   // Int16Array。水タイルの水面の行。それ以外 -1
+        this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
+        this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
 
         this._generate();
     }
@@ -175,6 +182,10 @@ export class Map {
         // Step 9: Sprinkle hard blocks
         this._placeHardBlocks();
 
+        // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
+        // 開始の部屋（左上 3,3 から 20x16）と基地の部屋は除外
+        if (this.envKind === 'water') this._generateWater();
+
         // Step 10: Determine entity spawn positions
         this.landmineSpawns = this._findLandminePositions();
         this.enemyTankSpawns = this._findEnemyTankPositions();
@@ -202,6 +213,29 @@ export class Map {
             // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
             STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].backdrop,
         );
+    }
+
+    _generateWater() {
+        const rng = new SeededRNG((this.game.rng.state ^ 0x5DEECE66) >>> 0);
+        const b = this.enemyBaseCenter;
+        const excludeRects = [
+            { r0: 0, r1: 3 + 16 + 2, c0: 0, c1: 3 + 20 + 2 },
+            { r0: b.r - 12, r1: b.floorR + 2, c0: b.c - 10, c1: this.cols - 1 },
+        ];
+        const pools = generateWaterPools({
+            grid: this.grid, rows: this.rows, cols: this.cols, rooms: this.rooms, excludeRects, rng,
+            count: WATER_POOL_COUNT, depthMin: WATER_POOL_DEPTH_MIN, depthRange: WATER_POOL_DEPTH_RANGE,
+            maxTiles: WATER_POOL_MAX_TILES,
+        });
+        this.water = new Uint8Array(this.rows * this.cols);
+        this.waterSurface = new Int16Array(this.rows * this.cols).fill(-1);
+        for (const pool of pools) {
+            for (const [r, c] of pool.cells) {
+                this.water[r * this.cols + c] = 1;
+                this.waterSurface[r * this.cols + c] = pool.surfaceRow;
+                this.waterCells.push([r, c]);
+            }
+        }
     }
 
     _generatePlatforms() {
@@ -979,6 +1013,22 @@ export class Map {
     isSolidAtPixel(x, y) {
         if (isNaN(x) || isNaN(y)) return true;
         return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    }
+
+    isWater(r, c) {
+        if (!this.water) return false;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        return this.water[r * this.cols + c] === 1;
+    }
+
+    isWaterAtPixel(x, y) {
+        return this.isWater(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    }
+
+    /** 水タイルの水面の行。水でなければ -1。 */
+    waterSurfaceRow(r, c) {
+        if (!this.isWater(r, c)) return -1;
+        return this.waterSurface[r * this.cols + c];
     }
 
     pixelToTile(x, y) {

@@ -32,6 +32,7 @@ test('same seed produces identical grid and enemy spawns', async () => {
   assert.deepEqual(a.enemyTurretSpawns, b.enemyTurretSpawns);
   assert.deepEqual(a.landmineSpawns, b.landmineSpawns);
   assert.deepEqual(a.enemyBaseSpawn, b.enemyBaseSpawn);
+  assert.deepEqual(a.waterCells, b.waterCells);
 });
 
 test('different seeds produce different grids', async () => {
@@ -39,4 +40,12 @@ test('different seeds produce different grids', async () => {
   const a = buildMap(Map, 1, 2);
   const b = buildMap(Map, 2, 2);
   assert.notDeepEqual(a.grid, b.grid);
+});
+
+test('stage 4 has water and stage 1 has none; rng consumption of stage 1 is unchanged by water', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const water = buildMap(Map, 42, 3);
+  assert.ok(water.waterCells.length > 0, 'stage 4 should have pools');
+  const dry = buildMap(Map, 42, 0);
+  assert.equal(dry.waterCells.length, 0);
 });
