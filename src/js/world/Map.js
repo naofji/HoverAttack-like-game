@@ -17,11 +17,13 @@ import {
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES, STAGE_ENVIRONMENTS,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
-    WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES
+    WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
+    SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
+import { carveSnowStairs } from './snowStairs.js';
 
 
 // --- Map generation constants ---
@@ -186,6 +188,17 @@ export class Map {
         // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
         // 開始の部屋（左上 3,3 から 20x16）と基地の部屋は除外
         if (this.envKind === 'water') this._generateWater();
+
+        // Step 9c: 雪の面の階段（派生ストリーム）。exposedAtGen を記録する前に盛るので
+        // 段の上面にも雪が積もる
+        this.stairs = [];
+        if (this.envKind === 'snow') {
+            this.stairs = carveSnowStairs({
+                grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols, rooms: this.rooms,
+                rng: new SeededRNG((this.game.rng.state ^ 0x51A1E5) >>> 0),
+                count: SNOW_STAIRS_COUNT, lengthMin: SNOW_STAIRS_LENGTH_MIN, lengthRange: SNOW_STAIRS_LENGTH_RANGE,
+            });
+        }
 
         // Step 10: Determine entity spawn positions
         this.landmineSpawns = this._findLandminePositions();

@@ -33,6 +33,7 @@ test('same seed produces identical grid and enemy spawns', async () => {
   assert.deepEqual(a.landmineSpawns, b.landmineSpawns);
   assert.deepEqual(a.enemyBaseSpawn, b.enemyBaseSpawn);
   assert.deepEqual(a.waterCells, b.waterCells);
+  assert.deepEqual(a.stairs, b.stairs);
 });
 
 test('different seeds produce different grids', async () => {
@@ -61,5 +62,17 @@ test('same seed on the water stage produces identical water pools without distur
   const b = buildMap(Map, 42, 3);
   assert.ok(a.waterCells.length > 0, 'water stage should actually have pools to compare');
   assert.deepEqual(a.waterCells, b.waterCells);
+  assert.deepEqual(a.enemyTankSpawns, b.enemyTankSpawns);
+});
+
+// 5面（雪）は水面と同じ理由で別テストが要る（Task 11 の水面の教訓：
+// 非対象の面にしか assertion を足さないと恒真になる）。階段が実際に
+// 1本以上できることと、派生ストリームが敵配置の本流を乱さないことを確かめる。
+test('same seed on the snow stage produces identical stairs without disturbing enemy rng', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const a = buildMap(Map, 42, 4);
+  const b = buildMap(Map, 42, 4);
+  assert.ok(a.stairs.length > 0, 'snow stage should actually have stairs to compare');
+  assert.deepEqual(a.stairs, b.stairs);
   assert.deepEqual(a.enemyTankSpawns, b.enemyTankSpawns);
 });
