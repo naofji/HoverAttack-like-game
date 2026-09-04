@@ -49,3 +49,17 @@ test('stage 4 has water and stage 1 has none; rng consumption of stage 1 is unch
   const dry = buildMap(Map, 42, 0);
   assert.equal(dry.waterCells.length, 0);
 });
+
+// 上の「same seed」テストは missionLevel=2（水無し面）なので waterCells は
+// 常に [] で、_generateWater() 自体の決定性は確かめていない（恒真になっていた）。
+// 水面（missionLevel=3）で2回ビルドし、水タイル自体の再現性と、水生成が
+// 派生ストリームを使っていて game.rng（敵配置に使う本流）を乱していないことを
+// 両方確かめる。
+test('same seed on the water stage produces identical water pools without disturbing enemy rng', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const a = buildMap(Map, 42, 3);
+  const b = buildMap(Map, 42, 3);
+  assert.ok(a.waterCells.length > 0, 'water stage should actually have pools to compare');
+  assert.deepEqual(a.waterCells, b.waterCells);
+  assert.deepEqual(a.enemyTankSpawns, b.enemyTankSpawns);
+});

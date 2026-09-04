@@ -889,7 +889,7 @@ export const FOG_SIGHT_SCALE = 0.5;
 // 地底湖の生成。低い位置のチャンバーを選び、部屋の底から数段を水にする。
 export const WATER_POOL_COUNT = 3;
 export const WATER_POOL_DEPTH_MIN = 3;      // 段（タイル）
-export const WATER_POOL_DEPTH_RANGE = 3;    // 3〜5段
+export const WATER_POOL_DEPTH_RANGE = 2;    // 3〜5段（depthMin + floor(rng*(range+1)) なので range=2）
 export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
 // 地底湖の描画。塗りは半透明（機体が水の色をかぶる）。水面は区間ごとに sin で上下。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';

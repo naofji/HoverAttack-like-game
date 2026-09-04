@@ -1,4 +1,4 @@
-import { test, before } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { generateWaterPools } from '../src/js/world/waterPools.js';
