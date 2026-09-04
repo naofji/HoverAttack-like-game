@@ -290,3 +290,34 @@
 - 母艦の浮力、水の流体挙動（水位の変化・流れ込み）、霧の濃淡のムラ
 - 環境の効果音
 - 週替わりの環境
+
+---
+
+## 実装後の確認
+
+**ハードリロード（Cmd+Shift+R）が必要。** `index.html` が `main.js?v=1.0` とクエリでキャッシュを効かせているため。
+
+### 確認する面と見るポイント
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 4 | 水の色と濃さ、水面の波、しぶきの量、水中の重さ | `WATER_FILL` `WATER_WAVE_AMPLITUDE` `SPLASH_PARTICLES_PER_VY` `WATER_SPEED_SCALE` `WATER_GRAVITY_SCALE` |
+| 4 | 斜面の描画オフセット（自機が段を離れた瞬間に 0 へ戻るので跳ねて見えるか） | `Player.js` の `drawOffsetY`（`utils/slope.js` の `slopeDrawOffset`）|
+| 5 | 降雪の密度と速さ、積雪の帯の厚み、滑りの気持ちよさ、斜面の見え方 | `SNOW_LAYERS` `SNOW_CAP_THICKNESS` `ICE_SLIDE` `SLOPE_DOWNHILL_ACCEL` `SLOPE_UPHILL_SCALE` |
+| 5 | 斜面の下り吸着の猶予（浮いた直後に段へ吸着する範囲。広すぎると1段の崖でも吸着する） | `SLOPE_SNAP_COYOTE`（今 6。1〜2 で足りるので、違和感があれば 3 へ）|
+| 5 | 遠景の積雪の帯の明るさ（岩の輝度上限をわざと超えている） | `CaveBackdrop.js` の `_drawRockBand` の `lerpColor(rockLight, '#FFFFFF', 0.5)` |
+| 6 | 霧の濃さ、煙幕との見分けにくさ、索敵の縮み | `FOG_OVERLAY_ALPHA` `FOG_LAYERS` `FOG_SIGHT_SCALE` |
+| 6 | 遠景が霧で溶けているか（輝度テストの都合で寄せは 0.06 と弱い。物足りなければ寄せ方を変える） | `CaveBackdrop.js` の `BACKDROP_TINT.fog.k` |
+| 7 | 遠景の機械の密度と色 | `CaveBackdrop._drawMachineDecor` のモジュール定数 |
+| デモ | 面別ランキング・面セレクト・タイトルの重ねの薄さ | `DEMO_OVERLAY_ALPHA_SCALE` |
+
+### 計測
+
+雪の面（5面）と霧の面（6面）で1回ずつ。2026-08-16 と同じ方式で JSON に吐く:
+
+- フレーム間隔と描画+更新の時間を配列に積む
+- 終了時に JSON をダウンロード
+- 画面には出さない
+- 見る値は p99 と max のフレーム間隔、描画時間の平均
+- 8.4% から倍以内なら合格
+- **計測用の一時コードは commit しない（`git add -p` で除く）**
