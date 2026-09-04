@@ -20,7 +20,7 @@ import {
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
-import { generateWaterPools } from './waterPools.js';
+import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
 
 
 // --- Map generation constants ---
@@ -826,6 +826,8 @@ export class Map {
         if (this.blockHP[r][c] <= 0) {
             this.grid[r][c] = BLOCK_EMPTY;
             this.blockHP[r][c] = 0;
+            // 水面より下で水に接していれば、壊れた跡が即座に水で埋まる
+            if (this.water) fillDestroyedCells(this, [[r, c]]);
             this.invalidateTileRegion(r, c);
             return true;
         }
@@ -876,8 +878,16 @@ export class Map {
                 }
             }
         }
+        // 同時に壊れたクレーターは、水に接する破壊跡から順にまとめて埋める
+        // (damageBlock は1セルずつしか流入を試さないため、クレーターの奥まで届かない)
+        if (this.water && destroyed.length) {
+            fillDestroyedCells(this, destroyed.map(({ r, c }) => [r, c]));
+        }
         return destroyed;
     }
+
+    /** 水になったセルの通知フック（Task 13 で描画キャッシュの更新を差し込む）。 */
+    onWaterChanged(cells) {}
 
     // ------------------------------------------
     // Tile Render Cache
