@@ -82,6 +82,46 @@ test('the mirrored stair step cuts the top-right corner instead', async () => {
   assert.ok(pts.every(([px, py]) => py !== y || px === x), `top edge must be gone: ${JSON.stringify(pts)}`);
 });
 
+/** 小さい面取り（4..9px）のままであること = 坂にされていないこと。 */
+function assertSmallChamfer(pts, x, y) {
+  const topLeft = pts[0];
+  assert.ok(topLeft[0] > x && topLeft[0] < x + 10 && topLeft[1] === y, `small chamfer expected, got ${JSON.stringify(pts)}`);
+}
+
+// 2段の崖の足元: (3,1) の右上 (2,2) は岩だが、その上 (1,2) も岩なので「1段」ではない。
+// 階段ではないので坂にしてはいけない（緩い判定だとここを削って絵と当たり判定がずれた）
+const TALL_RISER = ['....', '..##', '..##', '.###', '####'];
+
+test('a 2-tall riser corner is not turned into a ramp on the snow stage', async () => {
+  const m = await blockDrawer(TALL_RISER, 'snow');
+  const ctx = makeFakeCtx();
+  m._drawRockyBlock(ctx, 3, 1, BLOCK_NORMAL);
+  assertSmallChamfer(basePolygon(ctx), TILE_SIZE, 3 * TILE_SIZE);
+});
+
+// 階段の一番下の段: 露出している左側に「降りる先」が無い（(3,0) が空）。
+// stairDirection もここでは 0 を返す＝描画オフセットが付かないので、坂に描かない
+const END_STEP = ['....', '..##', '.###', '.###'];
+
+test('the end step of a staircase stays square (stairDirection is 0 there)', async () => {
+  const m = await blockDrawer(END_STEP, 'snow');
+  const ctx = makeFakeCtx();
+  m._drawRockyBlock(ctx, 2, 1, BLOCK_NORMAL);
+  assertSmallChamfer(basePolygon(ctx), TILE_SIZE, 2 * TILE_SIZE);
+});
+
+test('a ramp tile that was not exposed at generation gets no snow band', async () => {
+  const m = await blockDrawer(STAIRS, 'snow');
+  m.exposedAtGen.fill(0); // 掘った跡＝生成時には埋まっていた段
+  const ctx = makeFakeCtx();
+  m._drawRockyBlock(ctx, 2, 1, BLOCK_NORMAL);
+  const x = TILE_SIZE, y = 2 * TILE_SIZE, S = TILE_SIZE;
+  // 形は坂のまま
+  assert.ok(basePolygon(ctx).some(([px, py]) => px === x + S && py === y), 'still a ramp');
+  const banded = ctx.calls.some((c) => (c.name === 'set:strokeStyle' || c.name === 'set:fillStyle') && c.args[0] === SNOW_CAP_COLOR);
+  assert.equal(banded, false, 'no snow on a top exposed by digging');
+});
+
 test('on a non-snow stage the same step keeps the small chamfer', async () => {
   const m = await blockDrawer(STAIRS, 'none');
   const ctx = makeFakeCtx();

@@ -24,6 +24,7 @@ import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
 import { carveSnowStairs } from './snowStairs.js';
+import { stairDirection } from '../utils/slope.js';
 
 
 // --- Map generation constants ---
@@ -1148,11 +1149,16 @@ export class Map {
         // - 板状の突出（上下と片側が露出した高さ1の先端）は、岩に接している辺を底辺に、
         //   タイルの中心を頂点にした三角にする。切り口の2本が接している側の角から
         //   中心へ向かうので「上下から面取りして中心で交わるくの字」になり、板の先が尖る
+        //
+        // 坂にする段は `stairDirection`（utils/slope.js）と**同じ判定**を使う。
+        // 描く坂と自機の描画オフセットが同じ判定を使うことで、坂が描かれる段でだけ
+        // 足が斜辺に乗る（判定を緩くすると2段高い崖の角まで削られて、当たり判定と
+        // 絵がずれた — 実測で坂タイルの54%がそれだった）
         let rampTL = false, rampTR = false, chevronL = false, chevronR = false;
         if (this.envKind === 'snow') {
-            const solid = (rr, cc) => rr >= 0 && rr < this.rows && cc >= 0 && cc < this.cols && this.grid[rr][cc] !== BLOCK_EMPTY;
-            if (expTop && expLeft && !expBottom && solid(r - 1, c + 1)) { cTL = S; rampTL = true; }
-            else if (expTop && expRight && !expBottom && solid(r - 1, c - 1)) { cTR = S; rampTR = true; }
+            const dir = stairDirection(this, r, c);
+            if (dir === 1 && expTop && expLeft && !expBottom) { cTL = S; rampTL = true; }
+            else if (dir === -1 && expTop && expRight && !expBottom) { cTR = S; rampTR = true; }
             else if (expTop && expBottom && expLeft && !expRight) chevronL = true; // 左が露出＝右辺で繋がっている
             else if (expTop && expBottom && expRight && !expLeft) chevronR = true; // 鏡像
         }
@@ -1240,6 +1246,8 @@ export class Map {
                     else { ctx.moveTo(x + S, y + S); ctx.lineTo(x, y); }
                     ctx.stroke();
                 } else {
+                    // くの字のタイルでは clip がこの帯を接している角の楔形に削るが、
+                    // 板の付け根に雪が残るのはむしろ自然なので、そのままにしている
                     ctx.fillStyle = SNOW_CAP_COLOR;
                     ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
                 }
