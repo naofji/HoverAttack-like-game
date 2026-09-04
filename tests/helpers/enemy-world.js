@@ -15,6 +15,7 @@ export function makeMap(rows) {
     isSolidAtPixel(x, y) {
       return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     },
+    isWaterAtPixel: () => false,
     pixelToTile(x, y) {
       return { r: Math.floor(y / TILE_SIZE), c: Math.floor(x / TILE_SIZE) };
     },

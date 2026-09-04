@@ -10,7 +10,7 @@ import {
 } from '../src/js/utils/Constants.js';
 
 // Trivial map: nothing is solid, so drones float freely and always have LOS.
-const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
+const AIR_MAP = { isSolidAtPixel: () => false, isWaterAtPixel: () => false, cols: 1000, rows: 1000 };
 
 /** Minimal drone built without running the real constructor's spawn logic. */
 function makeDrone(x, y, game = {}) {

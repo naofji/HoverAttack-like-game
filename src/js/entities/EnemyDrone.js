@@ -15,7 +15,7 @@ import {
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
     EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES,
-    DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE
+    DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE, TILE_SIZE
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
@@ -437,6 +437,17 @@ export class EnemyDrone {
                 this._startHover(); // Stop dashing if hit wall
             } else if (this.state === 'patrol') {
                 this.patrolDir *= -1;
+            }
+        }
+
+        // 水には入らない。次の位置の底が水なら、水面の1つ上で止める
+        // （水中の自機を水面すれすれで待つ形になる。設計どおり）
+        if (this.vy > 0 && map.isWaterAtPixel) {
+            const nextBottom = this.y + this.height + this.vy;
+            if (map.isWaterAtPixel(this.x + this.width / 2, nextBottom)) {
+                const surfaceY = Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
+                this.y = surfaceY - this.height;
+                this.vy = 0;
             }
         }
 
