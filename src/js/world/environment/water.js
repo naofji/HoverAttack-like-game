@@ -97,7 +97,8 @@ export function createWaterRenderer(env) {
             ctx.lineWidth = 2;
             ctx.beginPath();
             for (const s of surfaces.values()) {
-                if (s.x1 < camX || s.x0 > camX + CANVAS_WIDTH || s.y < camY - 8 || s.y > camY + CANVAS_HEIGHT + 8) continue;
+                // 波紋(最大6)+波(2.5px)で水面は最大8.5px動くので、カリング余白は12に広げてある
+                if (s.x1 < camX || s.x0 > camX + CANVAS_WIDTH || s.y < camY - 12 || s.y > camY + CANVAS_HEIGHT + 12) continue;
                 for (let x = s.x0; x <= s.x1; x += 8) {
                     const y = s.y + surfaceOffset(x, this.t, this.ripples);
                     if (x === s.x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);

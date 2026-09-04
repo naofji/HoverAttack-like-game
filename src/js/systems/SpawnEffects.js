@@ -9,8 +9,8 @@
 // settingsFlow.js と同じく **Object.assign で Game に混ぜる前提**の
 // オブジェクトリテラルで、`this` は Game を指す。
 
-import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS } from '../utils/Constants.js';
-import { createExplosion, createSparks } from '../entities/Particle.js';
+import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY } from '../utils/Constants.js';
+import { createExplosion, createSparks, SplashParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -65,5 +65,20 @@ export const SpawnEffects = {
     spawnHeavyDamage(x, y) {
         this.spawnSparks(x, y);
         audioManager.playHeavyDamage();
+    },
+
+    /**
+     * 水面のしぶき。エンティティが水面をまたいだフレームに StageEnvironment が呼ぶ。
+     * 粒の数は |vy| に比例（速く落ちるほど盛大）。水面には波紋を足す。
+     */
+    spawnSplash(x, surfaceY, vy) {
+        const n = Math.min(SPLASH_MAX_PARTICLES, Math.ceil(Math.abs(vy) * SPLASH_PARTICLES_PER_VY));
+        for (let i = 0; i < n; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+            const s = 1 + Math.random() * Math.min(4, Math.abs(vy));
+            this.particles.push(new SplashParticle(x, surfaceY, Math.cos(a) * s, Math.sin(a) * s));
+        }
+        const r = this.env && this.env.renderer;
+        if (r && r.addRipple) r.addRipple(x, Math.min(6, Math.abs(vy)));
     },
 };

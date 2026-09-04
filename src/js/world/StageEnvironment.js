@@ -14,7 +14,7 @@
 // drawOverWorld と drawOverlay の2回だけ呼ぶ。
 
 import {
-    STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, ICE_SLIDE, FOG_SIGHT_SCALE,
+    STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, ICE_SLIDE, FOG_SIGHT_SCALE, TILE_SIZE,
 } from '../utils/Constants.js';
 import { createNoneRenderer, canvasAvailable } from './environment/none.js';
 import { createFogRenderer } from './environment/fog.js';
@@ -74,6 +74,36 @@ export class StageEnvironment {
     /** 毎シミュレーションtick。描画側の時計を進める。 */
     update() {
         this.renderer.update();
+        // デモ画面（後続タスク）は game=null で StageEnvironment を作って update() を呼ぶので、
+        // 水しぶきの検出は game があるときだけ行う（null なら判定対象のエンティティが無い）。
+        if (this.kind === 'water' && this.game) this._trackWaterCrossings();
+    }
+
+    /** 前フレームと今フレームの「水中か」を比べ、またいだフレームだけしぶきを出す。 */
+    _trackWaterCrossings() {
+        const g = this.game;
+        const map = g.map;
+        const check = (e) => {
+            if (!e || e.alive === false) return;
+            const cx = e.x + (e.width || 0) / 2;
+            const cy = e.y + (e.height || 0) / 2;
+            const inWater = map.isWaterAtPixel(cx, cy);
+            if (e._inWater === undefined) { e._inWater = inWater; return; } // 初回は記録だけ
+            if (inWater !== e._inWater) {
+                e._inWater = inWater;
+                // 水面の y はまたいだタイルの上辺（水に入る側のタイル）
+                const r = Math.floor(cy / TILE_SIZE);
+                const c = Math.floor(cx / TILE_SIZE);
+                const sr = map.waterSurfaceRow ? map.waterSurfaceRow(inWater ? r : r + 1, c) : r;
+                const surfaceY = (sr >= 0 ? sr : r) * TILE_SIZE;
+                if (g.spawnSplash) g.spawnSplash(cx, surfaceY, e.vy || 0);
+            }
+        };
+        check(g.player);
+        check(g.carrier);
+        for (const e of g.enemies) check(e);
+        for (const p of g.projectiles) check(p);
+        for (const b of g.enemyBullets) check(b);
     }
 
     /** ワールド座標（translate 済み）。地形と機体の後、煙幕の前。 */
