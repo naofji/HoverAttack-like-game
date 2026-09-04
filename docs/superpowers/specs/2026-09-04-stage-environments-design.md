@@ -327,6 +327,18 @@
 | 6 | 霧が雲形に見えるか、濃淡のムラ、雲の大きさと横長さ | `FOG_BLOB_COUNT` `FOG_BLOB_RADIUS_MIN/RANGE` `FOG_BLOB_ASPECT` `FOG_BLOB_ALPHA_MIN/RANGE` |
 | 5〜7 | 遠景の装飾が前景より目立たないか（全装飾色を前景の輝度の 0.45 倍以下に落とした） | `CaveBackdrop.js` の `_drawRockBand`（雪のハイライト）`_drawWetDecor` `_drawMachineDecor` |
 
+### 第3ラウンド（2026-09-05 の追加指摘）
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 5 | 降る雪の明るさと粒の大きさ。岩の奥で降っているのが分かるか、弾と見分けられるか | `SNOW_COLOR`（#B6BFCB・輝度190。前は #8A9098・143）`SNOW_LAYERS` の粒径（1/2/3px） |
+| 5 | 足元で舞う雪の明るさ | `SNOW_KICK_COLOR`（#D5DDE8・輝度220。降る雪より明るくしてある） |
+| 5 | くの字に削れた先端から滑り落ちる速さ。立っていられないか、接している側へ入力すれば戻れるか | `PLATE_TIP_SLIDE_ACCEL`（0.10。45度の坂は `SLOPE_DOWNHILL_ACCEL` 0.06） |
+| 全般 | アタッカーのドロップが週内で固定されているか（同じ週・同じ面・同じ場所なら同じアイテム。倒す順番を変えても変わらない） | `utils/drops.js` の `attackerDropSeed` / `decideAttackerDrop` |
+
+- ドロップの確率そのものは変えていない（`ATTACKER_HEAVY_DROP_CHANCE` などは据え置き）。変えたのは「いつ・どの乱数で引くか」だけ。
+- くの字の先端は敵（戦車）には滑りを入れていない。巡回中に足場から落ち続けると湧きの前提が崩れるため。敵にも効かせたい場合は `EnemyTank._applySnowSlope` から同じ判定を呼ぶ。
+
 7面の地形タイルを人工物のパターンにする件は、要塞化の設計（別計画）で扱う。
 
 ### 計測
