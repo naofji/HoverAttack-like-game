@@ -2,10 +2,11 @@
 // Screen Renderer - 画面をまたぐ共通部品と、screens/ の取りまとめ
 // ============================================
 
-import { CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES } from '../utils/Constants.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, VOLUME_HUD_FADE_FRAMES, DEMO_OVERLAY_ALPHA_SCALE } from '../utils/Constants.js';
 import { volumePercent } from '../utils/bgmVolume.js';
 import { lerpColor } from '../utils/color.js';
 import { UI, SPACE, font, glow, drawFrame } from './theme.js';
+import { StageEnvironment } from '../world/StageEnvironment.js';
 import { MiniMap } from './screens/miniMap.js';
 import { RankingScreens } from './screens/rankingScreens.js';
 import { ResultScreens } from './screens/resultScreens.js';
@@ -154,6 +155,32 @@ export class ScreenRenderer {
             ctx.fillRect(barX + i * (segW + gap), barY, segW, 8);
         }
         ctx.restore();
+    }
+
+    /**
+     * デモ画面用の環境。面ごとに1つ作って持つ（霧・雪の板を毎フレーム作り直さない）。
+     * game を渡さないので水の描画は none になる（シーン絵の水面線は StageScene が引く）。
+     */
+    _demoEnv(stageIndex) {
+        this._demoEnvs = this._demoEnvs || {};
+        if (!this._demoEnvs[stageIndex]) this._demoEnvs[stageIndex] = new StageEnvironment(null, stageIndex);
+        return this._demoEnvs[stageIndex];
+    }
+
+    /** 画面全体に、その面の環境を（デモ用に薄めて）重ねる。 */
+    _drawDemoEnvironment(ctx, stageIndex) {
+        const env = this._demoEnv(stageIndex);
+        env.update();
+        env.drawOverlay(ctx, DEMO_OVERLAY_ALPHA_SCALE);
+    }
+
+    /** タイトルの背景に使う面。CONTINUE があればその面、無ければ 1 面。 */
+    _titleStageIndex() {
+        const items = this.game.titleMenuItems ? this.game.titleMenuItems() : [];
+        if (items.includes('continue') && this.game.saveManager) {
+            return this.game.saveManager.save.missionsCompleted;
+        }
+        return 0;
     }
 }
 

@@ -269,6 +269,8 @@ export const RankingScreens = {
             data: global, accent, emptyText: stageData.online ? 'NO RECORDS YET' : 'OFFLINE',
         });
 
+        this._drawDemoEnvironment(ctx, stageIndex);
+
         drawScanlines(ctx, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
