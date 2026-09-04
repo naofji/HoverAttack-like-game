@@ -106,6 +106,9 @@ export class StageEnvironment {
         for (const e of g.enemies) check(e);
         for (const p of g.projectiles) check(p);
         for (const b of g.enemyBullets) check(b);
+        // 破片も水面をまたぐとしぶきを出す。particles には煙や火花など他の演出も
+        // 混ざっているので isDebris で破片だけを拾う
+        for (const p of g.particles) if (p.isDebris) check(p);
     }
 
     /** ワールド座標（translate 済み）。地形と機体の後、煙幕の前。 */

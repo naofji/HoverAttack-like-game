@@ -758,6 +758,10 @@ export class Player {
         this.missileCooldown = 0;
         this.walkFrame = 2;
         this.walkTimer = 0;
+        // 雪の階段で死んだ直後に古い向きで吸着しないように
+        this.slopeDir = 0;
+        this.slopeCoyote = 0;
+        this.drawOffsetY = 0;
         this._resetMGState();
 
         audioManager.stopHover();

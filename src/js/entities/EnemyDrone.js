@@ -444,8 +444,16 @@ export class EnemyDrone {
         // （水中の自機を水面すれすれで待つ形になる。設計どおり）
         if (this.vy > 0) {
             const nextBottom = this.y + this.height + this.vy;
-            if (map.isWaterAtPixel(this.x + this.width / 2, nextBottom)) {
-                const surfaceY = Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
+            const centerX = this.x + this.width / 2;
+            if (map.isWaterAtPixel(centerX, nextBottom)) {
+                // プールは斜めの縁を持つので、タイルの底ではなく実際の水面行で止める。
+                // waterSurfaceRow が使えない（プール未対応マップ）ときだけ旧来のタイル境界に戻す
+                const r = Math.floor(nextBottom / TILE_SIZE);
+                const c = Math.floor(centerX / TILE_SIZE);
+                const surfaceRow = map.waterSurfaceRow ? map.waterSurfaceRow(r, c) : -1;
+                const surfaceY = surfaceRow >= 0
+                    ? surfaceRow * TILE_SIZE
+                    : Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
                 this.y = surfaceY - this.height;
                 this.vy = 0;
             }

@@ -1022,7 +1022,9 @@ export const Game = {
         for (const bullet of this.enemyBullets) bullet.draw(ctx);
         if (this.flag) this.flag.draw(ctx);
 
-        // 環境のワールド描画（水の塗りと水面）。機体と弾の上、煙幕の下
+        // 環境のワールド描画（水の塗りと水面）。機体と弾の上、煙幕の下。
+        // パーティクルの後に描くのは、水中の爆発や破片にも水の色をかぶせたいから
+        // （設計書は「パーティクルの前」と書いたが、こちらのほうが読める）
         this.env.drawOverWorld(ctx, camX, camY);
 
         // 煙は敵とHPバーの上に重ねる（隠すのが仕事なので最後に描く）

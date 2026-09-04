@@ -37,6 +37,23 @@ test('a splash happens on the frame an entity crosses the surface, not while it 
   assert.equal(calls.length, 2);
 });
 
+test('debris crossing the water surface triggers a splash; a non-debris particle does not', () => {
+  const calls = [];
+  const debris = { isDebris: true, x: 0, y: 0, width: 4, height: 4, vy: 3, alive: true };
+  const spark = { x: 0, y: 0, width: 4, height: 4, vy: 3, alive: true }; // isDebris なし
+  const game = {
+    map: waterBelow(100), player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
+    particles: [debris, spark],
+    spawnSplash: (x, y, vy) => calls.push([x, y, vy]),
+  };
+  const env = new StageEnvironment(game, 3);
+  env.update();                       // 外（中心 y=2）
+  assert.equal(calls.length, 0);
+  debris.y = 100; spark.y = 100;      // どちらも中心 y=102 → 水中へ
+  env.update();
+  assert.equal(calls.length, 1, '破片だけがしぶきを出すこと');
+});
+
 test('a null game does not throw when the environment is water', () => {
   const env = new StageEnvironment(null, 3);
   assert.doesNotThrow(() => env.update());

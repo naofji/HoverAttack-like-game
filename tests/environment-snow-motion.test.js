@@ -55,6 +55,20 @@ test('standing on a downhill staircase, the player accelerates downhill without 
   assert.ok(p.slopeDir === -1, `slopeDir ${p.slopeDir}`); // 左へ上る＝右へ下る
 });
 
+test('respawn clears the slope state so the player does not snap to the old direction', () => {
+  const game = snowWorld();
+  game.input = inputWith(new Set());
+  // 列 13 の段（row 14）に立ち、slopeDir を非0にしてから死んだことにする
+  const p = new Player(game, 13 * TILE_SIZE, 14 * TILE_SIZE - 24);
+  game.player = p;
+  for (let i = 0; i < 3; i++) p.update();
+  assert.notEqual(p.slopeDir, 0, '前提: 階段の上で slopeDir が立っていること');
+  p.respawn(3 * TILE_SIZE, 5 * TILE_SIZE);
+  assert.equal(p.slopeDir, 0);
+  assert.equal(p.slopeCoyote, 0);
+  assert.equal(p.drawOffsetY, 0);
+});
+
 test('walking uphill on snow is slower than PLAYER_MAX_SPEED', () => {
   const game = snowWorld();
   game.input = inputWith(new Set(['KeyA'])); // 左 = 上り
@@ -167,6 +181,6 @@ test('an airborne tank does not kick snow', () => {
   const t = new EnemyTank(game, 13 * TILE_SIZE, 4 * TILE_SIZE);
   game.enemies.push(t);
   for (let i = 0; i < 5; i++) t.update();
-  assert.equal(t.onGround === true, false);
+  assert.equal(t.grounded, false);
   assert.deepEqual(game.snowKicks, []);
 });

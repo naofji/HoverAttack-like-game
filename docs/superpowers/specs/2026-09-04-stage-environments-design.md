@@ -203,8 +203,9 @@
 
 `_drawWorld` に環境の描画を 2 回だけ足す。
 
-1. 地形と機体の後、パーティクルの前（ワールド座標）: `env.drawOverWorld(ctx, camX, camY)`。
-   水キャッシュの転送と水面の線。雪・霧はここでは何もしない
+1. パーティクルの後、煙幕の前（ワールド座標）: `env.drawOverWorld(ctx, camX, camY)`。
+   水キャッシュの転送と水面の線。雪・霧はここでは何もしない。水中の爆発や破片にも
+   水の色をかぶせたいので、この順にした（実装時にパーティクルの前から変更）
 2. HUD の直前（画面座標）: `env.drawOverlay(ctx)`。霧の層と薄塗り、降雪の板
 
 | 面 | 1フレームの追加 |
@@ -303,11 +304,14 @@
 |---|---|---|
 | 4 | 水の色と濃さ、水面の波、しぶきの量、水中の重さ | `WATER_FILL` `WATER_WAVE_AMPLITUDE` `SPLASH_PARTICLES_PER_VY` `WATER_SPEED_SCALE` `WATER_GRAVITY_SCALE` |
 | 4 | 斜面の描画オフセット（自機が段を離れた瞬間に 0 へ戻るので跳ねて見えるか） | `Player.js` の `drawOffsetY`（`utils/slope.js` の `slopeDrawOffset`）|
+| 4 | 水面をマシンガンの連射がまたいだときのしぶきの量（弾1発ごとに出るので粒が跳ねる） | `SPLASH_PARTICLES_PER_VY` `SPLASH_MAX_PARTICLES` |
 | 5 | 降雪の密度と速さ、積雪の帯の厚み、滑りの気持ちよさ、斜面の見え方 | `SNOW_LAYERS` `SNOW_CAP_THICKNESS` `ICE_SLIDE` `SLOPE_DOWNHILL_ACCEL` `SLOPE_UPHILL_SCALE` |
 | 5 | 斜面の下り吸着の猶予（浮いた直後に段へ吸着する範囲。広すぎると1段の崖でも吸着する） | `SLOPE_SNAP_COYOTE`（今 6。1〜2 で足りるので、違和感があれば 3 へ）|
 | 5 | 遠景の積雪の帯の明るさ（岩の輝度上限をわざと超えている） | `CaveBackdrop.js` の `_drawRockBand` の `lerpColor(rockLight, '#FFFFFF', 0.5)` |
+| 5 | 降雪の drawImage 回数（512px の板を 4×3 枚 × 3 層 ≒ 36 回/フレーム。設計の見積もり 6〜9 回より多い。計測で重ければ板を 2048×1024 にすると層あたり 2 回） | `SNOW_SHEET_SIZE` |
 | 6 | 霧の濃さ、煙幕との見分けにくさ、索敵の縮み | `FOG_OVERLAY_ALPHA` `FOG_LAYERS` `FOG_SIGHT_SCALE` |
 | 6 | 遠景が霧で溶けているか（輝度テストの都合で寄せは 0.06 と弱い。物足りなければ寄せ方を変える） | `CaveBackdrop.js` の `BACKDROP_TINT.fog.k` |
+| 6 | 霧の板のメモリ（2048×1024 が層数ぶん。デモ画面用にも面ごとに1組） | `FOG_SHEET_WIDTH` `FOG_SHEET_HEIGHT` |
 | 7 | 遠景の機械の密度と色 | `CaveBackdrop._drawMachineDecor` のモジュール定数 |
 | デモ | 面別ランキング・面セレクト・タイトルの重ねの薄さ | `DEMO_OVERLAY_ALPHA_SCALE` |
 

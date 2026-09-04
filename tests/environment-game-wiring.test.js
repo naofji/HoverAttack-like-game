@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/js/main.js';
-import { StageEnvironment } from '../src/js/world/StageEnvironment.js';
+import { makeFakeCtx } from './helpers/fake-ctx.js';
 
-// _simulationTick が env.update() を呼ぶこと、_drawWorld / draw が
-// drawOverWorld / drawOverlay を1回ずつ呼ぶことを、差し替えた env で数える。
+// _simulationTick が env.update() を呼ぶこと、draw() が
+// world → env.drawOverlay → hud の順で呼ぶことを、記録用のダミーで確かめる。
 function countingEnv() {
   const n = { update: 0, over: 0, overlay: 0 };
   return {
@@ -29,7 +29,18 @@ test('simulation tick advances the environment', () => {
   assert.equal(env.n.update, 1);
 });
 
-test('StageEnvironment is what main.js builds for a mission', () => {
-  // GameStateManager の面開始と main.js の init が同じクラスを使うこと
-  assert.equal(typeof StageEnvironment, 'function');
+test('draw() paints world, then the environment overlay, then the HUD (in that order)', () => {
+  const order = [];
+  const fake = {
+    gameState: 'playing',
+    ctx: makeFakeCtx(),
+    canvas: { width: 1366, height: 768 },
+    _drawWorld() { order.push('world'); },
+    env: { drawOverlay() { order.push('overlay'); } },
+    hud: { draw() { order.push('hud'); }, drawCarrierArrow() {} },
+    crosshair: { draw() {} },
+    _drawOverlays() {},
+  };
+  Game.draw.call(fake);
+  assert.deepEqual(order, ['world', 'overlay', 'hud']);
 });
