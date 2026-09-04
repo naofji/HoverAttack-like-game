@@ -18,12 +18,12 @@ import {
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
-    SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED,
+    SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
-import { stairDirection, slopeDrawOffset, supportColumn } from '../utils/slope.js';
+import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -84,6 +84,9 @@ export class Player {
         this.motion = LAND_MOTION;
         this.slopeDir = 0;      // 今フレームに足が乗っている階段の向き（雪面のみ）
         this.slopeCoyote = 0;   // 段を踏み外した直後、まだ階段の上とみなす残りフレーム
+        // 今フレームに足が乗っているくの字の先端の向き。階段とは別に持つ。
+        // くの字は下が空洞なので下りの吸着を効かせてはいけない（コヨーテも無し）
+        this.plateDir = 0;
         this.drawOffsetY = 0;   // 45度の線に乗せるための描画だけの縦ずらし
         this.facingRight = true;
         this.alive = true;
@@ -183,7 +186,13 @@ export class Player {
         if (this.motion.slide > 0) this._kickSnow(landed);
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
-        this.drawOffsetY = this.onGround ? slopeDrawOffset(this.slopeDir, this.x + this.width / 2) : 0;
+        // くの字の先端には描いた坂が無いので、階段(slopeDir)を優先しつつ、
+        // 階段でなければ板の先端用のオフセット（plateDrawOffset）を使う
+        this.drawOffsetY = this.onGround
+            ? (this.slopeDir !== 0
+                ? slopeDrawOffset(this.slopeDir, this.x + this.width / 2)
+                : plateDrawOffset(this.plateDir, this.x + this.width / 2))
+            : 0;
 
         this._updateWalkAnimation();
     }
@@ -261,21 +270,36 @@ export class Player {
      * onGround は前フレームの結果（_moveAndCollide が毎フレーム冒頭で倒す）。
      */
     _applySnowSlope(input) {
-        if (this.motion.slide === 0) { this.slopeDir = 0; this.slopeCoyote = 0; return; }
+        if (this.motion.slide === 0) { this.slopeDir = 0; this.slopeCoyote = 0; this.plateDir = 0; return; }
         if (!this.onGround) {
             // 段を踏み外した直後の数フレームは階段の上のままにしておく。
             // 接地判定は足を4px内側で見るため、体が前の段に数px重なったまま「空中」に
             // なる。ここで slopeDir を 0 に落とすと下の吸着が二度と成立せず、
             // 1段16pxの落下を10フレーム待つ動きに戻ってしまう（実測）
             if (this.slopeCoyote > 0) this.slopeCoyote--; else this.slopeDir = 0;
+            // くの字の先端には吸着（コヨーテ）が無い。下が空洞なので、空中に出たら
+            // 即座に「乗っていない」ことにしないと落下中も滑り続けて描画がずれる
+            this.plateDir = 0;
             return;
         }
         this.slopeDir = 0;
+        this.plateDir = 0;
         const map = this.game.map;
         const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
         const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
         this.slopeDir = stairDirection(map, r, c);
-        if (this.slopeDir === 0) { this.slopeCoyote = 0; return; }
+        if (this.slopeDir === 0) {
+            this.slopeCoyote = 0;
+            // 階段でなければ、同じ支持列でくの字の先端かどうかを見る（実機の指摘：
+            // 突き出たブロックの先端は元のブロックの1/4しかカバーしておらず不安定なので、
+            // 坂と同じく露出側へ滑り落ちるようにする。当たり判定は正方形のまま変えない）
+            this.plateDir = plateTipDirection(map, r, c);
+            if (this.plateDir !== 0) {
+                this.vx += this.plateDir * PLATE_TIP_SLIDE_ACCEL;
+                this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+            }
+            return;
+        }
         this.slopeCoyote = SLOPE_SNAP_COYOTE;
         const downhill = -this.slopeDir;
         const held = (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) ? -1
@@ -297,7 +321,7 @@ export class Player {
         const fy = this.y + this.height;
         if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
         if (!this.onGround || Math.abs(this.vx) < 0.1) return;
-        this.game.spawnSnowKick(fx, fy, this.slopeDir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
+        this.game.spawnSnowKick(fx, fy, (this.slopeDir !== 0 || this.plateDir !== 0) ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
     }
 
     /** Handle burst jump and hovering. */
@@ -761,6 +785,7 @@ export class Player {
         // 雪の階段で死んだ直後に古い向きで吸着しないように
         this.slopeDir = 0;
         this.slopeCoyote = 0;
+        this.plateDir = 0;
         this.drawOffsetY = 0;
         this._resetMGState();
 

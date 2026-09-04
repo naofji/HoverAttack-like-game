@@ -882,6 +882,9 @@ export const WATER_GRAVITY_SCALE = 0.3;
 export const ICE_SLIDE = 0.94;  // 実機: もう少し滑る（0.9 → 0.94。止まるまでの距離が約1.7倍）
 export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
 export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ毎フレーム下り方向へ
+// くの字に削れた先端は元のブロックの1/4しか残らないので、坂(SLOPE_DOWNHILL_ACCEL=0.06)より
+// 強く滑らせて立っていられなくする。接している側への入力（最高速 1.75）なら戻れる強さ（実機の指摘）
+export const PLATE_TIP_SLIDE_ACCEL = 0.10;
 export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
 export const SLOPE_SNAP_COYOTE = 6;        // 段を踏み外してから下りの吸着を諦めるまでのフレーム
 // 霧で索敵の横半径に掛ける倍率（縦は SIGHT_ASPECT 経由で同じ比率で縮む）。自機の Auto Aim も同じ。

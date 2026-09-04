@@ -7,7 +7,7 @@ import { SnowKickParticle } from '../src/js/entities/Particle.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
 import {
-  TILE_SIZE, ICE_SLIDE, SLOPE_UPHILL_SCALE, PLAYER_MAX_SPEED,
+  TILE_SIZE, ICE_SLIDE, SLOPE_UPHILL_SCALE, PLAYER_MAX_SPEED, PLAYER_HEIGHT,
   SNOW_KICK_LAND, SNOW_KICK_WALK, SNOW_KICK_SLIDE, SNOW_KICK_COLOR,
 } from '../src/js/utils/Constants.js';
 
@@ -40,6 +40,29 @@ function slopeRows() {
 
 function snowWorld() {
   const game = makeGame(makeMap(slopeRows()));
+  game.env = SNOW;
+  game.snowKicks = [];
+  game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
+  return game;
+}
+
+// くの字の先端（板状の突出）: 列9が上下に貫く壁、行14・列10だけが右へ突き出した
+// 高さ1の板。上下(行13,15)は空洞、右(列11)も空洞、左(列9)だけが壁で繋がっている
+// → plateTipDirection は +1（右へ露出）。他はすべて空洞（宙に浮いた孤立タイル）
+function plateRows() {
+  const rows = [];
+  for (let r = 0; r < 20; r++) {
+    let s = '';
+    for (let c = 0; c < 20; c++) {
+      s += (c === 9 || (r === 14 && c === 10)) ? '#' : '.';
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+
+function plateWorld() {
+  const game = makeGame(makeMap(plateRows()));
   game.env = SNOW;
   game.snowKicks = [];
   game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
@@ -194,4 +217,52 @@ test('SnowKickParticle is drawn with SNOW_KICK_COLOR', () => {
   const fillStyleCalls = ctx.calls.filter((c) => c.name === 'set:fillStyle');
   assert.ok(fillStyleCalls.length > 0, 'fillStyle should be set');
   assert.equal(fillStyleCalls[0].args[0], SNOW_KICK_COLOR, `fillStyle should be SNOW_KICK_COLOR`);
+});
+
+// 実機の指摘: くの字に削れた先端は元のブロックの1/4しか残っていないので不安定。
+// 45度の坂と同様、露出側へ滑り落ちるべき（当たり判定はいじらない＝タイルは今も正方形）
+test('standing still on a plate tip drifts toward the exposed side and eventually falls off', () => {
+  const game = plateWorld();
+  game.input = inputWith(new Set());
+  // 行14・列10の板の上。右(列11)が露出側なので +1 へ滑るはず
+  const p = new Player(game, 10 * TILE_SIZE, 14 * TILE_SIZE - PLAYER_HEIGHT);
+  game.player = p;
+  for (let i = 0; i < 3; i++) p.update();
+  assert.ok(p.vx > 0, `数フレームで露出側(右)へ滑り始めるはず: vx=${p.vx}`);
+
+  let leftTile = false;
+  for (let i = 0; i < 60; i++) {
+    p.update();
+    const centerCol = Math.floor((p.x + p.width / 2) / TILE_SIZE);
+    if (centerCol !== 10) { leftTile = true; break; }
+  }
+  assert.ok(leftTile, '滑り続ければやがてタイルから外れる（下は空洞なので落下する）');
+});
+
+test('holding the attached direction on a plate tip overrides the slide', () => {
+  const game = plateWorld();
+  game.input = inputWith(new Set(['KeyA'])); // 左＝壁のある接している側
+  const p = new Player(game, 10 * TILE_SIZE, 14 * TILE_SIZE - PLAYER_HEIGHT);
+  game.player = p;
+  for (let i = 0; i < 10; i++) p.update();
+  assert.ok(p.vx <= 0, `入力が滑りに勝って接している側へ戻れるはず: vx=${p.vx}`);
+});
+
+test('on a land stage the same plate-tip setup does not drift', () => {
+  const game = plateWorld();
+  game.env = null; // 陸上
+  game.input = inputWith(new Set());
+  const p = new Player(game, 10 * TILE_SIZE, 14 * TILE_SIZE - PLAYER_HEIGHT);
+  game.player = p;
+  for (let i = 0; i < 10; i++) p.update();
+  assert.equal(p.vx, 0, `陸上では滑らない: vx=${p.vx}`);
+});
+
+test('sliding off a plate tip kicks the slide-sized snow puff', () => {
+  const game = plateWorld();
+  game.input = inputWith(new Set());
+  const p = new Player(game, 10 * TILE_SIZE, 14 * TILE_SIZE - PLAYER_HEIGHT);
+  game.player = p;
+  for (let i = 0; i < 5; i++) p.update();
+  assert.ok(game.snowKicks.includes(SNOW_KICK_SLIDE), JSON.stringify(game.snowKicks));
 });

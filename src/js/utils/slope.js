@@ -65,3 +65,38 @@ export function slopeDrawOffset(dir, feetCenterX) {
     const t = dir > 0 ? frac : 1 - frac;
     return (1 - t) * TILE_SIZE;
 }
+
+/**
+ * 高さ1の板状の突出（くの字に削れた先端）の検出。Map.js の chevronL/chevronR
+ * （実機の指摘で追加した見た目）と**同じ条件**を isSolid ベースで表現する。
+ *
+ * タイル自体は岩、上下は空洞（板は宙に浮いている＝階段のように下が岩ではない）、
+ * 左右のどちらか片方だけが空洞（もう片方でブロックに繋がっている）ことを要求する。
+ * 両側とも空洞（幅1の柱）や両側とも岩（板の内側のタイル）は先端ではないので 0。
+ *
+ * @returns {-1|0|1} -1 = 左が露出（右辺で繋がっている）、+1 = 右が露出
+ */
+export function plateTipDirection(map, r, c) {
+    if (!map.isSolid(r, c)) return 0;
+    if (map.isSolid(r - 1, c) || map.isSolid(r + 1, c)) return 0;
+    const leftEmpty = !map.isSolid(r, c - 1);
+    const rightEmpty = !map.isSolid(r, c + 1);
+    if (leftEmpty && !rightEmpty) return -1;
+    if (rightEmpty && !leftEmpty) return 1;
+    return 0;
+}
+
+/**
+ * 板の先端に足を乗せるための描画だけの縦オフセット。slopeDrawOffset と違い、
+ * 露出側には描いた面が無い（くの字の頂点はタイル中心で止まる）ので、
+ * 中心を超えたところは TILE_SIZE/2 で頭打ちにする（それ以上下げると足が宙に浮く）。
+ * 接している辺（dir=+1 なら左端、dir=-1 なら右端）で 0。
+ */
+export function plateDrawOffset(dir, feetCenterX) {
+    if (dir === 0) return 0;
+    const frac = (feetCenterX - Math.floor(feetCenterX / TILE_SIZE) * TILE_SIZE) / TILE_SIZE;
+    const raw = (dir > 0 ? frac : 1 - frac) * TILE_SIZE;
+    // frac がタイル境界ちょうどのとき raw が -0 になることがある（slopeDrawOffset と同じ罠）。
+    // -0 は数値としては 0 と等しいが Object.is で区別されるため、+0 に矯正しておく
+    return Math.min(TILE_SIZE / 2, raw) || 0;
+}
