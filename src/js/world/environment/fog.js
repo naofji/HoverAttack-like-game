@@ -20,6 +20,17 @@ import { SeededRNG } from '../../utils/SeededRNG.js';
 import { SMOKE_SHAPES } from '../../entities/smokeSprites.js';
 import { withAlpha } from '../../utils/color.js';
 
+// 雲1個（半径1あたり）が中心からどこまではみ出し得るかの倍率。
+// SMOKE_SHAPES の全瘤について |dx|+r と |dy|+r の最大値を取る（起動時に一度だけ）。
+// buildSheet のラップ判定で「この雲は板の外に完全に出ているか」を見るのに使う。
+const LOBE_REACH = SMOKE_SHAPES.reduce(
+    (max, shape) => shape.reduce(
+        (m, lobe) => Math.max(m, Math.abs(lobe.dx) + lobe.r, Math.abs(lobe.dy) + lobe.r),
+        max,
+    ),
+    0,
+);
+
 /**
  * 雲を1つ描く。瘤（SMOKE_SHAPES の1形）を放射グラデーションで重ねる。
  * 横方向だけ ctx.scale で潰すので、瘤の座標は正円のまま扱える。
@@ -54,9 +65,15 @@ function buildSheet(seed) {
         // 濃さは雲ごとに変え、重なりで濃淡のムラを作る
         const alpha = FOG_BLOB_ALPHA_MIN + rng.next() * FOG_BLOB_ALPHA_RANGE;
         const shape = SMOKE_SHAPES[i % SMOKE_SHAPES.length];
+        // 端をまたぐ雲だけ反対側にも描く（全部を9回描くと生成コストが14倍になっていた。
+        // 220雲×9オフセット×5瘤≈9,900グラデーションのうち89%が板の外に完全に出ていた）
+        const ex = r * FOG_BLOB_ASPECT * LOBE_REACH;
+        const ey = r * LOBE_REACH;
         for (const dx of [0, -FOG_SHEET_WIDTH, FOG_SHEET_WIDTH]) {
             for (const dy of [0, -FOG_SHEET_HEIGHT, FOG_SHEET_HEIGHT]) {
-                drawCloud(ctx, shape, x + dx, y + dy, r, alpha);
+                const cx = x + dx, cy = y + dy;
+                if (cx + ex < 0 || cx - ex > FOG_SHEET_WIDTH || cy + ey < 0 || cy - ey > FOG_SHEET_HEIGHT) continue;
+                drawCloud(ctx, shape, cx, cy, r, alpha);
             }
         }
     }

@@ -122,6 +122,26 @@ test('a ramp tile that was not exposed at generation gets no snow band', async (
   assert.equal(banded, false, 'no snow on a top exposed by digging');
 });
 
+// 右上がりの坂（rampTL）でありながら、右側の角も同時に露出しているケース。
+// 上(1,1)空・左(2,0)空・下(3,1)岩に加えて右(2,2)も空にすると、坂の斜辺（cTL=S）
+// とは別に右上の面取り（cTR）が独立に立ってしまい、上辺の頂点列が
+// x+S まで進んだあと x+S-cTR へ戻る＝自己交差する多角形になっていた。
+const STAIRS_BOTH_CORNERS_EXPOSED = ['...', '..#', '.#.', '##.'];
+
+test('a ramp tile with the opposite top corner also exposed does not self-cross (cTR is suppressed)', async () => {
+  const m = await blockDrawer(STAIRS_BOTH_CORNERS_EXPOSED, 'snow');
+  const ctx = makeFakeCtx();
+  m._drawRockyBlock(ctx, 2, 1, BLOCK_NORMAL);
+  const x = TILE_SIZE, y = 2 * TILE_SIZE, S = TILE_SIZE;
+  const pts = basePolygon(ctx);
+  // 坂の形は保たれる（右上頂点と左下頂点）
+  assert.ok(pts.some(([px, py]) => px === x + S && py === y), 'top-right vertex (ramp hypotenuse)');
+  assert.ok(pts.some(([px, py]) => px === x && py === y + S), 'bottom-left vertex');
+  // 上辺は x+S まで一直線で、そこから x+S 未満へ戻る頂点（cTR の斜線）が無いこと
+  const topEdgeXs = pts.filter(([, py]) => py === y).map(([px]) => px);
+  assert.ok(topEdgeXs.every((px) => px === x + S), `no backtracking vertex on the top edge, got ${JSON.stringify(pts)}`);
+});
+
 test('on a non-snow stage the same step keeps the small chamfer', async () => {
   const m = await blockDrawer(STAIRS, 'none');
   const ctx = makeFakeCtx();

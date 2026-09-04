@@ -60,7 +60,6 @@ test('demo overlay still scrolls snow in screen space', async () => {
 });
 
 test('snow flakes are small and dim grey so they read apart from bullets', async () => {
-  const { SNOW_COLOR, SNOW_LAYERS } = await import('../src/js/utils/Constants.js');
   const lum = (hex) => { const s = hex.slice(1); return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16)).reduce((a, b, i) => a + b * [0.2126, 0.7152, 0.0722][i], 0); };
   assert.ok(lum(SNOW_COLOR) < 160, `snow colour too bright: ${SNOW_COLOR}`); // 弾（白）と見分ける
   for (const layer of SNOW_LAYERS) assert.ok(layer.size <= 2, `flake size ${layer.size}`);

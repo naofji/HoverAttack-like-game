@@ -69,3 +69,21 @@ test('fog sheets are built from organic smoke-shaped clouds, squashed horizontal
   }
   assert.ok(FOG_BLOB_ASPECT >= 1.8);
 });
+
+test('fog sheet build skips wrapped copies that fall fully outside the sheet', async () => {
+  const { FOG_BLOB_COUNT } = await import('../src/js/utils/Constants.js');
+  const { SMOKE_SHAPES } = await import('../src/js/entities/smokeSprites.js');
+  sheets = [];
+  const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
+  new StageEnvironment(null, 5);
+  assert.ok(sheets.length >= 2, 'two sheets built');
+  const minLobes = Math.min(...SMOKE_SHAPES.map((sh) => sh.length));
+  const maxLobes = Math.max(...SMOKE_SHAPES.map((sh) => sh.length));
+  for (const s of sheets) {
+    const grads = s.calls.filter((c) => c.name === 'createRadialGradient').length;
+    // 下限: 雲は必ず1回は描かれる（板の中に居るオフセットは常に1つある）
+    assert.ok(grads >= FOG_BLOB_COUNT * minLobes, `expected ≥ ${FOG_BLOB_COUNT * minLobes} lobes, got ${grads}`);
+    // 上限: 9オフセット全部を描いていた頃の 1/9 よりずっと少ない（境界をまたぐ雲だけ2回目を描く想定なので2倍未満に収まる）
+    assert.ok(grads < FOG_BLOB_COUNT * maxLobes * 2, `expected < ${FOG_BLOB_COUNT * maxLobes * 2}, got ${grads}`);
+  }
+});

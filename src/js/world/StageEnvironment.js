@@ -10,8 +10,10 @@
 // （game.env を直接読む箇所を増やさない。テストの簡易 game に env が無くても
 // 陸上として動くようにするため）。
 //
-// 描画は kind ごとのファイル（environment/）に分け、main.js からは
-// drawOverWorld と drawOverlay の2回だけ呼ぶ。
+// 描画は kind ごとのファイル（environment/）に分け、呼び出し口は4つ:
+// main.js から drawBehindTerrain（地形の下）・drawOverWorld（地形の上）・
+// drawOverlay（画面全体への重ね）の3回、加えて ScreenRenderer.js から
+// drawDemoOverlay（面別ランキングなどデモ画面での画面重ね）。
 
 import {
     STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, ICE_SLIDE, FOG_SIGHT_SCALE, TILE_SIZE,

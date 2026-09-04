@@ -1161,6 +1161,11 @@ export class Map {
             else if (dir === -1 && expTop && expRight && !expBottom) { cTR = S; rampTR = true; }
             else if (expTop && expBottom && expLeft && !expRight) chevronL = true; // 左が露出＝右辺で繋がっている
             else if (expTop && expBottom && expRight && !expLeft) chevronR = true; // 鏡像
+            // 坂にした側の斜辺は上辺いっぱい（cTL または cTR が S）まで伸びるので、
+            // 反対側の角がその上でさらに面取りされていると多角形が自己交差する
+            // （上辺が S まで来た後に戻って進むことになる）。実測で8マップ中2タイル。
+            if (rampTL) cTR = 0;
+            if (rampTR) cTL = 0;
         }
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ

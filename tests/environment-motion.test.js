@@ -53,7 +53,10 @@ test('env without document (node) still updates and draws without throwing', asy
   for (const idx of [0, 3, 4, 5, 6]) {
     const env = new StageEnvironment({ map: mapWithWater(() => false), enemies: [], projectiles: [], enemyBullets: [], particles: [] }, idx);
     env.update();
+    env.drawBehindTerrain({ drawImage() {} }, 0, 0);
     env.drawOverWorld({ drawImage() {} }, 0, 0);
     env.drawOverlay({ drawImage() {}, fillRect() {} });
+    // デモ画面（面別ランキングなど）用の入口も同じ環境で呼ばれるので、ここでも網羅する
+    env.drawDemoOverlay({ drawImage() {}, fillRect() {} });
   }
 });
