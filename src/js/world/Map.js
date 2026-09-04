@@ -13,6 +13,7 @@ import {
     ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG,
     COLOR_CAVE_BG, TILE_SIZE,
+    SNOW_CAP_COLOR, SNOW_CAP_THICKNESS,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES, STAGE_ENVIRONMENTS,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
@@ -199,6 +200,17 @@ export class Map {
         // 以前はミニマップ用に独自にタイルを塗り直していて、実際の地形(面取り多角形・
         // ひび割れ)と見え方が食い違っていた。tile cache から drawImage で縮小するだけに
         // すれば、本編の見た目とミニマップが常に一致する。
+        // 生成時に上が空洞だったブロック。雪はここにだけ積もる（壊して新しく出た面は素の岩。
+        // 掘った跡が読める）。破壊の再描画は _drawRockyBlock がこのビットを見る
+        this.exposedAtGen = new Uint8Array(this.rows * this.cols);
+        for (let r = 1; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                if (this.grid[r][c] !== BLOCK_EMPTY && this.grid[r - 1][c] === BLOCK_EMPTY) {
+                    this.exposedAtGen[r * this.cols + c] = 1;
+                }
+            }
+        }
+
         this._initTileCache();
         this._generateMiniMap();
 
@@ -1170,6 +1182,12 @@ export class Map {
                 i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
             }
             ctx.stroke();
+
+            // 積雪の帯（5面）。生成時に露出していた上面にだけ。
+            if (this.envKind === 'snow' && this.exposedAtGen && this.exposedAtGen[r * this.cols + c]) {
+                ctx.fillStyle = SNOW_CAP_COLOR;
+                ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
+            }
         }
 
         // 下面：影になる暗い面
