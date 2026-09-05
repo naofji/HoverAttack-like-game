@@ -18,7 +18,8 @@ import {
     STAGE_PALETTES, STAGE_ENVIRONMENTS,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
     WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
-    SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE
+    SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE,
+    HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -29,8 +30,6 @@ import { stairDirection } from '../utils/slope.js';
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
-const HARD_BLOCK_CHANCE = 0.06;
-const HARD_BLOCK_HP = 3;
 
 export class Map {
     constructor(game, missionLevel = 0) {
@@ -515,9 +514,13 @@ export class Map {
     }
 
     _placeHardBlocks() {
+        // 面ごとの割合。パレット・環境と同じく剰余で丸める（debugStartMission で面数を超えうる）。
+        // rng.next() は if の外に出さない代わりに、確率に関係なく必ず1タイル1回引く形を保つこと。
+        // 消費数が割合で変わると、後続のスポーン決定がずれて週次の決定性が壊れる。
+        const chance = HARD_BLOCK_CHANCE_BY_STAGE[this.missionLevel % HARD_BLOCK_CHANCE_BY_STAGE.length];
         for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
             for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < HARD_BLOCK_CHANCE) {
+                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < chance) {
                     this.grid[r][c] = BLOCK_HARD;
                     this.blockHP[r][c] = HARD_BLOCK_HP;
                 }

@@ -874,6 +874,17 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'machine', terrain: 'cave' }, // 7: 洞窟を改造した要塞（遠景だけ）
 ];
 
+// --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
+// _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、
+// missionLevel は剰余で丸める（debugStartMission で面数を超えた値が来るため）。
+// 前半3面は元の一律 0.06 のまま据え置き（序盤の手応えを変えない）。4面から立ち上げ、
+// **5面だけ特別に8割**（雪の岩山。掘って抜けるより地形を読んで飛ぶ面にする）、6→7で更に上げる。
+// 注意: 割合を変えても rng の消費数は変わらない（確率に関係なく必ず1回引くため）ので、
+// 週次の決定性（同じ週なら同じ敵配置）は壊れない。tests/hard-block-ratio.test.js が縛る。
+export const HARD_BLOCK_CHANCE_BY_STAGE = [0.06, 0.06, 0.10, 0.18, 0.80, 0.28, 0.40];
+// 硬い岩の耐久。1発では壊れず、途中経過はひび割れの本数で見せる（Map._drawTile）
+export const HARD_BLOCK_HP = 3;
+
 // 水中の動き。speed は位置更新と推力に掛ける倍率、gravity は重力の倍率。
 // 浮力は持たない（重力が弱いだけで、沈めば底を歩く）。実機で詰める前の初期値。
 export const WATER_SPEED_SCALE = 0.5;
