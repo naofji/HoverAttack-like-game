@@ -5,7 +5,7 @@
 import {
     MIN_MAP_COLS, MIN_MAP_ROWS, MAX_MAP_COLS, MAX_MAP_ROWS,
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
-    COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
+    COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER, HARD_BLOCK_TINT, HARD_BLOCK_DARKEN,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
@@ -13,18 +13,34 @@ import {
     ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT,
     ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG,
     COLOR_CAVE_BG, TILE_SIZE,
+    SNOW_CAP_COLOR, SNOW_CAP_THICKNESS,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    STAGE_PALETTES,
-    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS
+    STAGE_PALETTES, STAGE_ENVIRONMENTS,
+    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
+    WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
+    SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE,
+    GRENADE_BLOCK_DAMAGE,
+    HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
+import { lerpColor, luminance, withLuminance } from '../utils/color.js';
+import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
+import { carveSnowStairs } from './snowStairs.js';
+import { stairDirection } from '../utils/slope.js';
 
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
-const HARD_BLOCK_CHANCE = 0.06;
-const HARD_BLOCK_HP = 3;
+
+/**
+ * 硬い岩の描画色を、面のパレットの色 base から作る。
+ * gray へ HARD_BLOCK_TINT だけ寄せて色味を残し、輝度は base の HARD_BLOCK_DARKEN 倍に置く。
+ * 輝度を base に対する比で決めるので、元が暗い面（6面）でも黒へ潰れない。
+ */
+function hardBlockColor(base, gray) {
+    return withLuminance(lerpColor(base, gray, HARD_BLOCK_TINT), luminance(base) * HARD_BLOCK_DARKEN);
+}
 
 export class Map {
     constructor(game, missionLevel = 0) {
@@ -37,7 +53,12 @@ export class Map {
 
         this.blockStyles = {
             [BLOCK_NORMAL]: palettes[palIdx],
-            [BLOCK_HARD]: { fill: COLOR_HARD_BLOCK, border: COLOR_HARD_BLOCK_BORDER },
+            // 硬い岩は面のテーマ色を残した「暗くて彩度の低い岩」にする。係数の意味は
+            // Constants.js の HARD_BLOCK_TINT / HARD_BLOCK_DARKEN のコメントを見ること
+            [BLOCK_HARD]: {
+                fill: hardBlockColor(palettes[palIdx].fill, COLOR_HARD_BLOCK),
+                border: hardBlockColor(palettes[palIdx].border, COLOR_HARD_BLOCK_BORDER),
+            },
             [BLOCK_INDESTRUCTIBLE]: { fill: COLOR_INDESTRUCTIBLE_BLOCK, border: COLOR_INDESTRUCTIBLE_BLOCK_BORDER },
         };
 
@@ -82,6 +103,11 @@ export class Map {
         this.enemyDroneSpawns = [];
         this.enemyTurretSpawns = [];
         this.enemyBaseSpawn = null;
+
+        this.water = null;          // Uint8Array(rows*cols)。1 = 水。水の無い面は null のまま
+        this.waterSurface = null;   // Int16Array。水タイルの水面の行。それ以外 -1
+        this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
+        this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
 
         this._generate();
     }
@@ -175,6 +201,23 @@ export class Map {
         // Step 9: Sprinkle hard blocks
         this._placeHardBlocks();
 
+        // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
+        // 開始の部屋（左上 3,3 から 20x16）と基地の部屋は除外
+        if (this.envKind === 'water') this._generateWater();
+
+        // Step 9c: 雪の面の階段（派生ストリーム）。exposedAtGen を記録する前に盛るので
+        // 段の上面にも雪が積もる。開始の部屋・基地の部屋は水と同じ除外矩形で弾く
+        // （レビュー指摘: 除外せずに実装すると、開始直後や基地の部屋に階段が生えうる）
+        this.stairs = [];
+        if (this.envKind === 'snow') {
+            this.stairs = carveSnowStairs({
+                grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols, rooms: this.rooms,
+                excludeRects: this._reservedRects(),
+                rng: new SeededRNG((this.game.rng.state ^ 0x51A1E5) >>> 0),
+                count: SNOW_STAIRS_COUNT, lengthMin: SNOW_STAIRS_LENGTH_MIN, lengthRange: SNOW_STAIRS_LENGTH_RANGE,
+            });
+        }
+
         // Step 10: Determine entity spawn positions
         this.landmineSpawns = this._findLandminePositions();
         this.enemyTankSpawns = this._findEnemyTankPositions();
@@ -188,6 +231,17 @@ export class Map {
         // 以前はミニマップ用に独自にタイルを塗り直していて、実際の地形(面取り多角形・
         // ひび割れ)と見え方が食い違っていた。tile cache から drawImage で縮小するだけに
         // すれば、本編の見た目とミニマップが常に一致する。
+        // 生成時に上が空洞だったブロック。雪はここにだけ積もる（壊して新しく出た面は素の岩。
+        // 掘った跡が読める）。破壊の再描画は _drawRockyBlock がこのビットを見る
+        this.exposedAtGen = new Uint8Array(this.rows * this.cols);
+        for (let r = 1; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                if (this.grid[r][c] !== BLOCK_EMPTY && this.grid[r - 1][c] === BLOCK_EMPTY) {
+                    this.exposedAtGen[r * this.cols + c] = 1;
+                }
+            }
+        }
+
         this._initTileCache();
         this._generateMiniMap();
 
@@ -198,8 +252,39 @@ export class Map {
         this.backdrop = new CaveBackdrop(
             this.width, this.height,
             this.blockStyles[BLOCK_NORMAL].fill,
-            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0)
+            new SeededRNG((this.game.rng.state ^ 0x9E3779B9) >>> 0),
+            // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
+            STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].backdrop,
         );
+    }
+
+    // 開始の部屋・基地の部屋を避けるための矩形。水（_generateWater）と雪の階段
+    // （carveSnowStairs）の両方が使う。別々に計算すると数値がずれて食い違う恐れがある
+    // ため、値をここ1箇所にまとめる（レビュー指摘で追加）。
+    _reservedRects() {
+        const b = this.enemyBaseCenter;
+        return [
+            { r0: 0, r1: 3 + 16 + 2, c0: 0, c1: 3 + 20 + 2 },
+            { r0: b.r - 12, r1: b.floorR + 2, c0: b.c - 10, c1: this.cols - 1 },
+        ];
+    }
+    _generateWater() {
+        const rng = new SeededRNG((this.game.rng.state ^ 0x5DEECE66) >>> 0);
+        const excludeRects = this._reservedRects();
+        const pools = generateWaterPools({
+            grid: this.grid, rows: this.rows, cols: this.cols, rooms: this.rooms, excludeRects, rng,
+            count: WATER_POOL_COUNT, depthMin: WATER_POOL_DEPTH_MIN, depthRange: WATER_POOL_DEPTH_RANGE,
+            maxTiles: WATER_POOL_MAX_TILES,
+        });
+        this.water = new Uint8Array(this.rows * this.cols);
+        this.waterSurface = new Int16Array(this.rows * this.cols).fill(-1);
+        for (const pool of pools) {
+            for (const [r, c] of pool.cells) {
+                this.water[r * this.cols + c] = 1;
+                this.waterSurface[r * this.cols + c] = pool.surfaceRow;
+                this.waterCells.push([r, c]);
+            }
+        }
     }
 
     _generatePlatforms() {
@@ -445,9 +530,13 @@ export class Map {
     }
 
     _placeHardBlocks() {
+        // 面ごとの割合。パレット・環境と同じく剰余で丸める（debugStartMission で面数を超えうる）。
+        // rng.next() は if の外に出さない代わりに、確率に関係なく必ず1タイル1回引く形を保つこと。
+        // 消費数が割合で変わると、後続のスポーン決定がずれて週次の決定性が壊れる。
+        const chance = HARD_BLOCK_CHANCE_BY_STAGE[this.missionLevel % HARD_BLOCK_CHANCE_BY_STAGE.length];
         for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
             for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < HARD_BLOCK_CHANCE) {
+                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < chance) {
                     this.grid[r][c] = BLOCK_HARD;
                     this.blockHP[r][c] = HARD_BLOCK_HP;
                 }
@@ -790,6 +879,8 @@ export class Map {
         if (this.blockHP[r][c] <= 0) {
             this.grid[r][c] = BLOCK_EMPTY;
             this.blockHP[r][c] = 0;
+            // 水面より下で水に接していれば、壊れた跡が即座に水で埋まる
+            if (this.water) fillDestroyedCells(this, [[r, c]]);
             this.invalidateTileRegion(r, c);
             return true;
         }
@@ -827,20 +918,32 @@ export class Map {
         this.miniMapDirty = true;
     }
 
-    /** Destroy blocks in a radius (for grenades) */
-    destroyArea(centerR, centerC, radius) {
+    /** Destroy blocks in a radius (for grenades).
+     *  damage は呼び出し側が渡す（敵のグレネードは ENEMY_GRENADE_BLOCK_DAMAGE で弱い）。 */
+    destroyArea(centerR, centerC, radius, damage = GRENADE_BLOCK_DAMAGE) {
         const destroyed = [];
         for (let r = centerR - radius; r <= centerR + radius; r++) {
             for (let c = centerC - radius; c <= centerC + radius; c++) {
                 const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
                 if (dist <= radius) {
-                    if (this.damageBlock(r, c, 3)) {
+                    if (this.damageBlock(r, c, damage)) {
                         destroyed.push({ r, c });
                     }
                 }
             }
         }
+        // 同時に壊れたクレーターは、水に接する破壊跡から順にまとめて埋める
+        // (damageBlock は1セルずつしか流入を試さないため、クレーターの奥まで届かない)
+        if (this.water && destroyed.length) {
+            fillDestroyedCells(this, destroyed.map(({ r, c }) => [r, c]));
+        }
         return destroyed;
+    }
+
+    /** 流入で水が増えたとき。描画キャッシュ（環境側）に伝える。 */
+    onWaterChanged(cells) {
+        const env = this.game && this.game.env;
+        if (env && env.renderer && env.renderer.invalidate) env.renderer.invalidate(cells);
     }
 
     // ------------------------------------------
@@ -979,6 +1082,22 @@ export class Map {
         return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     }
 
+    isWater(r, c) {
+        if (!this.water) return false;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        return this.water[r * this.cols + c] === 1;
+    }
+
+    isWaterAtPixel(x, y) {
+        return this.isWater(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    }
+
+    /** 水タイルの水面の行。水でなければ -1。 */
+    waterSurfaceRow(r, c) {
+        if (!this.isWater(r, c)) return -1;
+        return this.waterSurface[r * this.cols + c];
+    }
+
     pixelToTile(x, y) {
         return {
             c: Math.floor(x / TILE_SIZE),
@@ -1037,10 +1156,37 @@ export class Map {
         const expRight = c === this.cols - 1 || this.grid[r][c + 1] === BLOCK_EMPTY;
 
         // 凸角：両隣が空洞 → 面取りサイズを決定論的に選ぶ
-        const cTL = (expTop && expLeft) ? (4 + Math.floor(rng(90) * 6)) : 0;
-        const cTR = (expTop && expRight) ? (4 + Math.floor(rng(91) * 6)) : 0;
-        const cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
-        const cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
+        // （雪の面だけ下で書き換えるので let。他の面では値も rng の消費順も従来どおり）
+        let cTL = (expTop && expLeft) ? (4 + Math.floor(rng(90) * 6)) : 0;
+        let cTR = (expTop && expRight) ? (4 + Math.floor(rng(91) * 6)) : 0;
+        let cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
+        let cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
+
+        // 雪の面だけ形を変える（実機の指摘。当たり判定は階段のまま）:
+        // - 階段の段（上と片側が露出、下は岩、露出側の反対の斜め上が岩）は面取りを
+        //   対角線いっぱいまで伸ばし、階段全体を45度の坂に見せる。自機の描画オフセット
+        //   （utils/slope.js）はこの斜辺の上に足が乗るよう向きを合わせてある
+        // - 板状の突出（上下と片側が露出した高さ1の先端）は、岩に接している辺を底辺に、
+        //   タイルの中心を頂点にした三角にする。切り口の2本が接している側の角から
+        //   中心へ向かうので「上下から面取りして中心で交わるくの字」になり、板の先が尖る
+        //
+        // 坂にする段は `stairDirection`（utils/slope.js）と**同じ判定**を使う。
+        // 描く坂と自機の描画オフセットが同じ判定を使うことで、坂が描かれる段でだけ
+        // 足が斜辺に乗る（判定を緩くすると2段高い崖の角まで削られて、当たり判定と
+        // 絵がずれた — 実測で坂タイルの54%がそれだった）
+        let rampTL = false, rampTR = false, chevronL = false, chevronR = false;
+        if (this.envKind === 'snow') {
+            const dir = stairDirection(this, r, c);
+            if (dir === 1 && expTop && expLeft && !expBottom) { cTL = S; rampTL = true; }
+            else if (dir === -1 && expTop && expRight && !expBottom) { cTR = S; rampTR = true; }
+            else if (expTop && expBottom && expLeft && !expRight) chevronL = true; // 左が露出＝右辺で繋がっている
+            else if (expTop && expBottom && expRight && !expLeft) chevronR = true; // 鏡像
+            // 坂にした側の斜辺は上辺いっぱい（cTL または cTR が S）まで伸びるので、
+            // 反対側の角がその上でさらに面取りされていると多角形が自己交差する
+            // （上辺が S まで来た後に戻って進むことになる）。実測で8マップ中2タイル。
+            if (rampTL) cTR = 0;
+            if (rampTR) cTL = 0;
+        }
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
         const notchTL = !expTop && !expLeft && r > 0 && c > 0 && this.grid[r - 1][c - 1] === BLOCK_EMPTY;
@@ -1051,15 +1197,22 @@ export class Map {
         // 1. 面取り多角形でベース塗り（時計回りで頂点列挙）
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(x + cTL, y);           // 上辺：左端（TL面取り分だけ右へ）
-        ctx.lineTo(x + S - cTR, y);           // 上辺：右端
-        if (cTR) ctx.lineTo(x + S, y + cTR); // TR面取り斜線
-        ctx.lineTo(x + S, y + S - cBR);       // 右辺：下端
-        if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
-        ctx.lineTo(x + cBL, y + S);       // 下辺：左端
-        if (cBL) ctx.lineTo(x, y + S - cBL); // BL面取り斜線
-        ctx.lineTo(x, y + cTL);     // 左辺：上端
-        if (cTL) ctx.lineTo(x + cTL, y);     // TL面取り斜線（→ closePath と一致）
+        if (chevronL || chevronR) {
+            // 板の先端だけは面取りの列挙では書けない（頂点が辺の上ではなく中心にある）。
+            // 接している辺を底辺にした三角を直接引く
+            if (chevronL) { ctx.moveTo(x + S, y); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S / 2, y + S / 2); }
+            else { ctx.moveTo(x, y); ctx.lineTo(x + S / 2, y + S / 2); ctx.lineTo(x, y + S); }
+        } else {
+            ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
+            ctx.lineTo(x + S - cTR, y);              // 上辺：右端
+            if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
+            ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
+            if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
+            ctx.lineTo(x + cBL, y + S);              // 下辺：左端
+            if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
+            ctx.lineTo(x, y + cTL);                  // 左辺：上端
+            if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
+        }
         ctx.closePath();
 
         ctx.fillStyle = style.fill;
@@ -1105,6 +1258,25 @@ export class Map {
                 i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
             }
             ctx.stroke();
+
+            // 積雪の帯（5面）。生成時に露出していた上面にだけ。
+            if (this.envKind === 'snow' && this.exposedAtGen && this.exposedAtGen[r * this.cols + c]) {
+                if (rampTL || rampTR) {
+                    // 坂の段には水平な上面が無いので、帯も斜辺に沿わせる。
+                    // 線幅を倍にして clip の内側に残る半分だけを積雪の厚みとして使う
+                    ctx.strokeStyle = SNOW_CAP_COLOR;
+                    ctx.lineWidth = SNOW_CAP_THICKNESS * 2;
+                    ctx.beginPath();
+                    if (rampTL) { ctx.moveTo(x, y + S); ctx.lineTo(x + S, y); }
+                    else { ctx.moveTo(x + S, y + S); ctx.lineTo(x, y); }
+                    ctx.stroke();
+                } else {
+                    // くの字のタイルでは clip がこの帯を接している角の楔形に削るが、
+                    // 板の付け根に雪が残るのはむしろ自然なので、そのままにしている
+                    ctx.fillStyle = SNOW_CAP_COLOR;
+                    ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
+                }
+            }
         }
 
         // 下面：影になる暗い面

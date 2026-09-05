@@ -27,6 +27,7 @@ import {
     panelAngles, panelOffsetX, panelDepth, isGuardAngle, guardBlocks, deployEase,
 } from '../utils/orbitShield.js';
 import { withinSight } from '../utils/Physics.js';
+import { sightScaleFor } from '../world/StageEnvironment.js';
 import { BaseLaser } from './BaseLaser.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Missile } from './Missile.js';
@@ -381,8 +382,9 @@ export class EnemyBase {
             const dx = c.x + c.width / 2 - centerX;
             const dy = c.y + c.height / 2 - centerY;
             // タンクと同じく、索敵の内外は楕円で、順位付けはユークリッド距離で。
-            // maxRange の既定は Infinity で、withinSight はそのとき常に true を返す。
-            if (!withinSight(dx, dy, maxRange)) continue;
+            // maxRange の既定は Infinity で、Infinity * 0.5 も Infinity のまま
+            // なので withinSight は常に true を返す（既定の「無制限」は霧でも保たれる）。
+            if (!withinSight(dx, dy, maxRange * sightScaleFor(this.game))) continue;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDist) {
                 minDist = dist;

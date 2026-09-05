@@ -7,12 +7,13 @@
 // ============================================
 
 import { lerpColor } from '../utils/color.js';
-import { ENEMY_ATTACKER_TYPES } from '../utils/Constants.js';
+import { ENEMY_ATTACKER_TYPES, STAGE_ENVIRONMENTS, WATER_FILL } from '../utils/Constants.js';
 import { Player } from '../entities/Player.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
 import { EnemyAttacker } from '../entities/EnemyAttacker.js';
 import { EnemyDrone } from '../entities/EnemyDrone.js';
 import { EnemyCruiseMissile } from '../entities/EnemyCruiseMissile.js';
+import { drawSurfaceLine } from '../world/environment/water.js';
 
 // Minimal stub so entity constructors/draw() run outside a live game. The player's
 // weapon aims at getTargetWorld() — return a point far to the right so it faces right.
@@ -131,6 +132,19 @@ export function drawStageScene(ctx, x, y, w, h, stageIndex, palette, nowMs) {
         drawEntity(ctx, e[enemyKey], enemyKey, enemyX, floorY, -bob);
         drawExchange(ctx, { x: playerX + 26, y: midY + bob }, { x: enemyX - 26, y: midY - bob }, nowMs, proj);
     }
+
+    // 面の環境を帯の中に描く（設計: デモ画面の背景）。全画面の重ねは画面側が別に行う
+    const kind = STAGE_ENVIRONMENTS[stageIndex] ? STAGE_ENVIRONMENTS[stageIndex].kind : 'none';
+    if (kind === 'water') {
+        ctx.save();
+        roundRectPath(ctx, x, y, w, h, 10);
+        ctx.clip();
+        ctx.fillStyle = WATER_FILL;
+        ctx.fillRect(x, floorY - 12, w, h - (floorY - 12 - y));
+        drawSurfaceLine(ctx, x, x + w, floorY - 12, nowMs / 16, []);
+        ctx.restore();
+    }
+
     ctx.restore();
 }
 

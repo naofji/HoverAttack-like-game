@@ -27,3 +27,30 @@ export function withAlpha(hex, alpha) {
     const [r, g, b] = _parseHex(hex);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** 知覚輝度（0..255）。ITU-R BT.601 の係数。地形の色の明暗を比べるのに使う。 */
+export function luminance(hex) {
+    const [r, g, b] = _parseHex(hex);
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * 色味（RGB の比）を保ったまま、輝度だけを target に合わせる。
+ *
+ * 「暗くする」を係数の掛け算ではなく到達点で書けるようにするためのもの。
+ * 元が暗い色に一律の係数を掛けると黒へ潰れてしまうが、他の色に対する**比**で
+ * 目標輝度を決めれば、明るい色も暗い色も同じだけ離れた位置に置ける
+ * （硬い岩の色を面のパレットから作るときに要る。面6の Cafe Noir が黒に潰れた）。
+ *
+ * 真っ黒は比を保ったまま明るくできない（0 を何倍しても 0）ので、無彩色として返す。
+ */
+export function withLuminance(hex, target) {
+    const [r, g, b] = _parseHex(hex);
+    const l = luminance(hex);
+    if (l <= 0) {
+        const v = _toHex(Math.round(target));
+        return '#' + v + v + v;
+    }
+    const k = target / l;
+    return '#' + _toHex(Math.round(r * k)) + _toHex(Math.round(g * k)) + _toHex(Math.round(b * k));
+}

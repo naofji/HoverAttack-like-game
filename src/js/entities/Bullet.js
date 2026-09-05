@@ -3,6 +3,7 @@
 // ============================================
 
 import { audioManager } from '../audio/AudioManager.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 /**
  * マシンガン弾の土台。自機と敵で、速さ・大きさ・寿命・音・色が違うだけで、
@@ -41,8 +42,9 @@ export class Bullet {
     update() {
         if (!this.alive) return;
 
-        this.x += this.vx;
-        this.y += this.vy;
+        const motion = motionFor(this.game, this.x, this.y);
+        this.x += this.vx * motion.speed;
+        this.y += this.vy * motion.speed;
         this.lifetime--;
 
         if (this.lifetime <= 0) {

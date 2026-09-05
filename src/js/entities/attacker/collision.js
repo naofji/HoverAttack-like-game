@@ -22,7 +22,7 @@ export const AttackerCollision = {
         const map = this.game.map;
 
         // --- Horizontal ---
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
         // Horizontal Map Collision
         let hitHMap = false;
         if (this._collidesWithMap()) {
@@ -40,7 +40,7 @@ export const AttackerCollision = {
 
             if (!steppedUp) {
                 hitHMap = true;
-                this.x -= this.vx;
+                this.x -= this.vx * this.motion.speed;
                 if (this.vx > 0) {
                     this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
                 } else if (this.vx < 0) {
@@ -76,7 +76,7 @@ export const AttackerCollision = {
                     const targetBelow = t && (t.y > this.y + TILE_SIZE);
                     if (!targetBelow) {
                         // Don't ratchet downhill: hold the ledge unless the target is below
-                        this.x -= this.vx;
+                        this.x -= this.vx * this.motion.speed;
                         this.vx = 0;
                         this.patrolDir *= -1;
                     } else if (mType === 'pace_and_jump') {
@@ -95,7 +95,7 @@ export const AttackerCollision = {
         }
 
         // --- Vertical ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         this.onGround = false;
 
         if (this._collidesWithMap()) {

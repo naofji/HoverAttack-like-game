@@ -13,6 +13,7 @@ import {
 import { TrailParticle } from './Particle.js';
 import { playBlast } from './destruction.js';
 import { avoidObstacle } from '../utils/obstacleAvoidance.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export class EnemyHomingMissile {
     constructor(game, x, y, initialAngle) {
@@ -42,13 +43,14 @@ export class EnemyHomingMissile {
     update() {
         if (!this.alive || this.exploded) return;
 
-        this._updateAcceleration();
+        const motion = motionFor(this.game, this.x, this.y);
+        this._updateAcceleration(motion.speed);
         this.frameCounter++;
         this._updateHoming();
         this._avoidObstacles();
 
-        this.x += Math.cos(this.angle + this.driftAngle) * this.speed;
-        this.y += Math.sin(this.angle + this.driftAngle) * this.speed;
+        this.x += Math.cos(this.angle + this.driftAngle) * this.speed * motion.speed;
+        this.y += Math.sin(this.angle + this.driftAngle) * this.speed * motion.speed;
         this.driftAngle *= 0.85;
 
         this._updateTrail();
@@ -71,8 +73,8 @@ export class EnemyHomingMissile {
     }
 
     /** Gradually accelerate from rest to cruise speed. */
-    _updateAcceleration() {
-        this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
+    _updateAcceleration(speedScale = 1) {
+        this.speed = Math.min(this.speed + this.acceleration * speedScale, this.maxSpeed);
     }
 
     /** Engage seeker when arming conditions are met, then steer toward target. */

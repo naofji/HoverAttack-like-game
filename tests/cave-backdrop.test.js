@@ -283,21 +283,23 @@ function luminance(hex) {
 
 test('backdrop tones are ordered void < rockDark < rockLight', async () => {
   const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
-  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
+  const { STAGE_PALETTES, ENV_BACKDROPS } = await import('../src/js/utils/Constants.js');
 
   for (const palette of STAGE_PALETTES) {
-    const { voidColor, rockDark, rockLight } = backdropColors(palette.fill);
-    assert.ok(
-      luminance(voidColor) < luminance(rockDark) && luminance(rockDark) < luminance(rockLight),
-      `tones out of order for ${palette.fill}: `
-      + `${luminance(voidColor).toFixed(1)} / ${luminance(rockDark).toFixed(1)} / ${luminance(rockLight).toFixed(1)}`
-    );
+    for (const backdrop of ENV_BACKDROPS) {
+      const { voidColor, rockDark, rockLight } = backdropColors(palette.fill, backdrop);
+      assert.ok(
+        luminance(voidColor) < luminance(rockDark) && luminance(rockDark) < luminance(rockLight),
+        `tones out of order for ${palette.fill}/${backdrop}: `
+        + `${luminance(voidColor).toFixed(1)} / ${luminance(rockDark).toFixed(1)} / ${luminance(rockLight).toFixed(1)}`
+      );
+    }
   }
 });
 
 test('backdrop reads as dark rock: structure visible but never competing with the foreground', async () => {
   const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
-  const { STAGE_PALETTES } = await import('../src/js/utils/Constants.js');
+  const { STAGE_PALETTES, ENV_BACKDROPS } = await import('../src/js/utils/Constants.js');
 
   const MIN_VOID = 3;          // 完全な黒ではない
   const MIN_STRUCTURE = 6;     // 岩と空洞の差がこれ未満だと黒一色に見える
@@ -305,16 +307,18 @@ test('backdrop reads as dark rock: structure visible but never competing with th
   const MAX_VS_FOREGROUND = 0.45; // 前景ブロックに対する遠景最明部の輝度比
 
   for (const palette of STAGE_PALETTES) {
-    const { voidColor, rockLight } = backdropColors(palette.fill);
-    const structure = luminance(rockLight) - luminance(voidColor);
+    for (const backdrop of ENV_BACKDROPS) {
+      const { voidColor, rockLight } = backdropColors(palette.fill, backdrop);
+      const structure = luminance(rockLight) - luminance(voidColor);
 
-    assert.ok(luminance(voidColor) >= MIN_VOID,
-      `void ${voidColor} for ${palette.fill} is effectively pure black`);
-    assert.ok(structure >= MIN_STRUCTURE,
-      `structure contrast ${structure.toFixed(1)} for ${palette.fill} is below ${MIN_STRUCTURE}`);
-    assert.ok(structure <= MAX_STRUCTURE,
-      `structure contrast ${structure.toFixed(1)} for ${palette.fill} exceeds ${MAX_STRUCTURE}`);
-    assert.ok(luminance(rockLight) <= luminance(palette.fill) * MAX_VS_FOREGROUND,
-      `rockLight ${rockLight} is too close to foreground block ${palette.fill}`);
+      assert.ok(luminance(voidColor) >= MIN_VOID,
+        `void ${voidColor} for ${palette.fill}/${backdrop} is effectively pure black`);
+      assert.ok(structure >= MIN_STRUCTURE,
+        `structure contrast ${structure.toFixed(1)} for ${palette.fill}/${backdrop} is below ${MIN_STRUCTURE}`);
+      assert.ok(structure <= MAX_STRUCTURE,
+        `structure contrast ${structure.toFixed(1)} for ${palette.fill}/${backdrop} exceeds ${MAX_STRUCTURE}`);
+      assert.ok(luminance(rockLight) <= luminance(palette.fill) * MAX_VS_FOREGROUND,
+        `rockLight ${rockLight} is too close to foreground block ${palette.fill}/${backdrop}`);
+    }
   }
 });

@@ -15,6 +15,7 @@ export function makeMap(rows) {
     isSolidAtPixel(x, y) {
       return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     },
+    isWaterAtPixel: () => false,
     pixelToTile(x, y) {
       return { r: Math.floor(y / TILE_SIZE), c: Math.floor(x / TILE_SIZE) };
     },
@@ -41,6 +42,9 @@ export function makeGame(map) {
     addScore() {},
     // _popSmoke() が無条件で呼ぶので、テスト用の簡易 game にも必須（修正4で防御を外した）
     spawnSmokeScreen() {},
+    // 環境。無いと motionFor が陸上へ落ちるので無くても動くが、
+    // 明示しておくと「このテストは陸上」と読める
+    env: null,
   };
 }
 

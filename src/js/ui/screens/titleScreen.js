@@ -47,6 +47,8 @@ export const TitleScreen = {
         }
         ctx.restore();
 
+        this._drawDemoEnvironment(ctx, this._titleStageIndex());
+
         drawScanlines(ctx, canvas.width, canvas.height);
 
         this._drawTitleMenu(ctx, canvas);
@@ -202,6 +204,8 @@ export const TitleScreen = {
         ctx.fillStyle = UI.dim;
         ctx.fillText('[W][S] / [\u2191][\u2193] SELECT    [ENTER] START    [ESC] BACK', W / 2, H - 20);
         ctx.restore();
+
+        this._drawDemoEnvironment(ctx, picked - 1);
 
         drawScanlines(ctx, W, H);
         ctx.textAlign = 'left';

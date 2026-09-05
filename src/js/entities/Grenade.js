@@ -5,12 +5,14 @@
 import {
     GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
     GRENADE_BLAST_RADIUS, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE,
+    GRENADE_BLOCK_DAMAGE, ENEMY_GRENADE_BLOCK_DAMAGE,
     GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
     GRENADE_LIFETIME,
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -29,21 +31,22 @@ export class Grenade {
         if (!this.alive) return;
 
         const map = this.game.map;
+        const motion = motionFor(this.game, this.x, this.y);
 
         // Apply gravity
-        this.vy += GRENADE_GRAVITY;
+        this.vy += GRENADE_GRAVITY * motion.gravity;
         if (this.vy > GRENADE_MAX_FALLING_SPEED) this.vy = GRENADE_MAX_FALLING_SPEED;
 
         // Calculate next position
-        let nextX = this.x + this.vx;
-        let nextY = this.y + this.vy;
+        let nextX = this.x + this.vx * motion.speed;
+        let nextY = this.y + this.vy * motion.speed;
 
         // --- Map collision (2D Bouncing) ---
 
         // Horizontal Movement & Collision
         if (map.isSolidAtPixel(nextX, this.y)) {
             this.vx *= -GRENADE_BOUNCE;
-            nextX = this.x + this.vx;
+            nextX = this.x + this.vx * motion.speed;
         }
         this.x = nextX;
 
@@ -57,7 +60,7 @@ export class Grenade {
                 this.vy = 0;
                 this.vx *= GRENADE_FRICTION;
             }
-            nextY = this.y + this.vy;
+            nextY = this.y + this.vy * motion.speed;
         }
         this.y = nextY;
 
@@ -83,11 +86,19 @@ export class Grenade {
         const tile = map.pixelToTile(this.x, this.y);
 
         // Map destruction
-        const destroyed = map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
+        // 半径は持ち主で変えない（変えると敵のグレネードが当たっていないように見える）。
+        // 弱めるのはブロックへのダメージだけ。敵は 1 なので通常岩は今までどおり一撃で
+        // 消えるが、硬い岩（HP 3）は残る＝足場の骨組みが撃ち崩されない
+        const destroyed = map.destroyArea(
+            tile.r, tile.c, GRENADE_BLAST_RADIUS,
+            this.isPlayerOwned ? GRENADE_BLOCK_DAMAGE : ENEMY_GRENADE_BLOCK_DAMAGE,
+        );
         playBlast(this.game, this.x, this.y, 'grenade');
 
         // Score for map blocks
-        if (destroyed.length > 0) {
+        // 持ち主を見ずに加点していたので、**敵が壊した地形でプレイヤーに点が入っていた**
+        // （敵のグレネードが増える後半ほど勝手に稼げる）。自機が壊した分だけ加点する
+        if (this.isPlayerOwned && destroyed.length > 0) {
             this.game.addScore(destroyed.length * 10);
         }
 

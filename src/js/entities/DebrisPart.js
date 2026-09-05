@@ -42,6 +42,9 @@ export class DebrisPart {
         this.life = opts.lifetime;
         this.game = opts.game || null;
         this.alive = true;
+        // 水面またぎの検出（StageEnvironment._trackWaterCrossings）が
+        // particles から破片だけを拾うための目印
+        this.isDebris = true;
     }
 
     /** 縮小率。後半ほど強く効くカーブで、消える直前に一気に小さくなる。 */

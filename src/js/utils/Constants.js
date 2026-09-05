@@ -186,6 +186,21 @@ export const GRENADE_BOUNCE = 0.2;
 export const GRENADE_FRICTION = 0.9;
 export const GRENADE_INITIAL_COUNT = 12;
 export const GRENADE_BLAST_RADIUS = 2; // in tiles for map destruction
+// グレネードの爆風がブロックに与えるダメージ。**半径は持ち主で変えない**（変えると
+// 「敵のグレネードが当たらない」ように見える）。変えるのはダメージだけ。
+//
+// 自機は 3 = HARD_BLOCK_HP なので硬い岩も一撃で吹き飛ぶ（今までどおり）。
+// **敵は 1。** 後半ほど敵の攻撃が増えて足場そのものが撃ち崩され、遊べなくなるのが
+// 元の困りごと（ユーザー報告）。1 なら通常岩（HP 1）は今までどおり一撃で消えるので
+// 敵が壁を掘る速度は変わらず、硬い岩（HP 3）だけが足場の骨組みとして残る。
+// HARD_BLOCK_CHANCE_BY_STAGE で後半ほど硬い岩を増やしてあるので、後半の面ほど
+// 骨組みが多く残る＝困りごとの大きい面ほど効く。
+//
+// 緊急防衛（EMERGENCY_WILD_FIRE_*）で敵が自分で壁を掘る仕組みは壊れない。
+// あれが使うのは Missile.js の damageBlock(…, 1) でグレネードではないし、
+// 敵のグレネードも通常岩は一撃で消せるまま。
+export const GRENADE_BLOCK_DAMAGE = 3;
+export const ENEMY_GRENADE_BLOCK_DAMAGE = 1;
 export const GRENADE_DAMAGE_RADIUS = 40; // in pixels for entity damage
 export const GRENADE_DAMAGE = 80;
 export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
@@ -292,6 +307,13 @@ export const LANDMINE_KNOCKBACK_VX = 3;   // Sideways push on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
 export const LANDMINE_BLAST_RADIUS = 50;   // Area of effect damage radius (~3 tiles)
 export const LANDMINE_SCORE = 50;      // Player-detonated landmine
+// 敵機が爆発したとき、この距離内の地雷が誘爆する。
+// 地雷を起爆できるのは「自機の弾」と「敵機の爆発」だけ（敵の弾では起爆しない）。
+// 敵の弾で起爆すると、地雷の爆風は game.enemies 全員に当たるので、敵が敵を巻き
+// 添えにする事故が起きていた。倒した敵の爆発で誘爆するのは自機の戦果なので残す。
+// 半径は地雷自身の爆風（LANDMINE_BLAST_RADIUS）と同じにしてある＝「爆風が届く
+// 距離なら誘爆する」で揃えた
+export const LANDMINE_DEATH_TRIGGER_RADIUS = LANDMINE_BLAST_RADIUS;
 export const ITEM_PICKUP_SCORE = 200;  // Any item (repair / missile / auto-aim) pickup
 
 // --- Enemy Tank (Hover) ---
@@ -856,9 +878,156 @@ export const STAGE_PALETTES = [
     { fill: '#483D8B', border: '#2e2759' }, // 7: DarkSlateBlue
 ];
 
+// --- 面ごとの環境（霧・雪・地底湖） ---
+// 設計: docs/superpowers/specs/2026-09-04-stage-environments-design.md
+// 面に固定する（面別ランキングがタイムアタックなので、同じ面は常に同じ条件）。
+// kind = 動きと画面に重ねる描画、backdrop = 遠景の装飾（kind から導けない行がある:
+// 7面は動きは今のままで遠景だけ機械）、terrain = 地形の生成規則（7面の要塞化のために
+// 予約。今は全行 'cave' で、読む側もまだ無い）。
+export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
+export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
+export const STAGE_ENVIRONMENTS = [
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 1
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 3
+    { kind: 'water', backdrop: 'wet',     terrain: 'cave' }, // 4: 地底湖
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
+    { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
+    { kind: 'none',  backdrop: 'machine', terrain: 'cave' }, // 7: 洞窟を改造した要塞（遠景だけ）
+];
+
+// --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
+// _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、
+// missionLevel は剰余で丸める（debugStartMission で面数を超えた値が来るため）。
+// 前半3面は元の一律 0.06 のまま据え置き（序盤の手応えを変えない）。4面から立ち上げ、
+// **5面だけ特別に8割**（雪の岩山。掘って抜けるより地形を読んで飛ぶ面にする）、6→7で更に上げる。
+//
+// なぜ増やすのか（ユーザーの動機。数値を動かす前にここを読むこと）:
+// 後半ほど敵のミサイルが増え、**足場そのものが撃ち崩されて遊べなくなる**。
+// 敵のミサイルとホーミングはブロックへのダメージが 1 なので、通常岩（HP 1）は
+// 被弾1発で消えるが、硬い岩（HARD_BLOCK_HP = 3）は3発耐える。つまりこの表は
+// 「後半の面の足場が何発もつか」の表でもある。
+// **5面が突出しているのは雪で滑るため。** 足場が減ると滑って立て直せず、
+// 他の面より遊びづらさが跳ね上がるので思い切って上げてある（6・7面より高い）。
+//
+// 効かない相手: グレネードと巡航ミサイルは destroyArea() で3ダメージなので、
+// 硬い岩も一撃で消える。そちらまで耐えさせたいなら HARD_BLOCK_HP を 4 に上げる
+// （自機が掘るコストも上がる）。
+// 注意: 割合を変えても rng の消費数は変わらない（確率に関係なく必ず1回引くため）ので、
+// 週次の決定性（同じ週なら同じ敵配置）は壊れない。tests/hard-block-ratio.test.js が縛る。
+export const HARD_BLOCK_CHANCE_BY_STAGE = [0.06, 0.06, 0.10, 0.18, 0.80, 0.28, 0.40];
+// 硬い岩の耐久。1発では壊れず、途中経過はひび割れの本数で見せる（Map._drawTile）
+export const HARD_BLOCK_HP = 3;
+
+// 水中の動き。speed は位置更新と推力に掛ける倍率、gravity は重力の倍率。
+// 浮力は持たない（重力が弱いだけで、沈めば底を歩く）。実機で詰める前の初期値。
+export const WATER_SPEED_SCALE = 0.5;
+export const WATER_GRAVITY_SCALE = 0.3;
+// 雪の地上で入力を離したときの速度の残存率（陸上は 0 = 即停止）。
+export const ICE_SLIDE = 0.94;  // 実機: もう少し滑る（0.9 → 0.94。止まるまでの距離が約1.7倍）
+export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
+export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ毎フレーム下り方向へ
+// くの字に削れた先端は元のブロックの1/4しか残らないので、坂(SLOPE_DOWNHILL_ACCEL=0.06)より
+// 強く滑らせて立っていられなくする。接している側への入力（最高速 1.75）なら戻れる強さ（実機の指摘）
+export const PLATE_TIP_SLIDE_ACCEL = 0.10;
+export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
+export const SLOPE_SNAP_COYOTE = 6;        // 段を踏み外してから下りの吸着を諦めるまでのフレーム
+// 霧で索敵の横半径に掛ける倍率（縦は SIGHT_ASPECT 経由で同じ比率で縮む）。自機の Auto Aim も同じ。
+export const FOG_SIGHT_SCALE = 0.5;
+
+// 地底湖の生成。低い位置のチャンバーを選び、部屋の底から数段を水にする。
+export const WATER_POOL_COUNT = 3;
+export const WATER_POOL_DEPTH_MIN = 3;      // 段（タイル）
+export const WATER_POOL_DEPTH_RANGE = 2;    // 3〜5段（depthMin + floor(rng*(range+1)) なので range=2）
+export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
+// 地底湖の描画。塗りは半透明（機体が水の色をかぶる）。水面は区間ごとに sin で上下。
+export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
+export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
+export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
+export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない
+export const WATER_WAVE_LENGTH = 24;        // 実機: 波を細かく（48 → 24。1.5 タイル）
+export const WATER_WAVE_SPEED = 0.05;       // rad/frame
+export const WATER_RIPPLE_DECAY = 0.94;     // しぶきが落ちた場所の波の減衰（毎フレーム）
+export const WATER_RIPPLE_MAX = 2.5;        // しぶきの波紋の強さの上限（実機: 爆発の波動は穏やかに。6 → 2.5）
+export const WATER_RIPPLE_MIN = 0.2;        // これ未満になった波紋は捨てる
+// しぶき。粒の数は |vy| に比例（速く落ちるほど盛大）。
+export const SPLASH_PARTICLES_PER_VY = 3;
+export const SPLASH_MAX_PARTICLES = 24;
+export const SPLASH_LIFETIME = 28;
+
+// 降雪。板（オフスクリーン）を層ごとにスクロールする。粒を個別に描かないのは
+// 縮尺（タイル16px）に見合う 1〜2px の粒を数千出したいから。
+export const SNOW_SHEET_SIZE = 512;
+// 実機: 3px の粒は大きすぎて雪に見えなかったので廃止。代わりに 2px を2枚重ね、
+// 落下速度と横揺れだけを「若干」変えて奥行きを出す（1.5倍を超えると大きさが同じぶん
+// 速さの差だけが目について2枚に見える）。板は層ごとに別のシードで撒かれ、横揺れの
+// 位相も層番号でずれるので、同じ大きさでも模様が重ならない（snow.js の buildSheet と sway）。
+//
+// 2枚目は**手前ではなく「遠い」と「中」の間**に置く（実機の指摘）。手前に置くと
+// 一番速い層が2枚あることになって騒がしく、欲しいのは奥行きの中途半端な段だった。
+// speed 1.15 の層はこれで無くなり、全体がゆっくり降るようになる。
+export const SNOW_LAYERS = [
+    { count: 320, size: 1, speed: 0.5,  sway: 0.25, alpha: 0.55 }, // 遠い
+    { count: 90,  size: 2, speed: 0.7,  sway: 0.38, alpha: 0.62 }, // 中途半端（遠いと中の間）
+    { count: 180, size: 2, speed: 0.9,  sway: 0.5,  alpha: 0.7 },  // 中
+];
+// 実機: 岩の奥（遠景と地形の間）に降るので弾とは層が違う。暗すぎたので明るくした（輝度 143 → 190。白 255 には寄せない）
+export const SNOW_COLOR = '#B6BFCB';
+// 足元で舞う雪。手前で短時間しか出ないので、降る雪より明るくする（輝度 220）。実機の指摘
+export const SNOW_KICK_COLOR = '#D5DDE8';
+// 舞う雪。既存の TrailParticle と同じ fillRect 1回の粒。
+export const SNOW_KICK_WALK = 1;     // 雪の地上を動いているあいだ、毎フレーム
+export const SNOW_KICK_LAND = 10;    // 着地
+export const SNOW_KICK_SLIDE = 3;    // 斜面を滑っているあいだ、毎フレーム
+export const SNOW_KICK_LIFETIME = 30;
+// 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
+export const SNOW_CAP_THICKNESS = 5;
+export const SNOW_CAP_COLOR = '#EEF4FB';
+// 雪の面の階段。部屋の縁に意図的に作り、滑れる長さを保証する。
+export const SNOW_STAIRS_COUNT = 8;
+export const SNOW_STAIRS_LENGTH_MIN = 5;
+export const SNOW_STAIRS_LENGTH_RANGE = 5;  // 5〜9段
+
+// 霧。層は事前に描いた板を視差付きでずらすだけ。粒は出さない。
+export const FOG_COLOR = '#8A96A8';
+export const FOG_OVERLAY_ALPHA = 0.22;      // 全画面の薄塗り
+// 板は画面（1366×768）より大きくして、継ぎ目が横方向にだけ1回入る形にする
+// （drawImage が層×2回で済む。1024×512 だと横2×縦2＝層×4回になる）
+export const FOG_SHEET_WIDTH = 2048;
+export const FOG_SHEET_HEIGHT = 1024;
+export const FOG_BLOB_COUNT = 220;          // 実機: ムラを増やす（160 → 220。雲は小さくする）
+// 実機の指摘: 円を並べると幾何学的に見える。煙幕と同じ瘤の並び（SMOKE_SHAPES）で
+// 雲形にし、横に押し潰して有機的に見せる
+export const FOG_BLOB_RADIUS_MIN = 18;      // 実機: 小さめ（40〜130 → 18〜60）
+export const FOG_BLOB_RADIUS_RANGE = 42;
+export const FOG_BLOB_ASPECT = 2.0;         // 横長。円だと幾何学的に見える（実機の指摘）
+export const FOG_BLOB_ALPHA_MIN = 0.05;     // 雲ごとの濃さの幅でムラを出す
+export const FOG_BLOB_ALPHA_RANGE = 0.30;
+export const FOG_LAYERS = [
+    { speed: 0.12, alpha: 0.30 },
+    { speed: 0.28, alpha: 0.22 },
+];
+
+// デモ画面（面別ランキング・面セレクト・タイトル）では文字の可読性のために薄くする。
+export const DEMO_OVERLAY_ALPHA_SCALE = 0.5;
+
 // --- Colors ---
+// 硬い岩の「寄せ先の灰色」。この色そのものは描画に出ない（下の2つの係数で面の
+// パレットと混ぜてから使う。HARD_BLOCK_TINT = 1.0 にすればこの灰色一色に戻る）
 export const COLOR_HARD_BLOCK = '#555555';
 export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
+// 硬い岩の色を面のパレットから作るときの2つの係数（Map の constructor で使う）。
+// 灰色一色だった頃は、5面を岩8割にすると画面の大半が灰色になって面のテーマ色が
+// 消えてしまった。かといって単純に灰色へ寄せるだけでは駄目で、面1は通常岩との
+// 輝度差が 0、面7で 8 しかなくなり、彩度だけが手がかりになる。硬い岩は3発かかる
+// ので**撃つ前に見分けられること**が要る。そこで2段構えにしている:
+//   1) 面のパレットを COLOR_HARD_BLOCK へ TINT だけ寄せる（色味を残す）
+//   2) その色の輝度を「通常岩の輝度 × DARKEN」に合わせる
+// 2 を係数の掛け算ではなく通常岩に対する**比**にしたのが要点。一律の係数だと
+// 面6（Cafe Noir、元の輝度 58）だけ黒へ潰れて洞窟の背景と見分けがつかなくなる。
+// 実測の輝度差（通常岩 → 硬い岩）: 32 / 38 / 51 / 40 / 45 / 22 / 28
+export const HARD_BLOCK_TINT = 0.65;    // 0 = 面の色そのまま、1.0 = 灰色一色（元の見た目）
+export const HARD_BLOCK_DARKEN = 0.62;  // 硬い岩の輝度 ÷ 通常岩の輝度
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_CAVE_BG = '#1a0a00';

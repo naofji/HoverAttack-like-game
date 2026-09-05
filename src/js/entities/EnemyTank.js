@@ -9,9 +9,14 @@ import {
     ENEMY_TANK_FIRE_INTERVAL, ENEMY_TANK_SCORE,
     ENEMY_TANK_MAX_FALLING_SPEED,
     
-    ENEMY_RECOIL_PROFILES
+    ENEMY_RECOIL_PROFILES,
+    VIEW_CULL_MARGIN, SLOPE_DOWNHILL_ACCEL, ICE_MAX_SLIDE_SPEED,
+    SNOW_KICK_WALK, SNOW_KICK_SLIDE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
+import { stairDirection, supportColumn } from '../utils/slope.js';
+import { isInView } from '../utils/viewCull.js';
+import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -26,6 +31,10 @@ export class EnemyTank {
         this.height = ENEMY_TANK_HEIGHT;
         this.vx = 0;
         this.vy = 0;
+        // 環境の物理係数（水中で重力・速度を落とす等）。update() で毎フレーム引き直す。
+        this.motion = LAND_MOTION;
+        // 前フレームの接地。雪の粒を接地中だけに絞るのに使う（自機の onGround と対）
+        this.grounded = false;
         this.recoilProfile = ENEMY_RECOIL_PROFILES.tank;
         this.recoilTimer = 0;
         this.alive = true;
@@ -55,12 +64,18 @@ export class EnemyTank {
         if (!recoiling) this.vx = this.patrolDir * ENEMY_TANK_SPEED;
 
         // --- Gravity (hover tanks float but are affected by gravity) ---
-        this.vy += GRAVITY;
+        // 中心座標で環境を引く。_moveAndCollide はこの後に呼ばれるので、
+        // そちら側にも同じ値を持たせて速度への掛け目を揃える（Player と同じ手順）。
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
+        this.vy += GRAVITY * this.motion.gravity;
         if (this.vy > ENEMY_TANK_MAX_FALLING_SPEED) this.vy = ENEMY_TANK_MAX_FALLING_SPEED;
 
         // --- Friction ---
         this.vx *= FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
+
+        // 雪の階段では下りに加速し、雪を蹴る（自機と同じ規則。ホバー戦車なので45度の補間は無し）
+        if (this.motion.slide > 0) this._applySnowSlope();
 
         // --- Movement with collision (carrier-style) ---
         this._moveAndCollide();
@@ -76,6 +91,28 @@ export class EnemyTank {
     // Physics (similar to Carrier)
     // ------------------------------------------
 
+    /**
+     * 雪の階段の下りで加速し、動いているあいだ雪を蹴る。
+     * 粒は画面内の戦車だけ（画面外の 9 割で撒くと particles を食い潰す）。
+     */
+    _applySnowSlope() {
+        const map = this.game.map;
+        const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
+        const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
+        const dir = stairDirection(map, r, c);
+        if (dir !== 0) {
+            this.vx += -dir * SLOPE_DOWNHILL_ACCEL;
+            this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+        }
+        // 粒は接地しているときだけ。_applySnowSlope は _moveAndCollide より前に走るので
+        // this.grounded は前フレームの結果（自機が this.onGround を同じ順で見ているのと対）。
+        // 接地を条件にしないと、崖から落ちる戦車が空中で雪を撒く
+        if (this.grounded && this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
+            && this.game.camera && isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) {
+            this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, dir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
+        }
+    }
+
     _moveAndCollide() {
         const map = this.game.map;
 
@@ -83,6 +120,7 @@ export class EnemyTank {
         this.y += 1;
         const grounded = this._collidesWithMap();
         this.y -= 1;
+        this.grounded = grounded;
 
         // --- Predictive Navigation (User Rules) ---
         if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
@@ -122,11 +160,11 @@ export class EnemyTank {
         }
 
         // --- Apply Horizontal Movement ---
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
 
         // Safety Fallback (in case of strange map overlaps)
         if (this._collidesWithMap()) {
-            this.x -= this.vx;
+            this.x -= this.vx * this.motion.speed;
             this.vx = 0;
             if (!isRecoiling(this)) this.patrolDir *= -1;
         }
@@ -135,7 +173,7 @@ export class EnemyTank {
         this._checkHorizontalEntities();
 
         // --- Vertical ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         if (this._collidesWithMap()) {
             if (this.vy > 0) {
                 // Landing
@@ -223,7 +261,8 @@ export class EnemyTank {
                 // 索敵の内外は楕円で、その中での順位付けはユークリッド距離で。
                 // 正規化距離で順位を付けると、縦のほうが半径が小さいぶん
                 // 横に居る標的が不当に優先されてしまう。
-                if (!withinSight(dx, dy, ENEMY_TANK_SIGHT_RANGE)) return;
+                // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）
+                if (!withinSight(dx, dy, ENEMY_TANK_SIGHT_RANGE * sightScaleFor(this.game))) return;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist <= minDist) { minDist = dist; best = entity; }
             }
@@ -296,3 +335,8 @@ export class EnemyTank {
         ctx.restore();
     }
 }
+
+// プロトタイプ既定値。既存テストの一部は `Object.create(EnemyTank.prototype)` で
+// constructor を通さずインスタンスを作る（sight-ellipse.test.js など）ため、
+// constructor 内の `this.motion = LAND_MOTION;` だけでは救えない（Player.js と同じ理由）。
+EnemyTank.prototype.motion = LAND_MOTION;

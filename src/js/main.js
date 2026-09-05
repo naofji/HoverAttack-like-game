@@ -39,6 +39,7 @@ import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { toggleFullscreen } from './utils/fullscreen.js';
 import { Map } from './world/Map.js';
 import { Camera } from './world/Camera.js';
+import { StageEnvironment, sightScaleFor } from './world/StageEnvironment.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Flag } from './entities/Flag.js';
@@ -193,6 +194,8 @@ export const Game = {
         this.rng = new SeededRNG(stageSeed(this.weekSeed, this.missionsCompleted));
 
         this.map = new Map(this, this.missionsCompleted);
+        // 面の環境（霧・雪・地底湖）。map の後（水タイルを読む）、Carrier/Player の前
+        this.env = new StageEnvironment(this, this.missionsCompleted);
         this.camera = new Camera(this);
         this.hud = new HUD(this);
         this.crosshair = new Crosshair(this);
@@ -529,6 +532,7 @@ export const Game = {
         this._updateAndPrune(this.missileKits);
         this._updateAutoAim();
         this._updateOverdrive();
+        this.env.update();
         this.map.update();
         this._updateAndPrune(this.enemies);
         this._updateEnemyHoverSound();
@@ -704,11 +708,17 @@ export const Game = {
 
             if (mine.alive) {
                 for (const proj of this.projectiles) {
+                    // 敵の弾では起爆しない（continue であって break ではない。敵の弾が
+                    // 先に並んでいても、後ろの自機の弾で起爆できないといけない）。
+                    // 地雷の爆風は game.enemies 全員に当たるので、敵の流れ弾で起爆すると
+                    // 敵が敵を巻き添えにしていた。誘爆させてよいのは自機の弾と、
+                    // 倒した敵機の爆発（destruction.js の detonatesMines）だけ
+                    if (!proj.isPlayerOwned) continue;
                     if (proj.alive && !proj.exploded && mine.collidesWithPoint(proj.x, proj.y)) {
                         mine.detonate();
                         proj.alive = false;
                         proj.exploded = true;
-                        if (proj.isPlayerOwned) this.addScore(LANDMINE_SCORE);
+                        this.addScore(LANDMINE_SCORE);
                         break;
                     }
                 }
@@ -803,7 +813,8 @@ export const Game = {
         // ロック対象なし: マウスのワールド座標に最も近い敵を新規検索
         const mouseWorld = this.input.getMouseWorld(this.camera);
         let bestEnemy = null;
-        let bestDist = AUTO_AIM_SNAP_RADIUS;
+        // 霧では Auto Aim の索敵も縮む（敵の索敵と同じ倍率）
+        let bestDist = AUTO_AIM_SNAP_RADIUS * sightScaleFor(this);
         for (const enemy of this.enemies) {
             if (!enemy.alive) continue;
             if (isEnemyConcealed(enemy, this.smokeScreens)) continue;  // 煙の中は見えない
@@ -943,6 +954,8 @@ export const Game = {
         }
 
         this._drawWorld(ctx);
+        // 環境の画面描画（霧の層・降雪）。ワールドの上、HUD の下
+        this.env.drawOverlay(ctx);
         this.hud.draw(ctx);
         this.crosshair.draw(ctx);
         this._drawOverlays(ctx);
@@ -973,6 +986,9 @@ export const Game = {
             ctx.fillStyle = COLOR_CAVE_BG;
             ctx.fillRect(camX, camY, this.canvas.width, this.canvas.height);
         }
+
+        // 環境の「岩の奥」の描画（雪）。遠景の上、地形の下＝空洞の向こうで降っている
+        this.env.drawBehindTerrain(ctx, camX, camY);
 
         this.map.draw(ctx);
         if (this.carrier) this.carrier.draw(ctx);
@@ -1014,6 +1030,11 @@ export const Game = {
 
         for (const bullet of this.enemyBullets) bullet.draw(ctx);
         if (this.flag) this.flag.draw(ctx);
+
+        // 環境のワールド描画（水の塗りと水面）。機体と弾の上、煙幕の下。
+        // パーティクルの後に描くのは、水中の爆発や破片にも水の色をかぶせたいから
+        // （設計書は「パーティクルの前」と書いたが、こちらのほうが読める）
+        this.env.drawOverWorld(ctx, camX, camY);
 
         // 煙は敵とHPバーの上に重ねる（隠すのが仕事なので最後に描く）
         for (const screen of this.smokeScreens) screen.draw(ctx);

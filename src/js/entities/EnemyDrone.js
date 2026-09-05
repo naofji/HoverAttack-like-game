@@ -15,9 +15,10 @@ import {
     EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SPEED_MULT,
     EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES,
-    DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE
+    DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE, TILE_SIZE
 } from '../utils/Constants.js';
 import { collidesWithMap, hasLineOfSight, withinSight } from '../utils/Physics.js';
+import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
 import { tickRecoil } from '../utils/Recoil.js';
@@ -268,7 +269,9 @@ export class EnemyDrone {
             // 250px は実在するどの敵の楕円にも収まってしまう（250/409.6 ≈ 0.61）。
             // それでも残してあるのは、将来どこかの索敵係数を下げて楕円の縦半径が
             // 250px を割り込んだときに、この OR が保険として即座に効くようにするため。
-            const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE)
+            // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）。
+            // 緊急防衛用の EMERGENCY_DEFENSE_SIGHT_RANGE は保険の即応距離なので対象外。
+            const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE * sightScaleFor(this.game))
                 || (this.emergencyDefense
                     && dx * dx + dy * dy < EMERGENCY_DEFENSE_SIGHT_RANGE ** 2);
             if (inSight && this._hasLineOfSight(target)) {
@@ -434,6 +437,25 @@ export class EnemyDrone {
                 this._startHover(); // Stop dashing if hit wall
             } else if (this.state === 'patrol') {
                 this.patrolDir *= -1;
+            }
+        }
+
+        // 水には入らない。次の位置の底が水なら、水面の1つ上で止める
+        // （水中の自機を水面すれすれで待つ形になる。設計どおり）
+        if (this.vy > 0) {
+            const nextBottom = this.y + this.height + this.vy;
+            const centerX = this.x + this.width / 2;
+            if (map.isWaterAtPixel(centerX, nextBottom)) {
+                // プールは斜めの縁を持つので、タイルの底ではなく実際の水面行で止める。
+                // waterSurfaceRow が使えない（プール未対応マップ）ときだけ旧来のタイル境界に戻す
+                const r = Math.floor(nextBottom / TILE_SIZE);
+                const c = Math.floor(centerX / TILE_SIZE);
+                const surfaceRow = map.waterSurfaceRow ? map.waterSurfaceRow(r, c) : -1;
+                const surfaceY = surfaceRow >= 0
+                    ? surfaceRow * TILE_SIZE
+                    : Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
+                this.y = surfaceY - this.height;
+                this.vy = 0;
             }
         }
 

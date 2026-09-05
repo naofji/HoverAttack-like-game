@@ -203,8 +203,9 @@
 
 `_drawWorld` に環境の描画を 2 回だけ足す。
 
-1. 地形と機体の後、パーティクルの前（ワールド座標）: `env.drawOverWorld(ctx, camX, camY)`。
-   水キャッシュの転送と水面の線。雪・霧はここでは何もしない
+1. パーティクルの後、煙幕の前（ワールド座標）: `env.drawOverWorld(ctx, camX, camY)`。
+   水キャッシュの転送と水面の線。雪・霧はここでは何もしない。水中の爆発や破片にも
+   水の色をかぶせたいので、この順にした（実装時にパーティクルの前から変更）
 2. HUD の直前（画面座標）: `env.drawOverlay(ctx)`。霧の層と薄塗り、降雪の板
 
 | 面 | 1フレームの追加 |
@@ -290,3 +291,63 @@
 - 母艦の浮力、水の流体挙動（水位の変化・流れ込み）、霧の濃淡のムラ
 - 環境の効果音
 - 週替わりの環境
+
+---
+
+## 実装後の確認
+
+**ハードリロード（Cmd+Shift+R）が必要。** `index.html` が `main.js?v=1.0` とクエリでキャッシュを効かせているため。
+
+### 確認する面と見るポイント
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 4 | 水の色と濃さ、水面の波、しぶきの量、水中の重さ | `WATER_FILL` `WATER_WAVE_AMPLITUDE` `SPLASH_PARTICLES_PER_VY` `WATER_SPEED_SCALE` `WATER_GRAVITY_SCALE` |
+| 4 | 斜面の描画オフセット（自機が段を離れた瞬間に 0 へ戻るので跳ねて見えるか） | `Player.js` の `drawOffsetY`（`utils/slope.js` の `slopeDrawOffset`）|
+| 4 | 水面をマシンガンの連射がまたいだときのしぶきの量（弾1発ごとに出るので粒が跳ねる） | `SPLASH_PARTICLES_PER_VY` `SPLASH_MAX_PARTICLES` |
+| 5 | 降雪の密度と速さ、積雪の帯の厚み、滑りの気持ちよさ、斜面の見え方 | `SNOW_LAYERS` `SNOW_CAP_THICKNESS` `ICE_SLIDE` `SLOPE_DOWNHILL_ACCEL` `SLOPE_UPHILL_SCALE` |
+| 5 | 斜面の下り吸着の猶予（浮いた直後に段へ吸着する範囲。広すぎると1段の崖でも吸着する） | `SLOPE_SNAP_COYOTE`（今 6。1〜2 で足りるので、違和感があれば 3 へ）|
+| 5 | 遠景の積雪の帯の明るさ（岩の輝度上限をわざと超えている） | `CaveBackdrop.js` の `_drawRockBand` の `lerpColor(rockLight, '#FFFFFF', 0.5)` |
+| 5 | 降雪の drawImage 回数（512px の板を 4×3 枚 × 3 層 ≒ 36 回/フレーム。設計の見積もり 6〜9 回より多い。計測で重ければ板を 2048×1024 にすると層あたり 2 回） | `SNOW_SHEET_SIZE` |
+| 6 | 霧の濃さ、煙幕との見分けにくさ、索敵の縮み | `FOG_OVERLAY_ALPHA` `FOG_LAYERS` `FOG_SIGHT_SCALE` |
+| 6 | 遠景が霧で溶けているか（輝度テストの都合で寄せは 0.06 と弱い。物足りなければ寄せ方を変える） | `CaveBackdrop.js` の `BACKDROP_TINT.fog.k` |
+| 6 | 霧の板のメモリ（2048×1024 が層数ぶん。デモ画面用にも面ごとに1組） | `FOG_SHEET_WIDTH` `FOG_SHEET_HEIGHT` |
+| 7 | 遠景の機械の密度と色 | `CaveBackdrop._drawMachineDecor` のモジュール定数 |
+| デモ | 面別ランキング・面セレクト・タイトルの重ねの薄さ | `DEMO_OVERLAY_ALPHA_SCALE` |
+
+### 第2ラウンド（2026-09-05 の実機指摘への対応）
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 4 | 波の細かさと水面の線の淡さ、しぶきの波紋の穏やかさ | `WATER_WAVE_LENGTH`（24）`WATER_WAVE_AMPLITUDE`（1.5）`WATER_SURFACE_LINE_WIDTH`（1）`WATER_SURFACE_COLOR` `WATER_RIPPLE_MAX`（2.5） |
+| 5 | 雪が岩の奥（遠景と地形の間）で降っているか。灰色の粒が弾と見分けられるか | `SNOW_COLOR`（#8A9098）`SNOW_LAYERS`（粒径 1〜2px） |
+| 5 | 滑りの長さ | `ICE_SLIDE`（0.94） |
+| 5 | 階段が45度の坂に見えるか。板状の突出が中心で交わるくの字か。坂の斜辺の積雪の帯の太さ | `Map._drawRockyBlock` の雪の分岐、`SNOW_CAP_THICKNESS` |
+| 5 | 坂の上で自機の足が斜辺に乗っているか（描画オフセットの向きを反転した） | `utils/slope.js` の `slopeDrawOffset` |
+| 6 | 霧が雲形に見えるか、濃淡のムラ、雲の大きさと横長さ | `FOG_BLOB_COUNT` `FOG_BLOB_RADIUS_MIN/RANGE` `FOG_BLOB_ASPECT` `FOG_BLOB_ALPHA_MIN/RANGE` |
+| 5〜7 | 遠景の装飾が前景より目立たないか（全装飾色を前景の輝度の 0.45 倍以下に落とした） | `CaveBackdrop.js` の `_drawRockBand`（雪のハイライト）`_drawWetDecor` `_drawMachineDecor` |
+
+### 第3ラウンド（2026-09-05 の追加指摘）
+
+| 面 | 見るところ | 定数 |
+|---|---|---|
+| 5 | 降る雪の明るさと粒の大きさ。岩の奥で降っているのが分かるか、弾と見分けられるか | `SNOW_COLOR`（#B6BFCB・輝度190。前は #8A9098・143）`SNOW_LAYERS` の粒径（1/2/3px） |
+| 5 | 足元で舞う雪の明るさ | `SNOW_KICK_COLOR`（#D5DDE8・輝度220。降る雪より明るくしてある） |
+| 5 | くの字に削れた先端から滑り落ちる速さ。立っていられないか、接している側へ入力すれば戻れるか | `PLATE_TIP_SLIDE_ACCEL`（0.10。45度の坂は `SLOPE_DOWNHILL_ACCEL` 0.06） |
+| 全般 | アタッカーのドロップが週内で固定されているか（同じ週・同じ面・同じ場所なら同じアイテム。倒す順番を変えても変わらない） | `utils/drops.js` の `attackerDropSeed` / `decideAttackerDrop` |
+
+- ドロップの確率そのものは変えていない（`ATTACKER_HEAVY_DROP_CHANCE` などは据え置き）。変えたのは「いつ・どの乱数で引くか」だけ。
+- くの字の先端は敵（戦車）には滑りを入れていない。巡回中に足場から落ち続けると湧きの前提が崩れるため。敵にも効かせたい場合は `EnemyTank._applySnowSlope` から同じ判定を呼ぶ。
+
+7面の地形タイルを人工物のパターンにする件は、要塞化の設計（別計画）で扱う。
+
+### 計測
+
+雪の面（5面）と霧の面（6面）で1回ずつ。2026-08-16 と同じ方式で JSON に吐く:
+
+- フレーム間隔と描画+更新の時間を配列に積む
+- 終了時に JSON をダウンロード
+- 画面には出さない
+- 見る値は p99 と max のフレーム間隔、描画時間の平均
+- 8.4% から倍以内なら合格
+- **計測用の一時コードは commit しない（`git add -p` で除く）**

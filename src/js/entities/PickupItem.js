@@ -3,6 +3,7 @@
 // ============================================
 
 import { TILE_SIZE, GRAVITY, ITEM_PICKUP_SCORE } from '../utils/Constants.js';
+import { motionFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 /** アイテムは1タイルぶんの正方形。3種とも同じ大きさで揃えてある。 */
@@ -61,9 +62,12 @@ export class PickupItem {
     _fall() {
         if (this.onGround) return;
 
-        this.vy += GRAVITY;
+        // アイテムは _moveAndCollide のような専用メソッドを持たないので、
+        // ここで中心座標の係数をその場で引く（Player/EnemyTank と同じ考え方）。
+        const motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
+        this.vy += GRAVITY * motion.gravity;
         if (this.vy > MAX_FALL_SPEED) this.vy = MAX_FALL_SPEED;
-        this.y += this.vy;
+        this.y += this.vy * motion.speed;
 
         const map = this.game.map;
         const feetY = this.y + this.height;

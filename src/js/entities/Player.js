@@ -17,10 +17,14 @@ import {
     COLOR_HOVER_EXHAUST,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
-    OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS
+    OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
+    SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
+    SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
+import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
+import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
@@ -75,6 +79,15 @@ export class Player {
         this.onGround = false;
         this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
         this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
+        // 今フレームの環境係数。update() が毎フレーム引き直すが、docked 中や
+        // 描画など update() を通らない経路でも undefined にならないよう陸上で初期化
+        this.motion = LAND_MOTION;
+        this.slopeDir = 0;      // 今フレームに足が乗っている階段の向き（雪面のみ）
+        this.slopeCoyote = 0;   // 段を踏み外した直後、まだ階段の上とみなす残りフレーム
+        // 今フレームに足が乗っているくの字の先端の向き。階段とは別に持つ。
+        // くの字は下が空洞なので下りの吸着を効かせてはいけない（コヨーテも無し）
+        this.plateDir = 0;
+        this.drawOffsetY = 0;   // 45度の線に乗せるための描画だけの縦ずらし
         this.facingRight = true;
         this.alive = true;
 
@@ -142,10 +155,14 @@ export class Player {
 
         const input = this.game.input;
         this._updateMGReload(input);
+        // 今フレームの環境の係数。中心で1回引いて、この後の重力・推力・位置更新が
+        // 全部同じ値を使う（途中で水面をまたいでも同一フレーム内で係数が変わらない）
+        this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this._updateCrouching(input);
         this._updateHorizontal(input);
+        this._applySnowSlope(input);
 
-        this.vy += GRAVITY;
+        this.vy += GRAVITY * this.motion.gravity;
 
         this._updateBurstHover(input);
         this._updateFuelRecovery(input);
@@ -166,8 +183,16 @@ export class Player {
         if (landed && this.airborneFrames >= LANDING_MIN_AIRBORNE_FRAMES) {
             audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
         }
+        if (this.motion.slide > 0) this._kickSnow(landed);
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
+        // くの字の先端には描いた坂が無いので、階段(slopeDir)を優先しつつ、
+        // 階段でなければ板の先端用のオフセット（plateDrawOffset）を使う
+        this.drawOffsetY = this.onGround
+            ? (this.slopeDir !== 0
+                ? slopeDrawOffset(this.slopeDir, this.x + this.width / 2)
+                : plateDrawOffset(this.plateDir, this.x + this.width / 2))
+            : 0;
 
         this._updateWalkAnimation();
     }
@@ -231,11 +256,72 @@ export class Player {
         } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
             this.vx = PLAYER_MAX_SPEED;
         } else if (this.onGround) {
-            this.vx = 0;
+            // 陸上は slide=0 で従来どおり即停止。氷では残存率ぶん滑る
+            this.vx *= this.motion.slide;
+            if (Math.abs(this.vx) < 0.05) this.vx = 0;
         } else {
             this.vx *= AIR_FRICTION;
             if (Math.abs(this.vx) < 0.1) this.vx = 0;
         }
+    }
+
+    /**
+     * 雪の面の斜面（階段）。下りは加速、上りは最高速が落ちる。
+     * onGround は前フレームの結果（_moveAndCollide が毎フレーム冒頭で倒す）。
+     */
+    _applySnowSlope(input) {
+        if (this.motion.slide === 0) { this.slopeDir = 0; this.slopeCoyote = 0; this.plateDir = 0; return; }
+        if (!this.onGround) {
+            // 段を踏み外した直後の数フレームは階段の上のままにしておく。
+            // 接地判定は足を4px内側で見るため、体が前の段に数px重なったまま「空中」に
+            // なる。ここで slopeDir を 0 に落とすと下の吸着が二度と成立せず、
+            // 1段16pxの落下を10フレーム待つ動きに戻ってしまう（実測）
+            if (this.slopeCoyote > 0) this.slopeCoyote--; else this.slopeDir = 0;
+            // くの字の先端には吸着（コヨーテ）が無い。下が空洞なので、空中に出たら
+            // 即座に「乗っていない」ことにしないと落下中も滑り続けて描画がずれる
+            this.plateDir = 0;
+            return;
+        }
+        this.slopeDir = 0;
+        this.plateDir = 0;
+        const map = this.game.map;
+        const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
+        const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
+        this.slopeDir = stairDirection(map, r, c);
+        if (this.slopeDir === 0) {
+            this.slopeCoyote = 0;
+            // 階段でなければ、同じ支持列でくの字の先端かどうかを見る（実機の指摘：
+            // 突き出たブロックの先端は元のブロックの1/4しかカバーしておらず不安定なので、
+            // 坂と同じく露出側へ滑り落ちるようにする。当たり判定は正方形のまま変えない）
+            this.plateDir = plateTipDirection(map, r, c);
+            if (this.plateDir !== 0) {
+                this.vx += this.plateDir * PLATE_TIP_SLIDE_ACCEL;
+                this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+            }
+            return;
+        }
+        this.slopeCoyote = SLOPE_SNAP_COYOTE;
+        const downhill = -this.slopeDir;
+        const held = (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) ? -1
+            : (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) ? 1 : 0;
+        if (held === this.slopeDir) {
+            // 上り: 入力の最高速を落とす（_updateHorizontal が ±MAX にした直後）
+            this.vx = held * PLAYER_MAX_SPEED * SLOPE_UPHILL_SCALE;
+        }
+        // しゃがみ中もここへ来る（_updateHorizontal が vx=0 にした後に加速が乗る）。
+        // 雪の斜面では屈んだまま滑り降りるのが意図した挙動
+        this.vx += downhill * SLOPE_DOWNHILL_ACCEL;
+        this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+    }
+
+    /** 雪の地上での粒。着地で多め、滑っているあいだは毎フレーム。 */
+    _kickSnow(landed) {
+        if (!this.game.spawnSnowKick) return;
+        const fx = this.x + this.width / 2;
+        const fy = this.y + this.height;
+        if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
+        if (!this.onGround || Math.abs(this.vx) < 0.1) return;
+        this.game.spawnSnowKick(fx, fy, (this.slopeDir !== 0 || this.plateDir !== 0) ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
     }
 
     /** Handle burst jump and hovering. */
@@ -256,7 +342,7 @@ export class Player {
                 // Hover (dynamic thrust based on remaining fuel)
                 const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
                 const thrust = HOVER_THRUST_MIN + (HOVER_THRUST - HOVER_THRUST_MIN) * fuelRatio;
-                this.vy += thrust;
+                this.vy += thrust * this.motion.speed; // 水中では浮上がゆっくり
                 this.hoverFuel = Math.max(0, this.hoverFuel - HOVER_FUEL_CONSUMPTION);
                 this.hovering = true;
                 audioManager.playHover(fuelRatio);
@@ -327,7 +413,7 @@ export class Player {
         this._pushOutOfEnemiesHorizontally();
 
         // --- 縦 ---
-        this.y += this.vy;
+        this.y += this.vy * this.motion.speed;
         this.onGround = false;
         this._landOnMapOrHitCeiling();
         this._landOnCarrier();
@@ -343,7 +429,7 @@ export class Player {
      * @returns {boolean} マップに当たって止まったか（母艦の押し出しを飛ばす判断に使う）
      */
     _moveHorizontalIntoMap() {
-        this.x += this.vx;
+        this.x += this.vx * this.motion.speed;
 
         let hitHMap = false;
         if (this._collidesWithMap()) {
@@ -362,7 +448,7 @@ export class Player {
 
             if (!steppedUp) {
                 hitHMap = true;
-                this.x -= this.vx;
+                this.x -= this.vx * this.motion.speed;
                 if (this.vx > 0) {
                     this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
                 } else if (this.vx < 0) {
@@ -546,6 +632,25 @@ export class Player {
 
     _probeGroundBelowFeet() {
         const map = this.game.map;
+        // 雪の階段を下るとき: 足元の1段下が床なら落下を待たず吸着する
+        // （段を跳ねる動きが消え、描画オフセットと合わせて斜面を滑って見える）
+        if (!this.onGround && this.vy >= 0 && this.motion.slide > 0 && this.slopeDir !== 0) {
+            const probeY = this.y + this.height + TILE_SIZE + 1;
+            const cx = this.x + this.width / 2;
+            if (map.isSolidAtPixel(cx, probeY) && !map.isSolidAtPixel(cx, probeY - TILE_SIZE)) {
+                // 吸着先で地形にめり込まないことを確かめてから移す。中心の1点だけ見て
+                // 落とすと、体の左半分がまだ1段高い段に乗っているうちに下ろしてしまい、
+                // 次のフレームに押し戻されて 184⇔200 と16px往復する（実測）
+                const prevY = this.y;
+                this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
+                if (!this._collidesWithMap()) {
+                    this.onGround = true;
+                    this.vy = 0;
+                    return;
+                }
+                this.y = prevY;
+            }
+        }
         // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)
         // This prevents the "not grounded" flicker when standing on a surface,
         // but it must NOT trigger when moving upward (vy < 0) otherwise slow hover gets stuck to the ground.
@@ -677,6 +782,11 @@ export class Player {
         this.missileCooldown = 0;
         this.walkFrame = 2;
         this.walkTimer = 0;
+        // 雪の階段で死んだ直後に古い向きで吸着しないように
+        this.slopeDir = 0;
+        this.slopeCoyote = 0;
+        this.plateDir = 0;
+        this.drawOffsetY = 0;
         this._resetMGState();
 
         audioManager.stopHover();
@@ -808,6 +918,11 @@ export class Player {
             return;
         }
 
+        // 45度の斜面に乗って見せるための縦ずらし。当たり判定は動かさず描画だけ。
+        // 点滅の早期 return より後に save するので、restore は末尾の1回で足りる
+        ctx.save();
+        ctx.translate(0, this.drawOffsetY);
+
         const x = Math.round(this.x);
         const y = Math.round(this.y);
         const isCrouched = this.crouching || this.docked;
@@ -825,6 +940,7 @@ export class Player {
             }
         }
         this._drawHoverExhaust(ctx);
+        ctx.restore();
     }
 
     /**
@@ -1163,3 +1279,10 @@ export class Player {
         });
     }
 }
+
+// プロトタイプ既定値。既存テストの一部は `Object.create(Player.prototype)` で
+// constructor を通さずインスタンスを作る（carrier-lift.test.js）ため、
+// constructor 内の `this.motion = LAND_MOTION;` だけでは救えない。
+// プロトタイプ側にも既定を置き、update() を一度も呼んでいない・constructor も
+// 通っていない経路でも motion が undefined にならないようにする。
+Player.prototype.motion = LAND_MOTION;
