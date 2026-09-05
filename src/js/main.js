@@ -708,11 +708,17 @@ export const Game = {
 
             if (mine.alive) {
                 for (const proj of this.projectiles) {
+                    // 敵の弾では起爆しない（continue であって break ではない。敵の弾が
+                    // 先に並んでいても、後ろの自機の弾で起爆できないといけない）。
+                    // 地雷の爆風は game.enemies 全員に当たるので、敵の流れ弾で起爆すると
+                    // 敵が敵を巻き添えにしていた。誘爆させてよいのは自機の弾と、
+                    // 倒した敵機の爆発（destruction.js の detonatesMines）だけ
+                    if (!proj.isPlayerOwned) continue;
                     if (proj.alive && !proj.exploded && mine.collidesWithPoint(proj.x, proj.y)) {
                         mine.detonate();
                         proj.alive = false;
                         proj.exploded = true;
-                        if (proj.isPlayerOwned) this.addScore(LANDMINE_SCORE);
+                        this.addScore(LANDMINE_SCORE);
                         break;
                     }
                 }

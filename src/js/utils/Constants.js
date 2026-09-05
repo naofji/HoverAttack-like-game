@@ -307,6 +307,13 @@ export const LANDMINE_KNOCKBACK_VX = 3;   // Sideways push on detonation
 export const LANDMINE_BLINK_INTERVAL = 30; // frames per blink cycle
 export const LANDMINE_BLAST_RADIUS = 50;   // Area of effect damage radius (~3 tiles)
 export const LANDMINE_SCORE = 50;      // Player-detonated landmine
+// 敵機が爆発したとき、この距離内の地雷が誘爆する。
+// 地雷を起爆できるのは「自機の弾」と「敵機の爆発」だけ（敵の弾では起爆しない）。
+// 敵の弾で起爆すると、地雷の爆風は game.enemies 全員に当たるので、敵が敵を巻き
+// 添えにする事故が起きていた。倒した敵の爆発で誘爆するのは自機の戦果なので残す。
+// 半径は地雷自身の爆風（LANDMINE_BLAST_RADIUS）と同じにしてある＝「爆風が届く
+// 距離なら誘爆する」で揃えた
+export const LANDMINE_DEATH_TRIGGER_RADIUS = LANDMINE_BLAST_RADIUS;
 export const ITEM_PICKUP_SCORE = 200;  // Any item (repair / missile / auto-aim) pickup
 
 // --- Enemy Tank (Hover) ---

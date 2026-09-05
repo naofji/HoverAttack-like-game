@@ -19,6 +19,7 @@ import {
     EXPLOSION_PARTICLE_COUNT, GRENADE_EXPLOSION_COUNT,
     PLAYER_DEATH_EXPLOSION_COUNT, CARRIER_DEATH_EXPLOSION_COUNT,
     FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
+    LANDMINE_DEATH_TRIGGER_RADIUS,
 } from '../utils/Constants.js';
 
 /**
@@ -29,23 +30,28 @@ import {
  * - `blast.count` / `blast.opts` — 爆発の粒子数と広がり
  * - `blast.delay` — 閃光から爆発までの間。破片の holdFrames と揃える
  * - `shake` — 爆発と同時にカメラを揺らすなら {intensity, duration}
+ * - `detonatesMines` — 爆発が近くの地雷を誘爆させるなら true（敵機だけ）
  */
 export const DESTRUCTION_PROFILES = {
     drone: {
         flash: { count: 2, radius: IMPACT_FLASH_RADIUS * 0.7, stagger: 0 },
         blast: { count: 20, opts: MACHINE_EXPLOSION_OPTS, delay: 0 },
+        detonatesMines: true,
     },
     tank: {
         flash: { count: 3, radius: IMPACT_FLASH_RADIUS * 0.8, stagger: DEATH_FLASH_STAGGER },
         blast: { count: EXPLOSION_PARTICLE_COUNT, opts: MACHINE_EXPLOSION_OPTS, delay: 2 },
+        detonatesMines: true,
     },
     turret: {
         flash: { count: 3, radius: IMPACT_FLASH_RADIUS * 0.8, stagger: DEATH_FLASH_STAGGER },
         blast: { count: 30, opts: MACHINE_EXPLOSION_OPTS, delay: 2 },
+        detonatesMines: true,
     },
     attacker: {
         flash: { count: 5, radius: IMPACT_FLASH_RADIUS, stagger: DEATH_FLASH_STAGGER },
         blast: { count: EXPLOSION_PARTICLE_COUNT, opts: MACHINE_EXPLOSION_OPTS, delay: 4 },
+        detonatesMines: true,
     },
     player: {
         flash: { count: 5, radius: IMPACT_FLASH_RADIUS, stagger: DEATH_FLASH_STAGGER },
@@ -90,11 +96,28 @@ export function playDestruction(game, entity, kind) {
         if (profile.shake && game.camera) {
             game.camera.shake(profile.shake.intensity, profile.shake.duration);
         }
+        // 敵機の爆発だけが地雷を誘爆させる。見えている爆発と同時に起こしたいので
+        // ここ（遅延が明けた後）で呼ぶ
+        if (profile.detonatesMines) detonateNearbyMines(game, cx, cy);
     };
     if (profile.blast.delay > 0) {
         game.particles.push(new DelayedCall(profile.blast.delay, blast));
     } else {
         blast();
+    }
+}
+
+/**
+ * 爆心から LANDMINE_DEATH_TRIGGER_RADIUS 以内の地雷を誘爆させる。
+ * detonate() は連鎖で他の地雷にも触るので、配列のコピーを回す。
+ */
+function detonateNearbyMines(game, cx, cy) {
+    if (!game.landmines) return;
+    for (const mine of [...game.landmines]) {
+        if (!mine.alive) continue;
+        const dx = (mine.x + mine.width / 2) - cx;
+        const dy = (mine.y + mine.height / 2) - cy;
+        if (Math.sqrt(dx * dx + dy * dy) <= LANDMINE_DEATH_TRIGGER_RADIUS) mine.detonate();
     }
 }
 
