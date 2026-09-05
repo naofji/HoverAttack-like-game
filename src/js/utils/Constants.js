@@ -908,6 +908,10 @@ export const FORTRESS_ZONE_W_RANGE = 9;    // 26〜35
 export const FORTRESS_ZONE_H_MIN = 18;
 export const FORTRESS_ZONE_H_RANGE = 7;    // 18〜25
 export const FORTRESS_ZONE_MARGIN = 3;     // 盤面の縁からこれだけ離す（BORDER_THICKNESS=2 の外側）
+// 外壁の厚さ。上帯と左帯（自機が来る正面）は装甲＝掘れない、下帯と右帯（背面）は
+// 硬い岩＝時間をかければ抄える。「回り込めば抄えるが、正面は口を通るしかない」に
+// なる。背面が必ず掘れるので詰みは起きない
+export const FORTRESS_WALL_THICKNESS = 2;
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

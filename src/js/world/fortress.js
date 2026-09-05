@@ -8,6 +8,10 @@
 //
 // 設計: docs/superpowers/specs/2026-09-06-stage7-fortress-design.md
 
+import {
+    BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE, HARD_BLOCK_HP,
+} from '../utils/Constants.js';
+
 /** 閉区間の矩形 { r0, r1, c0, c1 } 同士が重なるか。水・雪の除外矩形と同じ形。 */
 export function rectsOverlap(a, b) {
     return !(a.r1 < b.r0 || a.r0 > b.r1 || a.c1 < b.c0 || a.c0 > b.c1);
@@ -49,4 +53,37 @@ export function pickFortressZones({
         zones.push(zone);
     }
     return zones;
+}
+
+/**
+ * 外壁の4つの帯。**互いに重ならないように排他的に定義する。**
+ * 角の扱いをここ1箇所で決めておかないと、「背面に装甲が無い」が言えなくなる。
+ * 角は 左上・右上＝上帯（装甲）、左下＝左帯（装甲）、右下＝下帯（硬い岩）。
+ */
+export function zoneBands(zone, thickness) {
+    const T = thickness;
+    return {
+        top:    { r0: zone.r0,         r1: zone.r0 + T - 1, c0: zone.c0,         c1: zone.c1 },
+        left:   { r0: zone.r0 + T,     r1: zone.r1,         c0: zone.c0,         c1: zone.c0 + T - 1 },
+        bottom: { r0: zone.r1 - T + 1, r1: zone.r1,         c0: zone.c0 + T,     c1: zone.c1 },
+        right:  { r0: zone.r0 + T,     r1: zone.r1 - T,     c0: zone.c1 - T + 1, c1: zone.c1 },
+    };
+}
+
+function fillRect(grid, blockHP, rect, block, hp) {
+    for (let r = rect.r0; r <= rect.r1; r++) {
+        for (let c = rect.c0; c <= rect.c1; c++) {
+            grid[r][c] = block;
+            blockHP[r][c] = hp;
+        }
+    }
+}
+
+/** 外壁を書く。正面（上・左）は装甲、背面（下・右）は硬い岩。 */
+export function buildZoneWalls(grid, blockHP, zone, thickness) {
+    const bands = zoneBands(zone, thickness);
+    fillRect(grid, blockHP, bands.top, BLOCK_INDESTRUCTIBLE, -1);
+    fillRect(grid, blockHP, bands.left, BLOCK_INDESTRUCTIBLE, -1);
+    fillRect(grid, blockHP, bands.bottom, BLOCK_HARD, HARD_BLOCK_HP);
+    fillRect(grid, blockHP, bands.right, BLOCK_HARD, HARD_BLOCK_HP);
 }

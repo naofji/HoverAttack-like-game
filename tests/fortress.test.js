@@ -99,3 +99,79 @@ test('部屋が密集していても区画は重ならない', () => {
     }
   }
 });
+
+import { buildZoneWalls, zoneBands } from '../src/js/world/fortress.js';
+import {
+  BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
+  FORTRESS_WALL_THICKNESS, HARD_BLOCK_HP,
+} from '../src/js/utils/Constants.js';
+
+/** 全部空洞の盤面。区画だけを見たいので周りは何も無い。 */
+function blankBoard(rows = 60, cols = 80) {
+  const grid = [], blockHP = [];
+  for (let r = 0; r < rows; r++) {
+    grid.push(new Array(cols).fill(BLOCK_EMPTY));
+    blockHP.push(new Array(cols).fill(0));
+  }
+  return { grid, blockHP, rows, cols };
+}
+
+function forEachInRect(rect, fn) {
+  for (let r = rect.r0; r <= rect.r1; r++) for (let c = rect.c0; c <= rect.c1; c++) fn(r, c);
+}
+
+const ZONE = { r0: 10, r1: 34, c0: 10, c1: 44 };
+
+test('外壁は上と左が装甲、下と右が硬い岩', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const bands = zoneBands(ZONE, FORTRESS_WALL_THICKNESS);
+
+  forEachInRect(bands.top, (r, c) => {
+    assert.equal(b.grid[r][c], BLOCK_INDESTRUCTIBLE, `上帯 (${r},${c})`);
+    assert.equal(b.blockHP[r][c], -1, `上帯の HP (${r},${c})`);
+  });
+  forEachInRect(bands.left, (r, c) => {
+    assert.equal(b.grid[r][c], BLOCK_INDESTRUCTIBLE, `左帯 (${r},${c})`);
+  });
+  forEachInRect(bands.bottom, (r, c) => {
+    assert.equal(b.grid[r][c], BLOCK_HARD, `下帯 (${r},${c})`);
+    assert.equal(b.blockHP[r][c], HARD_BLOCK_HP, `下帯の HP (${r},${c})`);
+  });
+  forEachInRect(bands.right, (r, c) => {
+    assert.equal(b.grid[r][c], BLOCK_HARD, `右帯 (${r},${c})`);
+  });
+});
+
+test('背面（下帯と右帯）に装甲は1つも無い＝掘って回り込める', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const bands = zoneBands(ZONE, FORTRESS_WALL_THICKNESS);
+  for (const band of [bands.bottom, bands.right]) {
+    forEachInRect(band, (r, c) => {
+      assert.notEqual(b.grid[r][c], BLOCK_INDESTRUCTIBLE,
+        `背面に装甲がある (${r},${c})。掘って入れなくなる`);
+    });
+  }
+});
+
+test('4つの帯は互いに重ならず、外周を隙間なく覆う', () => {
+  const T = FORTRESS_WALL_THICKNESS;
+  const bands = zoneBands(ZONE, T);
+  const seen = new Map();
+  for (const [name, band] of Object.entries(bands)) {
+    forEachInRect(band, (r, c) => {
+      const key = `${r},${c}`;
+      assert.equal(seen.has(key), false, `${key} が ${seen.get(key)} と ${name} で重複`);
+      seen.set(key, name);
+    });
+  }
+  let expected = 0;
+  for (let r = ZONE.r0; r <= ZONE.r1; r++) {
+    for (let c = ZONE.c0; c <= ZONE.c1; c++) {
+      const inner = r >= ZONE.r0 + T && r <= ZONE.r1 - T && c >= ZONE.c0 + T && c <= ZONE.c1 - T;
+      if (!inner) expected++;
+    }
+  }
+  assert.equal(seen.size, expected, '外周に覆われていないマスがある');
+});
