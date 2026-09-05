@@ -912,6 +912,11 @@ export const FORTRESS_ZONE_MARGIN = 3;     // 盤面の縁からこれだけ離�
 // 硬い岩＝時間をかければ抄える。「回り込めば抄えるが、正面は口を通るしかない」に
 // なる。背面が必ず掘れるので詰みは起きない
 export const FORTRESS_WALL_THICKNESS = 2;
+// 区画の中の格子。自機は 16x24px = 1x1.5 タイルなので、幅3タイル（48px）の廊下は
+// 余裕がある（ドローンの 24px 幅も通る）。実機で窮屈なら 4 に上げる
+export const FORTRESS_CORRIDOR_W = 3;
+export const FORTRESS_CORRIDOR_PITCH = 8;  // 廊下3 ＋ 壁5。区画幅 26〜35 で3〜4本になる
+export const FORTRESS_ROOM_SIZE = 5;       // 廊下の交点をこの大きさに広げる（廊下より1タイル外へ）
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

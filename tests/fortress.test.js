@@ -175,3 +175,94 @@ test('4つの帯は互いに重ならず、外周を隙間なく覆う', () => {
   }
   assert.equal(seen.size, expected, '外周に覆われていないマスがある');
 });
+
+import { buildZoneInterior } from '../src/js/world/fortress.js';
+import {
+  FORTRESS_CORRIDOR_W, FORTRESS_CORRIDOR_PITCH, FORTRESS_ROOM_SIZE,
+} from '../src/js/utils/Constants.js';
+
+const INTERIOR_OPTS = {
+  thickness: FORTRESS_WALL_THICKNESS,
+  corridorW: FORTRESS_CORRIDOR_W,
+  pitch: FORTRESS_CORRIDOR_PITCH,
+  roomSize: FORTRESS_ROOM_SIZE,
+};
+
+/** 区画の内側（外壁の内）で、空洞の連結成分の数を数える。 */
+function openComponents(grid, zone, T) {
+  const r0 = zone.r0 + T, r1 = zone.r1 - T, c0 = zone.c0 + T, c1 = zone.c1 - T;
+  const seen = new Set();
+  let components = 0;
+  for (let sr = r0; sr <= r1; sr++) {
+    for (let sc = c0; sc <= c1; sc++) {
+      if (grid[sr][sc] !== BLOCK_EMPTY) continue;
+      if (seen.has(`${sr},${sc}`)) continue;
+      components++;
+      const stack = [[sr, sc]];
+      seen.add(`${sr},${sc}`);
+      while (stack.length) {
+        const [r, c] = stack.pop();
+        for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nr = r + dr, nc = c + dc;
+          if (nr < r0 || nr > r1 || nc < c0 || nc > c1) continue;
+          if (grid[nr][nc] !== BLOCK_EMPTY) continue;
+          const key = `${nr},${nc}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          stack.push([nr, nc]);
+        }
+      }
+    }
+  }
+  return components;
+}
+
+test('区画の中は廊下が縦横に走り、空洞がひとつながりになる', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const { corridorRows, corridorCols } = buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
+  assert.ok(corridorRows.length >= 2, `横の廊下が ${corridorRows.length} 本しかない`);
+  assert.ok(corridorCols.length >= 2, `縦の廊下が ${corridorCols.length} 本しかない`);
+  assert.equal(openComponents(b.grid, ZONE, FORTRESS_WALL_THICKNESS), 1,
+    '区画の中の空洞がひとつながりになっていない');
+});
+
+test('廊下でない内側は掘れる通常岩（迷路にしない）', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
+  const T = FORTRESS_WALL_THICKNESS;
+  let normal = 0, pillars = 0;
+  for (let r = ZONE.r0 + T; r <= ZONE.r1 - T; r++) {
+    for (let c = ZONE.c0 + T; c <= ZONE.c1 - T; c++) {
+      const v = b.grid[r][c];
+      assert.ok(v === BLOCK_EMPTY || v === BLOCK_NORMAL || v === BLOCK_INDESTRUCTIBLE,
+        `内側に硬い岩が残っている (${r},${c})`);
+      if (v === BLOCK_NORMAL) {
+        normal++;
+        assert.equal(b.blockHP[r][c], 1, `通常岩の HP が 1 でない (${r},${c})`);
+      }
+      if (v === BLOCK_INDESTRUCTIBLE) pillars++;
+    }
+  }
+  assert.ok(normal > 0, '内側の壁が1つも無い');
+  assert.ok(pillars > 0, '柱が1つも無い');
+});
+
+test('柱は廊下の中心線を塞がない', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const { corridorRows, corridorCols } = buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
+  const T = FORTRESS_WALL_THICKNESS;
+  const mid = Math.floor(FORTRESS_CORRIDOR_W / 2);
+  for (const rr of corridorRows) {
+    for (let c = ZONE.c0 + T; c <= ZONE.c1 - T; c++) {
+      assert.equal(b.grid[rr + mid][c], BLOCK_EMPTY, `横の廊下の中心線が塞がれている (${rr + mid},${c})`);
+    }
+  }
+  for (const cc of corridorCols) {
+    for (let r = ZONE.r0 + T; r <= ZONE.r1 - T; r++) {
+      assert.equal(b.grid[r][cc + mid], BLOCK_EMPTY, `縦の廊下の中心線が塞がれている (${r},${cc + mid})`);
+    }
+  }
+});

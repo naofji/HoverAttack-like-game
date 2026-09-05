@@ -87,3 +87,55 @@ export function buildZoneWalls(grid, blockHP, zone, thickness) {
     fillRect(grid, blockHP, bands.bottom, BLOCK_HARD, HARD_BLOCK_HP);
     fillRect(grid, blockHP, bands.right, BLOCK_HARD, HARD_BLOCK_HP);
 }
+
+/**
+ * 区画の中を格子にする。
+ *
+ * 手順: 内側を全部「掘れる通常岩」で埋める → 縦横の廊下を空洞で刻む →
+ * 交点を室に広げる → 室の四隅に装甲の柱を立てる。
+ *
+ * 中の壁を掘れる BLOCK_NORMAL にしているのは、外壁で経路を規定しておいて
+ * 中まで掘れないと格子がただの迷路になって窮屈だから。掘れば近道はできるが
+ * 外壁は抜けられない、という二段構えにする。
+ *
+ * @returns {{corridorRows:number[], corridorCols:number[]}} 各廊下の先頭の行／列
+ */
+export function buildZoneInterior(grid, blockHP, zone, { thickness, corridorW, pitch, roomSize }) {
+    const T = thickness;
+    const r0 = zone.r0 + T, r1 = zone.r1 - T;
+    const c0 = zone.c0 + T, c1 = zone.c1 - T;
+
+    fillRect(grid, blockHP, { r0, r1, c0, c1 }, BLOCK_NORMAL, 1);
+
+    const corridorRows = [];
+    for (let rr = r0; rr + corridorW - 1 <= r1; rr += pitch) corridorRows.push(rr);
+    const corridorCols = [];
+    for (let cc = c0; cc + corridorW - 1 <= c1; cc += pitch) corridorCols.push(cc);
+
+    for (const rr of corridorRows) {
+        fillRect(grid, blockHP, { r0: rr, r1: rr + corridorW - 1, c0, c1 }, BLOCK_EMPTY, 0);
+    }
+    for (const cc of corridorCols) {
+        fillRect(grid, blockHP, { r0, r1, c0: cc, c1: cc + corridorW - 1 }, BLOCK_EMPTY, 0);
+    }
+
+    // 交点の室。廊下の中心から roomSize/2 だけ広げる（区画の内側からはみ出さない）
+    const half = Math.floor(roomSize / 2);
+    const mid = Math.floor(corridorW / 2);
+    for (const rr of corridorRows) {
+        for (const cc of corridorCols) {
+            const room = {
+                r0: Math.max(r0, rr + mid - half), r1: Math.min(r1, rr + mid + half),
+                c0: Math.max(c0, cc + mid - half), c1: Math.min(c1, cc + mid + half),
+            };
+            fillRect(grid, blockHP, room, BLOCK_EMPTY, 0);
+            // 柱: 室の四隅。廊下の中心線からは外れるので通行を塞がない
+            for (const [pr, pc] of [[room.r0, room.c0], [room.r0, room.c1], [room.r1, room.c0], [room.r1, room.c1]]) {
+                if (pr === rr + mid || pc === cc + mid) continue; // 念のため中心線は避ける
+                grid[pr][pc] = BLOCK_INDESTRUCTIBLE;
+                blockHP[pr][pc] = -1;
+            }
+        }
+    }
+    return { corridorRows, corridorCols };
+}
