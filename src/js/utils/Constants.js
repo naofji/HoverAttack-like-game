@@ -970,8 +970,22 @@ export const FOG_LAYERS = [
 export const DEMO_OVERLAY_ALPHA_SCALE = 0.5;
 
 // --- Colors ---
+// 硬い岩の「寄せ先の灰色」。この色そのものは描画に出ない（下の2つの係数で面の
+// パレットと混ぜてから使う。HARD_BLOCK_TINT = 1.0 にすればこの灰色一色に戻る）
 export const COLOR_HARD_BLOCK = '#555555';
 export const COLOR_HARD_BLOCK_BORDER = '#3a3a3a';
+// 硬い岩の色を面のパレットから作るときの2つの係数（Map の constructor で使う）。
+// 灰色一色だった頃は、5面を岩8割にすると画面の大半が灰色になって面のテーマ色が
+// 消えてしまった。かといって単純に灰色へ寄せるだけでは駄目で、面1は通常岩との
+// 輝度差が 0、面7で 8 しかなくなり、彩度だけが手がかりになる。硬い岩は3発かかる
+// ので**撃つ前に見分けられること**が要る。そこで2段構えにしている:
+//   1) 面のパレットを COLOR_HARD_BLOCK へ TINT だけ寄せる（色味を残す）
+//   2) その色の輝度を「通常岩の輝度 × DARKEN」に合わせる
+// 2 を係数の掛け算ではなく通常岩に対する**比**にしたのが要点。一律の係数だと
+// 面6（Cafe Noir、元の輝度 58）だけ黒へ潰れて洞窟の背景と見分けがつかなくなる。
+// 実測の輝度差（通常岩 → 硬い岩）: 32 / 38 / 51 / 40 / 45 / 22 / 28
+export const HARD_BLOCK_TINT = 0.65;    // 0 = 面の色そのまま、1.0 = 灰色一色（元の見た目）
+export const HARD_BLOCK_DARKEN = 0.62;  // 硬い岩の輝度 ÷ 通常岩の輝度
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
 export const COLOR_CAVE_BG = '#1a0a00';

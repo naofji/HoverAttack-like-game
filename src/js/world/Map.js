@@ -5,7 +5,7 @@
 import {
     MIN_MAP_COLS, MIN_MAP_ROWS, MAX_MAP_COLS, MAX_MAP_ROWS,
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
-    COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER,
+    COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER, HARD_BLOCK_TINT, HARD_BLOCK_DARKEN,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
@@ -23,6 +23,7 @@ import {
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
+import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { stairDirection } from '../utils/slope.js';
@@ -30,6 +31,15 @@ import { stairDirection } from '../utils/slope.js';
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
+
+/**
+ * 硬い岩の描画色を、面のパレットの色 base から作る。
+ * gray へ HARD_BLOCK_TINT だけ寄せて色味を残し、輝度は base の HARD_BLOCK_DARKEN 倍に置く。
+ * 輝度を base に対する比で決めるので、元が暗い面（6面）でも黒へ潰れない。
+ */
+function hardBlockColor(base, gray) {
+    return withLuminance(lerpColor(base, gray, HARD_BLOCK_TINT), luminance(base) * HARD_BLOCK_DARKEN);
+}
 
 export class Map {
     constructor(game, missionLevel = 0) {
@@ -42,7 +52,12 @@ export class Map {
 
         this.blockStyles = {
             [BLOCK_NORMAL]: palettes[palIdx],
-            [BLOCK_HARD]: { fill: COLOR_HARD_BLOCK, border: COLOR_HARD_BLOCK_BORDER },
+            // 硬い岩は面のテーマ色を残した「暗くて彩度の低い岩」にする。係数の意味は
+            // Constants.js の HARD_BLOCK_TINT / HARD_BLOCK_DARKEN のコメントを見ること
+            [BLOCK_HARD]: {
+                fill: hardBlockColor(palettes[palIdx].fill, COLOR_HARD_BLOCK),
+                border: hardBlockColor(palettes[palIdx].border, COLOR_HARD_BLOCK_BORDER),
+            },
             [BLOCK_INDESTRUCTIBLE]: { fill: COLOR_INDESTRUCTIBLE_BLOCK, border: COLOR_INDESTRUCTIBLE_BLOCK_BORDER },
         };
 
