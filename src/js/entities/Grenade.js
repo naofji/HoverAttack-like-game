@@ -5,6 +5,7 @@
 import {
     GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
     GRENADE_BLAST_RADIUS, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE,
+    GRENADE_BLOCK_DAMAGE, ENEMY_GRENADE_BLOCK_DAMAGE,
     GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
     GRENADE_LIFETIME,
 } from '../utils/Constants.js';
@@ -85,11 +86,19 @@ export class Grenade {
         const tile = map.pixelToTile(this.x, this.y);
 
         // Map destruction
-        const destroyed = map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
+        // 半径は持ち主で変えない（変えると敵のグレネードが当たっていないように見える）。
+        // 弱めるのはブロックへのダメージだけ。敵は 1 なので通常岩は今までどおり一撃で
+        // 消えるが、硬い岩（HP 3）は残る＝足場の骨組みが撃ち崩されない
+        const destroyed = map.destroyArea(
+            tile.r, tile.c, GRENADE_BLAST_RADIUS,
+            this.isPlayerOwned ? GRENADE_BLOCK_DAMAGE : ENEMY_GRENADE_BLOCK_DAMAGE,
+        );
         playBlast(this.game, this.x, this.y, 'grenade');
 
         // Score for map blocks
-        if (destroyed.length > 0) {
+        // 持ち主を見ずに加点していたので、**敵が壊した地形でプレイヤーに点が入っていた**
+        // （敵のグレネードが増える後半ほど勝手に稼げる）。自機が壊した分だけ加点する
+        if (this.isPlayerOwned && destroyed.length > 0) {
             this.game.addScore(destroyed.length * 10);
         }
 

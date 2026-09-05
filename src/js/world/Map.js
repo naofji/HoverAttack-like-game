@@ -19,6 +19,7 @@ import {
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
     WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
     SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE,
+    GRENADE_BLOCK_DAMAGE,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -917,14 +918,15 @@ export class Map {
         this.miniMapDirty = true;
     }
 
-    /** Destroy blocks in a radius (for grenades) */
-    destroyArea(centerR, centerC, radius) {
+    /** Destroy blocks in a radius (for grenades).
+     *  damage は呼び出し側が渡す（敵のグレネードは ENEMY_GRENADE_BLOCK_DAMAGE で弱い）。 */
+    destroyArea(centerR, centerC, radius, damage = GRENADE_BLOCK_DAMAGE) {
         const destroyed = [];
         for (let r = centerR - radius; r <= centerR + radius; r++) {
             for (let c = centerC - radius; c <= centerC + radius; c++) {
                 const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
                 if (dist <= radius) {
-                    if (this.damageBlock(r, c, 3)) {
+                    if (this.damageBlock(r, c, damage)) {
                         destroyed.push({ r, c });
                     }
                 }

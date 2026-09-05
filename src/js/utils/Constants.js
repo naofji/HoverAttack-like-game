@@ -186,6 +186,21 @@ export const GRENADE_BOUNCE = 0.2;
 export const GRENADE_FRICTION = 0.9;
 export const GRENADE_INITIAL_COUNT = 12;
 export const GRENADE_BLAST_RADIUS = 2; // in tiles for map destruction
+// グレネードの爆風がブロックに与えるダメージ。**半径は持ち主で変えない**（変えると
+// 「敵のグレネードが当たらない」ように見える）。変えるのはダメージだけ。
+//
+// 自機は 3 = HARD_BLOCK_HP なので硬い岩も一撃で吹き飛ぶ（今までどおり）。
+// **敵は 1。** 後半ほど敵の攻撃が増えて足場そのものが撃ち崩され、遊べなくなるのが
+// 元の困りごと（ユーザー報告）。1 なら通常岩（HP 1）は今までどおり一撃で消えるので
+// 敵が壁を掘る速度は変わらず、硬い岩（HP 3）だけが足場の骨組みとして残る。
+// HARD_BLOCK_CHANCE_BY_STAGE で後半ほど硬い岩を増やしてあるので、後半の面ほど
+// 骨組みが多く残る＝困りごとの大きい面ほど効く。
+//
+// 緊急防衛（EMERGENCY_WILD_FIRE_*）で敵が自分で壁を掘る仕組みは壊れない。
+// あれが使うのは Missile.js の damageBlock(…, 1) でグレネードではないし、
+// 敵のグレネードも通常岩は一撃で消せるまま。
+export const GRENADE_BLOCK_DAMAGE = 3;
+export const ENEMY_GRENADE_BLOCK_DAMAGE = 1;
 export const GRENADE_DAMAGE_RADIUS = 40; // in pixels for entity damage
 export const GRENADE_DAMAGE = 80;
 export const GRENADE_LIFETIME = 90; // 1.5 seconds at 60fps
