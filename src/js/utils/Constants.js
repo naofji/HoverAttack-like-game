@@ -917,6 +917,9 @@ export const FORTRESS_WALL_THICKNESS = 2;
 export const FORTRESS_CORRIDOR_W = 3;
 export const FORTRESS_CORRIDOR_PITCH = 8;  // 廊下3 ＋ 壁5。区画幅 26〜35 で3〜4本になる
 export const FORTRESS_ROOM_SIZE = 5;       // 廊下の交点をこの大きさに広げる（廊下より1タイル外へ）
+// 開口から区画の外の空洞まで掘るトンネルの最大長。7面は空洞が 42% あるので
+// 数タイルで当たる。当たらないまま尽きたらそこで止める（掘った穴は残る）
+export const FORTRESS_OPENING_TUNNEL_MAX = 24;
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

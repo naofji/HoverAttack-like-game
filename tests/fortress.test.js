@@ -266,3 +266,80 @@ test('柱は廊下の中心線を塞がない', () => {
     }
   }
 });
+
+import { openZoneGates } from '../src/js/world/fortress.js';
+import { FORTRESS_OPENING_TUNNEL_MAX } from '../src/js/utils/Constants.js';
+
+/** 全部岩の盤面。開口の外にトンネルが掘られることを見たいので空洞を作らない。 */
+function solidBoard(rows = 60, cols = 80) {
+  const grid = [], blockHP = [];
+  for (let r = 0; r < rows; r++) {
+    grid.push(new Array(cols).fill(BLOCK_NORMAL));
+    blockHP.push(new Array(cols).fill(1));
+  }
+  return { grid, blockHP, rows, cols };
+}
+
+function buildZone(board, zone, rng) {
+  buildZoneWalls(board.grid, board.blockHP, zone, FORTRESS_WALL_THICKNESS);
+  const { corridorRows, corridorCols } = buildZoneInterior(board.grid, board.blockHP, zone, INTERIOR_OPTS);
+  const gates = openZoneGates(board.grid, board.blockHP, zone, {
+    thickness: FORTRESS_WALL_THICKNESS, corridorW: FORTRESS_CORRIDOR_W,
+    corridorRows, corridorCols, rng, tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
+    rows: board.rows, cols: board.cols,
+  });
+  return { corridorRows, corridorCols, gates };
+}
+
+test('開口は装甲の2辺に1つずつ、幅は廊下と同じ', () => {
+  const { gates } = buildZone(solidBoard(), ZONE, new SeededRNG(3));
+  assert.equal(gates.length, 2);
+  assert.deepEqual(gates.map((g) => g.side).sort(), ['left', 'top']);
+  for (const g of gates) assert.equal(g.w, FORTRESS_CORRIDOR_W);
+});
+
+test('開口のマスは空洞になっている', () => {
+  const b = solidBoard();
+  const { gates } = buildZone(b, ZONE, new SeededRNG(3));
+  const T = FORTRESS_WALL_THICKNESS;
+  for (const g of gates) {
+    if (g.side === 'left') {
+      for (let r = g.r; r < g.r + g.w; r++) {
+        for (let c = ZONE.c0; c < ZONE.c0 + T; c++) {
+          assert.equal(b.grid[r][c], BLOCK_EMPTY, `左の開口が空洞でない (${r},${c})`);
+        }
+      }
+    } else {
+      for (let c = g.c; c < g.c + g.w; c++) {
+        for (let r = ZONE.r0; r < ZONE.r0 + T; r++) {
+          assert.equal(b.grid[r][c], BLOCK_EMPTY, `上の開口が空洞でない (${r},${c})`);
+        }
+      }
+    }
+  }
+});
+
+test('開口は廊下の延長線上にある（入った先が壁にならない）', () => {
+  const { corridorRows, corridorCols, gates } = buildZone(solidBoard(), ZONE, new SeededRNG(3));
+  const left = gates.find((g) => g.side === 'left');
+  const top = gates.find((g) => g.side === 'top');
+  assert.ok(corridorRows.includes(left.r), `左の開口 ${left.r} が横の廊下 ${corridorRows} に無い`);
+  assert.ok(corridorCols.includes(top.c), `上の開口 ${top.c} が縦の廊下 ${corridorCols} に無い`);
+});
+
+test('開口の外へトンネルが掘られ、区画の外の空洞につながる', () => {
+  const b = solidBoard();
+  // 左に空洞の縦帯を置いておく。トンネルはここに当たって止まるはず
+  for (let r = 0; r < b.rows; r++) for (let c = 3; c <= 5; c++) { b.grid[r][c] = BLOCK_EMPTY; b.blockHP[r][c] = 0; }
+  const { gates } = buildZone(b, ZONE, new SeededRNG(3));
+  const left = gates.find((g) => g.side === 'left');
+  for (let c = 5; c < ZONE.c0; c++) {
+    assert.equal(b.grid[left.r][c], BLOCK_EMPTY, `トンネルが途切れている (${left.r},${c})`);
+  }
+});
+
+test('同じ rng なら同じ開口', () => {
+  const a = buildZone(solidBoard(), ZONE, new SeededRNG(8)).gates;
+  const c = buildZone(solidBoard(), ZONE, new SeededRNG(8)).gates;
+  assert.deepEqual(a, c);
+});

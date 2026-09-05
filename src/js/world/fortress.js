@@ -139,3 +139,52 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, corridorW, p
     }
     return { corridorRows, corridorCols };
 }
+
+/**
+ * 装甲の2辺（上・左）に開口を開け、区画の外の空洞へつなぐ。
+ *
+ * 開口は必ず**廊下の延長線上**に取る。適当な位置に開けると入った先が壁になり、
+ * 「入り口に見えるのに入れない」ことが起きる。
+ */
+export function openZoneGates(grid, blockHP, zone, {
+    thickness, corridorW, corridorRows, corridorCols, rng, tunnelMax, rows, cols,
+}) {
+    const T = thickness;
+    const gates = [];
+
+    // 左辺: 横の廊下から1本選び、その行の帯を空ける
+    if (corridorRows.length > 0) {
+        const rr = corridorRows[Math.floor(rng.next() * corridorRows.length)];
+        fillRect(grid, blockHP, { r0: rr, r1: rr + corridorW - 1, c0: zone.c0, c1: zone.c0 + T - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: rr, c: zone.c0, side: 'left', w: corridorW });
+    }
+    // 上辺: 縦の廊下から1本選ぶ
+    if (corridorCols.length > 0) {
+        const cc = corridorCols[Math.floor(rng.next() * corridorCols.length)];
+        fillRect(grid, blockHP, { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + corridorW - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: zone.r0, c: cc, side: 'top', w: corridorW });
+    }
+
+    for (const gate of gates) digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols);
+    return gates;
+}
+
+/** 開口から外向きに、最初の空洞に当たるまで幅 gate.w のトンネルを掘る。 */
+function digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols) {
+    const horizontal = gate.side === 'left';
+    for (let i = 1; i <= tunnelMax; i++) {
+        const r = horizontal ? gate.r : zone.r0 - i;
+        const c = horizontal ? zone.c0 - i : gate.c;
+        if (r < 1 || c < 1 || r >= rows - 1 || c >= cols - 1) return;
+        let hitEmpty = false;
+        for (let k = 0; k < gate.w; k++) {
+            const rr = horizontal ? r + k : r;
+            const cc = horizontal ? c : c + k;
+            if (rr < 1 || cc < 1 || rr >= rows - 1 || cc >= cols - 1) continue;
+            if (grid[rr][cc] === BLOCK_EMPTY) hitEmpty = true;
+            grid[rr][cc] = BLOCK_EMPTY;
+            blockHP[rr][cc] = 0;
+        }
+        if (hitEmpty) return;
+    }
+}
