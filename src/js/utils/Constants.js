@@ -882,8 +882,9 @@ export const STAGE_PALETTES = [
 // 設計: docs/superpowers/specs/2026-09-04-stage-environments-design.md
 // 面に固定する（面別ランキングがタイムアタックなので、同じ面は常に同じ条件）。
 // kind = 動きと画面に重ねる描画、backdrop = 遠景の装飾（kind から導けない行がある:
-// 7面は動きは今のままで遠景だけ機械）、terrain = 地形の生成規則（7面の要塞化のために
-// 予約。今は全行 'cave' で、読む側もまだ無い）。
+// 7面は動きは今のままで遠景だけ機械）、terrain = 地形の生成規則
+// （'fortress' は Map._generateFortress() が読む。設計:
+//  docs/superpowers/specs/2026-09-06-stage7-fortress-design.md）。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
@@ -893,7 +894,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'water', backdrop: 'wet',     terrain: 'cave' }, // 4: 地底湖
     { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
-    { kind: 'none',  backdrop: 'machine', terrain: 'cave' }, // 7: 洞窟を改造した要塞（遠景だけ）
+    { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
 ];
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---

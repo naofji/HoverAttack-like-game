@@ -108,6 +108,8 @@ export class Map {
         this.waterSurface = null;   // Int16Array。水タイルの水面の行。それ以外 -1
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
         this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
+        // 地形の生成規則。'fortress' なら洞窟を掘ったあとに要塞区画を埋め込む
+        this.envTerrain = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].terrain;
 
         this._generate();
     }

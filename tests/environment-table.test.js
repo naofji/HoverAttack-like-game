@@ -13,8 +13,14 @@ test('every row uses a known kind, backdrop and terrain', () => {
   for (const row of STAGE_ENVIRONMENTS) {
     assert.ok(ENV_KINDS.includes(row.kind), `unknown kind ${row.kind}`);
     assert.ok(ENV_BACKDROPS.includes(row.backdrop), `unknown backdrop ${row.backdrop}`);
-    assert.equal(row.terrain, 'cave'); // 7面の要塞化は別設計。今は予約だけ
   }
+});
+
+test('terrain は7面だけ fortress、他は cave', () => {
+  STAGE_ENVIRONMENTS.forEach((row, i) => {
+    const want = i === 6 ? 'fortress' : 'cave';
+    assert.equal(row.terrain, want, `面${i + 1} の terrain`);
+  });
 });
 
 // 設計で決めた割り当て。ここが動くと面別ランキングの条件が変わるので固定する。
