@@ -897,6 +897,18 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
 ];
 
+// --- 7面の要塞区画（terrain: 'fortress'）---
+// 設計: docs/superpowers/specs/2026-09-06-stage7-fortress-design.md
+// 洞窟を掘り終えたあとに矩形の区画を選び、中を「直線の廊下の格子」で書き潰す。
+// 7面は 150x300 タイル、画面は 86x48 タイル。区画を 26〜35 x 18〜25 にすると
+// 画面の 1/3 ほどになり、「入った」と分かる大きさになる。
+export const FORTRESS_ZONE_COUNT = 4;      // 上限。置けなければ少なくてよい
+export const FORTRESS_ZONE_W_MIN = 26;
+export const FORTRESS_ZONE_W_RANGE = 9;    // 26〜35
+export const FORTRESS_ZONE_H_MIN = 18;
+export const FORTRESS_ZONE_H_RANGE = 7;    // 18〜25
+export const FORTRESS_ZONE_MARGIN = 3;     // 盤面の縁からこれだけ離す（BORDER_THICKNESS=2 の外側）
+
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、
 // missionLevel は剰余で丸める（debugStartMission で面数を超えた値が来るため）。
