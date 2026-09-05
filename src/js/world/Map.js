@@ -20,6 +20,10 @@ import {
     WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
     SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE,
     GRENADE_BLOCK_DAMAGE,
+    FORTRESS_ZONE_COUNT, FORTRESS_ZONE_W_MIN, FORTRESS_ZONE_W_RANGE,
+    FORTRESS_ZONE_H_MIN, FORTRESS_ZONE_H_RANGE, FORTRESS_ZONE_MARGIN,
+    FORTRESS_WALL_THICKNESS, FORTRESS_CORRIDOR_W, FORTRESS_CORRIDOR_PITCH,
+    FORTRESS_ROOM_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -27,6 +31,7 @@ import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
 import { carveSnowStairs } from './snowStairs.js';
+import { carveFortressZones } from './fortress.js';
 import { stairDirection } from '../utils/slope.js';
 
 
@@ -203,6 +208,13 @@ export class Map {
         // Step 9: Sprinkle hard blocks
         this._placeHardBlocks();
 
+        // Step 9a: 7面の要塞区画（派生ストリーム）。**硬い岩のあとに置く** —
+        // 7面は硬い岩が4割あり、区画の中に混ざると洞窟に戻ってしまうので、
+        // 要塞は自分の矩形を後から書き潰す
+        this.fortress = new Uint8Array(this.rows * this.cols);
+        this.fortressZones = [];
+        if (this.envTerrain === 'fortress') this._generateFortress();
+
         // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
         // 開始の部屋（左上 3,3 から 20x16）と基地の部屋は除外
         if (this.envKind === 'water') this._generateWater();
@@ -270,6 +282,24 @@ export class Map {
             { r0: b.r - 12, r1: b.floorR + 2, c0: b.c - 10, c1: this.cols - 1 },
         ];
     }
+    _generateFortress() {
+        const result = carveFortressZones({
+            grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols,
+            rooms: this.rooms, excludeRects: this._reservedRects(),
+            // 派生ストリーム。game.rng を消費すると敵の構成が変わり、週の決定性が壊れる
+            rng: new SeededRNG((this.game.rng.state ^ 0xF0A7E5) >>> 0),
+            count: FORTRESS_ZONE_COUNT,
+            wMin: FORTRESS_ZONE_W_MIN, wRange: FORTRESS_ZONE_W_RANGE,
+            hMin: FORTRESS_ZONE_H_MIN, hRange: FORTRESS_ZONE_H_RANGE,
+            margin: FORTRESS_ZONE_MARGIN,
+            thickness: FORTRESS_WALL_THICKNESS, corridorW: FORTRESS_CORRIDOR_W,
+            pitch: FORTRESS_CORRIDOR_PITCH, roomSize: FORTRESS_ROOM_SIZE,
+            tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
+        });
+        this.fortressZones = result.zones;
+        this.fortress = result.marks;
+    }
+
     _generateWater() {
         const rng = new SeededRNG((this.game.rng.state ^ 0x5DEECE66) >>> 0);
         const excludeRects = this._reservedRects();

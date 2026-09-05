@@ -39,3 +39,30 @@ export function reachable(map, start, goal) {
   }
   return false;
 }
+
+/**
+ * (r, c) から**空洞だけ**を辿って届くマスの集合。掘らずに歩ける範囲。
+ * 「要塞区画に開口があるので掘らずに出入りできる」を測るのに使う
+ * （掘れる扱いの reachable() では、背面を掘れば必ず入れるので区別できない）。
+ */
+export function floodEmpty(map, start) {
+  const { rows, cols, grid } = map;
+  const seen = new Set();
+  if (grid[start.r][start.c] !== 0) return seen; // BLOCK_EMPTY === 0
+  const stack = [[start.r, start.c]];
+  seen.add(`${start.r},${start.c}`);
+  while (stack.length) {
+    const [r, c] = stack.pop();
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+      if (grid[nr][nc] !== 0) continue;
+      const key = `${nr},${nc}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      stack.push([nr, nc]);
+    }
+  }
+  return seen;
+}

@@ -343,3 +343,130 @@ test('同じ rng なら同じ開口', () => {
   const c = buildZone(solidBoard(), ZONE, new SeededRNG(8)).gates;
   assert.deepEqual(a, c);
 });
+
+import { carveFortressZones } from '../src/js/world/fortress.js';
+import { reachable } from './helpers/map-reach.js';
+
+const START = { r: 11, c: 13 };
+
+test('7面には要塞区画があり、他の面には無い', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const fort = new Map({ rng: new SeededRNG(1) }, 6);
+  assert.ok(fort.fortressZones.length > 0, '7面に区画が1つも無い');
+  assert.ok(fort.fortress.some((v) => v === 1), '7面に印が1つも立っていない');
+  for (let lv = 0; lv < 6; lv++) {
+    const m = new Map({ rng: new SeededRNG(1) }, lv);
+    assert.deepEqual(m.fortressZones, [], `面${lv + 1} に区画がある`);
+    assert.equal(m.fortress.some((v) => v === 1), false, `面${lv + 1} に印が立っている`);
+  }
+});
+
+test('同じ seed なら同じ要塞・同じ敵配置（生成は決定的）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const a = new Map({ rng: new SeededRNG(11) }, 6);
+  const b = new Map({ rng: new SeededRNG(11) }, 6);
+  assert.deepEqual(a.fortressZones, b.fortressZones);
+  assert.deepEqual(a.enemyTankSpawns, b.enemyTankSpawns);
+  assert.deepEqual(a.enemyAttackerSpawns, b.enemyAttackerSpawns);
+  const c = new Map({ rng: new SeededRNG(12) }, 6);
+  assert.notDeepEqual(a.fortressZones, c.fortressZones, 'seed を変えても同じ区画になっている');
+});
+
+test('carveFortressZones は渡された rng だけを使う', () => {
+  // Map が派生ストリームを渡している以上、純関数側が外の乱数に触れていない
+  // ことを直接見ておく。引数の rng を数えて実際に使われていることを確かめ、
+  // 同じ rng なら完全に同じ結果になることで「他の乱数源が混ざっていない」と言える。
+  //
+  // 補足: 「7面と6面で game.rng の消費回数が一致する」という形のテストは書けない。
+  // 要塞は grid を書き換えるので、あとで走るスポーン探索の候補数が変わり、
+  // シャッフルで引く回数が変わる。雪の階段（5面）も同じ理由で6面と 223 回ずれている。
+  // 派生ストリームが守っているのは「要塞の乱数が洞窟生成の乱数列を割り込まない」
+  // ことであって、総消費回数が面によらず一定になることではない。
+  const board = solidBoard(60, 200);
+  const rooms = [];
+  for (let c = 30; c < 180; c += 25) rooms.push({ centerR: 30, centerC: c });
+  let draws = 0;
+  const inner = new SeededRNG(21);
+  const counting = { next: () => { draws++; return inner.next(); } };
+  const args = {
+    rows: board.rows, cols: board.cols, rooms, excludeRects: [],
+    count: FORTRESS_ZONE_COUNT,
+    wMin: FORTRESS_ZONE_W_MIN, wRange: FORTRESS_ZONE_W_RANGE,
+    hMin: FORTRESS_ZONE_H_MIN, hRange: FORTRESS_ZONE_H_RANGE,
+    margin: FORTRESS_ZONE_MARGIN,
+    thickness: FORTRESS_WALL_THICKNESS, corridorW: FORTRESS_CORRIDOR_W,
+    pitch: FORTRESS_CORRIDOR_PITCH, roomSize: FORTRESS_ROOM_SIZE,
+    tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
+  };
+  const first = carveFortressZones({ ...args, grid: board.grid, blockHP: board.blockHP, rng: counting });
+  assert.ok(draws > 0, '渡した rng が使われていない');
+  const board2 = solidBoard(60, 200);
+  const second = carveFortressZones({
+    ...args, grid: board2.grid, blockHP: board2.blockHP, rng: new SeededRNG(21),
+  });
+  assert.deepEqual(second.zones, first.zones, '同じ seed で結果が変わる＝別の乱数源が混ざっている');
+});
+
+test('印は区画の矩形の中にしか立たない', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(2) }, 6);
+  for (let r = 0; r < m.rows; r++) {
+    for (let c = 0; c < m.cols; c++) {
+      if (m.fortress[r * m.cols + c] !== 1) continue;
+      const inside = m.fortressZones.some((z) => r >= z.r0 && r <= z.r1 && c >= z.c0 && c <= z.c1);
+      assert.ok(inside, `区画の外に印が立っている (${r},${c})`);
+    }
+  }
+});
+
+test('区画は開始の部屋・基地の部屋と重ならない', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    for (const z of m.fortressZones) {
+      for (const rect of m._reservedRects()) {
+        assert.equal(rectsOverlap(z, rect), false,
+          `seed ${seed}: 区画 ${JSON.stringify(z)} が予約矩形と重なっている`);
+      }
+    }
+  }
+});
+
+test('要塞を入れても基地へ到達できる', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    assert.ok(reachable(m, START, m.enemyBaseCenter), `seed ${seed}: 基地へ到達できない`);
+  }
+});
+
+test('掘らなくても区画に出入りできる（開口が効いている）', async () => {
+  // 基地への到達可能性は要塞に鈍感だった。区画を丸ごと塞いでも、洞窟の中の
+  // 島でしかないので経路が迂回してしまう（変異を入れても赤くならなかった）。
+  // 開口が守っているのは「掘らずに出入りできる」ことなので、そちらを直接測る。
+  // 空洞だけを辿って、区画の内側から外へ出られることを確かめる
+  const { Map } = await import('../src/js/world/Map.js');
+  const { floodEmpty } = await import('./helpers/map-reach.js');
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    assert.ok(m.fortressZones.length > 0, `seed ${seed}: 区画が無い`);
+    for (const z of m.fortressZones) {
+      const gate = z.openings.find((g) => g.side === 'left');
+      assert.ok(gate, `seed ${seed}: 左の開口が無い`);
+      // 開口の中心から空洞だけを辿る
+      const start = { r: gate.r + 1, c: z.c0 };
+      const seen = floodEmpty(m, start);
+      const escaped = [...seen].some((key) => {
+        const [r, c] = key.split(',').map(Number);
+        return r < z.r0 || r > z.r1 || c < z.c0 || c > z.c1;
+      });
+      assert.ok(escaped,
+        `seed ${seed}: 区画 ${JSON.stringify({ r0: z.r0, c0: z.c0 })} から掘らずに外へ出られない`);
+      const inside = [...seen].some((key) => {
+        const [r, c] = key.split(',').map(Number);
+        return r > z.r0 + 2 && r < z.r1 - 2 && c > z.c0 + 2 && c < z.c1 - 2;
+      });
+      assert.ok(inside, `seed ${seed}: 開口から中の廊下へ入れない`);
+    }
+  }
+});

@@ -188,3 +188,35 @@ function digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols) {
         if (hitEmpty) return;
     }
 }
+
+/**
+ * 区画を選び、外壁・格子・開口を書き、印を返す。Map から呼ばれる唯一の入口。
+ */
+export function carveFortressZones({
+    grid, blockHP, rows, cols, rooms, excludeRects, rng,
+    count, wMin, wRange, hMin, hRange, margin,
+    thickness, corridorW, pitch, roomSize, tunnelMax,
+}) {
+    const picked = pickFortressZones({
+        rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
+    });
+    const marks = new Uint8Array(rows * cols);
+    const zones = [];
+    for (const zone of picked) {
+        buildZoneWalls(grid, blockHP, zone, thickness);
+        const { corridorRows, corridorCols } = buildZoneInterior(
+            grid, blockHP, zone, { thickness, corridorW, pitch, roomSize },
+        );
+        const openings = openZoneGates(grid, blockHP, zone, {
+            thickness, corridorW, corridorRows, corridorCols, rng, tunnelMax, rows, cols,
+        });
+        // 印は区画の中の「空でない」タイルだけ。空洞には描くものが無い
+        for (let r = zone.r0; r <= zone.r1; r++) {
+            for (let c = zone.c0; c <= zone.c1; c++) {
+                if (grid[r][c] !== BLOCK_EMPTY) marks[r * cols + c] = 1;
+            }
+        }
+        zones.push({ ...zone, openings });
+    }
+    return { zones, marks };
+}
