@@ -1095,11 +1095,13 @@ export const WATER_SPRING_COUNT = 2;           // 水源の数
 export const WATER_SPRING_MAX_ROW_RATIO = 0.5; // マップ上半分から水源を選ぶ
 export const WATER_SPRING_STOP_ROW = 6;        // この行まで水没したら水源停止（詰み防止）
 // 滝（落下水流）の中の物理
-// 滝の先頭（一番上の落下セル）を、タイルの上辺からこれだけ下げて描き始める。
+// 滝の描き始めを、一番上の落下セルのタイルの上辺からこれだけ下げる。
 // 0 にすると岩の縁のところでいきなり全高の帯が立ち上がり、「岩から滑り落ちる」
 // ではなく「縁から下が急に滝になる」ように見える（実機の指摘）。
+// 8 でもまだ高いという指摘を受けて 16（1タイル）にした。TILE_SIZE を超える値も
+// 使える（そのぶん下のセルまで描き始めがずれる）。
 // 見た目だけの値で、当たり判定（isWaterfallAtPixel）はタイル単位のまま
-export const WATERFALL_HEAD_DROP = 8;          // px
+export const WATERFALL_HEAD_DROP = 16;         // px
 
 export const WATERFALL_DOWNFORCE = 0.18;       // 下方向への押し下げ加速度
 export const WATERFALL_FALL_SPEED_SCALE = 0.70;// 滝の中での落下速度上限スケール

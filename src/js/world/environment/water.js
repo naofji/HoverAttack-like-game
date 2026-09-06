@@ -127,14 +127,20 @@ export function getWaterfallPlacement(map, r, c) {
 /**
  * 滝セルを描き始める Y 座標。
  *
- * 列の一番上の落下セル（直上が落下セルでないもの）だけ WATERFALL_HEAD_DROP
- * ぶん下げる。岩の縁でいきなり全高の帯が立ち上がると「滑り落ちる」感じに
- * ならず、縁から下が急に滝になったように見えるため（実機の指摘）。
- * 途中のセルを下げると帯が飛び飛びになるので、先頭だけ。
+ * 滝の列の一番上のセルを見つけ、そこから WATERFALL_HEAD_DROP だけ下げた位置を
+ * 「この滝の始まり」とし、各セルは自分のタイルの中でそれを切り取る。岩の縁で
+ * いきなり全高の帯が立ち上がると「滑り落ちる」感じにならず、縁から下が急に滝に
+ * なったように見えるため（実機の指摘）。
+ *
+ * 先頭セルだけを下げるのではなく列の始まりから測るのは、WATERFALL_HEAD_DROP が
+ * TILE_SIZE 以上でも破綻しないようにするため（16 だと先頭セルは1ドットも
+ * 描かれず、次のセルの上辺から始まる）。
  */
 export function waterfallTopY(map, r, c) {
-    const isHead = r <= 0 || !(map.isWaterfallCell && map.isWaterfallCell(r - 1, c));
-    return r * TILE_SIZE + (isHead ? WATERFALL_HEAD_DROP : 0);
+    let headR = r;
+    while (headR - 1 >= 0 && map.isWaterfallCell && map.isWaterfallCell(headR - 1, c)) headR--;
+    const startY = headR * TILE_SIZE + WATERFALL_HEAD_DROP;
+    return Math.max(r * TILE_SIZE, Math.min((r + 1) * TILE_SIZE, startY));
 }
 
 export function createWaterRenderer(env) {
@@ -435,12 +441,18 @@ export function createWaterRenderer(env) {
                         ctx.fillRect(px, py, 1.5, streakLen);
                     }
 
-                    // 着水地点（直下が水底またはPoolingWater水面）なら微小な白い飛沫を跳ねさせる
+                    // 着水地点（直下が水底またはPoolingWater水面）なら微小な白い飛沫を跳ねさせる。
+                    // 跳ねる高さは**実際の液面**に合わせる。タイルの下辺に固定していたため、
+                    // 水量が少ない水たまりへ落ちるときは最大16px 高いところで跳ねていた
+                    // （実機の指摘「終点が高い」）
                     const isSplashCell = (r + 1 >= map.rows) ||
                                          (map.isSolid && map.isSolid(r + 1, c)) ||
                                          (!map.isWaterfallCell(r + 1, c));
                     if (isSplashCell) {
-                        const splashY = (r + 1) * TILE_SIZE - 2;
+                        const landLevel = (r + 1 < map.rows && map.isWater && map.isWater(r + 1, c) && map.getSurfaceY)
+                            ? map.getSurfaceY(r + 1, c)
+                            : (r + 1) * TILE_SIZE;
+                        const splashY = Math.round(landLevel) - 2;
                         for (let s = 0; s < 2; s++) {
                             const sx = flowX + 1 + ((this.t * 2 + s * 4 + c * 3) % (flowW - 2));
                             const sy = splashY - Math.abs(Math.sin(this.t * 0.35 + s * 2 + c) * 3);

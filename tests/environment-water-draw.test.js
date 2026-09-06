@@ -264,3 +264,66 @@ test('水塊の塗りの上端は、どの列でも水面の線と一致する�
       `列 ${c}: 塗りの上端 ${topByCol.get(c)} が水面の線 ${lineY} と違う（塗りが段になっている）`);
   }
 });
+
+test('滝は始点が WATERFALL_HEAD_DROP ぶん下がり、終点は着水先の液面に届く', async () => {
+  // 実機の指摘「FallingWater の始まる位置が高すぎる。始点終点とも下げたい」。
+  // 始点: 岩の縁からいきなり全高の帯が立ち上がらないよう、滝の列の一番上から
+  //       WATERFALL_HEAD_DROP だけ下げて描き始める。
+  // 終点: 着水先の**実際の液面**まで細い帯で届かせる。タイルの下辺で切ると
+  //       水量が少ない水たまりでは最大16px 手前で止まって水柱が浮いて見える。
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+  const { WATERFALL_HEAD_DROP } = await import('../src/js/utils/Constants.js');
+
+  // 行1の天井から落ちて、行5の浅い水たまり（水量2）に着水する滝（列5）
+  const map = makeWaterMap(`
+    ##########
+    #####4####
+    .....4....
+    .....4....
+    .....4....
+    .....2....
+    ##########
+  `);
+
+  const fills = [];
+  const origCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    const ctx = makeFakeCtx();
+    const orig = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (x, y, w, h) => { fills.push({ x, y, w, h }); return orig(x, y, w, h); };
+    return { width: 0, height: 0, getContext: () => ctx };
+  };
+  let renderer;
+  try {
+    renderer = createWaterRenderer({ game: { map } });
+  } finally {
+    globalThis.document.createElement = origCreateElement;
+  }
+
+  const inCol5 = fills.filter((f) => f.x >= 5 * TILE_SIZE && f.x < 6 * TILE_SIZE && f.h > 0);
+  assert.ok(inCol5.length > 0, '列5 に何か描かれるべき');
+
+  // 始点: 滝の一番上のセルは行1。そこから WATERFALL_HEAD_DROP 下がった位置
+  const startY = Math.min(...inCol5.map((f) => f.y));
+  assert.equal(startY, 1 * TILE_SIZE + WATERFALL_HEAD_DROP,
+    `滝の始点が違う: got ${startY}`);
+
+  // 終点: 細い帯（w < TILE_SIZE）の一番下が着水先の液面に一致する
+  const level = map.getSurfaceY(5, 5);
+  assert.ok(level > 5 * TILE_SIZE, '前提: 水量が少ないので液面はタイルの上辺より下');
+  const bandBottom = Math.max(...inCol5.filter((f) => f.w < TILE_SIZE).map((f) => f.y + f.h));
+  assert.equal(bandBottom, Math.round(level),
+    `滝の終点が液面に届いていない: got ${bandBottom}, level ${Math.round(level)}`);
+
+  // 着水の飛沫も液面の高さで跳ねる（タイルの下辺ではない）
+  const ctx = makeFakeCtx();
+  const splashes = [];
+  ctx.fillRect = (x, y, w, h) => { if (w === 1.5 && h === 1.5) splashes.push(y); };
+  renderer.t = 0;
+  renderer.drawOverWorld(ctx, 0, 0);
+  assert.ok(splashes.length > 0, '着水の飛沫が描かれるべき');
+  for (const y of splashes) {
+    assert.ok(y <= level && y > level - 8,
+      `飛沫が液面 ${level} の直上で跳ねていない: got ${y}`);
+  }
+});
