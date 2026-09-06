@@ -504,7 +504,10 @@ export const Game = {
             this.input.mouse.y = this.input.lockedWorldY - this.camera.y;
         }
         this._updateMiniMap();
-        if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive && !this.player.docked) {
+        // ドッキング中も武器切り替え（pressWeaponKey）を受け付ける。
+        // 射撃処理（_handleShooting）には別途 player.docked ガードがあるため誤射は起きず、
+        // ドッキング中に武器を選んでおけば発進（Wキー）と同時にその武器を構えて出撃できる
+        if (this.input.isKeyPressed('KeyF') && this.player && this.player.alive) {
             this.player.pressWeaponKey();
         }
         this._handleDocking();
