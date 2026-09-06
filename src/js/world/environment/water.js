@@ -95,8 +95,19 @@ export function createWaterRenderer(env) {
             if (r > 0 && map.isWater(r - 1, c)) {
                 cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
-                // 水面セル: 水量に応じた高さだけ下から塗る
-                const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+                // 水面セル: 左右の水面セルと平均化して水平に塗る
+                let avgMass = mass;
+                let count = 1;
+                if (c > 0 && map.isWater(r, c - 1) && (r === 0 || !map.isWater(r - 1, c - 1))) {
+                    avgMass += map.water ? map.water[r * map.cols + (c - 1)] : MAX_WATER_MASS;
+                    count++;
+                }
+                if (c + 1 < map.cols && map.isWater(r, c + 1) && (r === 0 || !map.isWater(r - 1, c + 1))) {
+                    avgMass += map.water ? map.water[r * map.cols + (c + 1)] : MAX_WATER_MASS;
+                    count++;
+                }
+                const effectiveMass = avgMass / count;
+                const h = Math.round((effectiveMass / MAX_WATER_MASS) * TILE_SIZE);
                 const y = (r + 1) * TILE_SIZE - h;
                 cctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, h);
             }
@@ -177,47 +188,72 @@ export function createWaterRenderer(env) {
             const sh = Math.min(CANVAS_HEIGHT, map.height - sy);
             if (sw > 0 && sh > 0) ctx.drawImage(cache, sx, sy, sw, sh, sx, sy, sw, sh);
 
-            // 水面。画面内の各列について、水たまり（地底湖）の「1層の水面」を引く
+            // 画面内の水面セル（連続した水ブロックの一番上の空気の直下）を収集
+            const surfaceCells = [];
+            const startCol = Math.max(0, Math.floor(camX / TILE_SIZE) - 1);
+            const endCol = Math.min(map.cols - 1, Math.ceil((camX + CANVAS_WIDTH) / TILE_SIZE) + 1);
+            const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
+            const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
+
+            for (let c = startCol; c <= endCol; c++) {
+                for (let r = startRow; r <= endRow; r++) {
+                    if (!map.isWater(r, c)) continue;
+                    // 直上が水なら水中（内部）なので水面ではない
+                    if (r > 0 && map.isWater(r - 1, c)) continue;
+                    // 直上が岩（天井）なら天井に張り付いた水なので水面ではない
+                    if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) continue;
+
+                    // 落下中の水流（滝）の途中セルは水面線を描かない（着水面のみ描く）
+                    if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
+                        if (r + 1 >= map.rows || !map.isWater(r + 1, c)) {
+                            continue;
+                        }
+                    }
+
+                    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+                    const rawY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
+                    surfaceCells.push({ r, c, rawY });
+                }
+            }
+
+            // 横方向に隣接する水面セルをセグメントにグループ化
+            surfaceCells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
+
+            const segments = [];
+            for (const cell of surfaceCells) {
+                let merged = false;
+                for (const seg of segments) {
+                    const last = seg[seg.length - 1];
+                    if (Math.abs(cell.r - last.r) <= 1 && cell.c === last.c + 1) {
+                        seg.push(cell);
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) {
+                    segments.push([cell]);
+                }
+            }
+
+            // 各セグメントごとに平均水位を求めて水平に描画
             ctx.strokeStyle = WATER_SURFACE_COLOR;
             ctx.lineWidth = WATER_SURFACE_LINE_WIDTH;
             ctx.beginPath();
 
-            const startCol = Math.max(0, Math.floor(camX / TILE_SIZE));
-            const endCol = Math.min(map.cols - 1, Math.ceil((camX + CANVAS_WIDTH) / TILE_SIZE));
-            const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
-            const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
+            for (const seg of segments) {
+                const avgY = seg.reduce((sum, item) => sum + item.rawY, 0) / seg.length;
+                const firstCol = seg[0].c;
+                const lastCol = seg[seg.length - 1].c;
+                const x0 = firstCol * TILE_SIZE;
+                const x1 = (lastCol + 1) * TILE_SIZE;
 
-            let prevX = -999;
-            for (let c = startCol; c <= endCol; c++) {
-                // 列 c において、画面内で最も上にある「水たまりのトップセル」を探す
-                for (let r = startRow; r <= endRow; r++) {
-                    if (!map.isWater(r, c)) continue;
-                    // 上も水なら水中（内部）なので水面ではない
-                    if (r > 0 && map.isWater(r - 1, c)) continue;
-                    // 滝（直下が空洞で落下中の水流）なら、それは水面ではなく滝なので水面線は描かない！
-                    if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
-                        continue;
+                for (let x = x0; x <= x1; x += 8) {
+                    const y = avgY + surfaceOffset(x, this.t, this.ripples);
+                    if (x === x0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
                     }
-
-                    // 水たまりの液面を見つけた！
-                    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-                    const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
-                    const baseY = (r + 1) * TILE_SIZE - h;
-
-                    const x0 = c * TILE_SIZE;
-                    const x1 = (c + 1) * TILE_SIZE;
-
-                    for (let x = x0; x <= x1; x += 8) {
-                        const y = baseY + surfaceOffset(x, this.t, this.ripples);
-                        if (x === x0 && Math.abs(x - prevX) > 1) {
-                            ctx.moveTo(x, y);
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
-                        prevX = x;
-                    }
-                    // この列の水面はこれ1つ（1層）のみ
-                    break;
                 }
             }
             ctx.stroke();

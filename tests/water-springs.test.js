@@ -150,3 +150,70 @@ test('Player: 滝の中では下向きのダウンフォースを受け、落下
     assert.ok(Math.abs(player.vy - expectedMax) < 1e-4, `vy clamped to waterfall max: expected ${expectedMax}, got ${player.vy}`);
 });
 
+test('water.js: 離れて2層存在する水ブロックがある場合、それぞれの空気直下のトップが水面になる', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 15, cols = 10;
+    const water = new Uint8Array(rows * cols);
+    // 上層の池: r = 3..4, c = 2..5 (r = 3 の上が空気)
+    for (let r = 3; r <= 4; r++) for (let c = 2; c <= 5; c++) water[r * cols + c] = 8;
+    // 中間 (r = 5..8) は空気
+    // 下層の池: r = 9..11, c = 2..5 (r = 9 の上が空気)
+    for (let r = 9; r <= 11; r++) for (let c = 2; c <= 5; c++) water[r * cols + c] = 8;
+
+    const map = {
+        rows, cols, width: cols * 16, height: rows * 16, water, waterCells: [],
+        isWater: (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && water[r * cols + c] > 0,
+        isSolid: () => false,
+        isWaterfallAtPixel: () => false,
+    };
+    const env = { game: { map } };
+    const renderer = createWaterRenderer(env);
+
+    const ctx = makeFakeCtx();
+    renderer.drawOverWorld(ctx, 0, 0);
+
+    // 水面線の moveTo が上層の池（r=3）と下層の池（r=9）でそれぞれ呼ばれ、2層とも描画されること
+    const moveCalls = ctx.calls.filter((c) => c.name === 'moveTo');
+    assert.equal(moveCalls.length, 2, '2つの独立した水たまりでそれぞれ1つずつ水面線が開始されるべき');
+    // 1つ目の水面は r=3 (y ≈ 48px)、2つ目の水面は r=9 (y ≈ 144px) 付近
+    assert.ok(Math.abs(moveCalls[0].args[1] - 48) < 10, `上層の水面高さが違う: ${moveCalls[0].args[1]}`);
+    assert.ok(Math.abs(moveCalls[1].args[1] - 144) < 10, `下層の水面高さが違う: ${moveCalls[1].args[1]}`);
+});
+
+test('water.js: 横方向に広がった水面セグメントは各セルの水量がバラついていても平均化されて水平に描画される', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const water = new Uint8Array(rows * cols);
+    // r = 5, c = 2..5 に水面がある。ただし水量は 8, 4, 6, 8 とバラバラ
+    water[5 * cols + 2] = 8;
+    water[5 * cols + 3] = 4;
+    water[5 * cols + 4] = 6;
+    water[5 * cols + 5] = 8;
+
+    const map = {
+        rows, cols, width: cols * 16, height: rows * 16, water, waterCells: [],
+        isWater: (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && water[r * cols + c] > 0,
+        isSolid: () => false,
+        isWaterfallAtPixel: () => false,
+    };
+    const env = { game: { map } };
+    const renderer = createWaterRenderer(env);
+
+    const ctx = makeFakeCtx();
+    // t=0 で波オフセットが0または規則的な状態で描画
+    renderer.t = 0;
+    renderer.drawOverWorld(ctx, 0, 0);
+
+    // 1つの連続セグメントとして1本のパスが引かれること
+    const moveCalls = ctx.calls.filter((c) => c.name === 'moveTo');
+    assert.equal(moveCalls.length, 1, '同一水たまりでは1本の水面パス');
+
+    // 平均水位: ( (6 - 8/8)*16 + (6 - 4/8)*16 + (6 - 6/8)*16 + (6 - 8/8)*16 ) / 4
+    // = ( 80 + 88 + 84 + 80 ) / 4 = 332 / 4 = 83px
+    // 起点のY座標が平均値（約83px）に波オフセットを加えた値になっていること
+    const startY = moveCalls[0].args[1];
+    assert.ok(Math.abs(startY - 83) < 3, `起点の水面高さが平均化されていない: got ${startY}, expected ≈ 83`);
+});
+
+
+
