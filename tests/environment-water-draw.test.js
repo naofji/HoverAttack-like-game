@@ -1,7 +1,8 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { TILE_SIZE, WATER_WAVE_AMPLITUDE, WATER_RIPPLE_DECAY } from '../src/js/utils/Constants.js';
+import { WATER_WAVE_AMPLITUDE, WATER_RIPPLE_DECAY } from '../src/js/utils/Constants.js';
+import { makeWaterMap } from './helpers/water-map.js';
 
 before(() => {
   globalThis.document = {
@@ -12,20 +13,24 @@ before(() => {
   };
 });
 
+// 行7が液面、行8が水中の落ち着いた水たまり（列2..5）。床は行9。
+// 以前はここで water[] と waterSurface[] を手で組み立てていたが、種別と液面は
+// waterQuery が water[] から導くようになったので、共通ヘルパーに寄せた。
+// 底を満水にしてあるのは、上下とも満水未満だと「落下中の水柱」と判定されて
+// 水たまりにならないため（滝の判定ルールC）。
 function mapWithPool() {
-  const rows = 10, cols = 10;
-  const water = new Uint8Array(rows * cols);
-  const waterSurface = new Int16Array(rows * cols).fill(-1);
-  const waterCells = [];
-  for (let r = 7; r < 9; r++) for (let c = 2; c < 6; c++) {
-    water[r * cols + c] = 1; waterSurface[r * cols + c] = 7; waterCells.push([r, c]);
-  }
-  return {
-    rows, cols, width: cols * TILE_SIZE, height: rows * TILE_SIZE, water, waterSurface, waterCells,
-    isWater(r, c) { return r >= 0 && c >= 0 && r < rows && c < cols && water[r * cols + c] === 1; },
-    isWaterAtPixel(x, y) { return this.isWater(Math.floor(y / 16), Math.floor(x / 16)); },
-    waterSurfaceRow(r, c) { return this.isWater(r, c) ? waterSurface[r * cols + c] : -1; },
-  };
+  return makeWaterMap(`
+    ..........
+    ..........
+    ..........
+    ..........
+    ..........
+    ..........
+    ..........
+    ..1111....
+    ..8888....
+    ##########
+  `);
 }
 
 test('surface wave stays within the amplitude and ripples decay', async () => {

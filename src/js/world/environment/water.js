@@ -233,16 +233,17 @@ export function createWaterRenderer(env) {
                         toRepaint.add(nr * map.cols + c);
                     }
                 }
-                // 水面セル（または直下が水面セル）なら、水面セグメント全体の横セルも再描画に追加
-                // 水位変動で水たまり全体が一斉に平らに塗り直される
-                if (map.getWaterSurfaceSegment) {
-                    const seg = map.getWaterSurfaceSegment(r, c) ||
-                                (r + 1 < map.rows ? map.getWaterSurfaceSegment(r + 1, c) : null) ||
-                                (r > 0 ? map.getWaterSurfaceSegment(r - 1, c) : null);
-                    if (seg) {
-                        for (const sc of seg) {
-                            toRepaint.add(sc.r * map.cols + sc.c);
-                        }
+                // 水面セルなら、同じ行の水面が続く範囲も塗り直す。液面はセグメント
+                // 全体の平均なので、1セルの水量が変わると仲間全員の見た目が変わる
+                for (const nr of [r - 1, r, r + 1]) {
+                    if (nr < 0 || nr >= map.rows) continue;
+                    if (!map.isWaterSurface(nr, c)) continue;
+                    toRepaint.add(nr * map.cols + c);
+                    for (let cc = c - 1; cc >= 0 && map.isWaterSurface(nr, cc); cc--) {
+                        toRepaint.add(nr * map.cols + cc);
+                    }
+                    for (let cc = c + 1; cc < map.cols && map.isWaterSurface(nr, cc); cc++) {
+                        toRepaint.add(nr * map.cols + cc);
                     }
                 }
             }
@@ -321,82 +322,39 @@ export function createWaterRenderer(env) {
             const sh = Math.min(CANVAS_HEIGHT, map.height - sy);
             if (sw > 0 && sh > 0) ctx.drawImage(cache, sx, sy, sw, sh, sx, sy, sw, sh);
 
-            // 画面内の水面セル（連続した水ブロックの一番上の空気の直下）を収集
+            // 画面内の水面セグメントを集める。waterKind が水面のあいだ横へ伸ばすだけ。
+            // 液面（平均水位）は waterSurfaceY に焼いてあるので計算し直さない
             const startCol = Math.max(0, Math.floor(camX / TILE_SIZE) - 1);
             const endCol = Math.min(map.cols - 1, Math.ceil((camX + CANVAS_WIDTH) / TILE_SIZE) + 1);
             const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
             const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
 
             const segments = [];
-            if (map.getWaterSurfaceSegment && map.getSurfaceY) {
-                const visited = new Set();
+            const visited = new Set();
+            for (let r = startRow; r <= endRow; r++) {
                 for (let c = startCol; c <= endCol; c++) {
-                    for (let r = startRow; r <= endRow; r++) {
-                        const key = r * map.cols + c;
-                        if (visited.has(key)) continue;
-                        if (!map.isWaterSurface(r, c)) continue;
-                        const seg = map.getWaterSurfaceSegment(r, c);
-                        if (seg) {
-                            for (const sc of seg) {
-                                visited.add(sc.r * map.cols + sc.c);
-                            }
-                            segments.push(seg);
-                        }
-                    }
-                }
-            } else {
-                // フォールバック（Map インスタンス以外や簡易モック）
-                const surfaceCells = [];
-                for (let c = startCol; c <= endCol; c++) {
-                    for (let r = startRow; r <= endRow; r++) {
-                        if (!map.isWater(r, c)) continue;
-                        if (r > 0 && map.isWater(r - 1, c)) continue;
-                        if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) continue;
-                        if (map.isWaterfallCell && map.isWaterfallCell(r, c)) continue;
-                        if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) continue;
-                        const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-                        const rawY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
-                        surfaceCells.push({ r, c, rawY });
-                    }
-                }
-                surfaceCells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
-                for (const cell of surfaceCells) {
-                    let merged = false;
-                    for (const seg of segments) {
-                        const last = seg[seg.length - 1];
-                        if (Math.abs(cell.r - last.r) <= 1 && cell.c === last.c + 1) {
-                            seg.push(cell);
-                            merged = true;
-                            break;
-                        }
-                    }
-                    if (!merged) {
-                        segments.push([cell]);
-                    }
+                    if (visited.has(r * map.cols + c)) continue;
+                    if (!map.isWaterSurface(r, c)) continue;
+                    let c0 = c;
+                    while (c0 - 1 >= 0 && map.isWaterSurface(r, c0 - 1)) c0--;
+                    let c1 = c;
+                    while (c1 + 1 < map.cols && map.isWaterSurface(r, c1 + 1)) c1++;
+                    for (let cc = c0; cc <= c1; cc++) visited.add(r * map.cols + cc);
+                    segments.push({ r, c0, c1 });
                 }
             }
 
-            // 各セグメントごとに平均水位を求めて水平に描画
+            // 各セグメントを平均水位で水平に描く
             ctx.strokeStyle = WATER_SURFACE_COLOR;
             ctx.lineWidth = WATER_SURFACE_LINE_WIDTH;
             ctx.beginPath();
-
             for (const seg of segments) {
-                const avgY = map.getSurfaceY ?
-                    map.getSurfaceY(seg[0].r, seg[0].c) :
-                    (seg.reduce((sum, item) => sum + (item.rawY ?? 0), 0) / seg.length);
-                const firstCol = seg[0].c;
-                const lastCol = seg[seg.length - 1].c;
-                const x0 = firstCol * TILE_SIZE;
-                const x1 = (lastCol + 1) * TILE_SIZE;
-
+                const avgY = map.getSurfaceY(seg.r, seg.c0);
+                const x0 = seg.c0 * TILE_SIZE;
+                const x1 = (seg.c1 + 1) * TILE_SIZE;
                 for (let x = x0; x <= x1; x += 8) {
                     const y = avgY + surfaceOffset(x, this.t, this.ripples);
-                    if (x === x0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
+                    if (x === x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                 }
             }
             ctx.stroke();
