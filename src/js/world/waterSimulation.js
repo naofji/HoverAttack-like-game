@@ -1,20 +1,28 @@
 // ============================================
-// waterSimulation - セル・オートマトン水流ロジック
+// waterSimulation - 水流シミュレーション（水槽・行単位レベリングモデル）
 // ============================================
 //
-// 1タイルを 0..MAX_WATER_MASS (8) の水量で管理し、重力と圧力平衡に従って
-// 水量をセル間で移動させる。
+// 1タイルを 0..MAX_WATER_MASS (8) の水量で管理する。
+// 「まず横方向に広がり、壁に当たって満たされたところで上方向に重なっていく」
+// 理想的な物理挙動を、以下の2フェーズで実現する：
 //
-// 1. 垂直落下（重力）: 直下が空洞で満水未満なら限界まで流す。
-// 2. 斜め滑落（階段・スロープ）: 直下が床なら、斜め下へ滑り落ちる。
-// 3. 水平拡散（圧力平衡）: 直下・斜め下に流せない場合、左右の空洞と水量を均等化する。
+// 1. 垂直落下（重力・滝）:
+//    直下が空洞（満水未満）なら、重力に従って直下へ落下する。
+//
+// 2. 横方向優先の水槽レベリング & 流出:
+//    直下が床または満水のセル群（同一行の連結区間）を走査する。
+//    - 区間内に落ち口（段差・穴など下に落ちられるセル）がある場合:
+//      水は落ち口に向かって水平に流れる。
+//    - 落ち口がない場合（＝底が完全に塞がれた容器・水たまりの層）:
+//      その層全体に水量を均等配分する（完全水平レベリング）。
+//      その層が満水（各セル MAX_WATER_MASS）になった時のみ、上の行へ水位が上がる。
 //
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
 import { MAX_WATER_MASS } from '../utils/Constants.js';
 
 /**
- * 1ステップのセル・オートマトン水流計算。
+ * 1ステップの水流計算（行単位水槽レベリングモデル）。
  *
  * @param {Object} params
  * @param {Uint8Array} params.water 水量配列 (0..MAX_WATER_MASS)。直接更新される。
@@ -48,12 +56,13 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
         .map((k) => ({ r: Math.floor(k / cols), c: k % cols, k }))
         .sort((a, b) => b.r - a.r);
 
+    // ----------------------------------------------------
+    // フェーズ1: 垂直落下（重力・滝）
+    // ----------------------------------------------------
     for (const { r, c, k } of cellsToProcess) {
         let mass = water[k];
-        if (mass === 0) continue;
-        if (isSolid(r, c)) continue;
+        if (mass === 0 || isSolid(r, c)) continue;
 
-        // 1. 垂直落下（重力）
         if (r + 1 < rows && !isSolid(r + 1, c)) {
             const downKey = (r + 1) * cols + c;
             const downMass = water[downKey];
@@ -62,110 +71,166 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
                 if (flow > 0) {
                     water[k] -= flow;
                     water[downKey] += flow;
-                    mass -= flow;
                     markChanged(r, c);
                     markChanged(r + 1, c);
                 }
             }
         }
+    }
 
-        if (mass === 0) continue;
+    // ----------------------------------------------------
+    // フェーズ2: 横方向優先の水槽レベリング & 流出
+    // ----------------------------------------------------
+    // アクティブなセルが存在する行（下から上へ処理）
+    const activeRows = Array.from(new Set(cellsToProcess.map((c) => c.r)))
+        .sort((a, b) => b - a);
 
-        // 2. 斜め滑落（階段・角）: 直下が固体または満水の場合
-        const downSolid = r + 1 >= rows || isSolid(r + 1, c);
-        const downFull = r + 1 < rows && water[(r + 1) * cols + c] >= MAX_WATER_MASS;
-        if (downSolid || downFull) {
-            const canLeft = r + 1 < rows && c > 0 && !isSolid(r + 1, c - 1) && !isSolid(r, c - 1);
-            const canRight = r + 1 < rows && c + 1 < cols && !isSolid(r + 1, c + 1) && !isSolid(r, c + 1);
+    const processedSegments = new Set();
 
-            const leftCap = canLeft ? MAX_WATER_MASS - water[(r + 1) * cols + (c - 1)] : 0;
-            const rightCap = canRight ? MAX_WATER_MASS - water[(r + 1) * cols + (c + 1)] : 0;
+    for (const r of activeRows) {
+        // 行 r において、アクティブなセルを含む連結空洞区間を探す
+        for (let c = 0; c < cols; c++) {
+            if (isSolid(r, c)) continue;
 
-            if (leftCap > 0 && rightCap > 0) {
-                const half = Math.min(mass, Math.ceil(mass / 2));
-                const flowL = Math.min(half, leftCap);
-                const flowR = Math.min(mass - flowL, rightCap);
-                if (flowL > 0) {
-                    water[k] -= flowL;
-                    water[(r + 1) * cols + (c - 1)] += flowL;
-                    mass -= flowL;
-                    markChanged(r, c);
-                    markChanged(r + 1, c - 1);
-                }
-                if (flowR > 0) {
-                    water[k] -= flowR;
-                    water[(r + 1) * cols + (c + 1)] += flowR;
-                    mass -= flowR;
-                    markChanged(r, c);
-                    markChanged(r + 1, c + 1);
-                }
-            } else if (leftCap > 0) {
-                const flow = Math.min(mass, leftCap);
-                water[k] -= flow;
-                water[(r + 1) * cols + (c - 1)] += flow;
-                mass -= flow;
-                markChanged(r, c);
-                markChanged(r + 1, c - 1);
-            } else if (rightCap > 0) {
-                const flow = Math.min(mass, rightCap);
-                water[k] -= flow;
-                water[(r + 1) * cols + (c + 1)] += flow;
-                mass -= flow;
-                markChanged(r, c);
-                markChanged(r + 1, c + 1);
+            // 区間の探索 [segStart .. segEnd]
+            const segStart = c;
+            while (c + 1 < cols && !isSolid(r, c + 1)) {
+                c++;
             }
-        }
+            const segEnd = c;
 
-        if (mass === 0) continue;
+            const segKey = `${r}:${segStart}:${segEnd}`;
+            if (processedSegments.has(segKey)) continue;
+            processedSegments.add(segKey);
 
-        // 3. 水平拡散（圧力平衡）
-        if (downSolid || downFull) {
-            const canL = c > 0 && !isSolid(r, c - 1);
-            const canR = c + 1 < cols && !isSolid(r, c + 1);
-
-            const massL = canL ? water[r * cols + (c - 1)] : MAX_WATER_MASS;
-            const massR = canR ? water[r * cols + (c + 1)] : MAX_WATER_MASS;
-
-            const diffL = canL ? mass - massL : 0;
-            const diffR = canR ? mass - massR : 0;
-
-            if (diffL >= 2 && diffR >= 2) {
-                const flowL = Math.floor(diffL / 2);
-                const flowR = Math.floor(diffR / 2);
-                const totalFlow = Math.min(mass, flowL + flowR);
-                const actualL = Math.min(flowL, Math.floor(totalFlow / 2));
-                const actualR = Math.min(flowR, totalFlow - actualL);
-                if (actualL > 0) {
-                    water[k] -= actualL;
-                    water[r * cols + (c - 1)] += actualL;
-                    mass -= actualL;
-                    markChanged(r, c);
-                    markChanged(r, c - 1);
+            // この区間に水が存在するか確認
+            let hasWater = false;
+            let sumMass = 0;
+            const segCols = [];
+            for (let sc = segStart; sc <= segEnd; sc++) {
+                segCols.push(sc);
+                const m = water[r * cols + sc];
+                if (m > 0) {
+                    hasWater = true;
+                    sumMass += m;
                 }
-                if (actualR > 0) {
-                    water[k] -= actualR;
-                    water[r * cols + (c + 1)] += actualR;
-                    mass -= actualR;
-                    markChanged(r, c);
-                    markChanged(r, c + 1);
+            }
+            if (!hasWater) continue;
+
+            // 区間内の各セルについて、直下に落ちられるか（落ち口か）判定
+            const drainCols = [];
+            for (const sc of segCols) {
+                if (r + 1 < rows && !isSolid(r + 1, sc)) {
+                    const downMass = water[(r + 1) * cols + sc];
+                    if (downMass < MAX_WATER_MASS) {
+                        drainCols.push(sc);
+                    }
                 }
-            } else if (diffL >= 2) {
-                const flow = Math.min(mass, Math.floor(diffL / 2));
-                if (flow > 0) {
-                    water[k] -= flow;
-                    water[r * cols + (c - 1)] += flow;
-                    mass -= flow;
-                    markChanged(r, c);
-                    markChanged(r, c - 1);
+            }
+
+            if (drainCols.length > 0) {
+                // ケースA: 区間内に落ち口（滝・穴）がある場合
+                // 水は落ち口へ向かって横に流れる
+                for (const sc of segCols) {
+                    let mass = water[r * cols + sc];
+                    if (mass === 0) continue;
+
+                    // 直下が落ち口なら、フェーズ1で落ちられなかった分（または同ステップ）直下へ
+                    if (r + 1 < rows && !isSolid(r + 1, sc)) {
+                        const downKey = (r + 1) * cols + sc;
+                        const downMass = water[downKey];
+                        if (downMass < MAX_WATER_MASS) {
+                            const flow = Math.min(mass, MAX_WATER_MASS - downMass);
+                            if (flow > 0) {
+                                water[r * cols + sc] -= flow;
+                                water[downKey] += flow;
+                                mass -= flow;
+                                markChanged(r, sc);
+                                markChanged(r + 1, sc);
+                            }
+                        }
+                    }
+                    if (mass === 0) continue;
+
+                    // 最も近い落ち口へ向かって隣のセルへ流す
+                    let closestDrain = drainCols[0];
+                    let minDist = Math.abs(sc - closestDrain);
+                    for (const dc of drainCols) {
+                        const dist = Math.abs(sc - dc);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestDrain = dc;
+                        }
+                    }
+
+                    if (closestDrain < sc) {
+                        // 左へ流す
+                        const targetCol = sc - 1;
+                        const targetKey = r * cols + targetCol;
+                        const targetMass = water[targetKey];
+                        if (targetMass < MAX_WATER_MASS) {
+                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, Math.max(1, Math.floor(mass / 2)));
+                            if (flow > 0) {
+                                water[r * cols + sc] -= flow;
+                                water[targetKey] += flow;
+                                markChanged(r, sc);
+                                markChanged(r, targetCol);
+                            }
+                        }
+                    } else if (closestDrain > sc) {
+                        // 右へ流す
+                        const targetCol = sc + 1;
+                        const targetKey = r * cols + targetCol;
+                        const targetMass = water[targetKey];
+                        if (targetMass < MAX_WATER_MASS) {
+                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, Math.max(1, Math.floor(mass / 2)));
+                            if (flow > 0) {
+                                water[r * cols + sc] -= flow;
+                                water[targetKey] += flow;
+                                markChanged(r, sc);
+                                markChanged(r, targetCol);
+                            }
+                        }
+                    }
                 }
-            } else if (diffR >= 2) {
-                const flow = Math.min(mass, Math.floor(diffR / 2));
-                if (flow > 0) {
-                    water[k] -= flow;
-                    water[r * cols + (c + 1)] += flow;
-                    mass -= flow;
-                    markChanged(r, c);
-                    markChanged(r, c + 1);
+            } else {
+                // ケースB: 落ち口がない（＝底が完全に塞がれた水槽・水たまりの層）
+                // この層の全セルに水量を均等に配分する！
+                const len = segCols.length;
+                const capacity = len * MAX_WATER_MASS;
+                const fillMass = Math.min(sumMass, capacity);
+                const excessMass = sumMass - fillMass;
+
+                const base = Math.floor(fillMass / len);
+                const rem = fillMass % len;
+
+                // 余りは均等に配る
+                for (let i = 0; i < len; i++) {
+                    const sc = segCols[i];
+                    const targetMass = base + (i < rem ? 1 : 0);
+                    const oldMass = water[r * cols + sc];
+                    if (oldMass !== targetMass) {
+                        water[r * cols + sc] = targetMass;
+                        markChanged(r, sc);
+                    }
+                }
+
+                // 余剰水がある場合（この行が完全に満杯になった場合）、上の行へ持ち上げる
+                if (excessMass > 0 && r > 0) {
+                    let leftOver = excessMass;
+                    for (const sc of segCols) {
+                        if (isSolid(r - 1, sc)) continue;
+                        const upKey = (r - 1) * cols + sc;
+                        const upMass = water[upKey];
+                        const canTake = MAX_WATER_MASS - upMass;
+                        const flow = Math.min(leftOver, canTake);
+                        if (flow > 0) {
+                            water[upKey] += flow;
+                            leftOver -= flow;
+                            markChanged(r - 1, sc);
+                        }
+                        if (leftOver === 0) break;
+                    }
                 }
             }
         }

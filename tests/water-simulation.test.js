@@ -152,4 +152,59 @@ test('Map.damageBlock: ブロック破壊時に即座に水ブロック化せず
   }
 });
 
+test('水槽レベリング: まず最下層の横方向一面が満たされ、壁に当たって満杯になってから上方向に水位が上がっていく', () => {
+  const rows = 5, cols = 7;
+  const water = new Uint8Array(rows * cols);
+  // c=0, c=6 は壁。r=4 は床。内側の空洞は c=1..5 (幅5マス)、r=0..3 (深さ4マス)
+  const isSolid = (r, c) => c === 0 || c === 6 || r === 4;
+
+  // 1. 水量 10 を床の上空 (1, 3) から落とす
+  water[1 * cols + 3] = 10;
+  let active = new Set([1 * cols + 3]);
+
+  // 3ステップシミュレーション
+  for (let s = 0; s < 3; s++) {
+    const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
+    active = res.nextActiveCells;
+  }
+
+  // 床の最下層 (r=3, c=1..5) の5マスに水量10が均等（各セル2）に広がり、
+  // 上の層 (r=2) には水が1滴も積み上がっていないこと！
+  for (let c = 1; c <= 5; c++) {
+    assert.equal(water[3 * cols + c], 2, `最下層 (3, ${c}) の水量は 2 であるべき: got ${water[3 * cols + c]}`);
+    assert.equal(water[2 * cols + c], 0, `上の層 (2, ${c}) に水が積み上がってはならない: got ${water[2 * cols + c]}`);
+  }
+
+  // 2. さらに水量 30 を追加（合計 40）。最下層の最大容量は 5 * 8 = 40
+  water[1 * cols + 3] += 30;
+  active.add(1 * cols + 3);
+
+  for (let s = 0; s < 15; s++) {
+    const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
+    active = res.nextActiveCells;
+  }
+
+  // 最下層がピッタリ満水（各セル8、合計40）になり、上の層 (r=2) はまだ0であること
+  for (let c = 1; c <= 5; c++) {
+    assert.equal(water[3 * cols + c], 8, `最下層 (3, ${c}) は満水 8 であるべき: got ${water[3 * cols + c]}`);
+    assert.equal(water[2 * cols + c], 0, `最下層が満杯になるまで上の層 (2, ${c}) は 0 であるべき: got ${water[2 * cols + c]}`);
+  }
+
+  // 3. さらに水量 10 を追加（合計 50）。最下層の40を超えて余剰が10発生
+  water[1 * cols + 3] += 10;
+  active.add(1 * cols + 3);
+
+  for (let s = 0; s < 15; s++) {
+    const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
+    active = res.nextActiveCells;
+  }
+
+  // 最下層は満水（8）を維持し、上の層 (r=2) の5マスに余剰10が均等（各セル2）に溜まること！
+  for (let c = 1; c <= 5; c++) {
+    assert.equal(water[3 * cols + c], 8, `最下層 (3, ${c}) は満水 8 を維持: got ${water[3 * cols + c]}`);
+    assert.equal(water[2 * cols + c], 2, `上の層 (2, ${c}) に水位が上がって均等に 2 溜まるべき: got ${water[2 * cols + c]}`);
+    assert.equal(water[1 * cols + c], 0, `さらに上の層 (1, ${c}) はまだ 0 であるべき: got ${water[1 * cols + c]}`);
+  }
+});
+
 
