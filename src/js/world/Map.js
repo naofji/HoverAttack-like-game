@@ -32,7 +32,7 @@ import {
     MAX_WATER_MASS, MIN_WATER_MASS,
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
     WATER_SPRING_MAX_ROW_RATIO, WATER_SPRING_STOP_ROW,
-    WATER_SIM_INTERVAL,
+    WATER_FALL_INTERVAL,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -1247,17 +1247,12 @@ export class Map {
     /** セルが水面（水たまりの液面）を形成しているか */
     isWaterSurface(r, c) {
         if (!this.isWater(r, c)) return false;
-        // 直上が水なら水中（内部）なので水面ではない
-        if (r > 0 && this.isWater(r - 1, c)) return false;
+        // 落下中の水流（滝）は決して液面（水面）を形成しない
+        if (this.isWaterfallCell(r, c)) return false;
+        // 直上が通常の水（落下水流・滝ではない水）なら水中（内部）なので水面ではない
+        if (r > 0 && this.isWater(r - 1, c) && !this.isWaterfallCell(r - 1, c)) return false;
         // 直上が天井（岩）なら天井に張り付いた水なので水面ではない
         if (r > 0 && this.isSolid && this.isSolid(r - 1, c)) return false;
-        // 落下中の水流（滝）の途中セルは水面を形成しない
-        if (this.isWaterfallCell(r, c)) {
-            // ただし直下が水（着水面）の場合は水面になり得る
-            if (r + 1 >= this.rows || !this.isWater(r + 1, c)) {
-                return false;
-            }
-        }
         return true;
     }
 
@@ -1394,21 +1389,23 @@ export class Map {
             }
 
             if (this.activeWaterCells && this.activeWaterCells.size > 0) {
-                this.waterSimTimer = (this.waterSimTimer || 0) + 1;
-                if (this.waterSimTimer >= WATER_SIM_INTERVAL) {
-                    this.waterSimTimer = 0;
-                    const isSolid = (r, c) => this.isSolid(r, c);
-                    const res = stepWaterSimulation({
-                        water: this.water,
-                        rows: this.rows,
-                        cols: this.cols,
-                        isSolid,
-                        activeCells: this.activeWaterCells,
-                    });
-                    this.activeWaterCells = res.nextActiveCells;
-                    if (res.changedCells.length > 0) {
-                        this.onWaterChanged(res.changedCells);
-                    }
+                this.waterFallTimer = (this.waterFallTimer || 0) + 1;
+                const doFall = (this.waterFallTimer >= WATER_FALL_INTERVAL);
+                if (doFall) {
+                    this.waterFallTimer = 0;
+                }
+                const isSolid = (r, c) => this.isSolid(r, c);
+                const res = stepWaterSimulation({
+                    water: this.water,
+                    rows: this.rows,
+                    cols: this.cols,
+                    isSolid,
+                    activeCells: this.activeWaterCells,
+                    doFall,
+                });
+                this.activeWaterCells = res.nextActiveCells;
+                if (res.changedCells.length > 0) {
+                    this.onWaterChanged(res.changedCells);
                 }
             }
         }

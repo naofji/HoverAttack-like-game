@@ -395,3 +395,39 @@ test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロッ�
         document.createElement = origCreateElement;
     }
 });
+
+test('Map.isWaterSurface & water.js: 落下中の水（滝）は水面（液面）と判定されず、液面の線を描画しない', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const water = new Uint8Array(rows * cols);
+    // (2, 4) から (4, 4) まで落下水流（滝）
+    water[2 * cols + 4] = 4;
+    water[3 * cols + 4] = 4;
+    water[4 * cols + 4] = 4;
+    // (5, 4) に水たまりの床 (solid)
+    const map = {
+        rows, cols,
+        width: cols * 16,
+        height: rows * 16,
+        water,
+        waterCells: [[2, 4], [3, 4], [4, 4]],
+        isWater(r, c) { return this.water[r * cols + c] > 0; },
+        isSolid(r, c) { return r >= 5; },
+    };
+    // Map の prototype メソッドをバインド
+    const { Map } = await import('../src/js/world/Map.js');
+    map.isWaterfallCell = Map.prototype.isWaterfallCell.bind(map);
+    map.isWaterSurface = Map.prototype.isWaterSurface.bind(map);
+    map.getWaterSurfaceSegment = Map.prototype.getWaterSurfaceSegment.bind(map);
+    map.getSurfaceY = Map.prototype.getSurfaceY.bind(map);
+
+    // 落下中のセル (2, 4), (3, 4) は絶対に水面（液面）になってはならない
+    assert.equal(map.isWaterfallCell(2, 4), true, '(2, 4) は滝セルであるべき');
+    assert.equal(map.isWaterSurface(2, 4), false, '(2, 4) は水面（液面）になってはならない');
+    assert.equal(map.isWaterSurface(3, 4), false, '(3, 4) は水面（液面）になってはならない');
+
+    // (4, 4) は直下が床（solid）なので着水面（水たまり表面）
+    assert.equal(map.isWaterfallCell(4, 4), false, '(4, 4) は床直上のため滝ではない');
+    assert.equal(map.isWaterSurface(4, 4), true, '(4, 4) は水面（液面）である');
+});
+

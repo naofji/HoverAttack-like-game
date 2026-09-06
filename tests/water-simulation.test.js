@@ -224,7 +224,7 @@ test('落下速度制限: 垂直落下は1ステップあたり WATER_MAX_FALL_F
   assert.equal(water[0], 8 - WATER_MAX_FALL_FLOW, `元セルに残る水量は ${8 - WATER_MAX_FALL_FLOW} であるべき: got ${water[0]}`);
 });
 
-test('水平流出速度制限: 段差からの水平流出は1ステップあたり WATER_MAX_SPREAD_FLOW (1) ずつ流れる', async () => {
+test('水平流出速度制限: 段差からの水平流出は1ステップあたり WATER_MAX_SPREAD_FLOW (4) ずつ流れる', async () => {
   const { WATER_MAX_SPREAD_FLOW } = await import('../src/js/utils/Constants.js');
   // (0, 0) に床あり、(0, 1) は下に穴（落ち口）
   // 2行 x 2列
@@ -239,9 +239,41 @@ test('水平流出速度制限: 段差からの水平流出は1ステップあ�
   // 1ステップ実行
   stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
 
-  // (0, 0) から右の落ち口 (0, 1) へ流れる量は WATER_MAX_SPREAD_FLOW (1) に制限されること
+  // (0, 0) から右の落ち口 (0, 1) へ流れる量は WATER_MAX_SPREAD_FLOW (4) に制限されること
   assert.equal(water[0 * cols + 0], 8 - WATER_MAX_SPREAD_FLOW);
   assert.equal(water[0 * cols + 1] + water[1 * cols + 1], WATER_MAX_SPREAD_FLOW);
+});
+
+test('doFall 分離: doFall=false 時は垂直落下をスキップしつつ落下待ちセルをアクティブに保ち、横方向拡散は毎ステップ即座に実行される', async () => {
+  const rows = 3, cols = 5;
+  const water = new Uint8Array(rows * cols);
+  // (0, 2) に空中の水滴（垂直落下待ち）、(2, 0) に底に溜まった水 8（横方向水槽レベリング対象）
+  water[0 * cols + 2] = 8;
+  water[2 * cols + 0] = 8;
+  // r=2 は底面（下が床）
+  const isSolid = (r, c) => r === 3;
+
+  let active = new Set([0 * cols + 2, 2 * cols + 0]);
+
+  // doFall = false で1ステップ実行
+  const res1 = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active, doFall: false });
+
+  // 1. 空中の水滴 (0, 2) は落下せずそのまま
+  assert.equal(water[0 * cols + 2], 8, 'doFall=false の時は垂直落下しない');
+  assert.equal(water[1 * cols + 2], 0, '落下先はまだ 0');
+
+  // 2. 底の水 (2, 0) は毎ステップ即座に水槽レベリングされて横 5 マスに均等配分される（初期スピード！）
+  for (let c = 0; c < cols; c++) {
+    assert.ok(water[2 * cols + c] > 0, `底のセル (2, ${c}) に水が横へ拡散していること`);
+  }
+
+  // 3. 空中の水滴 (0, 2) は nextActiveCells に保持されていること（休眠防止）
+  assert.ok(res1.nextActiveCells.has(0 * cols + 2), '落下待ちセルは nextActiveCells に保持される');
+
+  // 次に doFall = true で1ステップ実行
+  const res2 = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: res1.nextActiveCells, doFall: true });
+  // 空中の水滴が落下を開始すること
+  assert.ok(water[1 * cols + 2] > 0, 'doFall=true で落下が実行される');
 });
 
 

@@ -32,7 +32,7 @@ import { MAX_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../u
  * @param {Set<number>|Array<number>} params.activeCells 現在水流がアクティブなセル (r * cols + c)
  * @returns {{ changedCells: Array<[number, number]>, nextActiveCells: Set<number> }}
  */
-export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells }) {
+export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, doFall = true }) {
     const nextActiveCells = new Set();
     const changedSet = new Set();
 
@@ -45,13 +45,19 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
                 const nr = r + dr;
                 const nc = c + dc;
                 if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
-                    nextActiveCells.add(nr * cols + nc);
+                    if (!isSolid(nr, nc)) {
+                        nextActiveCells.add(nr * cols + nc);
+                    }
                 }
             }
         }
     };
 
-    // 処理対象のセル。下から上へ処理すると、落下がスムーズに連鎖する
+    if (!activeCells || activeCells.size === 0) {
+        return { changedCells: [], nextActiveCells };
+    }
+
+    // 処理対象セルを下層（rが大きい）から順にソート
     const cellsToProcess = Array.from(activeCells)
         .map((k) => ({ r: Math.floor(k / cols), c: k % cols, k }))
         .sort((a, b) => b.r - a.r);
@@ -59,20 +65,22 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
     // ----------------------------------------------------
     // フェーズ1: 垂直落下（重力・滝）
     // ----------------------------------------------------
-    for (const { r, c, k } of cellsToProcess) {
-        let mass = water[k];
-        if (mass === 0 || isSolid(r, c)) continue;
+    if (doFall) {
+        for (const { r, c, k } of cellsToProcess) {
+            let mass = water[k];
+            if (mass === 0 || isSolid(r, c)) continue;
 
-        if (r + 1 < rows && !isSolid(r + 1, c)) {
-            const downKey = (r + 1) * cols + c;
-            const downMass = water[downKey];
-            if (downMass < MAX_WATER_MASS) {
-                const flow = Math.min(mass, MAX_WATER_MASS - downMass, WATER_MAX_FALL_FLOW);
-                if (flow > 0) {
-                    water[k] -= flow;
-                    water[downKey] += flow;
-                    markChanged(r, c);
-                    markChanged(r + 1, c);
+            if (r + 1 < rows && !isSolid(r + 1, c)) {
+                const downKey = (r + 1) * cols + c;
+                const downMass = water[downKey];
+                if (downMass < MAX_WATER_MASS) {
+                    const flow = Math.min(mass, MAX_WATER_MASS - downMass, WATER_MAX_FALL_FLOW);
+                    if (flow > 0) {
+                        water[k] -= flow;
+                        water[downKey] += flow;
+                        markChanged(r, c);
+                        markChanged(r + 1, c);
+                    }
                 }
             }
         }
@@ -215,6 +223,15 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
                         if (leftOver === 0) break;
                     }
                 }
+            }
+        }
+    }
+
+    if (!doFall) {
+        // 落下処理をスキップしたフレームでは、まだ直下に落ちられる水セルをアクティブに保持し休眠を防ぐ
+        for (const { r, c, k } of cellsToProcess) {
+            if (water[k] > 0 && r + 1 < rows && !isSolid(r + 1, c) && water[(r + 1) * cols + c] < MAX_WATER_MASS) {
+                nextActiveCells.add(k);
             }
         }
     }

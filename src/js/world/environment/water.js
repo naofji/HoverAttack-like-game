@@ -311,9 +311,8 @@ export function createWaterRenderer(env) {
                         if (!map.isWater(r, c)) continue;
                         if (r > 0 && map.isWater(r - 1, c)) continue;
                         if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) continue;
-                        if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
-                            if (r + 1 >= map.rows || !map.isWater(r + 1, c)) continue;
-                        }
+                        if (map.isWaterfallCell && map.isWaterfallCell(r, c)) continue;
+                        if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) continue;
                         const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
                         const rawY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
                         surfaceCells.push({ r, c, rawY });
