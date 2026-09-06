@@ -579,10 +579,16 @@ export class Map {
         // 面ごとの割合。パレット・環境と同じく剰余で丸める（debugStartMission で面数を超えうる）。
         // rng.next() は if の外に出さない代わりに、確率に関係なく必ず1タイル1回引く形を保つこと。
         // 消費数が割合で変わると、後続のスポーン決定がずれて週次の決定性が壊れる。
-        const chance = HARD_BLOCK_CHANCE_BY_STAGE[this.missionLevel % HARD_BLOCK_CHANCE_BY_STAGE.length];
+        const row = HARD_BLOCK_CHANCE_BY_STAGE[this.missionLevel % HARD_BLOCK_CHANCE_BY_STAGE.length];
+        // 行が [左端, 右端] の対なら列で線形に補間する（7面。右へ進むほど固くなる）
+        const span = this.cols - 1 - BORDER_THICKNESS * 2;
+        const chanceAt = Array.isArray(row)
+            ? (c) => row[0] + (row[1] - row[0]) * ((c - BORDER_THICKNESS) / span)
+            : () => row;
         for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
             for (let c = BORDER_THICKNESS; c < this.cols - BORDER_THICKNESS; c++) {
-                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < chance) {
+                // rng.next() は if の外に出さない代わりに、確率に関係なく必ず1タイル1回引く
+                if (this.grid[r][c] === BLOCK_NORMAL && this.game.rng.next() < chanceAt(c)) {
                     this.grid[r][c] = BLOCK_HARD;
                     this.blockHP[r][c] = HARD_BLOCK_HP;
                 }
