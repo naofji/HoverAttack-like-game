@@ -931,9 +931,15 @@ export const FORTRESS_SHAFT_W = 4;     // 階をつなぐ縦穴の幅
 // バリアの列から左右にこれだけは敵を湧かせない。バリアの中に砲台が居ると、
 // 開ける前に一方的に撃たれるうえ、撃ち返した弾はバリアに吸われて届かない
 export const FORTRESS_BARRIER_CLEARANCE = 2;
-// 入り口の大きさ（タイル）。左辺・上辺とも同じ。自機は 1x1.5 タイルなので3で余裕がある。
-// 階の高さぶん（5）開けていた頃は「扉」ではなく「壁が崩れている」ように見えた（実機の指摘）
-export const FORTRESS_GATE_SIZE = 3;
+// 入り口の大きさ（タイル）。左辺・上辺とも同じ。3 → 5 に戻した（実機の指摘）。
+// 3では狭かった。5でも「壁が崩れている」に見えないのは、**開口の上下に守衛の
+// タレットを置いて「守られた門」だと分かるようにした**から（下の GATE_GUARD）
+export const FORTRESS_GATE_SIZE = 5;
+// 入り口を守るタレット。開口の上端（天井付け）と下端（床置き）に1基ずつ。
+// **ノーマル（gun）に固定する** — 7面はビーム砲台が混ざる面なので、放っておくと
+// 入り口の守衛がビームになり、入る前に削られて理不尽になる
+export const FORTRESS_GATE_GUARD_TYPE = 'gun';
+export const FORTRESS_GATE_GUARD_INSET = 1;   // 開口から内側へ何タイル入れるか
 // 開口から区画の外の空洞まで掘るトンネルの最大長。7面は空洞が 42% あるので
 // 数タイルで当たる。当たらないまま尽きたらそこで止める（掘った穴は残る）
 export const FORTRESS_OPENING_TUNNEL_MAX = 24;
@@ -949,7 +955,12 @@ export const FORTRESS_GARRISON_TANKS = 2;
 // 天井と床の2基のユニットが対で立ち、その間に縦のバリアが張られる。**両方**壊すと
 // 消える。壁を壊して進むのではなく装置を倒して進む形にすることで、横視点の遊びとして
 // 成立させる（真上から見た間取り図に見える、という実機の指摘への答えでもある）。
-export const BARRIER_EMITTER_HP = 30;        // = DAMAGE_PLAYER_MISSILE * 2。砲台と同じ硬さ
+// ユニットの硬さ。**ミサイル2発、マシンガン5発**で壊れるように置いてある（実機の指定）。
+// 30 = DAMAGE_PLAYER_MISSILE(15) x 2 = PLAYER_MG_DAMAGE(3) x BARRIER_UNIT_MG_MULT(2) x 5。
+// マシンガンに倍率を掛けているのは、素の 3 だと10発かかって「撫でて壊す」には
+// 長すぎるため。敵の mgDamageMult と同じ考え方（あちらは装甲で減らす向き）
+export const BARRIER_EMITTER_HP = 30;
+export const BARRIER_UNIT_MG_MULT = 2;
 export const BARRIER_UNIT_W = 12;            // ユニットの見た目の幅（px）
 export const BARRIER_UNIT_H = 8;             // 同、高さ
 export const BARRIER_FIELD_W = 6;            // バリアの幅（px）。細いほど「すり抜けられそう」に見えない程度
@@ -964,12 +975,15 @@ export const BARRIER_PULSE_PERIOD = 24;      // 明滅の周期（フレーム�
 export const BARRIER_COLOR = '#7FD8FF';      // 電磁パルスの芯
 export const BARRIER_GLOW_COLOR = 'rgba(127, 216, 255, 0.35)';
 // **被弾対象であることを色で明示する**（実機の指摘）。地形の金属（#383e51 など）に
-// 埋もれない白っぽさにして、「これは撃つものだ」と分かるようにする
-export const BARRIER_UNIT_COLOR = '#D6DEE8';
-// ランプは**本体（白）より濃い**色で点く。本体を白くしたぶん、明るい色で点けると
-// 「消えている」ほうが目立つ逆転が起きる。消灯は暗いスレートにして、
+// 埋もれない白っぽさにして、「これは撃つものだ」と分かるようにする。
+// 輝度 186 に抑えてあるのは、ランプ（#7FD8FF・輝度194）が本体より明るく見える
+// ようにするため。真っ白（#D6DEE8・221）にすると点灯のほうが暗くなって逆転する
+export const BARRIER_UNIT_COLOR = '#AEBCCB';
+// ランプ。**鮮やかな空色に戻した**（実機の指摘。一度 #3FC8FF に濃くしたが、
+// 以前のほうが印象が良かった）。本体の輝度を 221 → 186 に下げることで、
+// この色が本体より明るく見えるようにしてある。消灯は暗いスレートで、
 // 暗→シアンの点滅として読ませる
-export const BARRIER_UNIT_LAMP_COLOR = '#3FC8FF';
+export const BARRIER_UNIT_LAMP_COLOR = '#7FD8FF';
 export const BARRIER_UNIT_LAMP_OFF_COLOR = '#4A5A6B';
 // バリアの音。**細く高い持続音**にする。最初は 72Hz の低い唸り＋矩形波の倍音で
 // 作ったが、実機で「うざい」と出た（低い唸りは常時鳴ると圧が強く、母艦エンジンとも

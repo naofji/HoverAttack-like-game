@@ -176,7 +176,10 @@ export class SpawnManager {
         // ずれて週次の決定性が壊れる（tests/MapDeterminism.test.js）
         const beamMission = game.missionsCompleted >= 6;
         game.map.enemyTurretSpawns.forEach((pos, i) => {
-            const type = (beamMission && i % 2 === 0) ? 'beam' : 'gun';
+            // pos.type があればそれに従う（要塞の入り口の守衛はノーマルに固定。
+            // 7面はビームが混ざる面なので、放っておくと門番がビームになって
+            // 入る前に削られる）。無ければ今までどおり偶数番目をビームに
+            const type = pos.type ?? ((beamMission && i % 2 === 0) ? 'beam' : 'gun');
             game.enemies.push(new EnemyTurret(game, pos.x, pos.y, pos.isCeiling, type));
         });
 

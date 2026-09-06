@@ -318,13 +318,25 @@ test('ユニットは地形より遥かに明るい（撃つものだと分か�
   }
 });
 
+/** 2色の RGB 距離。輝度だけでは色味の違いを拾えないので、見分けはこちらで測る。 */
+function colorDistance(a, b) {
+  const px = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [ar, ag, ab] = px(a);
+  const [br, bg, bb] = px(b);
+  return Math.sqrt((ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2);
+}
+
 test('ランプは点いているときも消えているときも本体と見分けられる', () => {
   const body = luminance(BARRIER_UNIT_COLOR);
   const on = luminance(BARRIER_UNIT_LAMP_COLOR);
   const off = luminance(BARRIER_UNIT_LAMP_OFF_COLOR);
-  assert.ok(Math.abs(body - on) > 30, `点灯が本体と紛れる (${on.toFixed(0)} vs ${body.toFixed(0)})`);
+  // 点灯は色味で見分ける（鮮やかな空色 vs 灰白）。輝度だけで縛ると、
+  // ランプを鮮やかな色に戻せなくなる
+  assert.ok(colorDistance(BARRIER_UNIT_COLOR, BARRIER_UNIT_LAMP_COLOR) > 50,
+    `点灯が本体と紛れる (${BARRIER_UNIT_LAMP_COLOR} vs ${BARRIER_UNIT_COLOR})`);
   assert.ok(Math.abs(body - off) > 30, `消灯が本体と紛れる (${off.toFixed(0)} vs ${body.toFixed(0)})`);
-  // 点灯のほうが「明るい」向きに見えるよう、消灯より上に置く
+  // **点灯は本体より明るいこと。** ここが逆転すると「消えている」ほうが目立つ
+  assert.ok(on > body, `点灯(${on.toFixed(0)}) が本体(${body.toFixed(0)}) より暗い`);
   assert.ok(on > off, `点灯(${on.toFixed(0)}) が消灯(${off.toFixed(0)}) より暗い`);
 });
 
@@ -477,4 +489,47 @@ test('_drawHpBarIfDamaged が受け付ける形になっている', () => {
   b.damageEmitter('top', BARRIER_EMITTER_HP);
   Game._drawHpBarIfDamaged.call(fake, null, b.units.top);
   assert.equal(drawn.length, 1, '壊れたユニットにバーが出ている');
+});
+
+// --- 武器ごとの手数（ミサイル2発 / マシンガン5発） ---
+
+import { Missile } from '../src/js/entities/Missile.js';
+import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
+import {
+  DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, BARRIER_UNIT_MG_MULT,
+} from '../src/js/utils/Constants.js';
+
+/** ユニットの上に弾を1発置いて当てる。壊れたら true。 */
+function hitUnit(b, game, proj) {
+  proj.x = b.units.top.x + 2;
+  proj.y = b.units.top.y + 2;
+  proj.alive = true;
+  proj.exploded = false;
+  game.projectiles = [proj];
+  b.update();
+  return !b.units.top.alive;
+}
+
+test('ユニットはミサイル2発で壊れる', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const shot = () => hitUnit(b, game, new Missile(game, 0, 0, 0, true));
+  assert.equal(shot(), false, '1発で壊れた');
+  assert.equal(shot(), true, '2発で壊れない');
+});
+
+test('ユニットはマシンガン5発で壊れる', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const shot = () => hitUnit(b, game, new PlayerBullet(game, 0, 0, 0));
+  for (let i = 1; i <= 4; i++) {
+    assert.equal(shot(), false, `${i} 発で壊れた`);
+  }
+  assert.equal(shot(), true, '5発で壊れない');
+});
+
+test('手数は定数から導けている（HP を動かせば両方ついてくる）', () => {
+  assert.equal(BARRIER_EMITTER_HP, DAMAGE_PLAYER_MISSILE * 2, 'ミサイル2発ぶんでない');
+  assert.equal(BARRIER_EMITTER_HP, PLAYER_MG_DAMAGE * BARRIER_UNIT_MG_MULT * 5,
+    'マシンガン5発ぶんでない');
 });

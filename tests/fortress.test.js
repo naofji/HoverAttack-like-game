@@ -637,3 +637,48 @@ test('バリアの上に敵も地雷も湧かない', async () => {
     }
   }
 });
+
+import { FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET } from '../src/js/utils/Constants.js';
+
+test('入り口は5ブロックで、上下にノーマルの砲台が立つ', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  assert.equal(FORTRESS_GATE_SIZE, 5, '入り口が5ブロックでない');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  for (const z of m.fortressZones) {
+    const left = z.openings.find((g) => g.side === 'left');
+    assert.equal(left.w, 5, '左の開口が5ブロックでない');
+    const gc = z.c0 + FORTRESS_WALL_THICKNESS + FORTRESS_GATE_GUARD_INSET;
+    const guards = z.garrison.turrets.filter((t) => t.c === gc);
+    assert.equal(guards.length, 2, `入り口の守衛が2基でない (${guards.length})`);
+    // 上端は天井付け、下端は床置き
+    const ceiling = guards.find((g) => g.isCeiling);
+    const floor = guards.find((g) => !g.isCeiling);
+    assert.equal(ceiling.r, left.r, '天井側の守衛が開口の上端に無い');
+    assert.equal(floor.r, left.r + left.w - 1, '床側の守衛が開口の下端に無い');
+    // **ノーマルに固定**。7面はビームが混ざる面なので、門番がビームだと理不尽
+    for (const g of guards) assert.equal(g.type, FORTRESS_GATE_GUARD_TYPE, '守衛がノーマルでない');
+  }
+});
+
+test('入り口の守衛はビームにならない（湧かせる側でも固定される）', async () => {
+  const { SpawnManager } = await import('../src/js/systems/SpawnManager.js');
+  // **守衛を偶数番目に置く。** 奇数番目だと、種類を固定しなくても既定で gun に
+  // なってしまい、固定が効いているかを判別できない（最初この形で書いて、
+  // 変異を入れても赤くならなかった）
+  const spawns = [
+    { x: 0, y: 0, isCeiling: true, type: 'gun' },     // 守衛（0番目＝既定ならビーム）
+    { x: 16, y: 0, isCeiling: false },                // 指定なし（1番目＝既定で gun）
+    { x: 32, y: 0, isCeiling: false },                // 指定なし（2番目＝既定でビーム）
+  ];
+  const game = {
+    map: {
+      enemyTurretSpawns: spawns, enemyTankSpawns: [], enemyAttackerSpawns: [],
+      enemyDroneSpawns: [], enemyBaseSpawn: null,
+    },
+    missionsCompleted: 6, enemies: [], enemyBullets: [],
+  };
+  new SpawnManager(game).spawnEnemies();
+  const types = game.enemies.map((e) => e.type);
+  assert.equal(types[2], 'beam', '前提: 指定が無ければ偶数番目はビームになる面');
+  assert.equal(types[0], 'gun', '守衛がノーマルに固定されていない');
+});

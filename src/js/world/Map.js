@@ -27,7 +27,7 @@ import {
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_GATE_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
     FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
-    FORTRESS_BARRIER_CLEARANCE,
+    FORTRESS_BARRIER_CLEARANCE, FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -318,6 +318,7 @@ export class Map {
             garrisonTurrets: FORTRESS_GARRISON_TURRETS,
             garrisonTanks: FORTRESS_GARRISON_TANKS,
             barrierClearance: FORTRESS_BARRIER_CLEARANCE,
+            guardType: FORTRESS_GATE_GUARD_TYPE, guardInset: FORTRESS_GATE_GUARD_INSET,
         });
         this.fortressZones = result.zones;
         this.fortress = result.marks;
@@ -356,7 +357,10 @@ export class Map {
                 this.treasureSpawns.push({ x: t.c * S + S / 2, y: t.r * S, kind: t.kind });
             }
             for (const g of zone.garrison.turrets) {
-                this.enemyTurretSpawns.push({ x: g.c * S, y: g.r * S, isCeiling: g.isCeiling });
+                // type を持つものは砲台の種類を固定する（入り口の守衛はノーマル）
+                this.enemyTurretSpawns.push({
+                    x: g.c * S, y: g.r * S, isCeiling: g.isCeiling, type: g.type,
+                });
             }
             for (const g of zone.garrison.tanks) {
                 this.enemyTankSpawns.push({ x: g.c * S, y: g.r * S });

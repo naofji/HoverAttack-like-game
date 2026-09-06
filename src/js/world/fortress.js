@@ -222,6 +222,7 @@ export function carveFortressZones({
     count, wMin, wRange, hMin, hRange, margin,
     thickness, ceilingH, floorH, shaftW, gateSize, tunnelMax,
     treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
+    guardType, guardInset,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -242,8 +243,9 @@ export function carveFortressZones({
                 if (grid[r][c] !== BLOCK_EMPTY) marks[r * cols + c] = 1;
             }
         }
-        const contents = planZoneContents(zone, floors, shafts, {
-            thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance, rng,
+        const contents = planZoneContents(zone, floors, shafts, openings, {
+            thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
+            guardType, guardInset, rng,
         });
         zones.push({ ...zone, openings, floors, shafts, ...contents });
     }
@@ -259,8 +261,9 @@ export function carveFortressZones({
  *   シャフトの真上／真下に置くと落ちてきた瞬間に接触するので、2タイル空ける
  * - **守備隊**は各階の床の上と天井に置く。既存の湧きに足すだけ
  */
-export function planZoneContents(zone, floors, shafts, {
-    thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance, rng,
+export function planZoneContents(zone, floors, shafts, openings, {
+    thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
+    guardType, guardInset, rng,
 }) {
     const T = thickness;
     const c0 = zone.c0 + T, c1 = zone.c1 - T;
@@ -275,7 +278,12 @@ export function planZoneContents(zone, floors, shafts, {
         treasures.push({ r: bottom.r1, c, kind: i === 0 ? 'overdrive' : 'repair' });
     }
 
-    // バリア: 階ごとに1本。シャフトから2タイル以上離す。
+    // 入り口とその守衛が立つ列。バリアはここを避ける（入り口の真上にバリアが
+    // あると、入った瞬間に接触するうえ守衛がバリアに埋まる）
+    const left = openings.find((g) => g.side === 'left');
+    const guardCol = left ? zone.c0 + T + guardInset : null;
+
+    // バリア: 階ごとに1本。シャフトと入り口から離す。
     // 最下階だけは宝より手前（左）に置く（宝が「バリアの奥」になるように）
     const barriers = [];
     for (const floor of floors) {
@@ -287,9 +295,11 @@ export function planZoneContents(zone, floors, shafts, {
         for (let tries = 0; tries < 30 && c < 0; tries++) {
             const cand = c0 + 1 + Math.floor(rng.next() * Math.max(1, limit - c0 - 1));
             const nearShaft = shafts.some((s) => cand >= s.c - 1 && cand <= s.c + s.w);
-            if (!nearShaft) c = cand;
+            const nearGate = guardCol != null && Math.abs(cand - guardCol) <= barrierClearance;
+            if (!nearShaft && !nearGate) c = cand;
         }
-        if (c < 0) c = c0 + 1; // 逃げ道。シャフトだらけで置けないときは左端へ
+        // 逃げ道。置ける列が無ければ右端寄りへ（左端は入り口があるので避ける）
+        if (c < 0) c = Math.max(c0 + 1, limit - 1);
         barriers.push({ c, top: floor.r0, bottom: floor.r1 });
     }
 
@@ -319,6 +329,14 @@ export function planZoneContents(zone, floors, shafts, {
         const c = pickColumn();
         if (c == null) continue;
         tanks.push({ r: floor.r1, c });
+    }
+
+    // 入り口の守衛。開口の上端（天井付け）と下端（床置き）に1基ずつ。
+    // 5ブロックの開口は「壁が崩れている」ようにも見えるので、門番を置いて
+    // 「守られた入り口」だと読ませる（実機の指摘）
+    if (left) {
+        turrets.push({ r: left.r, c: guardCol, isCeiling: true, type: guardType });
+        turrets.push({ r: left.r + left.w - 1, c: guardCol, isCeiling: false, type: guardType });
     }
 
     return { treasures, barriers, garrison: { turrets, tanks } };
