@@ -102,8 +102,8 @@ test('部屋が密集していても区画は重ならない', () => {
 
 import { buildZoneWalls, zoneBands } from '../src/js/world/fortress.js';
 import {
-  BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
-  FORTRESS_WALL_THICKNESS, HARD_BLOCK_HP,
+  BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_METAL,
+  FORTRESS_WALL_THICKNESS, HARD_BLOCK_HP, METAL_BLOCK_HP,
 } from '../src/js/utils/Constants.js';
 
 /** 全部空洞の盤面。区画だけを見たいので周りは何も無い。 */
@@ -122,37 +122,50 @@ function forEachInRect(rect, fn) {
 
 const ZONE = { r0: 10, r1: 34, c0: 10, c1: 44 };
 
-test('外壁は上と左が装甲、下と右が硬い岩', () => {
+test('外壁は上・左・下が金属、右だけ硬い岩', () => {
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
   const bands = zoneBands(ZONE, FORTRESS_WALL_THICKNESS);
 
-  forEachInRect(bands.top, (r, c) => {
-    assert.equal(b.grid[r][c], BLOCK_INDESTRUCTIBLE, `上帯 (${r},${c})`);
-    assert.equal(b.blockHP[r][c], -1, `上帯の HP (${r},${c})`);
-  });
-  forEachInRect(bands.left, (r, c) => {
-    assert.equal(b.grid[r][c], BLOCK_INDESTRUCTIBLE, `左帯 (${r},${c})`);
-  });
-  forEachInRect(bands.bottom, (r, c) => {
-    assert.equal(b.grid[r][c], BLOCK_HARD, `下帯 (${r},${c})`);
-    assert.equal(b.blockHP[r][c], HARD_BLOCK_HP, `下帯の HP (${r},${c})`);
-  });
+  for (const name of ['top', 'left', 'bottom']) {
+    forEachInRect(bands[name], (r, c) => {
+      assert.equal(b.grid[r][c], BLOCK_METAL, `${name} 帯 (${r},${c})`);
+      assert.equal(b.blockHP[r][c], METAL_BLOCK_HP, `${name} 帯の HP (${r},${c})`);
+    });
+  }
   forEachInRect(bands.right, (r, c) => {
     assert.equal(b.grid[r][c], BLOCK_HARD, `右帯 (${r},${c})`);
+    assert.equal(b.blockHP[r][c], HARD_BLOCK_HP, `右帯の HP (${r},${c})`);
   });
 });
 
-test('背面（下帯と右帯）に装甲は1つも無い＝掘って回り込める', () => {
+test('外壁に壊せないブロックは1つも無い（マップを分断しない）', () => {
+  // 壊せない装甲をやめたのが今回の作り直しの要点。全部掘れることを縛る
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
   const bands = zoneBands(ZONE, FORTRESS_WALL_THICKNESS);
-  for (const band of [bands.bottom, bands.right]) {
+  for (const band of Object.values(bands)) {
     forEachInRect(band, (r, c) => {
-      assert.notEqual(b.grid[r][c], BLOCK_INDESTRUCTIBLE,
-        `背面に装甲がある (${r},${c})。掘って入れなくなる`);
+      assert.ok(b.blockHP[r][c] > 0, `掘れないブロックがある (${r},${c})`);
     });
   }
+});
+
+test('弱点は右だけ。上・左・下は右の2倍の手数が要る', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const bands = zoneBands(ZONE, FORTRESS_WALL_THICKNESS);
+  // 厚さ2層ぶんの合計 HP で比べる
+  const cost = (band) => {
+    let sum = 0;
+    forEachInRect(band, (r, c) => { sum += b.blockHP[r][c]; });
+    return sum / ((band.r1 - band.r0 + 1) * (band.c1 - band.c0 + 1)) * FORTRESS_WALL_THICKNESS;
+  };
+  const weak = cost(bands.right);
+  for (const name of ['top', 'left', 'bottom']) {
+    assert.ok(cost(bands[name]) >= weak * 2, `${name} が右より十分硬くない`);
+  }
+  assert.equal(weak, HARD_BLOCK_HP * FORTRESS_WALL_THICKNESS, '右の弱点が 6発でない');
 });
 
 test('4つの帯は互いに重ならず、外周を隙間なく覆う', () => {
@@ -178,15 +191,18 @@ test('4つの帯は互いに重ならず、外周を隙間なく覆う', () => {
 
 import { buildZoneInterior } from '../src/js/world/fortress.js';
 import {
-  FORTRESS_CORRIDOR_W, FORTRESS_CORRIDOR_PITCH, FORTRESS_ROOM_SIZE,
+  FORTRESS_CEILING_H, FORTRESS_FLOOR_H, FORTRESS_SHAFT_W,
 } from '../src/js/utils/Constants.js';
 
-const INTERIOR_OPTS = {
-  thickness: FORTRESS_WALL_THICKNESS,
-  corridorW: FORTRESS_CORRIDOR_W,
-  pitch: FORTRESS_CORRIDOR_PITCH,
-  roomSize: FORTRESS_ROOM_SIZE,
-};
+function interiorOpts(rng) {
+  return {
+    thickness: FORTRESS_WALL_THICKNESS,
+    ceilingH: FORTRESS_CEILING_H,
+    floorH: FORTRESS_FLOOR_H,
+    shaftW: FORTRESS_SHAFT_W,
+    rng,
+  };
+}
 
 /** 区画の内側（外壁の内）で、空洞の連結成分の数を数える。 */
 function openComponents(grid, zone, T) {
@@ -217,52 +233,59 @@ function openComponents(grid, zone, T) {
   return components;
 }
 
-test('区画の中は廊下が縦横に走り、空洞がひとつながりになる', () => {
+test('区画の中は横に長い階が縦に積み、シャフトで全部つながる', () => {
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
-  const { corridorRows, corridorCols } = buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
-  assert.ok(corridorRows.length >= 2, `横の廊下が ${corridorRows.length} 本しかない`);
-  assert.ok(corridorCols.length >= 2, `縦の廊下が ${corridorCols.length} 本しかない`);
+  const { floors, shafts } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(5)));
+  assert.ok(floors.length >= 2, `階が ${floors.length} しかない`);
+  assert.equal(shafts.length, floors.length - 1, '階の境目の数だけシャフトが要る');
   assert.equal(openComponents(b.grid, ZONE, FORTRESS_WALL_THICKNESS), 1,
-    '区画の中の空洞がひとつながりになっていない');
+    'シャフトで全部の階がつながっていない');
 });
 
-test('廊下でない内側は掘れる通常岩（迷路にしない）', () => {
+test('階は横に長い（真上から見た格子ではない）', () => {
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
-  buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
+  const { floors } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(5)));
+  const innerW = (ZONE.c1 - FORTRESS_WALL_THICKNESS) - (ZONE.c0 + FORTRESS_WALL_THICKNESS) + 1;
+  for (const f of floors) {
+    const h = f.r1 - f.r0 + 1;
+    assert.ok(innerW > h * 2, `階が横に長くない（幅 ${innerW} / 高さ ${h}）`);
+  }
+});
+
+test('階の境目は硬い岩の床（掘って抜けられるが手間）', () => {
+  const b = blankBoard();
+  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+  const { floors, shafts } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(5)));
   const T = FORTRESS_WALL_THICKNESS;
-  let normal = 0, pillars = 0;
-  for (let r = ZONE.r0 + T; r <= ZONE.r1 - T; r++) {
-    for (let c = ZONE.c0 + T; c <= ZONE.c1 - T; c++) {
-      const v = b.grid[r][c];
-      assert.ok(v === BLOCK_EMPTY || v === BLOCK_NORMAL || v === BLOCK_INDESTRUCTIBLE,
-        `内側に硬い岩が残っている (${r},${c})`);
-      if (v === BLOCK_NORMAL) {
-        normal++;
-        assert.equal(b.blockHP[r][c], 1, `通常岩の HP が 1 でない (${r},${c})`);
+  for (let i = 0; i + 1 < floors.length; i++) {
+    const shaft = shafts[i];
+    for (let r = floors[i].r1 + 1; r <= floors[i + 1].r0 - 1; r++) {
+      for (let c = ZONE.c0 + T; c <= ZONE.c1 - T; c++) {
+        const inShaft = c >= shaft.c && c < shaft.c + shaft.w;
+        if (inShaft) {
+          assert.equal(b.grid[r][c], BLOCK_EMPTY, `シャフトが塞がっている (${r},${c})`);
+        } else {
+          assert.equal(b.grid[r][c], BLOCK_HARD, `床が硬い岩でない (${r},${c})`);
+          assert.equal(b.blockHP[r][c], HARD_BLOCK_HP, `床の HP (${r},${c})`);
+        }
       }
-      if (v === BLOCK_INDESTRUCTIBLE) pillars++;
     }
   }
-  assert.ok(normal > 0, '内側の壁が1つも無い');
-  assert.ok(pillars > 0, '柱が1つも無い');
 });
 
-test('柱は廊下の中心線を塞がない', () => {
-  const b = blankBoard();
-  buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
-  const { corridorRows, corridorCols } = buildZoneInterior(b.grid, b.blockHP, ZONE, INTERIOR_OPTS);
-  const T = FORTRESS_WALL_THICKNESS;
-  const mid = Math.floor(FORTRESS_CORRIDOR_W / 2);
-  for (const rr of corridorRows) {
-    for (let c = ZONE.c0 + T; c <= ZONE.c1 - T; c++) {
-      assert.equal(b.grid[rr + mid][c], BLOCK_EMPTY, `横の廊下の中心線が塞がれている (${rr + mid},${c})`);
-    }
-  }
-  for (const cc of corridorCols) {
-    for (let r = ZONE.r0 + T; r <= ZONE.r1 - T; r++) {
-      assert.equal(b.grid[r][cc + mid], BLOCK_EMPTY, `縦の廊下の中心線が塞がれている (${r},${cc + mid})`);
+test('シャフトは階ごとに位置がずれる（一直線に落ちられない）', () => {
+  // 真上に並ぶと各階を横断させる意味が無くなる
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const b = blankBoard();
+    buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
+    const { shafts } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(seed)));
+    for (let i = 1; i < shafts.length; i++) {
+      const a = shafts[i - 1];
+      const c = shafts[i];
+      const overlap = Math.min(a.c + a.w, c.c + c.w) - Math.max(a.c, c.c);
+      assert.ok(overlap <= 0, `seed ${seed}: シャフトが縦に重なっている (${a.c} と ${c.c})`);
     }
   }
 });
@@ -282,54 +305,51 @@ function solidBoard(rows = 60, cols = 80) {
 
 function buildZone(board, zone, rng) {
   buildZoneWalls(board.grid, board.blockHP, zone, FORTRESS_WALL_THICKNESS);
-  const { corridorRows, corridorCols } = buildZoneInterior(board.grid, board.blockHP, zone, INTERIOR_OPTS);
+  const { floors, shafts } = buildZoneInterior(board.grid, board.blockHP, zone, interiorOpts(rng));
   const gates = openZoneGates(board.grid, board.blockHP, zone, {
-    thickness: FORTRESS_WALL_THICKNESS, corridorW: FORTRESS_CORRIDOR_W,
-    corridorRows, corridorCols, rng, tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
+    thickness: FORTRESS_WALL_THICKNESS, floors, shaftW: FORTRESS_SHAFT_W,
+    rng, tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
     rows: board.rows, cols: board.cols,
   });
-  return { corridorRows, corridorCols, gates };
+  return { floors, shafts, gates };
 }
 
-test('開口は装甲の2辺に1つずつ、幅は廊下と同じ', () => {
+test('開口は上辺と左辺に1つずつ', () => {
   const { gates } = buildZone(solidBoard(), ZONE, new SeededRNG(3));
   assert.equal(gates.length, 2);
   assert.deepEqual(gates.map((g) => g.side).sort(), ['left', 'top']);
-  for (const g of gates) assert.equal(g.w, FORTRESS_CORRIDOR_W);
 });
 
-test('開口のマスは空洞になっている', () => {
+test('左の開口は階の高さに合わせて開く（入った先が床にならない）', () => {
   const b = solidBoard();
-  const { gates } = buildZone(b, ZONE, new SeededRNG(3));
+  const { floors, gates } = buildZone(b, ZONE, new SeededRNG(3));
+  const left = gates.find((g) => g.side === 'left');
+  const floor = floors.find((f) => f.r0 === left.r);
+  assert.ok(floor, `左の開口 ${left.r} がどの階の上端とも合っていない`);
+  assert.equal(left.w, floor.r1 - floor.r0 + 1, '開口の高さが階の高さと違う');
   const T = FORTRESS_WALL_THICKNESS;
-  for (const g of gates) {
-    if (g.side === 'left') {
-      for (let r = g.r; r < g.r + g.w; r++) {
-        for (let c = ZONE.c0; c < ZONE.c0 + T; c++) {
-          assert.equal(b.grid[r][c], BLOCK_EMPTY, `左の開口が空洞でない (${r},${c})`);
-        }
-      }
-    } else {
-      for (let c = g.c; c < g.c + g.w; c++) {
-        for (let r = ZONE.r0; r < ZONE.r0 + T; r++) {
-          assert.equal(b.grid[r][c], BLOCK_EMPTY, `上の開口が空洞でない (${r},${c})`);
-        }
-      }
+  for (let r = left.r; r < left.r + left.w; r++) {
+    for (let c = ZONE.c0; c < ZONE.c0 + T; c++) {
+      assert.equal(b.grid[r][c], BLOCK_EMPTY, `左の開口が空洞でない (${r},${c})`);
     }
   }
 });
 
-test('開口は廊下の延長線上にある（入った先が壁にならない）', () => {
-  const { corridorRows, corridorCols, gates } = buildZone(solidBoard(), ZONE, new SeededRNG(3));
-  const left = gates.find((g) => g.side === 'left');
+test('上の開口は縦穴で、最上階へ通じる', () => {
+  const b = solidBoard();
+  const { gates } = buildZone(b, ZONE, new SeededRNG(3));
   const top = gates.find((g) => g.side === 'top');
-  assert.ok(corridorRows.includes(left.r), `左の開口 ${left.r} が横の廊下 ${corridorRows} に無い`);
-  assert.ok(corridorCols.includes(top.c), `上の開口 ${top.c} が縦の廊下 ${corridorCols} に無い`);
+  assert.equal(top.w, FORTRESS_SHAFT_W);
+  const T = FORTRESS_WALL_THICKNESS;
+  for (let c = top.c; c < top.c + top.w; c++) {
+    for (let r = ZONE.r0; r < ZONE.r0 + T; r++) {
+      assert.equal(b.grid[r][c], BLOCK_EMPTY, `上の開口が空洞でない (${r},${c})`);
+    }
+  }
 });
 
 test('開口の外へトンネルが掘られ、区画の外の空洞につながる', () => {
   const b = solidBoard();
-  // 左に空洞の縦帯を置いておく。トンネルはここに当たって止まるはず
   for (let r = 0; r < b.rows; r++) for (let c = 3; c <= 5; c++) { b.grid[r][c] = BLOCK_EMPTY; b.blockHP[r][c] = 0; }
   const { gates } = buildZone(b, ZONE, new SeededRNG(3));
   const left = gates.find((g) => g.side === 'left');
@@ -394,8 +414,8 @@ test('carveFortressZones は渡された rng だけを使う', () => {
     wMin: FORTRESS_ZONE_W_MIN, wRange: FORTRESS_ZONE_W_RANGE,
     hMin: FORTRESS_ZONE_H_MIN, hRange: FORTRESS_ZONE_H_RANGE,
     margin: FORTRESS_ZONE_MARGIN,
-    thickness: FORTRESS_WALL_THICKNESS, corridorW: FORTRESS_CORRIDOR_W,
-    pitch: FORTRESS_CORRIDOR_PITCH, roomSize: FORTRESS_ROOM_SIZE,
+    thickness: FORTRESS_WALL_THICKNESS, ceilingH: FORTRESS_CEILING_H,
+    floorH: FORTRESS_FLOOR_H, shaftW: FORTRESS_SHAFT_W,
     tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
   };
   const first = carveFortressZones({ ...args, grid: board.grid, blockHP: board.blockHP, rng: counting });

@@ -9,7 +9,7 @@
 // 設計: docs/superpowers/specs/2026-09-06-stage7-fortress-design.md
 
 import {
-    BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE, HARD_BLOCK_HP,
+    BLOCK_EMPTY, BLOCK_HARD, BLOCK_METAL, HARD_BLOCK_HP, METAL_BLOCK_HP,
 } from '../utils/Constants.js';
 
 /** 閉区間の矩形 { r0, r1, c0, c1 } 同士が重なるか。水・雪の除外矩形と同じ形。 */
@@ -57,8 +57,8 @@ export function pickFortressZones({
 
 /**
  * 外壁の4つの帯。**互いに重ならないように排他的に定義する。**
- * 角の扱いをここ1箇所で決めておかないと、「背面に装甲が無い」が言えなくなる。
- * 角は 左上・右上＝上帯（装甲）、左下＝左帯（装甲）、右下＝下帯（硬い岩）。
+ * 角の扱いをここ1箇所で決めておかないと、「弱点は右だけ」が言えなくなる。
+ * 角は 左上・右上＝上帯、左下＝左帯、右下＝下帯。**右帯にだけ硬い岩が来る。**
  */
 export function zoneBands(zone, thickness) {
     const T = thickness;
@@ -79,90 +79,109 @@ function fillRect(grid, blockHP, rect, block, hp) {
     }
 }
 
-/** 外壁を書く。正面（上・左）は装甲、背面（下・右）は硬い岩。 */
+/**
+ * 外壁を書く。上・左・下は金属（HP 6）、右だけ硬い岩（HP 3）。
+ *
+ * 厚さ2層あるので、金属は 6x2 = 12発、硬い岩は 3x2 = 6発。**壊せないブロックを
+ * 使わずに「正面は実質難攻不落、基地側の背面だけが弱点」を作れる**のが要点
+ * （実機の指摘）。全部掘れるので、要塞がマップを分断する危険が原理的に無い。
+ */
 export function buildZoneWalls(grid, blockHP, zone, thickness) {
     const bands = zoneBands(zone, thickness);
-    fillRect(grid, blockHP, bands.top, BLOCK_INDESTRUCTIBLE, -1);
-    fillRect(grid, blockHP, bands.left, BLOCK_INDESTRUCTIBLE, -1);
-    fillRect(grid, blockHP, bands.bottom, BLOCK_HARD, HARD_BLOCK_HP);
+    fillRect(grid, blockHP, bands.top, BLOCK_METAL, METAL_BLOCK_HP);
+    fillRect(grid, blockHP, bands.left, BLOCK_METAL, METAL_BLOCK_HP);
+    fillRect(grid, blockHP, bands.bottom, BLOCK_METAL, METAL_BLOCK_HP);
     fillRect(grid, blockHP, bands.right, BLOCK_HARD, HARD_BLOCK_HP);
 }
 
 /**
- * 区画の中を格子にする。
+ * 区画の中を階層構造にする。
  *
- * 手順: 内側を全部「掘れる通常岩」で埋める → 縦横の廊下を空洞で刻む →
- * 交点を室に広げる → 室の四隅に装甲の柱を立てる。
+ * **縦横同じピッチの格子にしてはいけない。** このゲームは横視点なので、格子は
+ * 「真上から見た間取り図」に見えてしまう（実機の指摘）。横に長い階を縦に積み、
+ * 階をつなぐ縦のシャフトを掘って、建物の断面に見せる。
  *
- * 中の壁を掘れる BLOCK_NORMAL にしているのは、外壁で経路を規定しておいて
- * 中まで掘れないと格子がただの迷路になって窮屈だから。掘れば近道はできるが
- * 外壁は抜けられない、という二段構えにする。
+ * 手順: 内側を全部空洞にする → 階の境目に床を敷く → 床にシャフトの穴を開ける。
  *
- * @returns {{corridorRows:number[], corridorCols:number[]}} 各廊下の先頭の行／列
+ * 床は硬い岩（3発）。シャフトを使うのが速いが、掘って階を抜くこともできる。
+ * 掘れないと窮屈になり、掘るのが速いとシャフトの意味が無くなる、その中間。
+ *
+ * シャフトは階ごとに位置をずらす。上から下まで一直線に落ちられないようにして、
+ * 各階を横断させる。
+ *
+ * @returns {{floors:{r0:number,r1:number}[], shafts:{r:number,c:number,w:number}[]}}
+ *   floors は各階の空間（上端・下端の行）。開口とバリアの置き場所に使う
  */
-export function buildZoneInterior(grid, blockHP, zone, { thickness, corridorW, pitch, roomSize }) {
+export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng }) {
     const T = thickness;
     const r0 = zone.r0 + T, r1 = zone.r1 - T;
     const c0 = zone.c0 + T, c1 = zone.c1 - T;
 
-    fillRect(grid, blockHP, { r0, r1, c0, c1 }, BLOCK_NORMAL, 1);
+    fillRect(grid, blockHP, { r0, r1, c0, c1 }, BLOCK_EMPTY, 0);
 
-    const corridorRows = [];
-    for (let rr = r0; rr + corridorW - 1 <= r1; rr += pitch) corridorRows.push(rr);
-    const corridorCols = [];
-    for (let cc = c0; cc + corridorW - 1 <= c1; cc += pitch) corridorCols.push(cc);
+    // 階を上から積む。最後の階は端数を吸収して少し高く／低くなる
+    const floors = [];
+    let top = r0;
+    while (top + ceilingH - 1 <= r1) {
+        floors.push({ r0: top, r1: top + ceilingH - 1 });
+        top += ceilingH + floorH;
+    }
+    // 端数が天井高の半分以上あれば、最後の階を下端まで伸ばす（細い隙間を残さない）
+    if (floors.length > 0 && r1 - floors[floors.length - 1].r1 >= Math.floor(ceilingH / 2)) {
+        floors[floors.length - 1].r1 = r1;
+    }
 
-    for (const rr of corridorRows) {
-        fillRect(grid, blockHP, { r0: rr, r1: rr + corridorW - 1, c0, c1 }, BLOCK_EMPTY, 0);
-    }
-    for (const cc of corridorCols) {
-        fillRect(grid, blockHP, { r0, r1, c0: cc, c1: cc + corridorW - 1 }, BLOCK_EMPTY, 0);
+    // 階と階の間に床を敷く
+    for (let i = 0; i + 1 < floors.length; i++) {
+        fillRect(grid, blockHP,
+            { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0, c1 }, BLOCK_HARD, HARD_BLOCK_HP);
     }
 
-    // 交点の室。廊下の中心から roomSize/2 だけ広げる（区画の内側からはみ出さない）
-    const half = Math.floor(roomSize / 2);
-    const mid = Math.floor(corridorW / 2);
-    for (const rr of corridorRows) {
-        for (const cc of corridorCols) {
-            const room = {
-                r0: Math.max(r0, rr + mid - half), r1: Math.min(r1, rr + mid + half),
-                c0: Math.max(c0, cc + mid - half), c1: Math.min(c1, cc + mid + half),
-            };
-            fillRect(grid, blockHP, room, BLOCK_EMPTY, 0);
-            // 柱: 室の四隅。廊下の中心線からは外れるので通行を塞がない
-            for (const [pr, pc] of [[room.r0, room.c0], [room.r0, room.c1], [room.r1, room.c0], [room.r1, room.c1]]) {
-                if (pr === rr + mid || pc === cc + mid) continue; // 念のため中心線は避ける
-                grid[pr][pc] = BLOCK_INDESTRUCTIBLE;
-                blockHP[pr][pc] = -1;
-            }
-        }
+    // 床ごとにシャフトを1本。位置は階ごとにずらす（真下に落ち続けられないように）
+    const shafts = [];
+    const innerW = c1 - c0 + 1;
+    for (let i = 0; i + 1 < floors.length; i++) {
+        // 左右を交互に寄せたうえで、帯の中で乱数を振る。交互にするのは、
+        // 乱数だけだと偶然真上に並ぶことがあるため
+        const leftHalf = i % 2 === 0;
+        const span = Math.max(1, Math.floor(innerW / 2) - shaftW);
+        const base = leftHalf ? c0 : c0 + Math.floor(innerW / 2);
+        const sc = Math.min(c1 - shaftW + 1, base + Math.floor(rng.next() * span));
+        fillRect(grid, blockHP,
+            { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0: sc, c1: sc + shaftW - 1 }, BLOCK_EMPTY, 0);
+        shafts.push({ r: floors[i].r1 + 1, c: sc, w: shaftW });
     }
-    return { corridorRows, corridorCols };
+
+    return { floors, shafts };
 }
 
 /**
- * 装甲の2辺（上・左）に開口を開け、区画の外の空洞へつなぐ。
+ * 外壁の2辺（上・左）に開口を開け、区画の外の空洞へつなぐ。
  *
- * 開口は必ず**廊下の延長線上**に取る。適当な位置に開けると入った先が壁になり、
- * 「入り口に見えるのに入れない」ことが起きる。
+ * 左の開口は**階の高さに合わせて**開ける。適当な位置に開けると入った先が床になり、
+ * 「入り口に見えるのに入れない」ことが起きる。上の開口は最上階へ落ちる縦穴。
  */
 export function openZoneGates(grid, blockHP, zone, {
-    thickness, corridorW, corridorRows, corridorCols, rng, tunnelMax, rows, cols,
+    thickness, floors, shaftW, rng, tunnelMax, rows, cols,
 }) {
     const T = thickness;
     const gates = [];
 
-    // 左辺: 横の廊下から1本選び、その行の帯を空ける
-    if (corridorRows.length > 0) {
-        const rr = corridorRows[Math.floor(rng.next() * corridorRows.length)];
-        fillRect(grid, blockHP, { r0: rr, r1: rr + corridorW - 1, c0: zone.c0, c1: zone.c0 + T - 1 }, BLOCK_EMPTY, 0);
-        gates.push({ r: rr, c: zone.c0, side: 'left', w: corridorW });
+    // 左辺: 階を1つ選び、その階の高さぶん帯を空ける
+    if (floors.length > 0) {
+        const floor = floors[Math.floor(rng.next() * floors.length)];
+        fillRect(grid, blockHP,
+            { r0: floor.r0, r1: floor.r1, c0: zone.c0, c1: zone.c0 + T - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: floor.r0, c: zone.c0, side: 'left', w: floor.r1 - floor.r0 + 1 });
     }
-    // 上辺: 縦の廊下から1本選ぶ
-    if (corridorCols.length > 0) {
-        const cc = corridorCols[Math.floor(rng.next() * corridorCols.length)];
-        fillRect(grid, blockHP, { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + corridorW - 1 }, BLOCK_EMPTY, 0);
-        gates.push({ r: zone.r0, c: cc, side: 'top', w: corridorW });
+    // 上辺: 最上階へ落ちる縦穴。幅はシャフトと同じ
+    if (floors.length > 0) {
+        const innerC0 = zone.c0 + T;
+        const innerW = (zone.c1 - T) - innerC0 + 1;
+        const cc = innerC0 + Math.floor(rng.next() * Math.max(1, innerW - shaftW + 1));
+        fillRect(grid, blockHP,
+            { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + shaftW - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: zone.r0, c: cc, side: 'top', w: shaftW });
     }
 
     for (const gate of gates) digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols);
@@ -195,7 +214,7 @@ function digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols) {
 export function carveFortressZones({
     grid, blockHP, rows, cols, rooms, excludeRects, rng,
     count, wMin, wRange, hMin, hRange, margin,
-    thickness, corridorW, pitch, roomSize, tunnelMax,
+    thickness, ceilingH, floorH, shaftW, tunnelMax,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -204,11 +223,11 @@ export function carveFortressZones({
     const zones = [];
     for (const zone of picked) {
         buildZoneWalls(grid, blockHP, zone, thickness);
-        const { corridorRows, corridorCols } = buildZoneInterior(
-            grid, blockHP, zone, { thickness, corridorW, pitch, roomSize },
+        const { floors, shafts } = buildZoneInterior(
+            grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng },
         );
         const openings = openZoneGates(grid, blockHP, zone, {
-            thickness, corridorW, corridorRows, corridorCols, rng, tunnelMax, rows, cols,
+            thickness, floors, shaftW, rng, tunnelMax, rows, cols,
         });
         // 印は区画の中の「空でない」タイルだけ。空洞には描くものが無い
         for (let r = zone.r0; r <= zone.r1; r++) {
@@ -216,7 +235,7 @@ export function carveFortressZones({
                 if (grid[r][c] !== BLOCK_EMPTY) marks[r * cols + c] = 1;
             }
         }
-        zones.push({ ...zone, openings });
+        zones.push({ ...zone, openings, floors, shafts });
     }
     return { zones, marks };
 }
