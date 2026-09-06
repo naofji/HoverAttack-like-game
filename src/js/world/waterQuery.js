@@ -95,27 +95,71 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
 }
 
 /**
- * 水面セル (r, c) を含む行セグメントを左右に伸ばし、平均の液面 Y を全員に書く。
+ * 隣の列 (r2, c2) の水面が、(r1, c1) と同じ水たまりの続きか。
+ *
+ * 水量は 8 段階に量子化されているので、ひとつの水たまりでも一番上の行が
+ * 全幅を覆えないことがある（20 の水を 8 セルに配ると 3,3,3,3,2,2,2,2）。
+ * すると水面が2つの行にまたがり、行ごとに平均すると**つながっているはずの
+ * 液面に段差が出る**（実測で 46px と 48px に割れた）。だから1行の差までは
+ * 同じ水たまりとして繋ぐ。
+ *
+ * ただし岩の縁を挟んで隣り合っただけの別々の水たまりを繋いではいけない。
+ * 「深いほうの行で**両方の列とも水**」を条件にすると、あいだに岩があるときは
+ * その行が岩になるので繋がらない。
+ */
+function sameBody(water, cols, r1, c1, r2, c2) {
+    if (Math.abs(r1 - r2) > 1) return false;
+    const deep = Math.max(r1, r2);
+    return water[deep * cols + c1] >= MIN_WATER_MASS
+        && water[deep * cols + c2] >= MIN_WATER_MASS;
+}
+
+/**
+ * 水面セル (r, c) がつながっている水面のかたまりを集め、平均の液面 Y を全員に書く。
+ *
  * 平均にするのは、水量がセルごとにバラついていても液面を水平に見せるため
  * （バラついたまま描くと水面がギザギザになる）。
- * @returns {[number, number]} セグメントの [左端の列, 右端の列]
+ *
+ * 左右へ「1本の経路」を辿るのではなく塗り広げ（幅優先）にしてあるのは、
+ * どのセルから始めても必ず同じかたまりになるようにするため。経路を辿る形だと
+ * 段差の分かれ道でどちらへ進むかが開始セルに依存し、種にした列によって液面が
+ * 変わりうる。
+ *
+ * @returns {Array<[number, number]>} かたまりに含まれるセルの [行, 列]
  */
-export function levelSurfaceSegment({ water, kind, surfaceY, cols, r, c }) {
-    let c0 = c;
-    while (c0 - 1 >= 0 && kind[r * cols + (c0 - 1)] === WATER_SURFACE) c0--;
-    let c1 = c;
-    while (c1 + 1 < cols && kind[r * cols + (c1 + 1)] === WATER_SURFACE) c1++;
+export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, r, c }) {
+    const cells = [];
+    const seen = new Set([r * cols + c]);
+    const queue = [[r, c]];
+
+    while (queue.length) {
+        const [cr, cc] = queue.pop();
+        cells.push([cr, cc]);
+        for (const dc of [-1, 1]) {
+            const nc = cc + dc;
+            if (nc < 0 || nc >= cols) continue;
+            for (const nr of [cr - 1, cr, cr + 1]) {
+                if (nr < 0 || nr >= rows) continue;
+                const nk = nr * cols + nc;
+                if (seen.has(nk)) continue;
+                if (kind[nk] !== WATER_SURFACE) continue;
+                if (!sameBody(water, cols, cr, cc, nr, nc)) continue;
+                seen.add(nk);
+                queue.push([nr, nc]);
+            }
+        }
+    }
 
     let total = 0;
-    for (let sc = c0; sc <= c1; sc++) {
-        total += (r + 1 - water[r * cols + sc] / MAX_WATER_MASS) * TILE_SIZE;
+    for (const [sr, sc] of cells) {
+        total += (sr + 1 - water[sr * cols + sc] / MAX_WATER_MASS) * TILE_SIZE;
     }
     // 整数に丸めるのは描画（fillRect）と当たり判定を1ドットもずらさないため。
     // 以前は描画側だけが Math.round していて、最大0.5px ずれていた
-    const avg = Math.round(total / (c1 - c0 + 1));
-    for (let sc = c0; sc <= c1; sc++) surfaceY[r * cols + sc] = avg;
+    const avg = Math.round(total / cells.length);
+    for (const [sr, sc] of cells) surfaceY[sr * cols + sc] = avg;
 
-    return [c0, c1];
+    return cells;
 }
 
 /**
@@ -148,8 +192,8 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         for (let r = 0; r < rows; r++) {
             const k = r * cols + c;
             if (kind[k] !== WATER_SURFACE || done.has(k)) continue;
-            const [c0, c1] = levelSurfaceSegment({ water, kind, surfaceY, cols, r, c });
-            for (let sc = c0; sc <= c1; sc++) done.add(r * cols + sc);
+            const cells = levelSurfaceSegment({ water, kind, surfaceY, rows, cols, r, c });
+            for (const [sr, sc] of cells) done.add(sr * cols + sc);
         }
     }
 }

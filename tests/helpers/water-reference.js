@@ -38,15 +38,55 @@ export function referenceKindAt(ctx, r, c) {
     return WATER_BODY;
 }
 
-// 旧 Map.getWaterSurfaceSegment + getSurfaceY をそのまま写したもの
-export function referenceSurfaceY(ctx, r, c) {
-    if (!isSurface(ctx, r, c)) return -1;
-    const seg = [c];
-    for (let cc = c - 1; cc >= 0 && isSurface(ctx, r, cc); cc--) seg.push(cc);
-    for (let cc = c + 1; cc < ctx.cols && isSurface(ctx, r, cc); cc++) seg.push(cc);
-    let total = 0;
-    for (const sc of seg) {
-        total += (r + 1 - ctx.water[r * ctx.cols + sc] / MAX_WATER_MASS) * TILE_SIZE;
+// 液面の高さ。実装（waterQuery）は水面セルから塗り広げてかたまりを作るが、
+// こちらは**全水面セルを列挙して union-find で同値類にまとめる**。同じ答えに
+// なるはずだが解き方が別なので、実装のバグ（開始セルによって結果が変わる、
+// 隣を1方向しか見ていない等）を突き合わせで捕まえられる。
+function surfaceGroups(ctx) {
+    const n = ctx.rows * ctx.cols;
+    const parent = new Int32Array(n).fill(-1);
+    const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+
+    const surfaces = [];
+    for (let r = 0; r < ctx.rows; r++) {
+        for (let c = 0; c < ctx.cols; c++) {
+            if (!isSurface(ctx, r, c)) continue;
+            const k = r * ctx.cols + c;
+            parent[k] = k;
+            surfaces.push([r, c]);
+        }
     }
-    return Math.round(total / seg.length);
+
+    // 隣り合う列の水面どうしを、行差1以内かつ「深いほうの行で両列とも水」なら繋ぐ
+    for (const [r, c] of surfaces) {
+        for (let nr = r - 1; nr <= r + 1; nr++) {
+            const nc = c + 1;
+            if (nr < 0 || nr >= ctx.rows || nc >= ctx.cols) continue;
+            if (!isSurface(ctx, nr, nc)) continue;
+            const deep = Math.max(r, nr);
+            if (!isWater(ctx, deep, c) || !isWater(ctx, deep, nc)) continue;
+            union(r * ctx.cols + c, nr * ctx.cols + nc);
+        }
+    }
+
+    const sums = new global.Map();
+    for (const [r, c] of surfaces) {
+        const root = find(r * ctx.cols + c);
+        const e = sums.get(root) || { total: 0, n: 0 };
+        e.total += (r + 1 - ctx.water[r * ctx.cols + c] / MAX_WATER_MASS) * TILE_SIZE;
+        e.n++;
+        sums.set(root, e);
+    }
+    const out = new Int16Array(n).fill(-1);
+    for (const [r, c] of surfaces) {
+        const e = sums.get(find(r * ctx.cols + c));
+        out[r * ctx.cols + c] = Math.round(e.total / e.n);
+    }
+    return out;
+}
+
+/** ctx 全体の液面配列を返す（1セルずつ聞かれると毎回作り直すので配列で返す） */
+export function referenceSurfaceYAll(ctx) {
+    return surfaceGroups(ctx);
 }

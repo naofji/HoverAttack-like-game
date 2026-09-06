@@ -141,7 +141,7 @@ test('滝のセルと水なしのセルの surfaceY は -1', () => {
 // 導かないためにファイルを分けている。
 // ------------------------------------------------------------------
 
-import { referenceKindAt, referenceSurfaceY } from './helpers/water-reference.js';
+import { referenceKindAt, referenceSurfaceYAll } from './helpers/water-reference.js';
 import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
 
 /** 種を決めた線形合同法。node --test に乱数を持ち込まないため */
@@ -180,12 +180,13 @@ function buildCache(ctx) {
 }
 
 function assertMatchesReference(ctx, cache, label) {
+    const refY = referenceSurfaceYAll(ctx);
     for (let r = 0; r < ctx.rows; r++) {
         for (let c = 0; c < ctx.cols; c++) {
             const k = r * ctx.cols + c;
             assert.equal(cache.kind[k], referenceKindAt(ctx, r, c),
                 `${label}: kind が (${r},${c}) で食い違う`);
-            assert.equal(cache.surfaceY[k], referenceSurfaceY(ctx, r, c),
+            assert.equal(cache.surfaceY[k], refY[k],
                 `${label}: surfaceY が (${r},${c}) で食い違う`);
         }
     }
@@ -262,4 +263,46 @@ test('湖底のブロックを壊しても、湖の内部に滝（縦縞）が�
         assert.equal(surfaceY[2 * cols + c], y,
             `水面が (2,${c}) で分断され、液面がずれている`);
     }
+});
+
+test('つながった水たまりの液面は、上の行が全幅を覆えなくても段差にならない', () => {
+    // 水量は8段階に量子化されているので、ひとつの水たまりでも一番上の行が
+    // 全幅を覆えないことがある。行ごとに平均すると液面が2つに割れて
+    // 「つながっているはずの液面に段差」ができる（実機の指摘。実測で
+    // 左が 46px、右が 48px に割れていた）。
+    const m = fromArt(`
+        ##############
+        #............#
+        #45678888....#
+        #88888888888.#
+        ##############
+    `);
+    const ys = [];
+    for (let c = 1; c <= 11; c++) {
+        for (let r = 0; r < m.rows; r++) {
+            if (m.kind[r * m.cols + c] === WATER_SURFACE) { ys.push(m.surfaceY[r * m.cols + c]); break; }
+        }
+    }
+    assert.equal(ys.length, 11, '列1..11 それぞれに水面セルがあるはず');
+    for (const y of ys) {
+        assert.equal(y, ys[0], `液面が段差になっている: ${ys.join(',')}`);
+    }
+});
+
+test('岩の縁を挟んで高さが違う水は、隣の列でも繋がらない', () => {
+    // 「段差をまたいで繋ぐ」を入れたことで、別々の水まで繋げてしまわないこと。
+    // (2,3) は岩 (3,3) の上に乗った水、(3,4) はその1段下の水。列は隣どうしで
+    // 行差も1だが、深いほうの行 (3,3) が岩なので同じ水たまりではない。
+    const m = fromArt(`
+        ##########
+        #........#
+        #..4.....#
+        #..#4....#
+        #..#8....#
+        ##########
+    `);
+    assert.equal(m.kind[2 * m.cols + 3], WATER_SURFACE, '(2,3) は岩の上の水面');
+    assert.equal(m.kind[3 * m.cols + 4], WATER_SURFACE, '(3,4) は1段下の水面');
+    assert.notEqual(m.surfaceY[2 * m.cols + 3], m.surfaceY[3 * m.cols + 4],
+        '岩の縁で隔てられた水の液面が繋がってしまっている');
 });
