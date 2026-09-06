@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FortressBarrier } from '../src/js/entities/FortressBarrier.js';
+// **先頭で静的に読む。** テストの途中で await import すると、先行するテストが
+// 差し替えた偽 document を main.js が掴んでしまう（getElementById が無くて落ちた）
+import { Game } from '../src/js/main.js';
 import { TILE_SIZE } from '../src/js/utils/Constants.js';
 import {
   BARRIER_EMITTER_HP, BARRIER_TOUCH_DAMAGE,
@@ -98,11 +101,11 @@ test('弾もグレネードも吸収される（自機の弾も敵の弾も）',
 test('ユニットに当たった自機の弾はユニットを削る（吸収されない）', () => {
   const game = makeGame();
   const b = makeBarrier(game);
-  const proj = { x: b.topUnit.x + 2, y: b.topUnit.y + 2, alive: true, exploded: false, isPlayerOwned: true };
+  const proj = { x: b.units.top.x + 2, y: b.units.top.y + 2, alive: true, exploded: false, isPlayerOwned: true };
   game.projectiles = [proj];
-  const before = b.emitterHP.top;
+  const before = b.units.top.hp;
   b.update();
-  assert.ok(b.emitterHP.top < before, 'ユニットが削れていない');
+  assert.ok(b.units.top.hp < before, 'ユニットが削れていない');
   assert.equal(proj.alive, false, '弾が消えていない');
 });
 
@@ -430,4 +433,48 @@ test('右側から来たものは右側へ戻される', () => {
   b.update();
   assert.ok(drone.x >= b.fieldX + b.fieldW, `右から来たのに左側へ抜けている (x=${drone.x})`);
   assert.equal(drone.patrolDir, 1, '向きが変わっていない');
+});
+
+// --- ユニットは他の敵と同じ形で HP を持つ（ダメージバーが出る） ---
+
+test('ユニットは hp / maxHp / alive と矩形を1つのオブジェクトで持つ', () => {
+  // _drawHpBarIfDamaged は「hp・maxHp・alive・矩形を持つもの」なら何でも受ける。
+  // 矩形と HP が別々だと、そこへ渡せる形にならない（実機の指摘）
+  const b = makeBarrier(makeGame());
+  for (const which of ['top', 'bottom']) {
+    const u = b.units[which];
+    assert.equal(u.hp, BARRIER_EMITTER_HP);
+    assert.equal(u.maxHp, BARRIER_EMITTER_HP);
+    assert.equal(u.alive, true);
+    for (const k of ['x', 'y', 'width', 'height']) {
+      assert.equal(typeof u[k], 'number', `${which}.${k} が数値でない`);
+    }
+  }
+});
+
+test('削れると hp が減り、尽きると alive が false になる', () => {
+  const b = makeBarrier(makeGame());
+  b.damageEmitter('top', 10);
+  assert.equal(b.units.top.hp, BARRIER_EMITTER_HP - 10);
+  assert.equal(b.units.top.alive, true, 'まだ生きているはず');
+  b.damageEmitter('top', BARRIER_EMITTER_HP);
+  assert.equal(b.units.top.alive, false);
+  assert.equal(b.units.top.hp, 0, 'HP が負に振れている');
+});
+
+test('_drawHpBarIfDamaged が受け付ける形になっている', () => {
+  const b = makeBarrier(makeGame());
+  const drawn = [];
+  const fake = { _drawEnemyHealthBar: (ctx, e) => drawn.push(e) };
+  // 無傷なら出ない
+  Game._drawHpBarIfDamaged.call(fake, null, b.units.top);
+  assert.equal(drawn.length, 0, '無傷なのにバーが出ている');
+  // 削れたら出る
+  b.damageEmitter('top', 10);
+  Game._drawHpBarIfDamaged.call(fake, null, b.units.top);
+  assert.equal(drawn.length, 1, '削れてもバーが出ない');
+  // 壊れたら出ない
+  b.damageEmitter('top', BARRIER_EMITTER_HP);
+  Game._drawHpBarIfDamaged.call(fake, null, b.units.top);
+  assert.equal(drawn.length, 1, '壊れたユニットにバーが出ている');
 });

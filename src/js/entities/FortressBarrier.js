@@ -47,19 +47,21 @@ export class FortressBarrier {
         this.game = game;
         this.alive = true;
         this.timer = 0;
-        this.emitterHP = { top: BARRIER_EMITTER_HP, bottom: BARRIER_EMITTER_HP };
+        const cx = spec.c * TILE_SIZE + TILE_SIZE / 2;
+        // ユニットは**矩形と HP を1つのオブジェクトにまとめる**。こうしておくと
+        // Game._drawHpBarIfDamaged() にそのまま渡せて、他の敵と同じダメージバーが
+        // 出る（矩形と HP が別々だと渡す形が作れない。実機の指摘）
+        const unit = (y) => ({
+            x: cx - BARRIER_UNIT_W / 2, y,
+            width: BARRIER_UNIT_W, height: BARRIER_UNIT_H,
+            hp: BARRIER_EMITTER_HP, maxHp: BARRIER_EMITTER_HP, alive: true,
+        });
         // 吸収した跡。当たった高さに光の輪を残す（消えるだけだとバグに見える）
         this.flares = [];
 
-        const cx = spec.c * TILE_SIZE + TILE_SIZE / 2;
-        this.topUnit = {
-            x: cx - BARRIER_UNIT_W / 2, y: spec.top * TILE_SIZE,
-            width: BARRIER_UNIT_W, height: BARRIER_UNIT_H,
-        };
-        this.bottomUnit = {
-            x: cx - BARRIER_UNIT_W / 2,
-            y: (spec.bottom + 1) * TILE_SIZE - BARRIER_UNIT_H,
-            width: BARRIER_UNIT_W, height: BARRIER_UNIT_H,
+        this.units = {
+            top: unit(spec.top * TILE_SIZE),
+            bottom: unit((spec.bottom + 1) * TILE_SIZE - BARRIER_UNIT_H),
         };
         // バリアの帯はユニットとユニットの間。ユニットを壊すとその向きへ伸びるので、
         // タイル座標を覚えておいて毎フレーム測り直す
@@ -89,19 +91,19 @@ export class FortressBarrier {
      */
     _measureField() {
         let topRow = this.topRow;
-        if (this.emitterHP.top <= 0) {
+        if (!this.units.top.alive) {
             for (let i = 0; i < BARRIER_EXTEND_MAX && !this._solidAt(topRow - 1); i++) topRow--;
         }
         let bottomRow = this.bottomRow;
-        if (this.emitterHP.bottom <= 0) {
+        if (!this.units.bottom.alive) {
             for (let i = 0; i < BARRIER_EXTEND_MAX && !this._solidAt(bottomRow + 1); i++) bottomRow++;
         }
         // 生きているユニットの側はユニットの内側から、壊れた側はタイルの端まで
-        const top = this.emitterHP.top > 0
-            ? this.topUnit.y + this.topUnit.height
+        const top = this.units.top.alive
+            ? this.units.top.y + this.units.top.height
             : topRow * TILE_SIZE;
-        const bottom = this.emitterHP.bottom > 0
-            ? this.bottomUnit.y
+        const bottom = this.units.bottom.alive
+            ? this.units.bottom.y
             : (bottomRow + 1) * TILE_SIZE;
         this.fieldY = top;
         this.fieldH = Math.max(0, bottom - top);
@@ -113,7 +115,7 @@ export class FortressBarrier {
      * 残った1基が張り続けている、という絵として読ませる。
      */
     get active() {
-        return this.emitterHP.top > 0 || this.emitterHP.bottom > 0;
+        return this.units.top.alive || this.units.bottom.alive;
     }
 
     get fieldRect() {
@@ -122,11 +124,12 @@ export class FortressBarrier {
 
     /** ユニットにダメージ。壊れた瞬間に爆発を出す。 */
     damageEmitter(which, amount) {
-        if (this.emitterHP[which] <= 0) return false;
-        this.emitterHP[which] -= amount;
-        if (this.emitterHP[which] <= 0) {
-            this.emitterHP[which] = 0;
-            const unit = which === 'top' ? this.topUnit : this.bottomUnit;
+        const unit = this.units[which];
+        if (!unit.alive) return false;
+        unit.hp -= amount;
+        if (unit.hp <= 0) {
+            unit.hp = 0;
+            unit.alive = false;
             playBlast(this.game, unit.x + unit.width / 2, unit.y + unit.height / 2, 'missileHit');
             // 2基目を壊した瞬間だけ、電源が落ちる音を重ねる。1基目では鳴らさない
             // （まだ張られているので「開いた」と誤解させない）
@@ -197,8 +200,8 @@ export class FortressBarrier {
     /** 自機の弾がユニットに当たったか。当たったら削って true。 */
     _hitUnit(proj) {
         for (const which of ['top', 'bottom']) {
-            if (this.emitterHP[which] <= 0) continue;
-            const unit = which === 'top' ? this.topUnit : this.bottomUnit;
+            const unit = this.units[which];
+            if (!unit.alive) continue;
             if (!pointIn(proj.x, proj.y, unit)) continue;
             this.damageEmitter(which, proj.blockDamage ?? 15);
             proj.alive = false;
@@ -288,9 +291,8 @@ export class FortressBarrier {
 
     draw(ctx) {
         // ユニット（壊れていない側だけ）
-        for (const which of ['top', 'bottom']) {
-            if (this.emitterHP[which] <= 0) continue;
-            const u = which === 'top' ? this.topUnit : this.bottomUnit;
+        for (const u of [this.units.top, this.units.bottom]) {
+            if (!u.alive) continue;
             ctx.fillStyle = BARRIER_UNIT_COLOR;
             ctx.fillRect(u.x, u.y, u.width, u.height);
             // 稼働中だけランプが点く。消えていれば「もう片方を探せ」の合図になる

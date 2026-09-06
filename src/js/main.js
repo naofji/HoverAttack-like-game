@@ -1018,6 +1018,11 @@ export const Game = {
         for (const barrier of this.barriers) {
             if (!isInView(barrier.fieldRect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             barrier.draw(ctx);
+            // ユニットは他の敵と同じダメージバーを出す。**壊せる的だと分からないと
+            // 撃ってもらえない**（実機の指摘）。ユニットが hp/maxHp/alive と矩形を
+            // 1つのオブジェクトで持っているので、敵と同じ関数がそのまま使える
+            this._drawHpBarIfDamaged(ctx, barrier.units.top);
+            this._drawHpBarIfDamaged(ctx, barrier.units.bottom);
         }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);

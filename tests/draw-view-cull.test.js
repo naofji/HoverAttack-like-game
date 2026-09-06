@@ -23,7 +23,7 @@ function stubEnemy(name, x, y) {
 }
 
 /** _drawWorld() が触るものだけを埋めた最小の game。描画以外はすべて空 */
-function makeWorld({ enemies = [], landmines = [] } = {}) {
+function makeWorld({ enemies = [], landmines = [], barriers = [] } = {}) {
     const noop = () => {};
     return {
         gameState: 'playing',
@@ -40,7 +40,7 @@ function makeWorld({ enemies = [], landmines = [] } = {}) {
         grenadeTrajectory: null,
         enemies,
         landmines,
-        barriers: [],
+        barriers,
         projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
         missileKits: [], enemyBullets: [], smokeScreens: [],
         _applyRenderInterpolation: noop,
@@ -124,4 +124,36 @@ test('画面外の敵は HP バーも描かない', () => {
     Game._drawWorld.call(world, makeFakeCtx());
 
     assert.deepEqual(hpBarFor, []);
+});
+
+test('バリアのユニットにもダメージバーが出る（他の敵と同じ扱い）', async () => {
+    // 壊せる的だと分からないと撃ってもらえない（実機の指摘）。
+    // 画面内のバリアについて、上下2基ぶんが _drawHpBarIfDamaged へ渡ること
+    const { FortressBarrier } = await import('../src/js/entities/FortressBarrier.js');
+    const game = { particles: [], projectiles: [], enemyBullets: [], enemies: [] };
+    // カメラは (1000,500) 中心。そこに掛かる位置へ置く
+    const barrier = new FortressBarrier(game, { c: 62, top: 30, bottom: 34 });
+    const world = makeWorld({ barriers: [barrier] });
+    const passed = [];
+    // 自機と母艦（この偽ワールドでは null）も同じ関数を通るので除く
+    world._drawHpBarIfDamaged = (ctx, e) => { if (e) passed.push(e); };
+
+    Game._drawWorld.call(world, makeFakeCtx());
+
+    assert.deepEqual(passed, [barrier.units.top, barrier.units.bottom],
+        'ユニット2基がダメージバーの経路へ渡っていない');
+});
+
+test('画面外のバリアはユニットのダメージバーも描かない', async () => {
+    const { FortressBarrier } = await import('../src/js/entities/FortressBarrier.js');
+    const game = { particles: [], projectiles: [], enemyBullets: [], enemies: [] };
+    const far = new FortressBarrier(game, { c: 400, top: 200, bottom: 204 });
+    const world = makeWorld({ barriers: [far] });
+    const passed = [];
+    // 自機と母艦（この偽ワールドでは null）も同じ関数を通るので除く
+    world._drawHpBarIfDamaged = (ctx, e) => { if (e) passed.push(e); };
+
+    Game._drawWorld.call(world, makeFakeCtx());
+
+    assert.deepEqual(passed, []);
 });
