@@ -6,11 +6,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { Grenade } from '../src/js/entities/Grenade.js';
+import { Carrier } from '../src/js/entities/Carrier.js';
 import { CombatActions } from '../src/js/systems/CombatActions.js';
 import {
   TILE_SIZE,
   PLAYER_MAX_FALLING_SPEED,
   GRENADE_MAX_FALLING_SPEED,
+  CARRIER_MAX_FALLING_SPEED,
   WATER_FALL_SPEED_SCALE,
   WATER_SPEED_SCALE,
   WATER_GRAVITY_SCALE,
@@ -100,4 +102,19 @@ test('グレネード弾道プレビュー（_calcGrenadeTrajectory）も水中�
     assert.ok(Math.abs(trajectory.points[i].x - actualPoints[i].x) < 1e-4, `point[${i}].x mismatch`);
     assert.ok(Math.abs(trajectory.points[i].y - actualPoints[i].y) < 1e-4, `point[${i}].y mismatch`);
   }
+});
+
+test('キャリア（Carrier）: 水中では落下速度上限が CARRIER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE にクランプされる', () => {
+  const game = makeTestGame({ env: WATER_ENV });
+  const carrier = new Carrier(game, 100, 100);
+
+  // 空中から水中に大きな落下速度で突入したケース
+  carrier.vy = CARRIER_MAX_FALLING_SPEED; // 5.0
+  carrier.update();
+
+  const expectedCap = CARRIER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE;
+  assert.ok(carrier.vy <= expectedCap + 1e-6,
+    `キャリアの水中落下速度が上限 (${expectedCap}) を超えている: vy=${carrier.vy}`);
+  assert.ok(Math.abs(carrier.vy - expectedCap) < 1e-4,
+    `キャリアの水中落下速度が上限 (${expectedCap}) にクランプされていない: vy=${carrier.vy}`);
 });

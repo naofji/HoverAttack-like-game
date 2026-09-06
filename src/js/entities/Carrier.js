@@ -7,6 +7,7 @@ import {
     CARRIER_WIDTH, CARRIER_HEIGHT, CARRIER_SPEED,
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
+    WATER_FALL_SPEED_SCALE,
     GRAVITY, FRICTION
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -61,7 +62,10 @@ export class Carrier {
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this.vy += GRAVITY * this.motion.gravity;
-        if (this.vy > CARRIER_MAX_FALLING_SPEED) this.vy = CARRIER_MAX_FALLING_SPEED;
+        const maxFall = this.motion.speed < 1
+            ? CARRIER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
+            : CARRIER_MAX_FALLING_SPEED;
+        if (this.vy > maxFall) this.vy = maxFall;
 
         // Movement with collision
         this._moveAndCollide();
