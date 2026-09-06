@@ -131,10 +131,11 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
     // 最下階が少し高くなるが、吹き抜けの1階に見えるので都合がよい
     if (floors.length > 0) floors[floors.length - 1].r1 = r1;
 
-    // 階と階の間に床を敷く
+    // 階と階の間に床を敷く。**金属2層**（12発）— 硬い岩1層（3発）だと掘って
+    // 抜くほうが速く、シャフトの意味が薄かった（実機の指摘）
     for (let i = 0; i + 1 < floors.length; i++) {
         fillRect(grid, blockHP,
-            { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0, c1 }, BLOCK_HARD, HARD_BLOCK_HP);
+            { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0, c1 }, BLOCK_METAL, METAL_BLOCK_HP);
     }
 
     // 床ごとにシャフトを1本。位置は階ごとにずらす（真下に落ち続けられないように）
@@ -215,7 +216,7 @@ export function carveFortressZones({
     grid, blockHP, rows, cols, rooms, excludeRects, rng,
     count, wMin, wRange, hMin, hRange, margin,
     thickness, ceilingH, floorH, shaftW, tunnelMax,
-    treasureCount, garrisonTurrets, garrisonTanks,
+    treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -237,7 +238,7 @@ export function carveFortressZones({
             }
         }
         const contents = planZoneContents(zone, floors, shafts, {
-            thickness, treasureCount, garrisonTurrets, garrisonTanks, rng,
+            thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance, rng,
         });
         zones.push({ ...zone, openings, floors, shafts, ...contents });
     }
@@ -254,7 +255,7 @@ export function carveFortressZones({
  * - **守備隊**は各階の床の上と天井に置く。既存の湧きに足すだけ
  */
 export function planZoneContents(zone, floors, shafts, {
-    thickness, treasureCount, garrisonTurrets, garrisonTanks, rng,
+    thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance, rng,
 }) {
     const T = thickness;
     const c0 = zone.c0 + T, c1 = zone.c1 - T;
@@ -287,17 +288,31 @@ export function planZoneContents(zone, floors, shafts, {
         barriers.push({ c, top: floor.r0, bottom: floor.r1 });
     }
 
-    // 守備隊: 階ごとに床と天井へ交互に置く。区画あたりの合計は定数で決める
+    // 守備隊: 階ごとに床と天井へ交互に置く。区画あたりの合計は定数で決める。
+    // **バリアの列とその左右は避ける** — バリアの中に砲台が居ると、開ける前に
+    // 一方的に撃たれるうえ、撃ち返した弾はバリアに吸われて届かない（実機の指摘）
+    const clearOfBarriers = (c) => !barriers.some(
+        (b) => Math.abs(b.c - c) <= barrierClearance,
+    );
+    const pickColumn = () => {
+        for (let tries = 0; tries < 20; tries++) {
+            const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
+            if (clearOfBarriers(c)) return c;
+        }
+        return null;   // 置ける列が無ければ諦める（無理に置くとバリアに埋まる）
+    };
     const turrets = [];
     const tanks = [];
     for (let i = 0; i < garrisonTurrets; i++) {
         const floor = floors[i % floors.length];
-        const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
+        const c = pickColumn();
+        if (c == null) continue;
         turrets.push({ r: i % 2 === 0 ? floor.r1 : floor.r0, c, isCeiling: i % 2 !== 0 });
     }
     for (let i = 0; i < garrisonTanks; i++) {
         const floor = floors[(i + 1) % floors.length];
-        const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
+        const c = pickColumn();
+        if (c == null) continue;
         tanks.push({ r: floor.r1, c });
     }
 

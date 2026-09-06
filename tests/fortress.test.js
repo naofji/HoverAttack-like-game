@@ -254,11 +254,12 @@ test('階は横に長い（真上から見た格子ではない）', () => {
   }
 });
 
-test('階の境目は硬い岩の床（掘って抜けられるが手間）', () => {
+test('階の境目は金属2層の床（シャフトを使うのが正解になる厚さ）', () => {
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
   const { floors, shafts } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(5)));
   const T = FORTRESS_WALL_THICKNESS;
+  assert.equal(FORTRESS_FLOOR_H, 2, '床は2層');
   for (let i = 0; i + 1 < floors.length; i++) {
     const shaft = shafts[i];
     for (let r = floors[i].r1 + 1; r <= floors[i + 1].r0 - 1; r++) {
@@ -267,8 +268,8 @@ test('階の境目は硬い岩の床（掘って抜けられるが手間）', ()
         if (inShaft) {
           assert.equal(b.grid[r][c], BLOCK_EMPTY, `シャフトが塞がっている (${r},${c})`);
         } else {
-          assert.equal(b.grid[r][c], BLOCK_HARD, `床が硬い岩でない (${r},${c})`);
-          assert.equal(b.blockHP[r][c], HARD_BLOCK_HP, `床の HP (${r},${c})`);
+          assert.equal(b.grid[r][c], BLOCK_METAL, `床が金属でない (${r},${c})`);
+          assert.equal(b.blockHP[r][c], METAL_BLOCK_HP, `床の HP (${r},${c})`);
         }
       }
     }
@@ -573,6 +574,47 @@ test('お宝が実際にゲームへ置かれる（7面だけ）', async () => {
       assert.ok(game.repairKits.length > 0, 'リペアキットが置かれていない');
     } else {
       assert.equal(total, 0, `面${lv + 1} に宝が置かれている`);
+    }
+  }
+});
+
+test('床を抜くよりシャフトを使うほうが安い', () => {
+  // 床は金属2層 = 12発。硬い岩1層(3発)から上げたので「掘って階を抜く」は
+  // 最後の手段になり、シャフトを探すのが正解になる（実機の指摘）
+  assert.equal(FORTRESS_FLOOR_H, 2, '床が2層でない');
+  assert.equal(METAL_BLOCK_HP * FORTRESS_FLOOR_H, 12,
+    `床を抜くのに要る弾が 12 発でない (${METAL_BLOCK_HP * FORTRESS_FLOOR_H})`);
+  assert.ok(METAL_BLOCK_HP * FORTRESS_FLOOR_H > HARD_BLOCK_HP * 2,
+    '床が硬い岩2層より柔らかい');
+});
+
+import { FORTRESS_BARRIER_CLEARANCE } from '../src/js/utils/Constants.js';
+
+test('バリアの上に敵も地雷も湧かない', async () => {
+  // バリアの中に砲台が居ると、開ける前に一方的に撃たれるうえ、撃ち返した弾は
+  // バリアに吸われて届かない。守備隊（要塞が置く側）と、面全体の湧き
+  // （要塞を知らない側）の両方を確かめる
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    const lists = {
+      砲台: m.enemyTurretSpawns, 戦車: m.enemyTankSpawns,
+      ドローン: m.enemyDroneSpawns, アタッカー: m.enemyAttackerSpawns,
+      地雷: m.landmineSpawns,
+    };
+    for (const [name, list] of Object.entries(lists)) {
+      for (const pos of list) {
+        const r = Math.floor(pos.y / 16);
+        const c = Math.floor(pos.x / 16);
+        for (const z of m.fortressZones) {
+          for (const b of z.barriers) {
+            const onIt = Math.abs(b.c - c) <= FORTRESS_BARRIER_CLEARANCE
+              && r >= b.top && r <= b.bottom;
+            assert.equal(onIt, false,
+              `seed ${seed}: ${name} がバリア(列 ${b.c}, 行 ${b.top}〜${b.bottom}) の上に居る (${r},${c})`);
+          }
+        }
+      }
     }
   }
 });

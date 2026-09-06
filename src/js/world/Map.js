@@ -27,6 +27,7 @@ import {
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_OPENING_TUNNEL_MAX,
     FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
+    FORTRESS_BARRIER_CLEARANCE,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -316,6 +317,7 @@ export class Map {
             treasureCount: FORTRESS_TREASURE_COUNT,
             garrisonTurrets: FORTRESS_GARRISON_TURRETS,
             garrisonTanks: FORTRESS_GARRISON_TANKS,
+            barrierClearance: FORTRESS_BARRIER_CLEARANCE,
         });
         this.fortressZones = result.zones;
         this.fortress = result.marks;
@@ -331,6 +333,24 @@ export class Map {
     _placeFortressContents() {
         const S = TILE_SIZE;
         this.treasureSpawns = [];
+
+        // まず、面全体の湧き（Step 10 で決まったもの）からバリアに重なるものを外す。
+        // 守備隊はバリアを避けて置いているが、**元からある湧きは要塞を知らない**ので
+        // バリアの中に立ってしまう。そうなると開ける前に一方的に撃たれるうえ、
+        // 撃ち返した弾はバリアに吸われて届かない（実機の指摘）
+        const onBarrier = (pos) => {
+            const r = Math.floor(pos.y / S);
+            const c = Math.floor(pos.x / S);
+            return this.fortressZones.some((zone) => zone.barriers.some(
+                (b) => Math.abs(b.c - c) <= FORTRESS_BARRIER_CLEARANCE
+                    && r >= b.top && r <= b.bottom,
+            ));
+        };
+        this.enemyTurretSpawns = this.enemyTurretSpawns.filter((p) => !onBarrier(p));
+        this.enemyTankSpawns = this.enemyTankSpawns.filter((p) => !onBarrier(p));
+        this.enemyDroneSpawns = this.enemyDroneSpawns.filter((p) => !onBarrier(p));
+        this.enemyAttackerSpawns = this.enemyAttackerSpawns.filter((p) => !onBarrier(p));
+        this.landmineSpawns = this.landmineSpawns.filter((p) => !onBarrier(p));
         for (const zone of this.fortressZones) {
             for (const t of zone.treasures) {
                 this.treasureSpawns.push({ x: t.c * S + S / 2, y: t.r * S, kind: t.kind });

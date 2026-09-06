@@ -923,8 +923,14 @@ export const FORTRESS_WALL_THICKNESS = 2;
 // 自機は 16x24px = 1x1.5 タイル。天井高5（80px）は「幅3の廊下が若干窮屈」という
 // 実機の指摘を受けた値。区画の高さ 18〜25 から外壁2層を引くと 2〜3階になる
 export const FORTRESS_CEILING_H = 5;   // 天井高（タイル）
-export const FORTRESS_FLOOR_H = 1;     // 床の厚さ。階のピッチは 5+1=6
+// 床は**金属2層**（= METAL_BLOCK_HP 6 × 2 = 12発）。硬い岩1層（3発）だった頃は
+// 掘って階を抜くほうが速く、シャフトの意味が薄かった（実機の指摘）。
+// 12発かかるなら「掘って抜く」は最後の手段になり、シャフトを探すのが正解になる
+export const FORTRESS_FLOOR_H = 2;     // 床の厚さ。階のピッチは 5+2=7
 export const FORTRESS_SHAFT_W = 4;     // 階をつなぐ縦穴の幅
+// バリアの列から左右にこれだけは敵を湧かせない。バリアの中に砲台が居ると、
+// 開ける前に一方的に撃たれるうえ、撃ち返した弾はバリアに吸われて届かない
+export const FORTRESS_BARRIER_CLEARANCE = 2;
 // 開口から区画の外の空洞まで掘るトンネルの最大長。7面は空洞が 42% あるので
 // 数タイルで当たる。当たらないまま尽きたらそこで止める（掘った穴は残る）
 export const FORTRESS_OPENING_TUNNEL_MAX = 24;
