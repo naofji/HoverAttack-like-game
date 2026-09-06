@@ -9,7 +9,7 @@
 // 乱数は呼び出し側が派生ストリームを渡す。game.rng を消費すると敵の構成が
 // 変わって週の決定性が壊れる（CaveBackdrop と同じ理由）。
 
-import { BLOCK_EMPTY, MAX_WATER_MASS } from '../utils/Constants.js';
+import { BLOCK_EMPTY } from '../utils/Constants.js';
 
 function inRects(r, c, rects) {
     return rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
@@ -64,40 +64,6 @@ export function generateWaterPools({ grid, rows, cols, rooms, excludeRects, rng,
         pools.push({ surfaceRow, cells });
     }
     return pools;
-}
-
-/**
- * 壊れたブロックのうち、水面より下で水に4方向で接するものを水にする。
- * 壊れたセルの集合の中だけを塗り広げる（元からの空洞には流さない。流すと
- * 「水面より下の空洞をどこまでも埋める」ことになり基地の部屋へ届く回が出る）。
- * 水面の行は動かさない。
- * @returns {Array<[number,number]>} 水になったセル
- */
-export function fillDestroyedCells(map, destroyed) {
-    const pending = new Set(destroyed.map(([r, c]) => r * map.cols + c));
-    const filled = [];
-    let progressed = true;
-    while (progressed && pending.size) {
-        progressed = false;
-        for (const key of [...pending]) {
-            const r = Math.floor(key / map.cols);
-            const c = key % map.cols;
-            const around = [[r + 1, c], [r - 1, c], [r, c + 1], [r, c - 1]];
-            let surface = -1;
-            for (const [nr, nc] of around) {
-                const s = map.waterSurfaceRow(nr, nc);
-                if (s >= 0 && r >= s) { surface = s; break; }
-            }
-            if (surface < 0) continue;
-            map.water[key] = MAX_WATER_MASS;
-            map.waterSurface[key] = surface;
-            filled.push([r, c]);
-            pending.delete(key);
-            progressed = true;
-        }
-    }
-    if (filled.length) map.onWaterChanged(filled);
-    return filled;
 }
 
 /** 部屋の中心などから上へ辿って天井直下の空洞行を返す。 */

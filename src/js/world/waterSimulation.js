@@ -15,7 +15,8 @@
 //      水は落ち口に向かって水平に流れる。
 //    - 落ち口がない場合（＝底が完全に塞がれた容器・水たまりの層）:
 //      その層全体に水量を均等配分する（完全水平レベリング）。
-//      その層が満水（各セル MAX_WATER_MASS）になった時のみ、上の行へ水位が上がる。
+//      水位が上がるのは、その層が満ちて落ちられなくなった水がフェーズ1で
+//      上の行に積み上がる結果であって、この層の処理が押し上げるのではない。
 //
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
@@ -187,13 +188,15 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
             } else {
                 // ケースB: 落ち口がない（＝底が完全に塞がれた水槽・水たまりの層）
                 // この層の全セルに水量を均等に配分する！
+                //
+                // 以前ここに「区間の容量を超えたぶんを上の行へ持ち上げる」処理が
+                // あったが、water[] は1セル MAX_WATER_MASS が上限なので sumMass が
+                // 容量（len * MAX_WATER_MASS）を超えることはあり得ず、到達不能だった。
+                // 水位が上がるのは、下の行が満ちて落ちられなくなった水がフェーズ1で
+                // 積み上がる自然な結果である
                 const len = segCols.length;
-                const capacity = len * MAX_WATER_MASS;
-                const fillMass = Math.min(sumMass, capacity);
-                const excessMass = sumMass - fillMass;
-
-                const base = Math.floor(fillMass / len);
-                const rem = fillMass % len;
+                const base = Math.floor(sumMass / len);
+                const rem = sumMass % len;
 
                 // 余りは均等に配る
                 for (let i = 0; i < len; i++) {
@@ -206,23 +209,6 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                     }
                 }
 
-                // 余剰水がある場合（この行が完全に満杯になった場合）、上の行へ持ち上げる
-                if (excessMass > 0 && r > 0) {
-                    let leftOver = excessMass;
-                    for (const sc of segCols) {
-                        if (isSolid(r - 1, sc)) continue;
-                        const upKey = (r - 1) * cols + sc;
-                        const upMass = water[upKey];
-                        const canTake = MAX_WATER_MASS - upMass;
-                        const flow = Math.min(leftOver, canTake);
-                        if (flow > 0) {
-                            water[upKey] += flow;
-                            leftOver -= flow;
-                            markChanged(r - 1, sc);
-                        }
-                        if (leftOver === 0) break;
-                    }
-                }
             }
         }
     }

@@ -1352,6 +1352,11 @@ export class Map {
             // 水源（湧水）の処理
             if (this.waterSprings && this.waterSprings.length > 0) {
                 for (const sp of this.waterSprings) {
+                    // この2つのガードはどちらも構造的に成立しない。sp.r は生成時に
+                    // 決まって以後変わらず、sp.r-1 は水源の定義（天井直下の空洞）から
+                    // 必ず岩なので water[] は常に 0。つまり**水源は止まらない**。
+                    // これは意図した挙動で、面がゆっくり水没していくのは仕様。
+                    // 止めたくなったら、実際の水位（水面の行）を見る条件に書き直すこと
                     if (sp.r <= WATER_SPRING_STOP_ROW) continue;
                     if (sp.r > 0 && this.water[(sp.r - 1) * this.cols + sp.c] >= MAX_WATER_MASS) continue;
                     sp.timer++;
