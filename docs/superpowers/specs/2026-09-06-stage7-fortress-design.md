@@ -278,16 +278,29 @@ Step 9c 雪の階段（5面）
 候補は十分にある）。区画がマップに占める面積は約6%で、通り道に1〜2回当たる程度。
 薄いと感じたら `FORTRESS_ZONE_COUNT` を上げるのが一番効く。
 
+### 実測（第2ラウンド後。seed 1〜5、7面）
+
+| | 実測 |
+|---|---|
+| 区画 | 5 seed とも 4個 |
+| 階 | 区画あたり 2〜3階（4区画の合計で平均 10.6） |
+| お宝 | 12個（区画あたり3。うち1個がオーバードライブ） |
+| バリアの置き場所 | 平均 10.6本（階の数と一致） |
+| 砲台 / 戦車 | 24 / 40（守備隊を足す前は 16 / 32） |
+
 ### 見るところ
 
 | 見るところ | 調整用の定数 |
 |---|---|
 | 区画に入ったと分かるか。4個は多いか少ないか | `FORTRESS_ZONE_COUNT` |
-| 幅3の廊下が窮屈でないか | `FORTRESS_CORRIDOR_W` |
-| 格子の目が細かすぎ／粗すぎないか | `FORTRESS_CORRIDOR_PITCH` |
-| 正面の開口を見つけられるか。装甲に阻まれて迷わないか | `FORTRESS_OPENING_W` |
-| 背面を掘って回り込めると気づけるか | 外壁の割り当て（節3） |
-| 柱が人工物に見えるか | `FORTRESS_ROOM_SIZE` |
+| **建物の断面に見えるか**（真上から見た間取り図に見えないか） | `FORTRESS_CEILING_H` / `FORTRESS_FLOOR_H` |
+| 天井高5でホバーが窮屈でないか | `FORTRESS_CEILING_H` |
+| シャフトの幅4で降りやすいか。階ごとにずれているのが分かるか | `FORTRESS_SHAFT_W` |
+| **金属が岩と見分けられるか。焼けた赤茶が「熱」に見えるか** | `METAL_BLOCK_TINT` / `METAL_HEAT_COLOR` / `METAL_HEAT_GLOSS_LOSS` |
+| 12発の正面が「難攻不落」に感じられるか。右が弱点と気づけるか | `METAL_BLOCK_HP` / `FORTRESS_WALL_THICKNESS` |
+| 右へ進むほど地形が固くなるのが分かるか | `HARD_BLOCK_CHANCE_BY_STAGE` の7行目 |
+| 守備隊の数（区画あたり砲台2・戦車2）が手応えに合うか | `FORTRESS_GARRISON_TURRETS` / `FORTRESS_GARRISON_TANKS` |
+| 奥のお宝3個が見つけたときに嬉しいか | `FORTRESS_TREASURE_COUNT` |
 
 ## 7. 段B・段Cへの申し送り
 
