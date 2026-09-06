@@ -1077,6 +1077,15 @@ export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がり
 // 水流セル・オートマトン。1タイルを 8 段階の水量（mass）で管理する。
 export const MAX_WATER_MASS = 8;
 export const MIN_WATER_MASS = 1;
+// 水源（湧水）と滝の仕様
+export const WATER_SPRING_INTERVAL = 15;        // 湧き出る周期（フレーム）
+export const WATER_SPRING_MASS = 2;            // 1回あたりの湧出水量
+export const WATER_SPRING_COUNT = 2;           // 水源の数
+export const WATER_SPRING_MAX_ROW_RATIO = 0.5; // マップ上半分から水源を選ぶ
+export const WATER_SPRING_STOP_ROW = 6;        // この行まで水没したら水源停止（詰み防止）
+// 滝（落下水流）の中の物理
+export const WATERFALL_DOWNFORCE = 0.18;       // 下方向への押し下げ加速度
+export const WATERFALL_FALL_SPEED_SCALE = 0.70;// 滝の中での落下速度上限スケール
 // 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
 export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）

@@ -61,10 +61,11 @@ export class Carrier {
         this.vx *= FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
-        this.vy += GRAVITY * this.motion.gravity;
-        const maxFall = this.motion.speed < 1
-            ? CARRIER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
-            : CARRIER_MAX_FALLING_SPEED;
+        this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
+        const fallScale = this.motion.fallSpeedScale !== undefined
+            ? this.motion.fallSpeedScale
+            : (this.motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
+        const maxFall = CARRIER_MAX_FALLING_SPEED * fallScale;
         if (this.vy > maxFall) this.vy = maxFall;
 
         // Movement with collision

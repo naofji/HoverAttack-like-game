@@ -30,11 +30,13 @@ import {
     FORTRESS_BARRIER_CLEARANCE, FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP,
     MAX_WATER_MASS, MIN_WATER_MASS,
+    WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
+    WATER_SPRING_MAX_ROW_RATIO, WATER_SPRING_STOP_ROW,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
-import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
+import { generateWaterPools, generateWaterSprings, fillDestroyedCells } from './waterPools.js';
 import { stepWaterSimulation } from './waterSimulation.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
@@ -389,6 +391,11 @@ export class Map {
                 this.waterCells.push([r, c]);
             }
         }
+        const springs = generateWaterSprings({
+            grid: this.grid, rows: this.rows, cols: this.cols, rooms: this.rooms, excludeRects, rng,
+            count: WATER_SPRING_COUNT, maxRowRatio: WATER_SPRING_MAX_ROW_RATIO,
+        });
+        this.waterSprings = springs.map((s) => ({ r: s.r, c: s.c, timer: 0 }));
     }
 
     _generatePlatforms() {
@@ -1223,6 +1230,25 @@ export class Map {
         return y >= surfaceY;
     }
 
+    /** ピクセル座標が落下中の滝（水流）の中にあるか */
+    isWaterfallAtPixel(x, y) {
+        if (!this.isWaterAtPixel(x, y)) return false;
+        const r = Math.floor(y / TILE_SIZE);
+        const c = Math.floor(x / TILE_SIZE);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        // 直下が固体なら水底なので滝ではない
+        if (r + 1 >= this.rows || this.isSolid(r + 1, c)) return false;
+        // 直下が満水でなければ下へ落下中（滝）
+        const belowMass = this.water[(r + 1) * this.cols + c];
+        if (belowMass < MAX_WATER_MASS) return true;
+        // 直下も満水だが、さらに下が空洞や落下中なら滝の柱の中
+        let downR = r + 1;
+        while (downR < this.rows - 1 && !this.isSolid(downR, c) && this.water[downR * this.cols + c] >= MAX_WATER_MASS) {
+            downR++;
+        }
+        return downR < this.rows && !this.isSolid(downR, c) && this.water[downR * this.cols + c] < MAX_WATER_MASS;
+    }
+
     /** 水タイルの水面の行。水でなければ -1。 */
     waterSurfaceRow(r, c) {
         if (!this.isWater(r, c)) return -1;
@@ -1241,18 +1267,47 @@ export class Map {
     // ------------------------------------------
 
     update() {
-        if (this.envKind === 'water' && this.water && this.activeWaterCells && this.activeWaterCells.size > 0) {
-            const isSolid = (r, c) => this.isSolid(r, c);
-            const res = stepWaterSimulation({
-                water: this.water,
-                rows: this.rows,
-                cols: this.cols,
-                isSolid,
-                activeCells: this.activeWaterCells,
-            });
-            this.activeWaterCells = res.nextActiveCells;
-            if (res.changedCells.length > 0) {
-                this.onWaterChanged(res.changedCells);
+        if (this.envKind === 'water' && this.water) {
+            // 水源（湧水）の処理
+            if (this.waterSprings && this.waterSprings.length > 0) {
+                for (const sp of this.waterSprings) {
+                    if (sp.r <= WATER_SPRING_STOP_ROW) continue;
+                    if (sp.r > 0 && this.water[(sp.r - 1) * this.cols + sp.c] >= MAX_WATER_MASS) continue;
+                    sp.timer++;
+                    if (sp.timer >= WATER_SPRING_INTERVAL) {
+                        sp.timer = 0;
+                        const key = sp.r * this.cols + sp.c;
+                        const cur = this.water[key];
+                        if (cur < MAX_WATER_MASS) {
+                            this.water[key] = Math.min(MAX_WATER_MASS, cur + WATER_SPRING_MASS);
+                            if (!this.activeWaterCells) this.activeWaterCells = new Set();
+                            this.activeWaterCells.add(key);
+                        } else if (sp.r + 1 < this.rows && !this.isSolid(sp.r + 1, sp.c)) {
+                            const downKey = (sp.r + 1) * this.cols + sp.c;
+                            const downCur = this.water[downKey];
+                            if (downCur < MAX_WATER_MASS) {
+                                this.water[downKey] = Math.min(MAX_WATER_MASS, downCur + WATER_SPRING_MASS);
+                                if (!this.activeWaterCells) this.activeWaterCells = new Set();
+                                this.activeWaterCells.add(downKey);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (this.activeWaterCells && this.activeWaterCells.size > 0) {
+                const isSolid = (r, c) => this.isSolid(r, c);
+                const res = stepWaterSimulation({
+                    water: this.water,
+                    rows: this.rows,
+                    cols: this.cols,
+                    isSolid,
+                    activeCells: this.activeWaterCells,
+                });
+                this.activeWaterCells = res.nextActiveCells;
+                if (res.changedCells.length > 0) {
+                    this.onWaterChanged(res.changedCells);
+                }
             }
         }
     }

@@ -34,11 +34,12 @@ export class Grenade {
         const map = this.game.map;
         const motion = motionFor(this.game, this.x, this.y);
 
-        // Apply gravity
-        this.vy += GRENADE_GRAVITY * motion.gravity;
-        const maxFall = motion.speed < 1
-            ? GRENADE_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
-            : GRENADE_MAX_FALLING_SPEED;
+        // Apply gravity & downforce
+        this.vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
+        const fallScale = motion.fallSpeedScale !== undefined
+            ? motion.fallSpeedScale
+            : (motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
+        const maxFall = GRENADE_MAX_FALLING_SPEED * fallScale;
         if (this.vy > maxFall) this.vy = maxFall;
 
         // Calculate next position

@@ -139,6 +139,21 @@ export function createWaterRenderer(env) {
             this.t++;
             for (const rp of this.ripples) rp.strength *= WATER_RIPPLE_DECAY;
             this.ripples = this.ripples.filter((rp) => rp.strength >= WATER_RIPPLE_MIN);
+
+            // 滝の着水波紋（12フレームごとに小さな波紋を励起）
+            if (this.t % 12 === 0 && map.waterSprings) {
+                for (const sp of map.waterSprings) {
+                    const c = sp.c;
+                    const x = (c + 0.5) * TILE_SIZE;
+                    for (let r = sp.r + 1; r < map.rows; r++) {
+                        if (map.isSolid && map.isSolid(r, c)) break;
+                        if (map.isWater && map.isWater(r, c) && map.isWaterfallAtPixel && !map.isWaterfallAtPixel(x, (r + 0.5) * TILE_SIZE)) {
+                            this.addRipple(x, 0.4);
+                            break;
+                        }
+                    }
+                }
+            }
         },
         addRipple(x, strength) {
             this.ripples.push({ x, strength });
@@ -180,6 +195,20 @@ export function createWaterRenderer(env) {
                 }
             }
             ctx.stroke();
+
+            // 水源（湧水）の口の滴り・飛沫演出
+            if (map.waterSprings) {
+                ctx.fillStyle = WATER_SURFACE_COLOR;
+                for (const sp of map.waterSprings) {
+                    const bx = sp.c * TILE_SIZE;
+                    const by = sp.r * TILE_SIZE;
+                    if (bx + TILE_SIZE < camX || bx > camX + CANVAS_WIDTH ||
+                        by + TILE_SIZE < camY || by > camY + CANVAS_HEIGHT) continue;
+                    const dropOffset = (this.t * 1.5) % TILE_SIZE;
+                    ctx.fillRect(bx + 6, by, 4, 2);
+                    ctx.fillRect(bx + 7, by + dropOffset, 2, 3);
+                }
+            }
         },
         drawOverlay() {},
         drawDemoOverlay() {},

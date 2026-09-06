@@ -214,7 +214,7 @@ export class EnemyAttacker {
 
         // --- Physics ---
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
-        this.vy += GRAVITY * this.motion.gravity;
+        this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
         if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
 
         if (!this.onGround && this.aiState === 'patrol') {

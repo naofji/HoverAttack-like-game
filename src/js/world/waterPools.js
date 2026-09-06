@@ -99,3 +99,79 @@ export function fillDestroyedCells(map, destroyed) {
     if (filled.length) map.onWaterChanged(filled);
     return filled;
 }
+
+/** 部屋の中心などから上へ辿って天井直下の空洞行を返す。 */
+function ceilingEmptyRowAbove(grid, r, c) {
+    if (grid[r] == null || grid[r][c] !== BLOCK_EMPTY) return -1;
+    let rr = r;
+    while (rr - 1 >= 0 && grid[rr - 1][c] === BLOCK_EMPTY) rr--;
+    return (rr - 1 >= 0 && grid[rr - 1][c] !== BLOCK_EMPTY) ? rr : -1;
+}
+
+/**
+ * 天井から水が湧き出る水源（滝の起点）を洞窟上部から選定する。
+ * @returns {Array<{r: number, c: number}>}
+ */
+export function generateWaterSprings({ grid, rows, cols, rooms, excludeRects, rng, count, maxRowRatio = 0.5 }) {
+    const maxR = Math.floor(rows * maxRowRatio);
+    const candidates = [];
+
+    // 部屋の中心およびその左右から天井直下の空洞を探索
+    for (const room of rooms) {
+        if (room.centerR > maxR) continue;
+        for (let dc = -8; dc <= 8; dc += 2) {
+            const c = room.centerC + dc;
+            if (c < 3 || c >= cols - 3) continue;
+            const r = ceilingEmptyRowAbove(grid, room.centerR, c);
+            if (r > 2 && r <= maxR) {
+                // 直下が空洞で落下可能か
+                if (grid[r + 1] && grid[r + 1][c] === BLOCK_EMPTY) {
+                    if (!inRects(r, c, excludeRects)) {
+                        candidates.push({ r, c });
+                    }
+                }
+            }
+        }
+    }
+
+    // 候補が少なければ上部全体から探索
+    if (candidates.length < count) {
+        for (let r = 3; r <= maxR; r++) {
+            for (let c = 5; c < cols - 5; c += 3) {
+                if (grid[r][c] === BLOCK_EMPTY &&
+                    grid[r - 1] && grid[r - 1][c] !== BLOCK_EMPTY &&
+                    grid[r + 1] && grid[r + 1][c] === BLOCK_EMPTY &&
+                    !inRects(r, c, excludeRects)) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+    }
+
+    // 重複除去
+    const unique = [];
+    const seen = new Set();
+    for (const p of candidates) {
+        const key = p.r * cols + p.c;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(p);
+        }
+    }
+
+    // 決定論的ソート
+    unique.sort((a, b) => (a.c - b.c) || (a.r - b.r));
+
+    const selected = [];
+    const minColDist = 16; // 水源同士が近すぎないように離す
+    while (unique.length > 0 && selected.length < count) {
+        const idx = Math.floor(rng.next() * unique.length);
+        const [pick] = unique.splice(idx, 1);
+        const tooClose = selected.some((s) => Math.abs(s.c - pick.c) < minColDist);
+        if (!tooClose || unique.length === 0) {
+            selected.push(pick);
+        }
+    }
+    return selected;
+}
+

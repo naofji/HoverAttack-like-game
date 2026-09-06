@@ -73,7 +73,7 @@ export class EnemyTank {
         // 中心座標で環境を引く。_moveAndCollide はこの後に呼ばれるので、
         // そちら側にも同じ値を持たせて速度への掛け目を揃える（Player と同じ手順）。
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
-        this.vy += GRAVITY * this.motion.gravity;
+        this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
         if (this.vy > ENEMY_TANK_MAX_FALLING_SPEED) this.vy = ENEMY_TANK_MAX_FALLING_SPEED;
 
         // --- Friction ---

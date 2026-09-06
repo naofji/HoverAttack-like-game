@@ -16,7 +16,9 @@
 // drawDemoOverlay（面別ランキングなどデモ画面での画面重ね）。
 
 import {
-    STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, ICE_SLIDE, FOG_SIGHT_SCALE, TILE_SIZE,
+    STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, WATER_FALL_SPEED_SCALE,
+    WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE,
+    ICE_SLIDE, FOG_SIGHT_SCALE, TILE_SIZE,
 } from '../utils/Constants.js';
 import { createNoneRenderer, canvasAvailable } from './environment/none.js';
 import { createFogRenderer } from './environment/fog.js';
@@ -25,8 +27,12 @@ import { createSnowRenderer } from './environment/snow.js';
 
 /** 陸上。陸上の面では全エンティティがこれを受け取り、掛けても値が変わらない。 */
 export const LAND_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: 0 });
-const WATER_MOTION = Object.freeze({ speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0 });
-const SNOW_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: ICE_SLIDE });
+export const WATER_MOTION = Object.freeze({ speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0 });
+export const WATERFALL_MOTION = Object.freeze({
+    speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0,
+    downforce: WATERFALL_DOWNFORCE, fallSpeedScale: WATERFALL_FALL_SPEED_SCALE,
+});
+export const SNOW_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: ICE_SLIDE });
 
 const NONE_ROW = Object.freeze({ kind: 'none', backdrop: 'cave', terrain: 'cave' });
 
@@ -69,7 +75,9 @@ export class StageEnvironment {
     motionAt(x, y) {
         if (this.kind === 'water') {
             const map = this.game && this.game.map;
-            return map && map.isWaterAtPixel(x, y) ? WATER_MOTION : LAND_MOTION;
+            if (map && map.isWaterfallAtPixel && map.isWaterfallAtPixel(x, y)) return WATERFALL_MOTION;
+            if (map && map.isWaterAtPixel && map.isWaterAtPixel(x, y)) return WATER_MOTION;
+            return LAND_MOTION;
         }
         if (this.kind === 'snow') return SNOW_MOTION;
         return LAND_MOTION;

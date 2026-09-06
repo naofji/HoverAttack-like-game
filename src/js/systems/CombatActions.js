@@ -229,10 +229,11 @@ export const CombatActions = {
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
             const motion = motionFor(this, x, y);
 
-            vy += GRENADE_GRAVITY * motion.gravity;
-            const maxFall = motion.speed < 1
-                ? GRENADE_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
-                : GRENADE_MAX_FALLING_SPEED;
+            vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
+            const fallScale = motion.fallSpeedScale !== undefined
+                ? motion.fallSpeedScale
+                : (motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
+            const maxFall = GRENADE_MAX_FALLING_SPEED * fallScale;
             if (vy > maxFall) vy = maxFall;
 
             let nextX = x + vx * motion.speed;

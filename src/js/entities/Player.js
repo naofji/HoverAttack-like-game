@@ -163,7 +163,7 @@ export class Player {
         this._updateHorizontal(input);
         this._applySnowSlope(input);
 
-        this.vy += GRAVITY * this.motion.gravity;
+        this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
 
         this._updateBurstHover(input);
         this._updateFuelRecovery(input);
@@ -369,9 +369,10 @@ export class Player {
 
     /** Clamp vertical speed within allowed limits. */
     _updateSpeedCaps() {
-        const maxFall = this.motion.speed < 1
-            ? PLAYER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
-            : PLAYER_MAX_FALLING_SPEED;
+        const fallScale = this.motion.fallSpeedScale !== undefined
+            ? this.motion.fallSpeedScale
+            : (this.motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
+        const maxFall = PLAYER_MAX_FALLING_SPEED * fallScale;
         if (this.vy > maxFall) this.vy = maxFall;
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
     }
