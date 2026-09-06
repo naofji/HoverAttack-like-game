@@ -15,12 +15,14 @@
 import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
+    GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION, GRENADE_LIFETIME,
 } from '../utils/Constants.js';
 import { Missile } from '../entities/Missile.js';
 import { Grenade } from '../entities/Grenade.js';
 import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { REPAIR_KIT_HEAL } from '../entities/RepairKit.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export const CombatActions = {
     // ==========================================
@@ -210,16 +212,12 @@ export const CombatActions = {
         player.consumeMGRound();
     },
     /**
-     * グレネードの物理軌道を事前シミュレーションして計算する
+     * グレネードの物理軌道を事前シミュレーションして計算する。
+     * 物理法則は Grenade.js の update() と完全に一致させ、
+     * motionFor による水中の減速・浮力やバリアの吸収も反映する。
      * @returns {{ points: {x,y}[], landX: number, landY: number }}
      */
-    _calcGrenadeTrajectory(startX, startY, angle, speed) {
-        const TRAJ_GRAVITY = 0.20;
-        const TRAJ_MAX_FALLING_SPEED = 6;
-        const TRAJ_BOUNCE = 0.2;
-        const TRAJ_FRICTION = 0.9;
-        const TRAJ_LIFETIME = 90;
-
+     _calcGrenadeTrajectory(startX, startY, angle, speed) {
         const map = this.map;
         const points = [];
         let x = startX, y = startY;
@@ -227,29 +225,44 @@ export const CombatActions = {
         let vy = Math.sin(angle) * speed;
         let landX = x, landY = y;
 
-        for (let i = 0; i < TRAJ_LIFETIME; i++) {
-            vy += TRAJ_GRAVITY;
-            if (vy > TRAJ_MAX_FALLING_SPEED) vy = TRAJ_MAX_FALLING_SPEED;
+        for (let i = 0; i < GRENADE_LIFETIME; i++) {
+            const motion = motionFor(this, x, y);
 
-            let nextX = x + vx;
-            let nextY = y + vy;
+            vy += GRENADE_GRAVITY * motion.gravity;
+            if (vy > GRENADE_MAX_FALLING_SPEED) vy = GRENADE_MAX_FALLING_SPEED;
+
+            let nextX = x + vx * motion.speed;
+            let nextY = y + vy * motion.speed;
 
             if (map.isSolidAtPixel(nextX, y)) {
-                vx *= -TRAJ_BOUNCE;
-                nextX = x + vx;
+                vx *= -GRENADE_BOUNCE;
+                nextX = x + vx * motion.speed;
             }
             x = nextX;
 
             if (map.isSolidAtPixel(x, nextY)) {
                 if (Math.abs(vy) > 0.5) {
-                    vy *= -TRAJ_BOUNCE;
+                    vy *= -GRENADE_BOUNCE;
                 } else {
                     vy = 0;
-                    vx *= TRAJ_FRICTION;
+                    vx *= GRENADE_FRICTION;
                 }
-                nextY = y + vy;
+                nextY = y + vy * motion.speed;
             }
             y = nextY;
+
+            // バリア（電磁パルスバリア）があれば吸収されるためプレビューをそこで止める
+            let absorbed = false;
+            if (this.barriers) {
+                for (const barrier of this.barriers) {
+                    if (barrier.active && barrier.fieldRect &&
+                        x >= barrier.fieldRect.x && x <= barrier.fieldRect.x + barrier.fieldRect.width &&
+                        y >= barrier.fieldRect.y && y <= barrier.fieldRect.y + barrier.fieldRect.height) {
+                        absorbed = true;
+                        break;
+                    }
+                }
+            }
 
             // 3フレームおきに軌跡の点を記録
             if (i % 3 === 0) {
@@ -258,6 +271,8 @@ export const CombatActions = {
 
             landX = x;
             landY = y;
+
+            if (absorbed) break;
 
             // マップ外に出たら終了
             if (x < 0 || x > map.width || y < 0 || y > map.height) break;
