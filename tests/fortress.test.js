@@ -490,3 +490,89 @@ test('掘らなくても区画に出入りできる（開口が効いている�
     }
   }
 });
+
+import { FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS } from '../src/js/utils/Constants.js';
+
+test('お宝は一番下の階の、開口から一番遠い側に並ぶ', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  for (const z of m.fortressZones) {
+    assert.equal(z.treasures.length, FORTRESS_TREASURE_COUNT, '宝の数が違う');
+    const bottom = z.floors[z.floors.length - 1];
+    const half = (z.c0 + z.c1) / 2;
+    for (const t of z.treasures) {
+      assert.ok(t.r >= bottom.r0 && t.r <= bottom.r1, `宝が最下階に無い (${t.r})`);
+      assert.ok(t.c > half, `宝が右寄りでない (${t.c} / 中央 ${half})`);
+      assert.equal(m.grid[t.r][t.c], BLOCK_EMPTY, `宝が岩に埋まっている (${t.r},${t.c})`);
+      assert.ok(m.grid[t.r + 1][t.c] !== BLOCK_EMPTY, `宝の足元が空洞 (${t.r},${t.c})`);
+    }
+    // 稀少なオーバードライブが必ず含まれる
+    assert.ok(z.treasures.some((t) => t.kind === 'overdrive'), 'オーバードライブが無い');
+    assert.ok(z.treasures.some((t) => t.kind === 'repair'), 'リペアキットが無い');
+  }
+});
+
+test('バリアは階ごとに1本立ち、シャフトと重ならない', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const seed of [1, 2, 3]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    for (const z of m.fortressZones) {
+      assert.equal(z.barriers.length, z.floors.length, '階の数だけバリアが要る');
+      for (const b of z.barriers) {
+        const floor = z.floors.find((f) => f.r0 === b.top && f.r1 === b.bottom);
+        assert.ok(floor, `バリア ${b.c} がどの階とも合っていない`);
+        // 上下のユニットが立つマスは、その階の天井と床に接している
+        assert.equal(m.grid[b.top][b.c], BLOCK_EMPTY, 'バリア上端が空洞でない');
+        assert.equal(m.grid[b.bottom][b.c], BLOCK_EMPTY, 'バリア下端が空洞でない');
+        for (const s of z.shafts) {
+          assert.ok(b.c < s.c - 1 || b.c > s.c + s.w, `バリア ${b.c} がシャフト ${s.c} と近すぎる`);
+        }
+      }
+    }
+  }
+});
+
+test('お宝はバリアより奥（右）にある', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  for (const z of m.fortressZones) {
+    const bottom = z.floors[z.floors.length - 1];
+    const barrier = z.barriers.find((b) => b.top === bottom.r0);
+    const leftmost = Math.min(...z.treasures.map((t) => t.c));
+    assert.ok(barrier.c < leftmost, `バリア ${barrier.c} が宝 ${leftmost} より奥にある`);
+  }
+});
+
+test('要塞区画に守備隊が追加されている', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const fort = new Map({ rng: new SeededRNG(1) }, 6);
+  const inZone = (pos) => fort.fortressZones.some((z) => {
+    const r = Math.floor(pos.y / 16), c = Math.floor(pos.x / 16);
+    return r >= z.r0 && r <= z.r1 && c >= z.c0 && c <= z.c1;
+  });
+  const turrets = fort.enemyTurretSpawns.filter(inZone).length;
+  const tanks = fort.enemyTankSpawns.filter(inZone).length;
+  const zones = fort.fortressZones.length;
+  assert.ok(turrets >= zones * FORTRESS_GARRISON_TURRETS,
+    `区画内の砲台が ${turrets} しかない（最低 ${zones * FORTRESS_GARRISON_TURRETS}）`);
+  assert.ok(tanks >= zones * FORTRESS_GARRISON_TANKS,
+    `区画内の戦車が ${tanks} しかない（最低 ${zones * FORTRESS_GARRISON_TANKS}）`);
+});
+
+test('お宝が実際にゲームへ置かれる（7面だけ）', async () => {
+  const { SpawnManager } = await import('../src/js/systems/SpawnManager.js');
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const lv of [0, 6]) {
+    const map = new Map({ rng: new SeededRNG(1) }, lv);
+    const game = { map, repairKits: [], missileKits: [] };
+    new SpawnManager(game).spawnTreasures();
+    const total = game.repairKits.length + game.missileKits.length;
+    if (lv === 6) {
+      assert.equal(total, map.fortressZones.length * FORTRESS_TREASURE_COUNT, '7面の宝の数が合わない');
+      assert.ok(game.missileKits.length > 0, 'オーバードライブが置かれていない');
+      assert.ok(game.repairKits.length > 0, 'リペアキットが置かれていない');
+    } else {
+      assert.equal(total, 0, `面${lv + 1} に宝が置かれている`);
+    }
+  }
+});

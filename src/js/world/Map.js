@@ -26,6 +26,7 @@ import {
     FORTRESS_ZONE_H_MIN, FORTRESS_ZONE_H_RANGE, FORTRESS_ZONE_MARGIN,
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_OPENING_TUNNEL_MAX,
+    FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -253,6 +254,9 @@ export class Map {
         this.enemyDroneSpawns = this._findEnemyDronePositions();
         this.enemyTurretSpawns = this._findEnemyTurretPositions();
         this._addMainBaseDefenders(); // Force add defenders specifically around the base
+        // 要塞の中身は「探索が終わったあと」に足す（先に足すとシャッフルで散る）
+        this.treasureSpawns = [];
+        if (this.envTerrain === 'fortress') this._placeFortressContents();
 
         // Step 11: Generate off-screen mini-map
         // tile cache (実寸で焼いた地形) を先に作ってから、それを縮小してミニマップにする。
@@ -309,9 +313,35 @@ export class Map {
             thickness: FORTRESS_WALL_THICKNESS, ceilingH: FORTRESS_CEILING_H,
             floorH: FORTRESS_FLOOR_H, shaftW: FORTRESS_SHAFT_W,
             tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
+            treasureCount: FORTRESS_TREASURE_COUNT,
+            garrisonTurrets: FORTRESS_GARRISON_TURRETS,
+            garrisonTanks: FORTRESS_GARRISON_TANKS,
         });
         this.fortressZones = result.zones;
         this.fortress = result.marks;
+    }
+
+    /**
+     * 要塞のお宝と守備隊を、面全体の湧きの配列に足す。
+     *
+     * **スポーン探索（Step 10）のあとに呼ぶ。** 先に足すとシャッフルで混ざって
+     * 区画の外へ散ってしまう。既存の湧きに「足す」だけなので、面全体の上限
+     * （maxTurrets など）は触らない＝他の面には一切影響しない。
+     */
+    _placeFortressContents() {
+        const S = TILE_SIZE;
+        this.treasureSpawns = [];
+        for (const zone of this.fortressZones) {
+            for (const t of zone.treasures) {
+                this.treasureSpawns.push({ x: t.c * S + S / 2, y: t.r * S, kind: t.kind });
+            }
+            for (const g of zone.garrison.turrets) {
+                this.enemyTurretSpawns.push({ x: g.c * S, y: g.r * S, isCeiling: g.isCeiling });
+            }
+            for (const g of zone.garrison.tanks) {
+                this.enemyTankSpawns.push({ x: g.c * S, y: g.r * S });
+            }
+        }
     }
 
     _generateWater() {

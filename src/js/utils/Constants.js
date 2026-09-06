@@ -928,6 +928,13 @@ export const FORTRESS_SHAFT_W = 4;     // 階をつなぐ縦穴の幅
 // 開口から区画の外の空洞まで掘るトンネルの最大長。7面は空洞が 42% あるので
 // 数タイルで当たる。当たらないまま尽きたらそこで止める（掘った穴は残る）
 export const FORTRESS_OPENING_TUNNEL_MAX = 24;
+// 区画の奥（最下階の右端）に置くお宝。オーバードライブキットは今までアタッカーの
+// 撃破ドロップでしか出ない稀少品なので、要塞の奥という置き場所が意味を持つ
+export const FORTRESS_TREASURE_COUNT = 3;
+// 区画に追加で湧かせる守備隊。実機で「敵がもう少しいてもいい」と出た指摘への対応で、
+// 7面だけに効く。既存の湧きに足す形なので、面全体の上限（maxTurrets など）は触らない
+export const FORTRESS_GARRISON_TURRETS = 2;
+export const FORTRESS_GARRISON_TANKS = 2;
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

@@ -126,10 +126,10 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
         floors.push({ r0: top, r1: top + ceilingH - 1 });
         top += ceilingH + floorH;
     }
-    // 端数が天井高の半分以上あれば、最後の階を下端まで伸ばす（細い隙間を残さない）
-    if (floors.length > 0 && r1 - floors[floors.length - 1].r1 >= Math.floor(ceilingH / 2)) {
-        floors[floors.length - 1].r1 = r1;
-    }
+    // 最下階は**必ず**内側の下端まで伸ばす。端数を空きスペースとして残すと、
+    // 床に置いたつもりのお宝が宙に浮く（実際にテストで捕まえた）。
+    // 最下階が少し高くなるが、吹き抜けの1階に見えるので都合がよい
+    if (floors.length > 0) floors[floors.length - 1].r1 = r1;
 
     // 階と階の間に床を敷く
     for (let i = 0; i + 1 < floors.length; i++) {
@@ -215,6 +215,7 @@ export function carveFortressZones({
     grid, blockHP, rows, cols, rooms, excludeRects, rng,
     count, wMin, wRange, hMin, hRange, margin,
     thickness, ceilingH, floorH, shaftW, tunnelMax,
+    treasureCount, garrisonTurrets, garrisonTanks,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -235,7 +236,70 @@ export function carveFortressZones({
                 if (grid[r][c] !== BLOCK_EMPTY) marks[r * cols + c] = 1;
             }
         }
-        zones.push({ ...zone, openings, floors, shafts });
+        const contents = planZoneContents(zone, floors, shafts, {
+            thickness, treasureCount, garrisonTurrets, garrisonTanks, rng,
+        });
+        zones.push({ ...zone, openings, floors, shafts, ...contents });
     }
     return { zones, marks };
+}
+
+/**
+ * 区画の中身（お宝・バリアの置き場所・守備隊）を決める。地形は書き換えない。
+ *
+ * - **お宝**は最下階の右端に並べる。左上から来て右下の基地へ向かうので、
+ *   右奥が「一番遠い」＝踏み込んだご褒美になる
+ * - **バリア**は階ごとに1本。上下のユニットを壊すと消える（実体は段C）。
+ *   シャフトの真上／真下に置くと落ちてきた瞬間に接触するので、2タイル空ける
+ * - **守備隊**は各階の床の上と天井に置く。既存の湧きに足すだけ
+ */
+export function planZoneContents(zone, floors, shafts, {
+    thickness, treasureCount, garrisonTurrets, garrisonTanks, rng,
+}) {
+    const T = thickness;
+    const c0 = zone.c0 + T, c1 = zone.c1 - T;
+    const bottom = floors[floors.length - 1];
+
+    // お宝: 最下階の床の上、右端から2タイルおきに左へ並べる。
+    // 稀少なオーバードライブを一番奥（右）に置く
+    const treasures = [];
+    for (let i = 0; i < treasureCount; i++) {
+        const c = c1 - 1 - i * 2;
+        if (c <= c0) break;
+        treasures.push({ r: bottom.r1, c, kind: i === 0 ? 'overdrive' : 'repair' });
+    }
+
+    // バリア: 階ごとに1本。シャフトから2タイル以上離す。
+    // 最下階だけは宝より手前（左）に置く（宝が「バリアの奥」になるように）
+    const barriers = [];
+    for (const floor of floors) {
+        const isTreasureFloor = floor === bottom;
+        const limit = isTreasureFloor && treasures.length
+            ? Math.min(...treasures.map((t) => t.c)) - 2
+            : c1 - 1;
+        let c = -1;
+        for (let tries = 0; tries < 30 && c < 0; tries++) {
+            const cand = c0 + 1 + Math.floor(rng.next() * Math.max(1, limit - c0 - 1));
+            const nearShaft = shafts.some((s) => cand >= s.c - 1 && cand <= s.c + s.w);
+            if (!nearShaft) c = cand;
+        }
+        if (c < 0) c = c0 + 1; // 逃げ道。シャフトだらけで置けないときは左端へ
+        barriers.push({ c, top: floor.r0, bottom: floor.r1 });
+    }
+
+    // 守備隊: 階ごとに床と天井へ交互に置く。区画あたりの合計は定数で決める
+    const turrets = [];
+    const tanks = [];
+    for (let i = 0; i < garrisonTurrets; i++) {
+        const floor = floors[i % floors.length];
+        const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
+        turrets.push({ r: i % 2 === 0 ? floor.r1 : floor.r0, c, isCeiling: i % 2 !== 0 });
+    }
+    for (let i = 0; i < garrisonTanks; i++) {
+        const floor = floors[(i + 1) % floors.length];
+        const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
+        tanks.push({ r: floor.r1, c });
+    }
+
+    return { treasures, barriers, garrison: { turrets, tanks } };
 }

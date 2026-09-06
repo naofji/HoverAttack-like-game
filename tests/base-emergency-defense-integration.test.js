@@ -267,7 +267,7 @@ test('GameStateManager.resetLevel() resets baseEmergencyAlert/emergencyTargetBas
       totalTime: 0,
       stageResults: [],
       weekSeed: 1,
-      spawnManager: { findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines: () => {}, spawnEnemies: () => {} },
+      spawnManager: { findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines: () => {}, spawnTreasures: () => {}, spawnEnemies: () => {} },
       camera: { follow: () => {}, snapToTarget: () => {} }
     };
 

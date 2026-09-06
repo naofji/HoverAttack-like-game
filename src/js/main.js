@@ -223,6 +223,7 @@ export const Game = {
         this.player.docked = true;
 
         this.spawnManager.spawnLandmines();
+        this.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
         this.spawnManager.spawnEnemies();
 
         this.camera.follow(this.player);

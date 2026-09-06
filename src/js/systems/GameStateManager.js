@@ -43,6 +43,10 @@ export class GameStateManager {
         game.enemies = [];
         game.enemyBullets = [];
         game.repairKits = [];
+        // **元からあった漏れ。** missileKits だけリセットされておらず、前の面で
+        // 拾い残したミサイル補給とオーバードライブが次の面へ持ち越されていた。
+        // 7面の要塞のお宝をこの配列に入れるので、ここで直しておく
+        game.missileKits = [];
         game.autoAimUnits = [];
         game.autoAimTarget = null;
         game.autoAimLockedEnemy = null;
@@ -82,6 +86,7 @@ export class GameStateManager {
 
         // Recreate landmines and enemies
         game.spawnManager.spawnLandmines();
+        game.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
         game.spawnManager.spawnEnemies();
 
         // Remember the furthest stage reached locally (gates the ranking attract screen).

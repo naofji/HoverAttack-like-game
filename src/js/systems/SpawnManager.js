@@ -9,6 +9,8 @@ import { EnemyAttacker } from '../entities/EnemyAttacker.js';
 import { EnemyDrone } from '../entities/EnemyDrone.js';
 import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
+import { RepairKit } from '../entities/RepairKit.js';
+import { OverdriveKit } from '../entities/OverdriveKit.js';
 
 export class SpawnManager {
     constructor(game) {
@@ -54,6 +56,23 @@ export class SpawnManager {
         this.game.landmines = [];
         for (const pos of this.game.map.landmineSpawns) {
             this.game.landmines.push(new Landmine(this.game, pos.x, pos.y));
+        }
+    }
+
+    /**
+     * 要塞のお宝を置く（7面だけ。map.treasureSpawns が空なら何もしない）。
+     *
+     * 敵の撃破ドロップと同じ配列に入れるので、拾得・更新・描画は既存のまま動く。
+     * オーバードライブキットは missileKits 側（OverdriveKit が MissileKit を
+     * 継承しているため）。
+     */
+    spawnTreasures() {
+        for (const t of this.game.map.treasureSpawns || []) {
+            if (t.kind === 'overdrive') {
+                this.game.missileKits.push(new OverdriveKit(this.game, t.x, t.y));
+            } else {
+                this.game.repairKits.push(new RepairKit(this.game, t.x, t.y));
+            }
         }
     }
 
