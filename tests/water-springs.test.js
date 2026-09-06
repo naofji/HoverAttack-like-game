@@ -215,5 +215,96 @@ test('water.js: 横方向に広がった水面セグメントは各セルの水�
     assert.ok(Math.abs(startY - 83) < 3, `起点の水面高さが平均化されていない: got ${startY}, expected ≈ 83`);
 });
 
+test('Map.getSurfaceY & isWaterAtPixel: 横方向に繋がった水たまりで水面高さと水中判定が平均化され完全に一致する', () => {
+    const rows = 10, cols = 10;
+    const map = new Map({ rng: { next: () => 0 } }, 1);
+    map.rows = rows;
+    map.cols = cols;
+    map.width = cols * 16;
+    map.height = rows * 16;
+    map.water = new Uint8Array(rows * cols);
+    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
+    // r = 6 を床（固体ブロック）にする
+    for (let c = 0; c < cols; c++) map.grid[6][c] = 1;
 
+    // r = 5, c = 2..5 に水面。水量は 8, 4, 6, 8
+    map.water[5 * cols + 2] = 8;
+    map.water[5 * cols + 3] = 4;
+    map.water[5 * cols + 4] = 6;
+    map.water[5 * cols + 5] = 8;
 
+    // 平均水位: ( (6 - 8/8)*16 + (6 - 4/8)*16 + (6 - 6/8)*16 + (6 - 8/8)*16 ) / 4 = 83px
+    const expectedSurfaceY = 83;
+    for (let c = 2; c <= 5; c++) {
+        const surfaceY = map.getSurfaceY(5, c);
+        assert.equal(surfaceY, expectedSurfaceY, `セル (5, ${c}) の水面高さは平均水位 83px であるべき: got ${surfaceY}`);
+    }
+
+    // isWaterAtPixel の判定: 平均水面 83px より上（y = 82）は空気、83px 以上（y = 83, 84）は水中
+    for (let c = 2; c <= 5; c++) {
+        const px = c * 16 + 8;
+        assert.equal(map.isWaterAtPixel(px, 82), false, `y=82px は水面より上なので false であるべき (c=${c})`);
+        assert.equal(map.isWaterAtPixel(px, 83), true, `y=83px は水面位置なので true であるべき (c=${c})`);
+        assert.equal(map.isWaterAtPixel(px, 90), true, `y=90px は水中なので true であるべき (c=${c})`);
+    }
+});
+
+test('water.js: 水ブロックの塗り（fillRect）の上端が平均水面高さと一致し、完全に水平に塗られる', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const map = new Map({ rng: { next: () => 0 } }, 1);
+    map.rows = rows;
+    map.cols = cols;
+    map.width = cols * 16;
+    map.height = rows * 16;
+    map.water = new Uint8Array(rows * cols);
+    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
+    // r = 6 を床（固体ブロック）にする
+    for (let c = 0; c < cols; c++) map.grid[6][c] = 1;
+
+    map.waterCells = [
+        [5, 2], [5, 3], [5, 4], [5, 5],
+    ];
+
+    // r = 5, c = 2..5 に水面。水量は 8, 4, 6, 8（平均 83px）
+    map.water[5 * cols + 2] = 8;
+    map.water[5 * cols + 3] = 4;
+    map.water[5 * cols + 4] = 6;
+    map.water[5 * cols + 5] = 8;
+
+    const fillCalls = [];
+    const origCreateElement = document.createElement;
+    document.createElement = (tag) => {
+        const el = origCreateElement.call(document, tag);
+        if (tag === 'canvas') {
+            const origGetContext = el.getContext;
+            el.getContext = (type) => {
+                const ctx = origGetContext.call(el, type);
+                if (type === '2d') {
+                    const origFillRect = ctx.fillRect;
+                    ctx.fillRect = function(x, y, w, h) {
+                        fillCalls.push({ x, y, w, h });
+                        return origFillRect.apply(this, arguments);
+                    };
+                }
+                return ctx;
+            };
+        }
+        return el;
+    };
+
+    try {
+        const env = { game: { map } };
+        createWaterRenderer(env);
+
+        // 前景 canvas の fillRect 呼び出しを抽出（y が水面付近のもの）
+        const surfaceFills = fillCalls.filter((call) => Math.abs(call.y - 83) < 2);
+        assert.equal(surfaceFills.length, 4, '4つの水面セルすべてが平均水位で描画されるべき');
+        for (const fill of surfaceFills) {
+            assert.equal(fill.y, 83, `水ブロックの上端 Y 座標は平均水位 83px に揃っているべき: got ${fill.y}`);
+            assert.equal(fill.h, 96 - 83, `水ブロックの高さは 96 - 83 = 13px であるべき: got ${fill.h}`);
+        }
+    } finally {
+        document.createElement = origCreateElement;
+    }
+});

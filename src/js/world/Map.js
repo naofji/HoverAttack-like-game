@@ -1228,13 +1228,103 @@ export class Map {
         const r = Math.floor(y / TILE_SIZE);
         const c = Math.floor(x / TILE_SIZE);
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
-        const mass = this.water[r * this.cols + c];
-        if (mass < MIN_WATER_MASS) return false;
-        // 真上も水なら満水状態（水中）
-        if (r > 0 && this.water[(r - 1) * this.cols + c] >= MIN_WATER_MASS) return true;
-        // 水面セル: 水量に応じた液面高さ判定
-        const surfaceY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
-        return y >= surfaceY;
+        if (!this.isWater(r, c)) return false;
+
+        // 水面セルならセグメント平均水面高さで判定
+        if (this.isWaterSurface(r, c)) {
+            const surfaceY = this.getSurfaceY(r, c);
+            return y >= surfaceY;
+        }
+
+        return true;
+    }
+
+    /** セルが水面（水たまりの液面）を形成しているか */
+    isWaterSurface(r, c) {
+        if (!this.isWater(r, c)) return false;
+        // 直上が水なら水中（内部）なので水面ではない
+        if (r > 0 && this.isWater(r - 1, c)) return false;
+        // 直上が天井（岩）なら天井に張り付いた水なので水面ではない
+        if (r > 0 && this.isSolid && this.isSolid(r - 1, c)) return false;
+        // 落下中の水流（滝）の途中セルは水面を形成しない
+        if (this.isWaterfallCell(r, c)) {
+            // ただし直下が水（着水面）の場合は水面になり得る
+            if (r + 1 >= this.rows || !this.isWater(r + 1, c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 水面セル (r, c) を含む、同じ行で横方向に連続した水面セグメントを取得 */
+    getWaterSurfaceSegment(r, c) {
+        if (!this.isWaterSurface(r, c)) return null;
+        const segment = [{ r, c }];
+
+        // 左方向へ連続する水面セルを探索
+        for (let curC = c - 1; curC >= 0; curC--) {
+            if (this.isWaterSurface(r, curC)) {
+                segment.unshift({ r, c: curC });
+            } else {
+                break;
+            }
+        }
+
+        // 右方向へ連続する水面セルを探索
+        for (let curC = c + 1; curC < this.cols; curC++) {
+            if (this.isWaterSurface(r, curC)) {
+                segment.push({ r, c: curC });
+            } else {
+                break;
+            }
+        }
+
+        return segment;
+    }
+
+    /** セル (r, c) における水面の Y 座標 (px) を返す。セグメント全体の平均水位。 */
+    getSurfaceY(r, c) {
+        if (!this.isWater(r, c)) return -1;
+        if (!this.isWaterSurface(r, c)) {
+            return r * TILE_SIZE;
+        }
+
+        const segment = this.getWaterSurfaceSegment(r, c);
+        if (!segment || segment.length === 0) {
+            const mass = this.water ? this.water[r * this.cols + c] : MAX_WATER_MASS;
+            return (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
+        }
+
+        let totalRawY = 0;
+        for (const cell of segment) {
+            const mass = this.water ? this.water[cell.r * this.cols + cell.c] : MAX_WATER_MASS;
+            totalRawY += (cell.r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
+        }
+        return totalRawY / segment.length;
+    }
+
+    /** セルが落下中の滝（水流）の中にあるか */
+    isWaterfallCell(r, c) {
+        const checkWater = (row, col) => {
+            if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return false;
+            if (typeof this.isWater === 'function') return this.isWater(row, col);
+            return this.water ? this.water[row * this.cols + col] >= MIN_WATER_MASS : false;
+        };
+
+        if (!checkWater(r, c)) return false;
+        // 直下が固体なら水底なので滝ではない
+        if (r + 1 >= this.rows || (this.isSolid && this.isSolid(r + 1, c))) return false;
+        // 直下が水でなければ下へ落下中（滝）
+        if (!checkWater(r + 1, c)) return true;
+        // 直下が満水でなければ下へ落下中（滝）
+        const belowMass = this.water ? this.water[(r + 1) * this.cols + c] : 0;
+        if (belowMass < MAX_WATER_MASS) return true;
+        // 直下も満水だが、さらに下が空洞や落下中なら滝の柱の中
+        let downR = r + 1;
+        while (downR < this.rows - 1 && !(this.isSolid && this.isSolid(downR, c)) && this.water[downR * this.cols + c] >= MAX_WATER_MASS) {
+            downR++;
+        }
+        return downR < this.rows && !(this.isSolid && this.isSolid(downR, c)) && this.water[downR * this.cols + c] < MAX_WATER_MASS;
     }
 
     /** ピクセル座標が落下中の滝（水流）の中にあるか */
@@ -1242,18 +1332,10 @@ export class Map {
         if (!this.isWaterAtPixel(x, y)) return false;
         const r = Math.floor(y / TILE_SIZE);
         const c = Math.floor(x / TILE_SIZE);
-        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
-        // 直下が固体なら水底なので滝ではない
-        if (r + 1 >= this.rows || this.isSolid(r + 1, c)) return false;
-        // 直下が満水でなければ下へ落下中（滝）
-        const belowMass = this.water[(r + 1) * this.cols + c];
-        if (belowMass < MAX_WATER_MASS) return true;
-        // 直下も満水だが、さらに下が空洞や落下中なら滝の柱の中
-        let downR = r + 1;
-        while (downR < this.rows - 1 && !this.isSolid(downR, c) && this.water[downR * this.cols + c] >= MAX_WATER_MASS) {
-            downR++;
+        if (typeof this.isWaterfallCell === 'function') {
+            return this.isWaterfallCell(r, c);
         }
-        return downR < this.rows && !this.isSolid(downR, c) && this.water[downR * this.cols + c] < MAX_WATER_MASS;
+        return Map.prototype.isWaterfallCell.call(this, r, c);
     }
 
     /** 水タイルの水面の行。水でなければ -1。 */

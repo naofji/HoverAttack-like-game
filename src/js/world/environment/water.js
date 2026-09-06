@@ -91,25 +91,21 @@ export function createWaterRenderer(env) {
             if (!map.isWater(r, c)) continue;
             const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
             if (mass === 0) continue;
-            // 真上も水なら満水状態（16x16）
-            if (r > 0 && map.isWater(r - 1, c)) {
+
+            const isSurface = map.isWaterSurface ? map.isWaterSurface(r, c) : (r === 0 || !map.isWater(r - 1, c));
+
+            if (!isSurface) {
+                // 水中セルまたは天井水: タイル全体（16x16）を満水として塗る
                 cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
-                // 水面セル: 左右の水面セルと平均化して水平に塗る
-                let avgMass = mass;
-                let count = 1;
-                if (c > 0 && map.isWater(r, c - 1) && (r === 0 || !map.isWater(r - 1, c - 1))) {
-                    avgMass += map.water ? map.water[r * map.cols + (c - 1)] : MAX_WATER_MASS;
-                    count++;
+                // 水面セル: 共通の getSurfaceY(r, c) で水面高さを完全に一致させる
+                const surfaceY = map.getSurfaceY ? map.getSurfaceY(r, c) : ((r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE);
+                const bottomY = (r + 1) * TILE_SIZE;
+                const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, Math.round(surfaceY)));
+                const h = bottomY - topY;
+                if (h > 0) {
+                    cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, h);
                 }
-                if (c + 1 < map.cols && map.isWater(r, c + 1) && (r === 0 || !map.isWater(r - 1, c + 1))) {
-                    avgMass += map.water ? map.water[r * map.cols + (c + 1)] : MAX_WATER_MASS;
-                    count++;
-                }
-                const effectiveMass = avgMass / count;
-                const h = Math.round((effectiveMass / MAX_WATER_MASS) * TILE_SIZE);
-                const y = (r + 1) * TILE_SIZE - h;
-                cctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, h);
             }
         }
     };
@@ -138,11 +134,9 @@ export function createWaterRenderer(env) {
             if (this.t % 12 === 0 && map.waterSprings) {
                 for (const sp of map.waterSprings) {
                     const c = sp.c;
-                    const x = (c + 0.5) * TILE_SIZE;
-                    for (let r = sp.r + 1; r < map.rows; r++) {
-                        if (map.isSolid && map.isSolid(r, c)) break;
-                        if (map.isWater && map.isWater(r, c) && map.isWaterfallAtPixel && !map.isWaterfallAtPixel(x, (r + 0.5) * TILE_SIZE)) {
-                            this.addRipple(x, 0.4);
+                    for (let r = sp.r; r < map.rows; r++) {
+                        if (map.isWater(r, c) && (!map.isWaterfallAtPixel || !map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE))) {
+                            this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
                             break;
                         }
                     }
@@ -160,6 +154,18 @@ export function createWaterRenderer(env) {
                     const nr = r + dr;
                     if (nr >= 0 && nr < map.rows) {
                         toRepaint.add(nr * map.cols + c);
+                    }
+                }
+                // 水面セル（または直下が水面セル）なら、水面セグメント全体の横セルも再描画に追加
+                // 水位変動で水たまり全体が一斉に平らに塗り直される
+                if (map.getWaterSurfaceSegment) {
+                    const seg = map.getWaterSurfaceSegment(r, c) ||
+                                (r + 1 < map.rows ? map.getWaterSurfaceSegment(r + 1, c) : null) ||
+                                (r > 0 ? map.getWaterSurfaceSegment(r - 1, c) : null);
+                    if (seg) {
+                        for (const sc of seg) {
+                            toRepaint.add(sc.r * map.cols + sc.c);
+                        }
                     }
                 }
             }
@@ -189,49 +195,58 @@ export function createWaterRenderer(env) {
             if (sw > 0 && sh > 0) ctx.drawImage(cache, sx, sy, sw, sh, sx, sy, sw, sh);
 
             // 画面内の水面セル（連続した水ブロックの一番上の空気の直下）を収集
-            const surfaceCells = [];
             const startCol = Math.max(0, Math.floor(camX / TILE_SIZE) - 1);
             const endCol = Math.min(map.cols - 1, Math.ceil((camX + CANVAS_WIDTH) / TILE_SIZE) + 1);
             const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
             const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
 
-            for (let c = startCol; c <= endCol; c++) {
-                for (let r = startRow; r <= endRow; r++) {
-                    if (!map.isWater(r, c)) continue;
-                    // 直上が水なら水中（内部）なので水面ではない
-                    if (r > 0 && map.isWater(r - 1, c)) continue;
-                    // 直上が岩（天井）なら天井に張り付いた水なので水面ではない
-                    if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) continue;
-
-                    // 落下中の水流（滝）の途中セルは水面線を描かない（着水面のみ描く）
-                    if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
-                        if (r + 1 >= map.rows || !map.isWater(r + 1, c)) {
-                            continue;
+            const segments = [];
+            if (map.getWaterSurfaceSegment && map.getSurfaceY) {
+                const visited = new Set();
+                for (let c = startCol; c <= endCol; c++) {
+                    for (let r = startRow; r <= endRow; r++) {
+                        const key = r * map.cols + c;
+                        if (visited.has(key)) continue;
+                        if (!map.isWaterSurface(r, c)) continue;
+                        const seg = map.getWaterSurfaceSegment(r, c);
+                        if (seg) {
+                            for (const sc of seg) {
+                                visited.add(sc.r * map.cols + sc.c);
+                            }
+                            segments.push(seg);
                         }
                     }
-
-                    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-                    const rawY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
-                    surfaceCells.push({ r, c, rawY });
                 }
-            }
-
-            // 横方向に隣接する水面セルをセグメントにグループ化
-            surfaceCells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
-
-            const segments = [];
-            for (const cell of surfaceCells) {
-                let merged = false;
-                for (const seg of segments) {
-                    const last = seg[seg.length - 1];
-                    if (Math.abs(cell.r - last.r) <= 1 && cell.c === last.c + 1) {
-                        seg.push(cell);
-                        merged = true;
-                        break;
+            } else {
+                // フォールバック（Map インスタンス以外や簡易モック）
+                const surfaceCells = [];
+                for (let c = startCol; c <= endCol; c++) {
+                    for (let r = startRow; r <= endRow; r++) {
+                        if (!map.isWater(r, c)) continue;
+                        if (r > 0 && map.isWater(r - 1, c)) continue;
+                        if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) continue;
+                        if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
+                            if (r + 1 >= map.rows || !map.isWater(r + 1, c)) continue;
+                        }
+                        const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+                        const rawY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
+                        surfaceCells.push({ r, c, rawY });
                     }
                 }
-                if (!merged) {
-                    segments.push([cell]);
+                surfaceCells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
+                for (const cell of surfaceCells) {
+                    let merged = false;
+                    for (const seg of segments) {
+                        const last = seg[seg.length - 1];
+                        if (Math.abs(cell.r - last.r) <= 1 && cell.c === last.c + 1) {
+                            seg.push(cell);
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if (!merged) {
+                        segments.push([cell]);
+                    }
                 }
             }
 
@@ -241,7 +256,9 @@ export function createWaterRenderer(env) {
             ctx.beginPath();
 
             for (const seg of segments) {
-                const avgY = seg.reduce((sum, item) => sum + item.rawY, 0) / seg.length;
+                const avgY = map.getSurfaceY ?
+                    map.getSurfaceY(seg[0].r, seg[0].c) :
+                    (seg.reduce((sum, item) => sum + (item.rawY ?? 0), 0) / seg.length);
                 const firstCol = seg[0].c;
                 const lastCol = seg[seg.length - 1].c;
                 const x0 = firstCol * TILE_SIZE;
