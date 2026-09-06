@@ -220,3 +220,46 @@ test('水を動かしたあとも、変化した列だけ作り直せば参照�
         }
     }
 });
+
+test('湖底のブロックを壊しても、湖の内部に滝（縦縞）が現れない', () => {
+    // 以前は滝判定が「自分より下のどこかに空気がある」だったため、湖底に
+    // 穴が開いた瞬間、水が1ドットも動いていないのに、その列が水面まで
+    // 全部「滝」と判定されて 8px の細帯で描かれていた（湖を貫く縦縞）。
+    // 穴が埋まるにつれ空気の位置が下がるので、縞が波打って水面へ移動して
+    // いくように見えた。水面もそこで途切れてセグメントが2つに割れていた。
+    const rows = 12, cols = 14;
+    const solid = new Uint8Array(rows * cols);
+    for (let c = 0; c < cols; c++) { solid[c] = 1; solid[(rows - 1) * cols + c] = 1; }
+    for (let r = 0; r < rows; r++) { solid[r * cols] = 1; solid[r * cols + cols - 1] = 1; }
+    for (let c = 1; c < cols - 1; c++) solid[7 * cols + c] = 1;  // 湖底
+
+    const water = new Uint8Array(rows * cols);
+    for (let r = 2; r <= 6; r++) {
+        for (let c = 1; c < cols - 1; c++) water[r * cols + c] = MAX_WATER_MASS;
+    }
+    const isSolid = (r, c) =>
+        (r < 0 || r >= rows || c < 0 || c >= cols) ? true : solid[r * cols + c] === 1;
+
+    const kind = new Uint8Array(rows * cols);
+    const surfaceY = new Int16Array(rows * cols).fill(-1);
+    const all = [...Array(cols).keys()];
+    rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols: all });
+
+    // 湖底 (7, 6) を破壊
+    solid[7 * cols + 6] = 0;
+    rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols: all });
+
+    for (let r = 2; r <= 6; r++) {
+        for (let c = 1; c < cols - 1; c++) {
+            assert.notEqual(kind[r * cols + c], WATER_FALL,
+                `(${r},${c}) が滝と判定された（湖を貫く縦縞の再発）`);
+        }
+    }
+
+    // 水面が縦縞で分断されていないこと＝行2 の液面が全列で同じ値
+    const y = surfaceY[2 * cols + 1];
+    for (let c = 1; c < cols - 1; c++) {
+        assert.equal(surfaceY[2 * cols + c], y,
+            `水面が (2,${c}) で分断され、液面がずれている`);
+    }
+});
