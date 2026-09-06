@@ -137,3 +137,31 @@ test('引数の配列も中の節も書き換えない', () => {
 test('空の配列は空のまま', () => {
   assert.deepEqual(ageSegments([]), []);
 });
+
+test('水面で vy が反転して跳ね返り、waterBounced が true になる', () => {
+  // y < 32 は空気、y >= 32 は水
+  const map = {
+    isSolidAtPixel: () => false,
+    isWaterAtPixel: (x, y) => y >= 32,
+  };
+  // x=40, y=28 から右下 (vx=4, vy=4) へ向かうと (44, 32) は水中
+  const r = stepBeam({ x: 40, y: 28, vx: 4, vy: 4 }, map);
+  assert.equal(r.bounced, true, '水面で跳ね返っていない');
+  assert.equal(r.waterBounced, true, 'waterBounced が true になっていない');
+  assert.equal(r.vx, 4, 'vx が変化している');
+  assert.equal(r.vy, -4, 'vy が反転していない');
+  assert.equal(r.x, 44, '反射後の x が不正');
+  assert.equal(r.y, 24, '反射後の y が不正（元位置 28 + 新速度 -4 = 24）');
+  assert.equal(map.isWaterAtPixel(r.x, r.y), false, '反射後が水中にめり込んでいる');
+});
+
+test('通常の固体壁での反射では waterBounced は false になる', () => {
+  const map = {
+    isSolidAtPixel: (x, y) => y >= 32,
+    isWaterAtPixel: () => false,
+  };
+  const r = stepBeam({ x: 40, y: 28, vx: 4, vy: 4 }, map);
+  assert.equal(r.bounced, true);
+  assert.equal(r.waterBounced, false);
+});
+

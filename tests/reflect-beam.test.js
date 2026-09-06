@@ -235,3 +235,35 @@ test('マップ外に出ると消える', () => {
   assert.equal(beam.alive, false, 'マップ外に出ても消えていない');
   assert.ok(beam.y > map.height, `マップ外判定より先に別の理由で消えている: y=${beam.y}`);
 });
+
+test('水面に当たると跳ね返り、波紋 (addRipple) が発生する', () => {
+  const ripples = [];
+  const map = {
+    isSolidAtPixel: () => false,
+    isWaterAtPixel: (x, y) => y >= 64,
+  };
+  const game = {
+    map,
+    particles: [],
+    env: {
+      renderer: {
+        addRipple: (x, strength) => ripples.push({ x, strength }),
+      },
+    },
+  };
+
+  // y=50 から斜め下 (角度 PI/4) に発射
+  const beam = new ReflectBeam(game, 40, 50, Math.PI / 4);
+  for (let i = 0; i < 10; i++) {
+    beam.update();
+  }
+
+  assert.ok(beam.bounces > 0, '水面で反射していない');
+  assert.ok(beam.vy < 0, `水面反射後に上向きになっていない: vy=${beam.vy}`);
+  assert.ok(beam.y < 64, `ビームが水中に進入している: y=${beam.y}`);
+  assert.ok(ripples.length > 0, '波紋 (addRipple) が発生していない');
+  assert.ok(ripples[0].x > 40 && ripples[0].x < 64, `波紋の x 座標が水面接触点でない: ${ripples[0].x}`);
+  assert.equal(ripples[0].strength, 1.5, '波紋の強度が設計値と異なる');
+});
+
+

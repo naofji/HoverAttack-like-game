@@ -84,6 +84,12 @@ export class ReflectBeam {
             this.segStart = { x: this.x, y: this.y };
             this.segFrames = 0;
             this.bounces++;
+            if (next.waterBounced) {
+                const r = this.game.env && this.game.env.renderer;
+                if (r && r.addRipple) {
+                    r.addRipple(this.x, 1.5);
+                }
+            }
         }
 
         this.x = next.x;

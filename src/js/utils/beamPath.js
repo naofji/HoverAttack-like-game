@@ -32,7 +32,7 @@ export function ageSegments(segments) {
 }
 
 /**
- * ビームを1フレーム進める。地形にめり込むなら跳ね返す。
+ * ビームを1フレーム進める。地形または水面にめり込むなら跳ね返す。
  *
  * 反射面の法線は「縦か横か」の2通りしかない（地形が軸並行のタイルだけなので）。
  * そこで x だけ動かした場合と y だけ動かした場合をそれぞれ試し、どちらが
@@ -41,38 +41,59 @@ export function ageSegments(segments) {
  * （タイル16px に対して 3.2倍の余裕があるので 1フレームで壁を飛び越すことはない。
  * 速度を上げるときはここの値も見直すこと）
  *
+ * 光（レーザー）は水面でも反射するため、固体地形（isSolidAtPixel）に加えて
+ * 水面境界（isWaterAtPixel の境）も反射面として扱う。水面境界で反射した場合は
+ * 戻り値に waterBounced: true を付与する。
+ *
  * 跳ね返るときは**元の位置から新しい速度で**動かす。こうすると壁の中に
  * 入り込まないうえ、折れ点が「元の位置」になる（呼び出し側はそこを経路に
  * 積めばよい）。
  *
  * @param {{x:number,y:number,vx:number,vy:number}} beam 書き換えない
- * @param {{isSolidAtPixel:function}} map
- * @returns {{x:number,y:number,vx:number,vy:number,bounced:boolean}}
+ * @param {{isSolidAtPixel:function, isWaterAtPixel?:function}} map
+ * @returns {{x:number,y:number,vx:number,vy:number,bounced:boolean,waterBounced:boolean}}
  */
 export function stepBeam(beam, map) {
     const { x, y, vx, vy } = beam;
     const nx = x + vx;
     const ny = y + vy;
 
-    if (!map.isSolidAtPixel(nx, ny)) {
-        return { x: nx, y: ny, vx, vy, bounced: false };
+    const isWater = (px, py) => (map.isWaterAtPixel ? map.isWaterAtPixel(px, py) : false);
+    const currentWater = isWater(x, y);
+
+    const isBlocked = (px, py) => {
+        if (map.isSolidAtPixel(px, py)) return true;
+        if (map.isWaterAtPixel && (isWater(px, py) !== currentWater)) return true;
+        return false;
+    };
+
+    if (!isBlocked(nx, ny)) {
+        return { x: nx, y: ny, vx, vy, bounced: false, waterBounced: false };
     }
 
-    const hitX = map.isSolidAtPixel(nx, y);
-    const hitY = map.isSolidAtPixel(x, ny);
+    const hitX = isBlocked(nx, y);
+    const hitY = isBlocked(x, ny);
 
     let rvx = hitX ? -vx : vx;
     let rvy = hitY ? -vy : vy;
     // どちらの軸も単独ではめり込まない＝角へ斜めから入った。両方を反転する
     if (!hitX && !hitY) { rvx = -vx; rvy = -vy; }
 
+    const waterBounced = Boolean(
+        map.isWaterAtPixel && (
+            (hitY && !map.isSolidAtPixel(x, ny) && isWater(x, ny) !== currentWater) ||
+            (hitX && !map.isSolidAtPixel(nx, y) && isWater(nx, y) !== currentWater) ||
+            (!hitX && !hitY && !map.isSolidAtPixel(nx, ny) && isWater(nx, ny) !== currentWater)
+        )
+    );
+
     const bx = x + rvx;
     const by = y + rvy;
     // 反転しても抜けられない（隙間に挟まった）ときは動かさない。速度は反転
     // したままなので次のフレームで反対側へ抜ける。抜けられないまま回っても、
     // 反射回数と ticks（寿命）の上限がいずれ尽きて消える
-    if (map.isSolidAtPixel(bx, by)) {
-        return { x, y, vx: rvx, vy: rvy, bounced: true };
+    if (isBlocked(bx, by)) {
+        return { x, y, vx: rvx, vy: rvy, bounced: true, waterBounced };
     }
-    return { x: bx, y: by, vx: rvx, vy: rvy, bounced: true };
+    return { x: bx, y: by, vx: rvx, vy: rvy, bounced: true, waterBounced };
 }
