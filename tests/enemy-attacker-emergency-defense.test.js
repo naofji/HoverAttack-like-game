@@ -5,6 +5,7 @@ import {
   EMERGENCY_DEFENSE_BASE_RADIUS,
   EMERGENCY_DEFENSE_SIGHT_RANGE
 } from '../src/js/utils/Constants.js';
+import { spawnStateRng } from '../src/js/utils/spawnState.js';
 
 // Trivial map: nothing is solid, so units float freely (fine for state-machine tests).
 const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
@@ -33,6 +34,9 @@ function makeAttacker(x, y, config = makeConfig(), game = {}) {
   a.maxSpeed = config.speed;
   a.jumpForce = config.jumpForce;
   a.score = config.score;
+  // 本物のコンストラクタが湧いた場所から決めるもの（utils/spawnState.js）。
+  // ここは constructor を走らせない偽物なので、同じ値を自分で作って揃える
+  a.emergencyAngle = spawnStateRng(a.game, x, y).next() * Math.PI * 2;
   a.facingRight = true;
   a.patrolDir = 1;
   a.fireTimer = 0;
@@ -104,9 +108,14 @@ test('re-activating does not clobber the saved spawn home', () => {
 });
 
 test('two attackers around the same base get spread-out (distinct) home points', () => {
+  // 散る角度は**湧いた場所**から決まるようになった（utils/spawnState.js）。
+  // 走るたびに総攻撃の絵が変わらないようにするためで、その代わり
+  // **まったく同じ座標に湧いた2体は同じ角度になる**。これは仕様どおり。
+  // 実際の湧きは別々のタイルなので（下の「湧き位置は重複しない」で担保）、
+  // ここも別々の位置で見る
   const base = makeBase(600, 300);
   const a1 = makeAttacker(100, 300);
-  const a2 = makeAttacker(100, 300);
+  const a2 = makeAttacker(132, 300);
   a1.setEmergencyDefense(true, base);
   a2.setEmergencyDefense(true, base);
   const same = a1.homeX === a2.homeX && a1.homeY === a2.homeY;

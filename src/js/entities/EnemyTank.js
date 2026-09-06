@@ -22,6 +22,8 @@ import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
 import { applyDamage } from '../utils/damage.js';
 
+import { spawnStateRng } from '../utils/spawnState.js';
+
 export class EnemyTank {
     constructor(game, x, y) {
         this.game = game;
@@ -42,10 +44,14 @@ export class EnemyTank {
         this.hp = ENEMY_TANK_HP;
         this.maxHp = this.hp;
         this.score = ENEMY_TANK_SCORE;
-        this.facingRight = Math.random() < 0.5;
+        // 初期状態は**湧いた場所**から決める。Math.random() だと同じ週の同じ面でも
+        // 走るたびに向きと撃ち出しがずれ、タイムアタックの記録が比べられない
+        // （実機の報告。utils/spawnState.js のコメントに経緯）
+        const spawnRng = spawnStateRng(game, x, y);
+        this.facingRight = spawnRng.next() < 0.5;
 
         // AI state
-        this.fireTimer = Math.floor(Math.random() * ENEMY_TANK_FIRE_INTERVAL);
+        this.fireTimer = Math.floor(spawnRng.next() * ENEMY_TANK_FIRE_INTERVAL);
         this.patrolDir = this.facingRight ? 1 : -1;
 
         // Hover engine exhaust animation

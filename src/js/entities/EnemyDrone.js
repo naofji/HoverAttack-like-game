@@ -26,6 +26,8 @@ import { audioManager } from '../audio/AudioManager.js';
 import { playDestruction } from './destruction.js';
 import { applyDamage } from '../utils/damage.js';
 
+import { spawnStateRng } from '../utils/spawnState.js';
+
 export class EnemyDrone {
     constructor(game, x, y) {
         this.game = game;
@@ -42,11 +44,13 @@ export class EnemyDrone {
         this.maxHp = this.hp;
         this.alive = true;
 
-        this.fireTimer = Math.floor(Math.random() * ENEMY_DRONE_FIRE_INTERVAL);
+        // 初期状態は**湧いた場所**から決める（utils/spawnState.js のコメントに経緯）
+        const spawnRng = spawnStateRng(game, x, y);
+        this.fireTimer = Math.floor(spawnRng.next() * ENEMY_DRONE_FIRE_INTERVAL);
 
         // Erratic movement states: 'patrol', 'dash', 'hover', 'attack'
         this.state = 'patrol';
-        this.patrolDir = Math.random() < 0.5 ? 1 : -1;
+        this.patrolDir = spawnRng.next() < 0.5 ? 1 : -1;
 
         this.stateTimer = 0;
         this.targetAngle = 0;

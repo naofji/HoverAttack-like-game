@@ -44,17 +44,6 @@ function input(frame) {
 const CHECKPOINTS = [1, 50, 100, 199, 230, 260, 300, 400, 500, 600, 800, 999];
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
-// EnemyTank のコンストラクタが facingRight / fireTimer の初期化に Math.random() を
-// 使っており、これが軌跡（巡回方向）を左右してしまう。再現性を保つため、
-// 生成中だけ Math.random を小さな LCG に差し替える（挙動そのものは変えない）。
-function makeSeededRandom(seed) {
-    let s = seed >>> 0;
-    return () => {
-        s = (s * 1664525 + 1013904223) >>> 0;
-        return s / 4294967296;
-    };
-}
-
 export function record() {
     const game = makeGame(makeMap(rows()));
     // Player.update() がカメラシェイクやキャンバスサイズ参照を行う箇所があるため、
@@ -69,14 +58,13 @@ export function record() {
     const player = new Player(game, 5 * TILE_SIZE, 20 * TILE_SIZE - 24);
     game.player = player;
 
-    const originalRandom = Math.random;
-    Math.random = makeSeededRandom(1);
-    let tank;
-    try {
-        tank = new EnemyTank(game, 20 * TILE_SIZE, 20 * TILE_SIZE - 16);
-    } finally {
-        Math.random = originalRandom;
-    }
+    const tank = new EnemyTank(game, 20 * TILE_SIZE, 20 * TILE_SIZE - 16);
+    // 巡回の向きを**ここで固定する**。以前は Math.random を LCG に差し替えて
+    // 再現していたが、初期状態が spawnStateRng（湧いた場所から決める）由来に
+    // なったので効かなくなった。測りたいのは物理であって初期化の乱数ではないので、
+    // 向きを直接指定するほうが、今後どう種を作り変えても影響を受けない
+    tank.facingRight = true;
+    tank.patrolDir = 1;
     tank.fireTimer = 1e9; // 撃たない（EnemyTank は fireInterval ではなく fireTimer で管理）
     game.enemies.push(tank);
 

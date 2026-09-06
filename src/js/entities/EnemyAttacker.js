@@ -14,6 +14,7 @@ import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
 import { OverdriveKit } from './OverdriveKit.js';
 import { decideAttackerDrop } from '../utils/drops.js';
+import { spawnStateRng } from '../utils/spawnState.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
 import { tickRecoil } from '../utils/Recoil.js';
 import { playDestruction } from './destruction.js';
@@ -64,9 +65,12 @@ export class EnemyAttacker {
         this.score = config.score;
 
         // AI state
-        this.facingRight = Math.random() < 0.5;
+        // 初期状態は**湧いた場所**から決める（utils/spawnState.js のコメントに経緯）。
+        // ドロップ（decideAttackerDrop）が既に同じ考え方で位置から引いている
+        const spawnRng = spawnStateRng(game, x, y);
+        this.facingRight = spawnRng.next() < 0.5;
         this.patrolDir = this.facingRight ? 1 : -1;
-        this.fireTimer = Math.floor(Math.random() * config.fireInterval);
+        this.fireTimer = Math.floor(spawnRng.next() * config.fireInterval);
         this.aiState = 'patrol'; // 'patrol', 'chase' or 'return'
         this.jumpCooldown = 0;
 
@@ -109,7 +113,9 @@ export class EnemyAttacker {
 
         // Hover fuel support (used if movementType allows hovering)
         this.hoverFuel = HOVER_MAX_FUEL;
-        this.frameCounter = Math.floor(Math.random() * 100);
+        this.frameCounter = Math.floor(spawnRng.next() * 100);
+        // 緊急防衛で基地の周りに散る角度も、位置から決めておく（下の _enterEmergency）
+        this.emergencyAngle = spawnRng.next() * Math.PI * 2;
     }
 
     /**
@@ -133,8 +139,9 @@ export class EnemyAttacker {
             this.emergencyTargetBase = targetBase;
 
             // Per-unit angle so multiple defenders spread around the base instead of
-            // stacking on one pixel. Derived once here from Math.random().
-            const angle = Math.random() * Math.PI * 2;
+            // stacking on one pixel. **スポーン時に位置から決めてある**（毎回変わると
+            // 総攻撃の絵が走るたびに違う）
+            const angle = this.emergencyAngle;
             const cx = targetBase.x + targetBase.width / 2;
             const cy = targetBase.y + targetBase.height / 2;
             this.homeX = cx + Math.cos(angle) * EMERGENCY_DEFENSE_BASE_RADIUS;
