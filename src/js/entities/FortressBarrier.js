@@ -189,6 +189,20 @@ export class FortressBarrier {
             this._pushBack(player);
         }
 
+        // 2b. キャリア（母艦）: 自機と同様にダメージ＋来た方向へ押し戻す。
+        //     自機がドッキングしたまま母艦ごと強行突破するのを防ぐ。
+        const carrier = game.carrier;
+        if (carrier && carrier.alive && overlaps(carrier, this.fieldRect)) {
+            recordHit(carrier, this.fieldX + this.fieldW / 2, carrier.y);
+            carrier.takeDamage(BARRIER_TOUCH_DAMAGE);
+            this._pushBack(carrier);
+            // 自機がドッキング中なら、母艦の位置同期に合わせて自機座標も即座に外へ戻す
+            if (player && player.docked) {
+                player.x = carrier.x + carrier.width / 2 - player.width / 2;
+                player.y = carrier.y - player.height;
+            }
+        }
+
         // 3. 敵: **壁と同じ扱いにして向きを変えさせる**（実機の案）。ダメージは
         //    与えない — 守備隊が自分のバリアで自滅すると「開けた瞬間に出てくる」
         //    という狙いが成立しなくなる。

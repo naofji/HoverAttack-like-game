@@ -32,6 +32,14 @@ function makePlayer(x, y) {
   };
 }
 
+function makeCarrier(x, y) {
+  return {
+    x, y, width: 64, height: 24, alive: true,
+    vx: 0, vy: 0, hp: 100,
+    takeDamage(n) { this.hp -= n; },
+  };
+}
+
 test('バリアは上下2基のユニットを両方壊すまで消えない', () => {
   const game = makeGame();
   const b = makeBarrier(game);
@@ -80,6 +88,33 @@ test('消えたバリアは自機に何もしない', () => {
   b.update();
   assert.equal(player.hp, 100, '消えたのにダメージを受けた');
   assert.equal(player.vx, 0);
+});
+
+test('キャリア（母艦）が触れるとダメージを受け、来た方向へ押し戻される', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  // バリアの左から突っ込む（右端がバリアにかかる位置）
+  const carrier = makeCarrier(b.fieldX - 60, (4 + 1) * TILE_SIZE);
+  carrier.vx = 2;
+  game.carrier = carrier;
+  b.update();
+  assert.ok(carrier.hp < 100, 'キャリアがダメージを受けていない');
+  assert.ok(carrier.vx < 0, `キャリアが左へ押し戻されていない (vx=${carrier.vx})`);
+  assert.ok(carrier.x + carrier.width <= b.fieldX, 'キャリアがバリアの外に押し戻されていない');
+});
+
+test('ドッキング中の自機もキャリアと一緒に押し戻され、バリアを通過できない', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const carrier = makeCarrier(b.fieldX - 60, (4 + 1) * TILE_SIZE);
+  carrier.vx = 2;
+  const player = makePlayer(carrier.x + carrier.width / 2 - 8, carrier.y - 24);
+  player.docked = true;
+  game.carrier = carrier;
+  game.player = player;
+  b.update();
+  assert.ok(carrier.x + carrier.width <= b.fieldX, 'キャリアが押し戻されていない');
+  assert.ok(player.x + player.width <= b.fieldX, 'ドッキング中の自機が押し戻されていない');
 });
 
 test('弾もグレネードも吸収される（自機の弾も敵の弾も）', () => {
