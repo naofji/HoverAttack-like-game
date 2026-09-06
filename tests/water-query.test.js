@@ -132,3 +132,91 @@ test('滝のセルと水なしのセルの surfaceY は -1', () => {
     assert.equal(m.surfaceY[1 * m.cols + 3], -1, '滝は液面を持たない');
     assert.equal(m.surfaceY[1 * m.cols + 1], -1, '水なしは液面を持たない');
 });
+
+// ------------------------------------------------------------------
+// 参照実装との突き合わせ
+//
+// 現行（キャッシュ導入前）の遅い実装を tests/helpers/water-reference.js に
+// 写してあり、それを「答え」としてキャッシュと全セル比べる。期待値を実装から
+// 導かないためにファイルを分けている。
+// ------------------------------------------------------------------
+
+import { referenceKindAt, referenceSurfaceY } from './helpers/water-reference.js';
+import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
+
+/** 種を決めた線形合同法。node --test に乱数を持ち込まないため */
+function makeRng(seed) {
+    let s = seed >>> 0;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+function randomWorld(seed) {
+    const rng = makeRng(seed);
+    const rows = 20, cols = 24;
+    const solid = new Uint8Array(rows * cols);
+    const water = new Uint8Array(rows * cols);
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const edge = (r === 0 || r === rows - 1 || c === 0 || c === cols - 1);
+            if (edge || rng() < 0.22) solid[r * cols + c] = 1;
+        }
+    }
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (solid[r * cols + c]) continue;
+            if (rng() < 0.45) water[r * cols + c] = 1 + Math.floor(rng() * MAX_WATER_MASS);
+        }
+    }
+    const isSolid = (r, c) =>
+        (r < 0 || r >= rows || c < 0 || c >= cols) ? true : solid[r * cols + c] === 1;
+    return { rows, cols, water, isSolid };
+}
+
+function buildCache(ctx) {
+    const kind = new Uint8Array(ctx.rows * ctx.cols);
+    const surfaceY = new Int16Array(ctx.rows * ctx.cols).fill(-1);
+    rebuildWaterCache({ ...ctx, kind, surfaceY, dirtyCols: [...Array(ctx.cols).keys()] });
+    return { kind, surfaceY };
+}
+
+function assertMatchesReference(ctx, cache, label) {
+    for (let r = 0; r < ctx.rows; r++) {
+        for (let c = 0; c < ctx.cols; c++) {
+            const k = r * ctx.cols + c;
+            assert.equal(cache.kind[k], referenceKindAt(ctx, r, c),
+                `${label}: kind が (${r},${c}) で食い違う`);
+            assert.equal(cache.surfaceY[k], referenceSurfaceY(ctx, r, c),
+                `${label}: surfaceY が (${r},${c}) で食い違う`);
+        }
+    }
+}
+
+test('ランダムな地形と水量 40通りで、キャッシュが参照実装と全セル一致する', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+        const ctx = randomWorld(seed);
+        assertMatchesReference(ctx, buildCache(ctx), `seed ${seed}`);
+    }
+});
+
+test('水を動かしたあとも、変化した列だけ作り直せば参照実装と一致する', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+        const ctx = randomWorld(seed);
+        const cache = buildCache(ctx);
+
+        let active = new Set();
+        for (let i = 0; i < ctx.rows * ctx.cols; i++) if (ctx.water[i] > 0) active.add(i);
+
+        for (let step = 0; step < 30 && active.size; step++) {
+            const res = stepWaterSimulation({
+                water: ctx.water, rows: ctx.rows, cols: ctx.cols,
+                isSolid: ctx.isSolid, activeCells: active, doFall: true,
+            });
+            active = res.nextActiveCells;
+            const dirty = new Set(res.changedCells.map(([, c]) => c));
+            rebuildWaterCache({
+                ...ctx, kind: cache.kind, surfaceY: cache.surfaceY, dirtyCols: dirty,
+            });
+            assertMatchesReference(ctx, cache, `seed ${seed} step ${step}`);
+        }
+    }
+});

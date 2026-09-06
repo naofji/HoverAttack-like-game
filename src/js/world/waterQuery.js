@@ -124,17 +124,32 @@ export function levelSurfaceSegment({ water, kind, surfaceY, cols, r, c }) {
  * 既に正しい（水量が変わっていない）ので、そのまま伸ばして構わない。
  */
 export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols }) {
-    const surfaceCells = [];
+    // まず kind を決め直す。ここは水量が変わった列だけでよい
     for (const c of dirtyCols) {
-        for (const r of classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c })) {
-            surfaceCells.push([r, c]);
-        }
+        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c });
     }
-    // 同じセグメントを何度も平均し直さないよう、片付いた列を覚えておく
+
+    // 液面の平均を取り直す種を集める。dirty 列そのものに加えて**両隣**も見るのは、
+    // セグメントが分裂したときを拾うため。ある列の水面が水面でなくなると、
+    // そこを境に左右へ分かれた2本のセグメントは平均が変わるのに、その列には
+    // もう水面セルが無いので、dirty 列だけを種にすると再平均が一度も走らない
+    // （ランダムな水を30ステップ動かす突き合わせで実際に 257 vs 256 のずれが出た）。
+    // 分裂は変化した列の場所でしか起きないので、1つ隣まで見れば足りる。
+    const seedCols = new Set();
+    for (const c of dirtyCols) {
+        if (c - 1 >= 0) seedCols.add(c - 1);
+        seedCols.add(c);
+        if (c + 1 < cols) seedCols.add(c + 1);
+    }
+
+    // 同じセグメントを何度も平均し直さないよう、片付いたセルを覚えておく
     const done = new Set();
-    for (const [r, c] of surfaceCells) {
-        if (done.has(r * cols + c)) continue;
-        const [c0, c1] = levelSurfaceSegment({ water, kind, surfaceY, cols, r, c });
-        for (let sc = c0; sc <= c1; sc++) done.add(r * cols + sc);
+    for (const c of seedCols) {
+        for (let r = 0; r < rows; r++) {
+            const k = r * cols + c;
+            if (kind[k] !== WATER_SURFACE || done.has(k)) continue;
+            const [c0, c1] = levelSurfaceSegment({ water, kind, surfaceY, cols, r, c });
+            for (let sc = c0; sc <= c1; sc++) done.add(r * cols + sc);
+        }
     }
 }
