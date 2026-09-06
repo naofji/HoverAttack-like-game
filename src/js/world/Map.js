@@ -39,6 +39,9 @@ import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, generateWaterSprings } from './waterPools.js';
 import { stepWaterSimulation } from './waterSimulation.js';
+import {
+    rebuildWaterCache, WATER_NONE, WATER_SURFACE, WATER_FALL,
+} from './waterQuery.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
 import { stairDirection } from '../utils/slope.js';
@@ -131,7 +134,9 @@ export class Map {
         this.enemyBaseSpawn = null;
 
         this.water = null;          // Uint8Array(rows*cols)。0..MAX_WATER_MASS。水の無い面は null のまま
-        this.waterSurface = null;   // Int16Array。水タイルの水面の行。それ以外 -1
+        this.waterKind = null;      // Uint8Array。0=水なし 1=水中 2=水面 3=滝。water[] から導く要約
+        this.waterSurfaceY = null;  // Int16Array。水面セルの液面 Y(px)。それ以外 -1
+        this.dirtyWaterCols = new Set(); // 作り直しが要る列。問い合わせの手前でまとめて処理する
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
         this.activeWaterCells = new Set(); // 現在水流シミュレーションがアクティブなセル
         this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
@@ -383,12 +388,13 @@ export class Map {
             maxTiles: WATER_POOL_MAX_TILES,
         });
         this.water = new Uint8Array(this.rows * this.cols);
-        this.waterSurface = new Int16Array(this.rows * this.cols).fill(-1);
+        this.waterKind = new Uint8Array(this.rows * this.cols);
+        this.waterSurfaceY = new Int16Array(this.rows * this.cols).fill(-1);
+        this.dirtyWaterCols = new Set();
         this.activeWaterCells = new Set();
         for (const pool of pools) {
             for (const [r, c] of pool.cells) {
                 this.water[r * this.cols + c] = MAX_WATER_MASS;
-                this.waterSurface[r * this.cols + c] = pool.surfaceRow;
                 this.waterCells.push([r, c]);
             }
         }
@@ -397,6 +403,10 @@ export class Map {
             count: WATER_SPRING_COUNT, maxRowRatio: WATER_SPRING_MAX_ROW_RATIO,
         });
         this.waterSprings = springs.map((s) => ({ r: s.r, c: s.c, timer: 0 }));
+
+        // 生成直後は全列を作り直して初期状態を揃える。実測 235.7µs（この1回だけ）
+        for (let c = 0; c < this.cols; c++) this.dirtyWaterCols.add(c);
+        this._rebuildWaterCacheIfDirty();
     }
 
     _generatePlatforms() {
@@ -1008,6 +1018,13 @@ export class Map {
                         }
                     }
                 }
+                // 地形が変わると水量が変わらなくても種別が変わる（直下が岩でなくなる、
+                // 天井が抜けて水面になる）ので、この列は必ず作り直す。onWaterChanged
+                // は水量が動いたときしか呼ばれないので、そちら任せにはできない
+                for (let dc = -1; dc <= 1; dc++) {
+                    const nc = c + dc;
+                    if (nc >= 0 && nc < this.cols) this.dirtyWaterCols.add(nc);
+                }
             }
             this.invalidateTileRegion(r, c);
             const env = this.game && this.game.env;
@@ -1080,10 +1097,39 @@ export class Map {
         return destroyed;
     }
 
-    /** 流入で水が増えたとき。描画キャッシュ（環境側）に伝える。 */
+    /** 流入で水が増えたとき。派生キャッシュを dirty にし、描画キャッシュ（環境側）に伝える。 */
     onWaterChanged(cells) {
+        this._markWaterDirty(cells);
         const env = this.game && this.game.env;
         if (env && env.renderer && env.renderer.invalidate) env.renderer.invalidate(cells);
+    }
+
+    /** 変化したセルの「列」を覚えておく。作り直しは列単位で行う */
+    _markWaterDirty(cells) {
+        if (!this.water) return;
+        for (const [, c] of cells) this.dirtyWaterCols.add(c);
+    }
+
+    /**
+     * dirty な列の waterKind / waterSurfaceY を作り直す。
+     *
+     * update() の末尾ではなく問い合わせの手前で呼ぶのは、ブロック破壊が
+     * update() の外（衝突処理の中）でも起きるため。Set.size の判定は
+     * 実質ゼロコストなので、呼ばれる順序に関係なく正しくなるほうを取った。
+     */
+    _rebuildWaterCacheIfDirty() {
+        if (!this.water || this.dirtyWaterCols.size === 0) return;
+        if (!this._waterIsSolid) this._waterIsSolid = (r, c) => this.isSolid(r, c);
+        rebuildWaterCache({
+            water: this.water,
+            kind: this.waterKind,
+            surfaceY: this.waterSurfaceY,
+            rows: this.rows,
+            cols: this.cols,
+            isSolid: this._waterIsSolid,
+            dirtyCols: this.dirtyWaterCols,
+        });
+        this.dirtyWaterCols.clear();
     }
 
     // ------------------------------------------
@@ -1228,135 +1274,56 @@ export class Map {
         return this.water[r * this.cols + c] >= MIN_WATER_MASS;
     }
 
+    /** セルが水面（水たまりの液面）を形成しているか */
+    isWaterSurface(r, c) {
+        if (!this.waterKind) return false;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        this._rebuildWaterCacheIfDirty();
+        return this.waterKind[r * this.cols + c] === WATER_SURFACE;
+    }
+
+    /** セルが落下中の滝（水流）の中にあるか */
+    isWaterfallCell(r, c) {
+        if (!this.waterKind) return false;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        this._rebuildWaterCacheIfDirty();
+        return this.waterKind[r * this.cols + c] === WATER_FALL;
+    }
+
+    /**
+     * セル (r, c) における水面の Y 座標 (px)。セグメント全体の平均。
+     * 水面セルでなければタイルの上辺を返す（旧実装と同じ）。
+     */
+    getSurfaceY(r, c) {
+        if (!this.isWater(r, c)) return -1;
+        this._rebuildWaterCacheIfDirty();
+        const k = r * this.cols + c;
+        if (this.waterKind[k] !== WATER_SURFACE) return r * TILE_SIZE;
+        return this.waterSurfaceY[k];
+    }
+
     isWaterAtPixel(x, y) {
         if (!this.water) return false;
         const r = Math.floor(y / TILE_SIZE);
         const c = Math.floor(x / TILE_SIZE);
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
-        if (!this.isWater(r, c)) return false;
-
-        // 水面セルならセグメント平均水面高さで判定
-        if (this.isWaterSurface(r, c)) {
-            const surfaceY = this.getSurfaceY(r, c);
-            return y >= surfaceY;
-        }
-
-        return true;
-    }
-
-    /** セルが水面（水たまりの液面）を形成しているか */
-    isWaterSurface(r, c) {
-        if (!this.isWater(r, c)) return false;
-        // 落下中の水流（滝）は決して液面（水面）を形成しない
-        if (this.isWaterfallCell(r, c)) return false;
-        // 直上が通常の水（落下水流・滝ではない水）なら水中（内部）なので水面ではない
-        if (r > 0 && this.isWater(r - 1, c) && !this.isWaterfallCell(r - 1, c)) return false;
-        // 直上が天井（岩）なら天井に張り付いた水なので水面ではない
-        if (r > 0 && this.isSolid && this.isSolid(r - 1, c)) return false;
-        return true;
-    }
-
-    /** 水面セル (r, c) を含む、同じ行で横方向に連続した水面セグメントを取得 */
-    getWaterSurfaceSegment(r, c) {
-        if (!this.isWaterSurface(r, c)) return null;
-        const segment = [{ r, c }];
-
-        // 左方向へ連続する水面セルを探索
-        for (let curC = c - 1; curC >= 0; curC--) {
-            if (this.isWaterSurface(r, curC)) {
-                segment.unshift({ r, c: curC });
-            } else {
-                break;
-            }
-        }
-
-        // 右方向へ連続する水面セルを探索
-        for (let curC = c + 1; curC < this.cols; curC++) {
-            if (this.isWaterSurface(r, curC)) {
-                segment.push({ r, c: curC });
-            } else {
-                break;
-            }
-        }
-
-        return segment;
-    }
-
-    /** セル (r, c) における水面の Y 座標 (px) を返す。セグメント全体の平均水位。 */
-    getSurfaceY(r, c) {
-        if (!this.isWater(r, c)) return -1;
-        if (!this.isWaterSurface(r, c)) {
-            return r * TILE_SIZE;
-        }
-
-        const segment = this.getWaterSurfaceSegment(r, c);
-        if (!segment || segment.length === 0) {
-            const mass = this.water ? this.water[r * this.cols + c] : MAX_WATER_MASS;
-            return (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
-        }
-
-        let totalRawY = 0;
-        for (const cell of segment) {
-            const mass = this.water ? this.water[cell.r * this.cols + cell.c] : MAX_WATER_MASS;
-            totalRawY += (cell.r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
-        }
-        return totalRawY / segment.length;
-    }
-
-    /** セルが落下中の滝（水流）の中にあるか */
-    isWaterfallCell(r, c) {
-        const checkWater = (row, col) => {
-            if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return false;
-            if (typeof this.isWater === 'function') return this.isWater(row, col);
-            return this.water ? this.water[row * this.cols + col] >= MIN_WATER_MASS : false;
-        };
-
-        if (!checkWater(r, c)) return false;
-        // 直下が固体なら水底なので絶対に滝ではない（PoolingWater）
-        if (r + 1 >= this.rows || (this.isSolid && this.isSolid(r + 1, c))) return false;
-        // 直下が水でなければ下へ落下中（滝）
-        if (!checkWater(r + 1, c)) return true;
-
-        // 直下が水の場合: 下方向へ辿って、途中に水のない空洞（空気）が存在するか？
-        let downR = r + 1;
-        let hitsAir = false;
-        while (downR < this.rows && !(this.isSolid && this.isSolid(downR, c))) {
-            if (!checkWater(downR, c)) {
-                hitsAir = true;
-                break;
-            }
-            downR++;
-        }
-        if (hitsAir) {
-            // 下に空洞（空気）がある空間へ落ちていく途中なので、滝（FallingWater）
-            return true;
-        }
-
-        // 下がすべて水で底が床（solid）の場合:
-        // 基本的には水槽・プール（PoolingWater）である。
-        // 左右が水に繋がっているか、両側が壁で挟まれた水槽なら、間違いなく PoolingWater（滝ではない）
-        const leftIsWater = c > 0 && checkWater(r, c - 1);
-        const rightIsWater = c + 1 < this.cols && checkWater(r, c + 1);
-        const leftIsSolid = c > 0 && this.isSolid && this.isSolid(r, c - 1);
-        const rightIsSolid = c + 1 < this.cols && this.isSolid && this.isSolid(r, c + 1);
-
-        if (leftIsWater || rightIsWater || (leftIsSolid && rightIsSolid)) {
-            return false;
-        }
-
-        // 左右が空気（水たまりが横に広がっていない孤立した垂直水流）で、直下が床でないなら空中の滝の柱
+        this._rebuildWaterCacheIfDirty();
+        const k = r * this.cols + c;
+        const kind = this.waterKind[k];
+        if (kind === WATER_NONE) return false;
+        // 水面のタイルだけは、液面より下かどうかを見る（タイルの途中に境目がある）
+        if (kind === WATER_SURFACE) return y >= this.waterSurfaceY[k];
         return true;
     }
 
     /** ピクセル座標が落下中の滝（水流）の中にあるか */
     isWaterfallAtPixel(x, y) {
-        if (!this.isWaterAtPixel(x, y)) return false;
+        if (!this.water) return false;
         const r = Math.floor(y / TILE_SIZE);
         const c = Math.floor(x / TILE_SIZE);
-        if (typeof this.isWaterfallCell === 'function') {
-            return this.isWaterfallCell(r, c);
-        }
-        return Map.prototype.isWaterfallCell.call(this, r, c);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        this._rebuildWaterCacheIfDirty();
+        return this.waterKind[r * this.cols + c] === WATER_FALL;
     }
 
     /** 水タイルの水面の行。水でなければ -1。 */
