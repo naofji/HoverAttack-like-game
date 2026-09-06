@@ -19,7 +19,7 @@ import {
     REPAIR_HUM_FREQ_TO, REPAIR_HUM_GAIN,
 } from '../src/js/utils/Constants.js';
 import {
-    SAMPLE_RATE, biquad, sawtooth, whiteNoise, aWeightedRms, transientLevel, db,
+    SAMPLE_RATE, biquad, whiteNoise, aWeightedRms, transientLevel, db,
 } from '../tests/helpers/dsp.js';
 
 const OUT_DIR = new URL('../audio-preview/', import.meta.url);
@@ -47,15 +47,16 @@ function toWav(samples) {
     return Buffer.concat([header, data]);
 }
 
-/** 唸り: ノコギリ＋矩形をローパス、11Hz の AM で揺らす。 */
+/** 唸り: 三角波1本をローパス、浅い AM で揺らす（WebAudio 版と同じ設計）。 */
 export function humGen() {
-    const saw = sawtooth(BARRIER_HUM_FREQ);
     const lp = biquad('lowpass', BARRIER_HUM_FILTER, 0.707);
+    const tri = (f, t) => 4 * Math.abs(((t * f) % 1) - 0.5) - 1;
     return (i) => {
         const t = i / SAMPLE_RATE;
-        const square = Math.sign(Math.sin(2 * Math.PI * BARRIER_HUM_HARMONIC * t));
+        const core = tri(BARRIER_HUM_FREQ, t)
+            + (BARRIER_HUM_HARMONIC > 0 ? tri(BARRIER_HUM_HARMONIC, t) : 0);
         const am = 1 + BARRIER_HUM_AM_DEPTH * Math.sin(2 * Math.PI * BARRIER_HUM_AM_HZ * t);
-        return lp(saw() + square) * BARRIER_HUM_GAIN * am;
+        return lp(core) * BARRIER_HUM_GAIN * am;
     };
 }
 

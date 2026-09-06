@@ -954,21 +954,28 @@ export const BARRIER_KNOCKBACK_VY = -2;
 export const BARRIER_PULSE_PERIOD = 24;      // 明滅の周期（フレーム）
 export const BARRIER_COLOR = '#7FD8FF';      // 電磁パルスの芯
 export const BARRIER_GLOW_COLOR = 'rgba(127, 216, 255, 0.35)';
-export const BARRIER_UNIT_COLOR = '#4A5A6B';
-export const BARRIER_UNIT_LAMP_COLOR = '#7FD8FF';
-// バリアの音。**低い唸り＋速い振幅変調**で「電磁」を出す。純粋なトーンだと
-// 電子音になり、装置が唸っている感じにならない（回復ハムと同じ理由）。
-// 唸りだけだと母艦エンジンと紛らわしいので、11Hz の AM で「ジジジ」を足す
-export const BARRIER_HUM_FREQ = 72;          // 芯の唸り（Hz）
-export const BARRIER_HUM_HARMONIC = 148;     // 上に重ねる矩形波。倍音で金属感を出す
-export const BARRIER_HUM_FILTER = 760;       // ローパス。これより上を削って籠らせる
-export const BARRIER_HUM_AM_HZ = 11;         // 振幅変調。電磁の「ジジジ」
-export const BARRIER_HUM_AM_DEPTH = 0.45;
-export const BARRIER_HUM_GAIN = 0.055;       // 満音量のときの gain。A特性で -41.8dB（回復ハムとほぼ同じ）
+// **被弾対象であることを色で明示する**（実機の指摘）。地形の金属（#383e51 など）に
+// 埋もれない白っぽさにして、「これは撃つものだ」と分かるようにする
+export const BARRIER_UNIT_COLOR = '#D6DEE8';
+// ランプは**本体（白）より濃い**色で点く。本体を白くしたぶん、明るい色で点けると
+// 「消えている」ほうが目立つ逆転が起きる。消灯は暗いスレートにして、
+// 暗→シアンの点滅として読ませる
+export const BARRIER_UNIT_LAMP_COLOR = '#3FC8FF';
+export const BARRIER_UNIT_LAMP_OFF_COLOR = '#4A5A6B';
+// バリアの音。**細く高い持続音**にする。最初は 72Hz の低い唸り＋矩形波の倍音で
+// 作ったが、実機で「うざい」と出た（低い唸りは常時鳴ると圧が強く、母艦エンジンとも
+// 帯域が近い）。三角波1本に絞って高い方へ寄せ、ローパスも上げて細くしてある。
+// AM も浅く遅くして「ジジジ」を弱め、蛍光灯の唸りくらいの存在感に留める
+export const BARRIER_HUM_FREQ = 320;         // 芯（Hz）。低い唸りをやめて高い方へ
+export const BARRIER_HUM_HARMONIC = 0;       // 倍音の矩形波は廃止（0 で無効）
+export const BARRIER_HUM_FILTER = 1800;      // ローパス。芯より上に置いて角を丸める程度に
+export const BARRIER_HUM_AM_HZ = 7;          // 振幅変調。11 → 7 で落ち着かせる
+export const BARRIER_HUM_AM_DEPTH = 0.25;    // 0.45 → 0.25。揺れを浅く
+export const BARRIER_HUM_GAIN = 0.032;       // A特性で -48.1dB。回復ハムより 6dB 低い（実機の「うざい」への対応）       // 満音量のときの gain
 // 弾を吸ったときの単発。短いノイズのバースト＋落ちるブリップ
 export const BARRIER_ABSORB_FILTER = 2200;
 export const BARRIER_ABSORB_DECAY = 0.07;
-export const BARRIER_ABSORB_GAIN = 0.45;  // A特性で -39.7dB。唸り(-41.8dB)より 2dB 上げないと埋もれる（狭いバンドパスで捨てたぶんの補正）
+export const BARRIER_ABSORB_GAIN = 0.27;     // A特性で -43.7dB。唸りより 4dB 上（狭いバンドパスで捨てたぶんを補正した値）
 // 2基目のユニットが壊れてバリアが落ちたときの合図。電源が落ちる下降音
 export const BARRIER_DOWN_FREQ_FROM = 420;
 export const BARRIER_DOWN_FREQ_TO = 55;
@@ -986,6 +993,11 @@ export const BARRIER_SUCK_COUNT = 6;         // 吸い寄せられる粒の数
 export const BARRIER_SUCK_RADIUS = 20;       // どれだけ外から集まってくるか（px）
 export const BARRIER_SUCK_FRAMES = 9;        // 集まりきるまで。短いほど「吸われた」が鋭く出る
 export const BARRIER_SUCK_SIZE = 2;
+// 片方のユニットを壊すと、残った1基が**空中が続く限りバリアを伸ばす**（実機の案）。
+// 半端に壊すと危険が増すので「両方壊せ」の圧になる。**床は硬い岩＝自機が壊せる**ので、
+// 先に床へ穴を開けてから片方を壊すと、その穴を通って上下の階まで塞がる。
+// だから長さは毎フレーム地形から測り直す（固定にすると穴を開けても伸びない）
+export const BARRIER_EXTEND_MAX = 40;        // 伸びる上限（タイル）。暴走の歯止め
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

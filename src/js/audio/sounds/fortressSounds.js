@@ -47,9 +47,10 @@ export const AudioFortressSounds = {
             const am = this.ctx.createOscillator();
             const amGain = this.ctx.createGain();
 
-            osc.type = 'sawtooth';
+            // 三角波1本。ノコギリ＋矩形だと低い唸りが強く出て「うざい」（実機の指摘）
+            osc.type = 'triangle';
             osc.frequency.value = BARRIER_HUM_FREQ;
-            harm.type = 'square';
+            harm.type = 'triangle';
             harm.frequency.value = BARRIER_HUM_HARMONIC;
             filter.type = 'lowpass';
             filter.frequency.value = BARRIER_HUM_FILTER;
@@ -59,14 +60,15 @@ export const AudioFortressSounds = {
             gain.gain.value = 0;
 
             osc.connect(filter);
-            harm.connect(filter);
+            // HARMONIC が 0 なら倍音は無効。繋がないことで完全に消す
+            if (BARRIER_HUM_HARMONIC > 0) harm.connect(filter);
             filter.connect(gain);
             am.connect(amGain);
             amGain.connect(gain.gain);
             gain.connect(this._panned(x));
 
             osc.start();
-            harm.start();
+            if (BARRIER_HUM_HARMONIC > 0) harm.start();
             am.start();
             this.barrierHumOsc = osc;
             this.barrierHumHarm = harm;
@@ -81,7 +83,8 @@ export const AudioFortressSounds = {
     stopBarrierHum() {
         if (!this.barrierHumGain) return;
         this.barrierHumGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.10);
-        const nodes = [this.barrierHumOsc, this.barrierHumHarm, this.barrierHumAm];
+        const nodes = [this.barrierHumOsc, this.barrierHumAm];
+        if (BARRIER_HUM_HARMONIC > 0) nodes.push(this.barrierHumHarm);
         this.barrierHumOsc = null;
         this.barrierHumHarm = null;
         this.barrierHumAm = null;

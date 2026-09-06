@@ -106,7 +106,7 @@ test('ユニットに当たった自機の弾はユニットを削る（吸収�
   assert.equal(proj.alive, false, '弾が消えていない');
 });
 
-test('敵は押し戻されるがダメージは受けない（守備隊が自滅しない）', () => {
+test('敵はダメージを受けない（守備隊が自滅しない）', () => {
   const game = makeGame();
   const b = makeBarrier(game);
   let damaged = false;
@@ -117,7 +117,29 @@ test('敵は押し戻されるがダメージは受けない（守備隊が自�
   game.enemies = [enemy];
   b.update();
   assert.equal(damaged, false, '守備隊が自分のバリアで削れている');
-  assert.ok(enemy.vx < 0, '敵が押し戻されていない');
+});
+
+test('敵はバリアで巡回の向きを変える（壁と同じ扱い）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const tank = {
+    x: b.fieldX - 2, y: b.fieldY + 6, width: 16, height: 12, alive: true,
+    vx: 3, vy: 0, patrolDir: 1, facingRight: true, takeDamage() {},
+  };
+  game.enemies = [tank];
+  b.update();
+  assert.equal(tank.patrolDir, -1, '巡回の向きが変わっていない');
+  assert.equal(tank.facingRight, false, '向きの表示が変わっていない');
+  assert.ok(tank.x + tank.width <= b.fieldX, '場の外へ出されていない');
+});
+
+test('patrolDir を持たない敵でも落ちない', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const thing = { x: b.fieldX, y: b.fieldY + 6, width: 16, height: 12, alive: true, vx: 2, vy: 0 };
+  game.enemies = [thing];
+  b.update();
+  assert.ok(thing.x + thing.width <= b.fieldX);
 });
 
 test('引数なしで update しても例外を投げない', () => {
@@ -271,4 +293,141 @@ test('ホーミング・反射ビーム・敵の弾（enemyBullets）も吸収�
     assert.equal(p.alive, false, `${name} が吸収されていない`);
   }
   assert.equal(b.flares.length, 3, '吸収した数だけ光の輪が出ていない');
+});
+
+import { luminance } from '../src/js/utils/color.js';
+import {
+  BARRIER_UNIT_COLOR, BARRIER_UNIT_LAMP_COLOR, BARRIER_UNIT_LAMP_OFF_COLOR,
+  BLOCK_METAL, BLOCK_HARD, BLOCK_NORMAL, BLOCK_EMPTY,
+} from '../src/js/utils/Constants.js';
+
+test('ユニットは地形より遥かに明るい（撃つものだと分かる）', async () => {
+  const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }) };
+  const { SeededRNG } = await import('../src/js/utils/SeededRNG.js');
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  const unit = luminance(BARRIER_UNIT_COLOR);
+  for (const b of [BLOCK_METAL, BLOCK_HARD, BLOCK_NORMAL]) {
+    const terrain = luminance(m.blockStyles[b].fill);
+    assert.ok(unit - terrain > 100,
+      `ユニット(${unit.toFixed(0)}) が地形(${terrain.toFixed(0)}) に埋もれる`);
+  }
+});
+
+test('ランプは点いているときも消えているときも本体と見分けられる', () => {
+  const body = luminance(BARRIER_UNIT_COLOR);
+  const on = luminance(BARRIER_UNIT_LAMP_COLOR);
+  const off = luminance(BARRIER_UNIT_LAMP_OFF_COLOR);
+  assert.ok(Math.abs(body - on) > 30, `点灯が本体と紛れる (${on.toFixed(0)} vs ${body.toFixed(0)})`);
+  assert.ok(Math.abs(body - off) > 30, `消灯が本体と紛れる (${off.toFixed(0)} vs ${body.toFixed(0)})`);
+  // 点灯のほうが「明るい」向きに見えるよう、消灯より上に置く
+  assert.ok(on > off, `点灯(${on.toFixed(0)}) が消灯(${off.toFixed(0)}) より暗い`);
+});
+
+// --- 片方のユニットを壊すと、空中が続く限りバリアが伸びる ---
+
+/** 全部空洞の偽マップ。行 solidRows を岩にする。 */
+function fakeMap(rows = 20, cols = 20, solidRows = []) {
+  const grid = [];
+  for (let r = 0; r < rows; r++) {
+    grid.push(new Array(cols).fill(BLOCK_EMPTY));
+  }
+  for (const r of solidRows) grid[r] = new Array(cols).fill(BLOCK_NORMAL);
+  return { rows, cols, grid };
+}
+
+test('上のユニットを壊すと、上の岩に当たるまでバリアが伸びる', () => {
+  // 行 1 が岩、行 9 が床。バリアは 4..8 に張られている
+  const map = fakeMap(20, 20, [1, 9]);
+  const game = makeGame({ map });
+  const b = new FortressBarrier(game, { c: 10, top: 4, bottom: 8 });
+  const before = b.fieldY;
+  b.damageEmitter('top', BARRIER_EMITTER_HP);
+  b.update();
+  assert.ok(b.fieldY < before, 'バリアが上へ伸びていない');
+  // 行 1 が岩なので、行 2 の上端まで伸びる
+  assert.equal(b.fieldY, 2 * TILE_SIZE, `伸び方が違う (${b.fieldY})`);
+});
+
+test('下のユニットを壊すと下へ伸びる', () => {
+  const map = fakeMap(20, 20, [1, 15]);
+  const game = makeGame({ map });
+  const b = new FortressBarrier(game, { c: 10, top: 4, bottom: 8 });
+  const beforeBottom = b.fieldY + b.fieldH;
+  b.damageEmitter('bottom', BARRIER_EMITTER_HP);
+  b.update();
+  assert.ok(b.fieldY + b.fieldH > beforeBottom, 'バリアが下へ伸びていない');
+  assert.equal(b.fieldY + b.fieldH, 15 * TILE_SIZE, `伸び方が違う (${b.fieldY + b.fieldH})`);
+});
+
+test('壊していないうちは伸びない', () => {
+  const map = fakeMap(20, 20, [1, 15]);
+  const b = new FortressBarrier(makeGame({ map }), { c: 10, top: 4, bottom: 8 });
+  const y = b.fieldY;
+  const h = b.fieldH;
+  b.update();
+  assert.equal(b.fieldY, y);
+  assert.equal(b.fieldH, h);
+});
+
+test('床に穴を開けてから壊すと、その穴を通って伸びる（毎フレーム測り直す）', () => {
+  // これがこの仕掛けの肝。床は硬い岩なので自機が壊せる
+  const map = fakeMap(20, 20, [1, 9]);
+  const game = makeGame({ map });
+  const b = new FortressBarrier(game, { c: 10, top: 4, bottom: 8 });
+  b.damageEmitter('bottom', BARRIER_EMITTER_HP);
+  b.update();
+  const blocked = b.fieldY + b.fieldH;
+  assert.equal(blocked, 9 * TILE_SIZE, '床で止まっていない');
+  // 自機が床のその列に穴を開けた
+  map.grid[9][10] = BLOCK_EMPTY;
+  b.update();
+  assert.ok(b.fieldY + b.fieldH > blocked, '開けた穴を通って伸びていない');
+});
+
+test('マップが無くても落ちない（テスト用の偽ゲームで呼ばれる）', () => {
+  const b = new FortressBarrier(makeGame(), { c: 10, top: 4, bottom: 8 });
+  b.damageEmitter('top', BARRIER_EMITTER_HP);
+  b.update();
+  assert.ok(b.fieldH > 0);
+});
+
+test('タンクやドローンはバリアを突っ切れない（位置ごと戻される）', () => {
+  // 速度を押し戻すだけでは、敵は自分の AI で毎フレーム速度を上書きするので
+  // すり抜けてしまう（実機の指摘）。位置そのものを場の外へ戻す
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const y = b.fieldY + 6;
+  // 場のど真ん中に居る敵（前のフレームで踏み込んでしまった状態）
+  const tank = { x: b.fieldX - 2, y, width: 16, height: 12, alive: true, vx: 3, vy: 0, patrolDir: 1, takeDamage() {} };
+  game.enemies = [tank];
+  b.update();
+  const overlapping = tank.x < b.fieldX + b.fieldW && tank.x + tank.width > b.fieldX;
+  assert.equal(overlapping, false, `敵が場に重なったまま (x=${tank.x})`);
+  assert.ok(tank.x + tank.width <= b.fieldX, '左から来た敵が右側へ抜けている');
+  assert.equal(tank.patrolDir, -1, '向きが変わっていない');
+});
+
+test('自機も位置ごと戻される（強行突破できない）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const player = makePlayer(b.fieldX - 2, b.fieldY + 6);
+  game.player = player;
+  b.update();
+  const overlapping = player.x < b.fieldX + b.fieldW && player.x + player.width > b.fieldX;
+  assert.equal(overlapping, false, `自機が場に重なったまま (x=${player.x})`);
+});
+
+test('右側から来たものは右側へ戻される', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const drone = {
+    x: b.fieldX + b.fieldW - 2, y: b.fieldY + 6, width: 24, height: 16,
+    alive: true, vx: -3, vy: 0, patrolDir: -1, takeDamage() {},
+  };
+  game.enemies = [drone];
+  b.update();
+  assert.ok(drone.x >= b.fieldX + b.fieldW, `右から来たのに左側へ抜けている (x=${drone.x})`);
+  assert.equal(drone.patrolDir, 1, '向きが変わっていない');
 });

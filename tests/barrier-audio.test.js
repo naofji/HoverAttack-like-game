@@ -100,17 +100,44 @@ test('バリアの音は3つとも引数なしで呼んでも例外を投げな�
 // 相対 dB をここで縛る。合成は tools/render-barrier-sounds.mjs と同じ設計。
 import { aWeightedRms, transientLevel, db } from './helpers/dsp.js';
 import { humGen, absorbGen, downGen } from '../tools/render-barrier-sounds.mjs';
-import { BARRIER_ABSORB_DECAY, BARRIER_DOWN_TIME } from '../src/js/utils/Constants.js';
+import {
+  BARRIER_ABSORB_DECAY, BARRIER_DOWN_TIME, BARRIER_HUM_FREQ, BARRIER_HUM_HARMONIC,
+  REPAIR_HUM_FREQ_TO, REPAIR_HUM_GAIN,
+} from '../src/js/utils/Constants.js';
 
-test('吸収音は唸りに埋もれない（唸りより大きい）', () => {
+test('吸収音は唸りに埋もれず、かつ大きすぎない', () => {
   const hum = aWeightedRms(humGen());
   const absorb = transientLevel(absorbGen(), BARRIER_ABSORB_DECAY);
   const diff = db(absorb / hum);
   assert.ok(diff > 0.5,
     `吸収(${db(absorb).toFixed(1)}dB) が唸り(${db(hum).toFixed(1)}dB) に埋もれる（差 ${diff.toFixed(1)}dB）`);
-  // 大きすぎても困る。吸うたびに鳴るので、耳障りにならない範囲に収める
+  // 吸うたびに鳴るので、耳障りにならない範囲に収める
   assert.ok(diff < 8, `吸収音が大きすぎる（差 ${diff.toFixed(1)}dB）`);
 });
+
+test('唸りは回復ハムより控えめ（実機で「うざい」と出たので下げた）', () => {
+  const hum = aWeightedRms(humGen());
+  const repair = aWeightedRms(repairHumGen());
+  const diff = db(hum / repair);
+  assert.ok(diff < -3, `唸りが控えめでない（回復ハムとの差 ${diff.toFixed(1)}dB）`);
+  // 下げすぎて聞こえないのも困る。**実際に一度 -54dB まで落として下げすぎた**
+  assert.ok(diff > -10, `唸りが小さすぎて聞こえない（差 ${diff.toFixed(1)}dB）`);
+});
+
+test('唸りは低い唸りではなく細い高音（母艦エンジンと帯域を分ける）', () => {
+  assert.ok(BARRIER_HUM_FREQ >= 200, `芯が低すぎる (${BARRIER_HUM_FREQ}Hz)`);
+  assert.equal(BARRIER_HUM_HARMONIC, 0, '倍音の矩形波が復活している（低域が太る）');
+});
+
+/** 比較用: 回復ハム（三角波）。tools/render-barrier-sounds.mjs と同じ。 */
+function repairHumGen() {
+  const SR = 48000;
+  return (i) => {
+    const t = i / SR;
+    const phase = (t * REPAIR_HUM_FREQ_TO) % 1;
+    return (4 * Math.abs(phase - 0.5) - 1) * REPAIR_HUM_GAIN;
+  };
+}
 
 test('落下音は吸収音より大きい（開いたことが分かる）', () => {
   const absorb = transientLevel(absorbGen(), BARRIER_ABSORB_DECAY);

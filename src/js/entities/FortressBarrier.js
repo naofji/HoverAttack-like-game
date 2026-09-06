@@ -18,9 +18,10 @@ import {
     BARRIER_EMITTER_HP, BARRIER_UNIT_W, BARRIER_UNIT_H, BARRIER_FIELD_W,
     BARRIER_TOUCH_DAMAGE, BARRIER_KNOCKBACK_VX, BARRIER_KNOCKBACK_VY,
     BARRIER_PULSE_PERIOD, BARRIER_COLOR, BARRIER_GLOW_COLOR,
-    BARRIER_UNIT_COLOR, BARRIER_UNIT_LAMP_COLOR,
+    BARRIER_UNIT_COLOR, BARRIER_UNIT_LAMP_COLOR, BARRIER_UNIT_LAMP_OFF_COLOR,
     BARRIER_FLARE_FRAMES, BARRIER_FLARE_WIDTH, BARRIER_FLARE_HEIGHT,
     BARRIER_SUCK_COUNT, BARRIER_SUCK_RADIUS, BARRIER_SUCK_FRAMES, BARRIER_SUCK_SIZE,
+    BARRIER_EXTEND_MAX, BLOCK_EMPTY,
 } from '../utils/Constants.js';
 import { Particle } from './Particle.js';
 import { playBlast } from './destruction.js';
@@ -60,11 +61,50 @@ export class FortressBarrier {
             y: (spec.bottom + 1) * TILE_SIZE - BARRIER_UNIT_H,
             width: BARRIER_UNIT_W, height: BARRIER_UNIT_H,
         };
-        // バリアの帯はユニットとユニットの間
+        // バリアの帯はユニットとユニットの間。ユニットを壊すとその向きへ伸びるので、
+        // タイル座標を覚えておいて毎フレーム測り直す
+        this.col = spec.c;
+        this.topRow = spec.top;
+        this.bottomRow = spec.bottom;
         this.fieldX = cx - BARRIER_FIELD_W / 2;
         this.fieldW = BARRIER_FIELD_W;
-        this.fieldY = this.topUnit.y + this.topUnit.height;
-        this.fieldH = this.bottomUnit.y - this.fieldY;
+        this._measureField();
+    }
+
+    /** この列の (r) が固いか。マップを持たない偽ゲームでは「固い」扱いにして伸ばさない。 */
+    _solidAt(r) {
+        const map = this.game.map;
+        if (!map || !map.grid) return true;
+        if (r < 0 || r >= map.rows) return true;
+        return map.grid[r][this.col] !== BLOCK_EMPTY;
+    }
+
+    /**
+     * バリアの上端と下端を地形から測る。
+     *
+     * 生きているユニットの側は、そのユニットで止まる。**壊れた側は、空中が
+     * 続く限り伸びる**（実機の案）。床は硬い岩＝自機が壊せるので、先に床へ穴を
+     * 開けてから片方を壊すと、その穴を通って上下の階まで塞がる。
+     * **毎フレーム測り直すのが要点** — 固定にすると穴を開けても伸びない。
+     */
+    _measureField() {
+        let topRow = this.topRow;
+        if (this.emitterHP.top <= 0) {
+            for (let i = 0; i < BARRIER_EXTEND_MAX && !this._solidAt(topRow - 1); i++) topRow--;
+        }
+        let bottomRow = this.bottomRow;
+        if (this.emitterHP.bottom <= 0) {
+            for (let i = 0; i < BARRIER_EXTEND_MAX && !this._solidAt(bottomRow + 1); i++) bottomRow++;
+        }
+        // 生きているユニットの側はユニットの内側から、壊れた側はタイルの端まで
+        const top = this.emitterHP.top > 0
+            ? this.topUnit.y + this.topUnit.height
+            : topRow * TILE_SIZE;
+        const bottom = this.emitterHP.bottom > 0
+            ? this.bottomUnit.y
+            : (bottomRow + 1) * TILE_SIZE;
+        this.fieldY = top;
+        this.fieldH = Math.max(0, bottom - top);
     }
 
     /**
@@ -99,6 +139,9 @@ export class FortressBarrier {
     update() {
         this.timer++;
         const game = this.game;
+
+        // 壊れた側は地形が変われば伸びる。毎フレーム測り直す
+        if (this.active) this._measureField();
 
         // 吸収の跡を進める（バリアが消えたあとも残りを描き切る）
         for (const f of this.flares) f.age++;
@@ -139,12 +182,15 @@ export class FortressBarrier {
             this._pushBack(player);
         }
 
-        // 3. 敵: 押し戻すだけ。**ダメージは与えない** — 守備隊が自分のバリアで
-        //    自滅すると「開けた瞬間に出てくる」という狙いが成立しなくなる
+        // 3. 敵: **壁と同じ扱いにして向きを変えさせる**（実機の案）。ダメージは
+        //    与えない — 守備隊が自分のバリアで自滅すると「開けた瞬間に出てくる」
+        //    という狙いが成立しなくなる。
+        //    押し戻して跳ね飛ばすより、巡回の向きを反転させるほうが自然に見えるし、
+        //    タンクもドローンも patrolDir を持っていて地形の壁で同じことをしている
         for (const enemy of game.enemies || []) {
             if (!enemy.alive) continue;
             if (enemy.width == null) continue; // 基地など矩形を持たないものは無視
-            if (overlaps(enemy, this.fieldRect)) this._pushBack(enemy);
+            if (overlaps(enemy, this.fieldRect)) this._turnAway(enemy);
         }
     }
 
@@ -162,13 +208,49 @@ export class FortressBarrier {
         return false;
     }
 
-    /** 来た方向へ返す。中心より左に居れば左へ、右に居れば右へ。 */
+    /**
+     * 敵をバリアの外へ出し、巡回の向きを反転させる。
+     *
+     * 地形の壁にぶつかったときと同じ扱い（タンクもドローンも patrolDir を反転
+     * させている）。**位置も戻すのが要点** — 速度や向きだけ変えても、敵は自分の
+     * update() で毎フレーム vx を組み立て直すので、重なったまま押し合って
+     * すり抜けることがある。
+     */
+    _turnAway(enemy) {
+        const center = this.fieldX + this.fieldW / 2;
+        const enemyCenter = enemy.x + enemy.width / 2;
+        // 来た方向は速度で見る。中心の位置で決めると、幅のある敵が半分通過した
+        // 時点で判定が反転し、勢いのまま向こう側へ出てしまう
+        const dir = enemy.vx ? -Math.sign(enemy.vx) : (enemyCenter < center ? -1 : 1);
+        enemy.x = dir < 0
+            ? this.fieldX - enemy.width - 1
+            : this.fieldX + this.fieldW + 1;
+        enemy.vx = 0;
+        if (enemy.patrolDir != null) enemy.patrolDir = dir;
+        if (enemy.facingRight != null) enemy.facingRight = dir > 0;
+    }
+
+    /**
+     * 来た方向へ返す（自機だけ）。ダメージと合わせて「強行突破できない」を体で示す。
+     *
+     * **速度を変えるだけでは足りない。** 敵は自分の AI で毎フレーム vx を
+     * 上書きするので、押し戻したつもりでもそのまま突っ切ってしまう（実機の指摘）。
+     * 位置そのものを場の外へ戻すことで、速度が何であっても中に居られなくする。
+     */
     _pushBack(entity) {
+        // 「来た方向」は**速度**で見る。中心の位置で決めると、幅のある敵が半分
+        // 通過した時点で判定が反転し、突っ込んだ勢いのまま向こう側へ出てしまう
+        // （実際にタンクで起きた）。止まっているものだけ位置で決める
         const center = this.fieldX + this.fieldW / 2;
         const entityCenter = entity.x + entity.width / 2;
-        const dir = entityCenter < center ? -1 : 1;
+        const dir = entity.vx ? -Math.sign(entity.vx) : (entityCenter < center ? -1 : 1);
         entity.vx = dir * BARRIER_KNOCKBACK_VX;
         entity.vy = BARRIER_KNOCKBACK_VY;
+        // 場の外側の縁へ置き直す。1px 余分に離すのは、次のフレームでまた
+        // 重なったと判定されて押し戻しが毎フレーム走り続けるのを防ぐため
+        entity.x = dir < 0
+            ? this.fieldX - entity.width - 1
+            : this.fieldX + this.fieldW + 1;
     }
 
     /**
@@ -214,7 +296,9 @@ export class FortressBarrier {
             // 稼働中だけランプが点く。消えていれば「もう片方を探せ」の合図になる
             if (this.active) {
                 const lit = (this.timer % BARRIER_PULSE_PERIOD) < BARRIER_PULSE_PERIOD / 2;
-                ctx.fillStyle = lit ? BARRIER_UNIT_LAMP_COLOR : BARRIER_UNIT_COLOR;
+                // 消灯は本体色ではなく暗いスレート。本体を白くしたので、本体色に
+                // 戻すと「消えている」ほうが明るくなって点滅が逆に見える
+                ctx.fillStyle = lit ? BARRIER_UNIT_LAMP_COLOR : BARRIER_UNIT_LAMP_OFF_COLOR;
                 ctx.fillRect(u.x + 2, u.y + u.height / 2 - 1, u.width - 4, 2);
             }
         }
