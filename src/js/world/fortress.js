@@ -159,30 +159,35 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
 /**
  * 外壁の2辺（上・左）に開口を開け、区画の外の空洞へつなぐ。
  *
- * 左の開口は**階の高さに合わせて**開ける。適当な位置に開けると入った先が床になり、
- * 「入り口に見えるのに入れない」ことが起きる。上の開口は最上階へ落ちる縦穴。
+ * **入り口は左上に固める**（実機の指摘）。階ごとにばらけると探しづらいので、
+ * 左の開口は必ず**最上階**に、しかも**その階の床の上**に開ける。床から
+ * gateSize ぶんなので「扉」に見える。階の高さぶん（5タイル）開けていた頃は
+ * 「壁が崩れている」ようにも見えた。上の開口は最上階へ落ちる縦穴。
  */
 export function openZoneGates(grid, blockHP, zone, {
-    thickness, floors, shaftW, rng, tunnelMax, rows, cols,
+    thickness, floors, gateSize, rng, tunnelMax, rows, cols,
 }) {
     const T = thickness;
     const gates = [];
 
-    // 左辺: 階を1つ選び、その階の高さぶん帯を空ける
+    // 左辺: 最上階の床の上に gateSize ぶん。乱数は使わない（必ず左上）
     if (floors.length > 0) {
-        const floor = floors[Math.floor(rng.next() * floors.length)];
+        const top = floors[0];
+        const r0 = Math.max(top.r0, top.r1 - gateSize + 1);
         fillRect(grid, blockHP,
-            { r0: floor.r0, r1: floor.r1, c0: zone.c0, c1: zone.c0 + T - 1 }, BLOCK_EMPTY, 0);
-        gates.push({ r: floor.r0, c: zone.c0, side: 'left', w: floor.r1 - floor.r0 + 1 });
+            { r0, r1: top.r1, c0: zone.c0, c1: zone.c0 + T - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: r0, c: zone.c0, side: 'left', w: top.r1 - r0 + 1 });
     }
-    // 上辺: 最上階へ落ちる縦穴。幅はシャフトと同じ
+    // 上辺: 最上階へ落ちる縦穴。左寄りに置いて、左の入り口と近づける
     if (floors.length > 0) {
         const innerC0 = zone.c0 + T;
         const innerW = (zone.c1 - T) - innerC0 + 1;
-        const cc = innerC0 + Math.floor(rng.next() * Math.max(1, innerW - shaftW + 1));
+        // 左半分の中で振る。右端に出ると「左上の入り口」がぼやける
+        const span = Math.max(1, Math.floor(innerW / 2) - gateSize);
+        const cc = innerC0 + Math.floor(rng.next() * span);
         fillRect(grid, blockHP,
-            { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + shaftW - 1 }, BLOCK_EMPTY, 0);
-        gates.push({ r: zone.r0, c: cc, side: 'top', w: shaftW });
+            { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + gateSize - 1 }, BLOCK_EMPTY, 0);
+        gates.push({ r: zone.r0, c: cc, side: 'top', w: gateSize });
     }
 
     for (const gate of gates) digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols);
@@ -215,7 +220,7 @@ function digTunnelFromGate(grid, blockHP, zone, gate, tunnelMax, rows, cols) {
 export function carveFortressZones({
     grid, blockHP, rows, cols, rooms, excludeRects, rng,
     count, wMin, wRange, hMin, hRange, margin,
-    thickness, ceilingH, floorH, shaftW, tunnelMax,
+    thickness, ceilingH, floorH, shaftW, gateSize, tunnelMax,
     treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
 }) {
     const picked = pickFortressZones({
@@ -229,7 +234,7 @@ export function carveFortressZones({
             grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng },
         );
         const openings = openZoneGates(grid, blockHP, zone, {
-            thickness, floors, shaftW, rng, tunnelMax, rows, cols,
+            thickness, floors, gateSize, rng, tunnelMax, rows, cols,
         });
         // 印は区画の中の「空でない」タイルだけ。空洞には描くものが無い
         for (let r = zone.r0; r <= zone.r1; r++) {

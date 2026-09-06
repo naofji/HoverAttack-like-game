@@ -292,7 +292,7 @@ test('シャフトは階ごとに位置がずれる（一直線に落ちられ�
 });
 
 import { openZoneGates } from '../src/js/world/fortress.js';
-import { FORTRESS_OPENING_TUNNEL_MAX } from '../src/js/utils/Constants.js';
+import { FORTRESS_OPENING_TUNNEL_MAX, FORTRESS_GATE_SIZE } from '../src/js/utils/Constants.js';
 
 /** 全部岩の盤面。開口の外にトンネルが掘られることを見たいので空洞を作らない。 */
 function solidBoard(rows = 60, cols = 80) {
@@ -308,7 +308,7 @@ function buildZone(board, zone, rng) {
   buildZoneWalls(board.grid, board.blockHP, zone, FORTRESS_WALL_THICKNESS);
   const { floors, shafts } = buildZoneInterior(board.grid, board.blockHP, zone, interiorOpts(rng));
   const gates = openZoneGates(board.grid, board.blockHP, zone, {
-    thickness: FORTRESS_WALL_THICKNESS, floors, shaftW: FORTRESS_SHAFT_W,
+    thickness: FORTRESS_WALL_THICKNESS, floors, gateSize: FORTRESS_GATE_SIZE,
     rng, tunnelMax: FORTRESS_OPENING_TUNNEL_MAX,
     rows: board.rows, cols: board.cols,
   });
@@ -321,13 +321,16 @@ test('開口は上辺と左辺に1つずつ', () => {
   assert.deepEqual(gates.map((g) => g.side).sort(), ['left', 'top']);
 });
 
-test('左の開口は階の高さに合わせて開く（入った先が床にならない）', () => {
+test('入り口は左上（最上階）にあり、大きさは3ブロック', () => {
+  // 実機の指摘。開口が階ごとにばらけると入り口が探しづらく、階の高さぶん
+  // （5タイル）開いていると「壁が崩れている」ようにも見えた
   const b = solidBoard();
   const { floors, gates } = buildZone(b, ZONE, new SeededRNG(3));
   const left = gates.find((g) => g.side === 'left');
-  const floor = floors.find((f) => f.r0 === left.r);
-  assert.ok(floor, `左の開口 ${left.r} がどの階の上端とも合っていない`);
-  assert.equal(left.w, floor.r1 - floor.r0 + 1, '開口の高さが階の高さと違う');
+  const top = floors[0];
+  assert.equal(left.w, FORTRESS_GATE_SIZE, '開口の高さが3ブロックでない');
+  assert.ok(left.r >= top.r0 && left.r + left.w - 1 <= top.r1,
+    `開口 ${left.r}〜${left.r + left.w - 1} が最上階 ${top.r0}〜${top.r1} の中に無い`);
   const T = FORTRESS_WALL_THICKNESS;
   for (let r = left.r; r < left.r + left.w; r++) {
     for (let c = ZONE.c0; c < ZONE.c0 + T; c++) {
@@ -336,11 +339,28 @@ test('左の開口は階の高さに合わせて開く（入った先が床に�
   }
 });
 
-test('上の開口は縦穴で、最上階へ通じる', () => {
+test('入り口は最上階の床の上に開く（宙に浮いた穴にしない）', () => {
+  const b = solidBoard();
+  const { floors, gates } = buildZone(b, ZONE, new SeededRNG(3));
+  const left = gates.find((g) => g.side === 'left');
+  assert.equal(left.r + left.w - 1, floors[0].r1,
+    '開口の下端が最上階の床と揃っていない（扉ではなく壁の穴に見える）');
+});
+
+test('階が何階でも入り口は最上階（seed を変えても動かない）', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const b = solidBoard();
+    const { floors, gates } = buildZone(b, ZONE, new SeededRNG(seed));
+    const left = gates.find((g) => g.side === 'left');
+    assert.equal(left.r + left.w - 1, floors[0].r1, `seed ${seed}: 入り口が最上階でない`);
+  }
+});
+
+test('上の開口も3ブロックの縦穴で、最上階へ通じる', () => {
   const b = solidBoard();
   const { gates } = buildZone(b, ZONE, new SeededRNG(3));
   const top = gates.find((g) => g.side === 'top');
-  assert.equal(top.w, FORTRESS_SHAFT_W);
+  assert.equal(top.w, FORTRESS_GATE_SIZE);
   const T = FORTRESS_WALL_THICKNESS;
   for (let c = top.c; c < top.c + top.w; c++) {
     for (let r = ZONE.r0; r < ZONE.r0 + T; r++) {
