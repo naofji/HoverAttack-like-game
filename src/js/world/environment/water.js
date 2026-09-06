@@ -159,10 +159,8 @@ export function createWaterRenderer(env) {
         cctx.fillStyle = WATER_FILL;
         for (const [r, c] of cells) {
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            if (!map.isWater(r, c)) continue;
-            const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-            if (mass === 0) continue;
 
+            const bottomY = (r + 1) * TILE_SIZE;
             const isWaterfall = map.isWaterfallCell ? map.isWaterfallCell(r, c) : false;
 
             if (isWaterfall) {
@@ -170,15 +168,21 @@ export function createWaterRenderer(env) {
                 // 先頭のセルだけ上辺を下げて、岩の縁から滑り落ちるように見せる
                 const placement = getWaterfallPlacement(map, r, c);
                 const topY = waterfallTopY(map, r, c);
-                cctx.fillRect(placement.x, topY, placement.width, (r + 1) * TILE_SIZE - topY);
-            } else if (map.isWaterSurface && map.isWaterSurface(r, c)) {
-                // 水面セル: 共通の getSurfaceY(r, c) で水面高さを完全に一致させる
-                const surfaceY = map.getSurfaceY ? map.getSurfaceY(r, c) : ((r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE);
-                const bottomY = (r + 1) * TILE_SIZE;
-                const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, Math.round(surfaceY)));
-                const h = bottomY - topY;
-                if (h > 0) {
-                    cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, h);
+                cctx.fillRect(placement.x, topY, placement.width, bottomY - topY);
+                continue;
+            }
+
+            // 液面（水塊にひとつ）が分かっているセルは、必ずその液面から下を塗る。
+            // タイルの中で切り取るのは clamp だけ。こうしないと、ひとつの水塊
+            // なのに列ごとに塗りの上端がタイルの上辺で頭打ちになり、線は平らなのに
+            // 塗りが段々になる（実機の指摘。線 73px に対し塗り 80px だった）。
+            // 水量が 0 のセルでも液面がかかっていれば塗る（量子化のせいで水量が
+            // 届いていないだけで、水面はそこにある）
+            const level = map.waterSurfaceY ? map.waterSurfaceY[r * map.cols + c] : -1;
+            if (level >= 0) {
+                const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, Math.round(level)));
+                if (bottomY - topY > 0) {
+                    cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
                 }
                 // 上から滝が落ちてきているなら、タイルの上辺から液面までを細い帯で埋める。
                 // ここを描かないと、滝の帯はタイルの境目で終わるのに液面はもっと下に
@@ -191,19 +195,12 @@ export function createWaterRenderer(env) {
                         cctx.fillRect(placement.x, r * TILE_SIZE, placement.width, gap);
                     }
                 }
-            } else if (r > 0 && map.isWater(r - 1, c)) {
-                // 水中セル（上下とも水で完全水没しているセル）のみ、タイル全体（16x16）を満水として塗る
+                continue;
+            }
+
+            // 液面を持たない水＝天井に張り付いた水など。タイル全体が水
+            if (map.isWater(r, c)) {
                 cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            } else if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) {
-                // 天井に張り付いた満水セル
-                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            } else {
-                // 水面判定に入らなかった場合の安全策（水位に応じた高さのみ塗る。決して16x16で埋めない）
-                const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
-                const y = (r + 1) * TILE_SIZE - h;
-                if (h > 0) {
-                    cctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, h);
-                }
             }
         }
     };
@@ -216,7 +213,25 @@ export function createWaterRenderer(env) {
         }
     };
 
-    paint(map.waterCells);
+    // 水セルに加えて、その真上のセルも塗る対象にする。液面が水量の届いていない
+    // タイルまで上がっていることがあり（水塊の液面はひとつ）、そこを塗らないと
+    // 塗りの上端が線に届かない
+    const withCellsAbove = (cells) => {
+        const keys = new Set();
+        const out = [];
+        for (const [r, c] of cells) {
+            for (const nr of [r - 1, r]) {
+                if (nr < 0 || nr >= map.rows) continue;
+                const k = nr * map.cols + c;
+                if (keys.has(k)) continue;
+                keys.add(k);
+                out.push([nr, c]);
+            }
+        }
+        return out;
+    };
+
+    paint(withCellsAbove(map.waterCells));
     const initialBorder = collectBorderBlocks(map, map.waterCells);
     paintBehind(initialBorder);
 

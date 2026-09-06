@@ -81,7 +81,20 @@ function surfaceGroups(ctx) {
     const out = new Int16Array(n).fill(-1);
     for (const [r, c] of surfaces) {
         const e = sums.get(find(r * ctx.cols + c));
-        out[r * ctx.cols + c] = Math.round(e.total / e.n);
+        const avg = Math.round(e.total / e.n);
+        out[r * ctx.cols + c] = avg;
+
+        // 液面は水面セルだけのものではなく「その水塊にかかっている液面」。
+        // 下の水中セルにも、液面がタイルより上に来るときは真上の空セルにも及ぶ。
+        // 水中セルの判定は referenceKindAt（実装とは別物）から取る
+        for (let rr = r + 1; rr < ctx.rows; rr++) {
+            if (referenceKindAt(ctx, rr, c) !== WATER_BODY) break;
+            out[rr * ctx.cols + c] = avg;
+        }
+        if (r - 1 >= 0 && referenceKindAt(ctx, r - 1, c) === WATER_NONE
+            && avg < r * TILE_SIZE && !ctx.isSolid(r - 1, c)) {
+            out[(r - 1) * ctx.cols + c] = avg;
+        }
     }
     return out;
 }

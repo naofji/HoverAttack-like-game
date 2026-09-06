@@ -21,6 +21,12 @@ export const WATER_BODY = 1;     // 水中（タイル全体が水）
 export const WATER_SURFACE = 2;  // 液面を形成するセル
 export const WATER_FALL = 3;     // 落下中（滝）
 
+// surfaceY[k] の意味は「**そのセルにかかっている水塊の液面 Y(px)**」。無ければ -1。
+// 水面セルだけでなく、その下の水中セルにも、液面がタイルより上に来るときは
+// 真上の空セルにも同じ値を入れる。こうしないと、ひとつの水塊なのに列ごとに
+// 塗りの上端が自分のタイルの上辺で頭打ちになり、**線は平らなのに塗りが段々に
+// なる**（実機のスクリーンショットで指摘された。実測で線 73px に対し塗り 80px）。
+
 /**
  * セルが落下中（滝）か。
  *
@@ -127,7 +133,7 @@ function sameBody(water, cols, r1, c1, r2, c2) {
  *
  * @returns {Array<[number, number]>} かたまりに含まれるセルの [行, 列]
  */
-export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, r, c }) {
+export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c }) {
     const cells = [];
     const seen = new Set([r * cols + c]);
     const queue = [[r, c]];
@@ -157,7 +163,28 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, r, c })
     // 整数に丸めるのは描画（fillRect）と当たり判定を1ドットもずらさないため。
     // 以前は描画側だけが Math.round していて、最大0.5px ずれていた
     const avg = Math.round(total / cells.length);
-    for (const [sr, sc] of cells) surfaceY[sr * cols + sc] = avg;
+
+    for (const [sr, sc] of cells) {
+        surfaceY[sr * cols + sc] = avg;
+
+        // 下へ: 同じ水塊の水中セルにも液面を持たせる。これが無いと、水面が
+        // 1段上にある列で「水中セルはタイル全部を塗る」ことになり、液面より
+        // 上まで青くなる
+        for (let rr = sr + 1; rr < rows; rr++) {
+            const kk = rr * cols + sc;
+            if (kind[kk] !== WATER_BODY) break;
+            surfaceY[kk] = avg;
+        }
+
+        // 上へ: 液面がこのタイルより上にあるなら、真上の空セルにも持たせる。
+        // これが無いと、水面が1段下にある列で塗りが液面まで届かない
+        if (sr - 1 >= 0) {
+            const ka = (sr - 1) * cols + sc;
+            if (kind[ka] === WATER_NONE) {
+                surfaceY[ka] = (avg < sr * TILE_SIZE && !isSolid(sr - 1, sc)) ? avg : -1;
+            }
+        }
+    }
 
     return cells;
 }
@@ -192,7 +219,7 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         for (let r = 0; r < rows; r++) {
             const k = r * cols + c;
             if (kind[k] !== WATER_SURFACE || done.has(k)) continue;
-            const cells = levelSurfaceSegment({ water, kind, surfaceY, rows, cols, r, c });
+            const cells = levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c });
             for (const [sr, sc] of cells) done.add(sr * cols + sc);
         }
     }

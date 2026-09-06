@@ -1,7 +1,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
-import { WATER_WAVE_AMPLITUDE, WATER_RIPPLE_DECAY } from '../src/js/utils/Constants.js';
+import { TILE_SIZE, WATER_WAVE_AMPLITUDE, WATER_RIPPLE_DECAY } from '../src/js/utils/Constants.js';
 import { makeWaterMap } from './helpers/water-map.js';
 
 before(() => {
@@ -211,3 +211,56 @@ test('invalidate clears behindCache when adjacent water drops or disappears', as
   assert.equal(filled10, false, '岩ブロック (1,0) に下層水が再描画されないこと');
 });
 
+
+test('水塊の塗りの上端は、どの列でも水面の線と一致する（塗りが段々にならない）', async () => {
+  // 実機のスクリーンショットの指摘。液面をひとつに揃えても、塗りが各セルの
+  // タイルの中でしか描けないと、水面が1段下にある列で上端がタイルの上辺で
+  // 頭打ちになり「線は平らなのに塗りが段々」になっていた（線 73px に対し
+  // 塗り 80px）。液面は水塊にひとつなので、水量が届いていない列でも
+  // 液面まで塗る。
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+
+  // 左半分は水面が行5、右半分は水が1段多くて水面が行4。つながった1つの水たまり
+  const map = makeWaterMap(`
+    ##############
+    #............#
+    #............#
+    #............#
+    #.......88888#
+    #.8888888888.#
+    ##############
+  `);
+
+  const fills = [];
+  const origCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    const ctx = makeFakeCtx();
+    const orig = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (x, y, w, h) => { fills.push({ x, y, w, h }); return orig(x, y, w, h); };
+    return { width: 0, height: 0, getContext: () => ctx };
+  };
+  try {
+    createWaterRenderer({ game: { map } });
+  } finally {
+    globalThis.document.createElement = origCreateElement;
+  }
+
+  // 列ごとの塗りの上端
+  const topByCol = new Map();
+  for (const f of fills) {
+    if (f.h <= 0) continue;
+    const c = Math.floor(f.x / TILE_SIZE);
+    const cur = topByCol.get(c);
+    if (cur === undefined || f.y < cur) topByCol.set(c, f.y);
+  }
+
+  for (let c = 2; c <= 12; c++) {
+    let lineY = null;
+    for (let r = 0; r < map.rows; r++) {
+      if (map.isWaterSurface(r, c)) { lineY = map.getSurfaceY(r, c); break; }
+    }
+    assert.notEqual(lineY, null, `列 ${c} に水面があるはず`);
+    assert.equal(topByCol.get(c), lineY,
+      `列 ${c}: 塗りの上端 ${topByCol.get(c)} が水面の線 ${lineY} と違う（塗りが段になっている）`);
+  }
+});

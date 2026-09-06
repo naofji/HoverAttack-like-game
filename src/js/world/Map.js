@@ -1291,15 +1291,14 @@ export class Map {
     }
 
     /**
-     * セル (r, c) における水面の Y 座標 (px)。セグメント全体の平均。
-     * 水面セルでなければタイルの上辺を返す（旧実装と同じ）。
+     * セル (r, c) にかかっている水塊の液面 Y 座標 (px)。
+     * 液面を持たない水（天井に張り付いた水など）はタイルの上辺を返す。
      */
     getSurfaceY(r, c) {
         if (!this.isWater(r, c)) return -1;
         this._rebuildWaterCacheIfDirty();
-        const k = r * this.cols + c;
-        if (this.waterKind[k] !== WATER_SURFACE) return r * TILE_SIZE;
-        return this.waterSurfaceY[k];
+        const level = this.waterSurfaceY[r * this.cols + c];
+        return level >= 0 ? level : r * TILE_SIZE;
     }
 
     isWaterAtPixel(x, y) {
@@ -1310,9 +1309,12 @@ export class Map {
         this._rebuildWaterCacheIfDirty();
         const k = r * this.cols + c;
         const kind = this.waterKind[k];
+        const level = this.waterSurfaceY[k];
+        // 液面を持つセルは、その液面より下かどうかで決める。水量が無いセルでも
+        // 液面がかかっていれば水（水塊の液面はひとつなので、量子化のせいで
+        // 水量が届いていない列でも液面までは水として扱う）
+        if (level >= 0) return y >= level;
         if (kind === WATER_NONE) return false;
-        // 水面のタイルだけは、液面より下かどうかを見る（タイルの途中に境目がある）
-        if (kind === WATER_SURFACE) return y >= this.waterSurfaceY[k];
         return true;
     }
 
