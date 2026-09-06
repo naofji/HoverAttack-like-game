@@ -26,8 +26,8 @@ test('垂直落下: 縦穴の上空に置かれた水が直下へ重力で落ち
   const isSolid = (r, c) => c === 0 || c === 2 || r === 4;
 
   let active = new Set([0 * cols + 1]);
-  // 4ステップ進める
-  for (let step = 0; step < 4; step++) {
+  // 1/4 速度になったため十分に落ち着くまでステップを進める
+  for (let step = 0; step < 15; step++) {
     const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
     active = res.nextActiveCells;
   }
@@ -162,8 +162,8 @@ test('水槽レベリング: まず最下層の横方向一面が満たされ、
   water[1 * cols + 3] = 10;
   let active = new Set([1 * cols + 3]);
 
-  // 3ステップシミュレーション
-  for (let s = 0; s < 3; s++) {
+  // 3ステップシミュレーション -> 1/4 速度になったため十分に落ち着くまでステップを進める
+  for (let s = 0; s < 15; s++) {
     const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
     active = res.nextActiveCells;
   }
@@ -179,7 +179,7 @@ test('水槽レベリング: まず最下層の横方向一面が満たされ、
   water[1 * cols + 3] += 30;
   active.add(1 * cols + 3);
 
-  for (let s = 0; s < 15; s++) {
+  for (let s = 0; s < 35; s++) {
     const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
     active = res.nextActiveCells;
   }
@@ -194,7 +194,7 @@ test('水槽レベリング: まず最下層の横方向一面が満たされ、
   water[1 * cols + 3] += 10;
   active.add(1 * cols + 3);
 
-  for (let s = 0; s < 15; s++) {
+  for (let s = 0; s < 35; s++) {
     const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
     active = res.nextActiveCells;
   }
@@ -205,6 +205,43 @@ test('水槽レベリング: まず最下層の横方向一面が満たされ、
     assert.equal(water[2 * cols + c], 2, `上の層 (2, ${c}) に水位が上がって均等に 2 溜まるべき: got ${water[2 * cols + c]}`);
     assert.equal(water[1 * cols + c], 0, `さらに上の層 (1, ${c}) はまだ 0 であるべき: got ${water[1 * cols + c]}`);
   }
+});
+
+test('落下速度制限: 垂直落下は1ステップあたり WATER_MAX_FALL_FLOW (2) ずつゆっくり落下する', async () => {
+  const { WATER_MAX_FALL_FLOW } = await import('../src/js/utils/Constants.js');
+  const rows = 3, cols = 1;
+  const water = new Uint8Array(rows * cols);
+  // (0, 0) に満水 8 を置く
+  water[0] = 8;
+  const isSolid = () => false;
+
+  let active = new Set([0]);
+  // 1ステップ実行
+  const res = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
+
+  // 1ステップで落ちた量は WATER_MAX_FALL_FLOW (2) であり、8一気に落ちないこと
+  assert.equal(water[1], WATER_MAX_FALL_FLOW, `1ステップの落下量は ${WATER_MAX_FALL_FLOW} であるべき: got ${water[1]}`);
+  assert.equal(water[0], 8 - WATER_MAX_FALL_FLOW, `元セルに残る水量は ${8 - WATER_MAX_FALL_FLOW} であるべき: got ${water[0]}`);
+});
+
+test('水平流出速度制限: 段差からの水平流出は1ステップあたり WATER_MAX_SPREAD_FLOW (1) ずつ流れる', async () => {
+  const { WATER_MAX_SPREAD_FLOW } = await import('../src/js/utils/Constants.js');
+  // (0, 0) に床あり、(0, 1) は下に穴（落ち口）
+  // 2行 x 2列
+  const rows = 2, cols = 2;
+  const water = new Uint8Array(rows * cols);
+  // (0, 0) に水 8 を置く
+  water[0 * cols + 0] = 8;
+  // (1, 0) は床（solid）、(1, 1) は空洞（落ち口）
+  const isSolid = (r, c) => r === 1 && c === 0;
+
+  let active = new Set([0]);
+  // 1ステップ実行
+  stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active });
+
+  // (0, 0) から右の落ち口 (0, 1) へ流れる量は WATER_MAX_SPREAD_FLOW (1) に制限されること
+  assert.equal(water[0 * cols + 0], 8 - WATER_MAX_SPREAD_FLOW);
+  assert.equal(water[0 * cols + 1] + water[1 * cols + 1], WATER_MAX_SPREAD_FLOW);
 });
 
 

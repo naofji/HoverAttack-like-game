@@ -19,7 +19,7 @@
 //
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
-import { MAX_WATER_MASS } from '../utils/Constants.js';
+import { MAX_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
 
 /**
  * 1ステップの水流計算（行単位水槽レベリングモデル）。
@@ -67,7 +67,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
             const downKey = (r + 1) * cols + c;
             const downMass = water[downKey];
             if (downMass < MAX_WATER_MASS) {
-                const flow = Math.min(mass, MAX_WATER_MASS - downMass);
+                const flow = Math.min(mass, MAX_WATER_MASS - downMass, WATER_MAX_FALL_FLOW);
                 if (flow > 0) {
                     water[k] -= flow;
                     water[downKey] += flow;
@@ -130,26 +130,9 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
 
             if (drainCols.length > 0) {
                 // ケースA: 区間内に落ち口（滝・穴）がある場合
-                // 水は落ち口へ向かって横に流れる
+                // 水は最も近い落ち口へ向かって横に流れる（直下落下はフェーズ1で実行済み）
                 for (const sc of segCols) {
                     let mass = water[r * cols + sc];
-                    if (mass === 0) continue;
-
-                    // 直下が落ち口なら、フェーズ1で落ちられなかった分（または同ステップ）直下へ
-                    if (r + 1 < rows && !isSolid(r + 1, sc)) {
-                        const downKey = (r + 1) * cols + sc;
-                        const downMass = water[downKey];
-                        if (downMass < MAX_WATER_MASS) {
-                            const flow = Math.min(mass, MAX_WATER_MASS - downMass);
-                            if (flow > 0) {
-                                water[r * cols + sc] -= flow;
-                                water[downKey] += flow;
-                                mass -= flow;
-                                markChanged(r, sc);
-                                markChanged(r + 1, sc);
-                            }
-                        }
-                    }
                     if (mass === 0) continue;
 
                     // 最も近い落ち口へ向かって隣のセルへ流す
@@ -169,7 +152,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
                         const targetKey = r * cols + targetCol;
                         const targetMass = water[targetKey];
                         if (targetMass < MAX_WATER_MASS) {
-                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, Math.max(1, Math.floor(mass / 2)));
+                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, WATER_MAX_SPREAD_FLOW);
                             if (flow > 0) {
                                 water[r * cols + sc] -= flow;
                                 water[targetKey] += flow;
@@ -183,7 +166,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells })
                         const targetKey = r * cols + targetCol;
                         const targetMass = water[targetKey];
                         if (targetMass < MAX_WATER_MASS) {
-                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, Math.max(1, Math.floor(mass / 2)));
+                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, WATER_MAX_SPREAD_FLOW);
                             if (flow > 0) {
                                 water[r * cols + sc] -= flow;
                                 water[targetKey] += flow;

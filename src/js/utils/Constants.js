@@ -1077,6 +1077,8 @@ export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がり
 // 水流セル・オートマトン。1タイルを 8 段階の水量（mass）で管理する。
 export const MAX_WATER_MASS = 8;
 export const MIN_WATER_MASS = 1;
+export const WATER_MAX_FALL_FLOW = 2;   // 1フレームあたりの最大垂直落下流量（現行の1/4 = 8/4）
+export const WATER_MAX_SPREAD_FLOW = 1; // 1フレームあたりの最大水平流出量（段差から横にこぼれ落ちる速度）
 // 水源（湧水）と滝の仕様
 export const WATER_SPRING_INTERVAL = 15;        // 湧き出る周期（フレーム）
 export const WATER_SPRING_MASS = 2;            // 1回あたりの湧出水量
