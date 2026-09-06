@@ -19,9 +19,13 @@ import {
     BARRIER_TOUCH_DAMAGE, BARRIER_KNOCKBACK_VX, BARRIER_KNOCKBACK_VY,
     BARRIER_PULSE_PERIOD, BARRIER_COLOR, BARRIER_GLOW_COLOR,
     BARRIER_UNIT_COLOR, BARRIER_UNIT_LAMP_COLOR,
+    BARRIER_FLARE_FRAMES, BARRIER_FLARE_WIDTH, BARRIER_FLARE_HEIGHT,
+    BARRIER_SUCK_COUNT, BARRIER_SUCK_RADIUS, BARRIER_SUCK_FRAMES, BARRIER_SUCK_SIZE,
 } from '../utils/Constants.js';
+import { Particle } from './Particle.js';
 import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 function overlaps(a, b) {
     return a.x < b.x + b.width && a.x + a.width > b.x
@@ -43,6 +47,8 @@ export class FortressBarrier {
         this.alive = true;
         this.timer = 0;
         this.emitterHP = { top: BARRIER_EMITTER_HP, bottom: BARRIER_EMITTER_HP };
+        // 吸収した跡。当たった高さに光の輪を残す（消えるだけだとバグに見える）
+        this.flares = [];
 
         const cx = spec.c * TILE_SIZE + TILE_SIZE / 2;
         this.topUnit = {
@@ -82,6 +88,9 @@ export class FortressBarrier {
             this.emitterHP[which] = 0;
             const unit = which === 'top' ? this.topUnit : this.bottomUnit;
             playBlast(this.game, unit.x + unit.width / 2, unit.y + unit.height / 2, 'missileHit');
+            // 2基目を壊した瞬間だけ、電源が落ちる音を重ねる。1基目では鳴らさない
+            // （まだ張られているので「開いた」と誤解させない）
+            if (!this.active) audioManager.playBarrierDown(unit.x + unit.width / 2);
             return true;
         }
         return false;
@@ -91,17 +100,31 @@ export class FortressBarrier {
         this.timer++;
         const game = this.game;
 
-        // 1. 弾は「ユニットに当たったら削る」「バリアに当たったら吸収」。
+        // 吸収の跡を進める（バリアが消えたあとも残りを描き切る）
+        for (const f of this.flares) f.age++;
+        this.flares = this.flares.filter((f) => f.age < BARRIER_FLARE_FRAMES);
+
+        // 1. 飛んでいるものは「ユニットに当たったら削る」「バリアに当たったら吸収」。
         //    ユニットを先に見るのは、ユニットがバリアの手前側にあるので
-        //    そちらが優先されないと開けられなくなるため
-        for (const proj of game.projectiles || []) {
-            if (!proj.alive || proj.exploded) continue;
-            if (proj.isPlayerOwned && this._hitUnit(proj)) continue;
-            if (!this.active) continue;
-            if (pointIn(proj.x, proj.y, this.fieldRect)) {
-                // 吸収。exploded を立てて、着弾の爆発と地形破壊が走らないようにする
+        //    そちらが優先されないと開けられなくなるため。
+        //
+        //    **2つの配列を見る。** 自機の弾・グレネードと敵アタッカーの弾は
+        //    game.projectiles、敵の弾・ホーミング・反射ビーム・巡航ミサイルは
+        //    game.enemyBullets に入る。片方だけ見ると「ホーミングだけ素通りする」
+        //    ことになり、実際に実機の指摘で見つかった
+        for (const list of [game.projectiles, game.enemyBullets]) {
+            for (const proj of list || []) {
+                if (!proj.alive || proj.exploded) continue;
+                if (proj.isPlayerOwned && this._hitUnit(proj)) continue;
+                if (!this.active) continue;
+                if (!pointIn(proj.x, proj.y, this.fieldRect)) continue;
+                // 吸収。exploded を立てて、着弾の爆発と地形破壊が走らないようにする。
+                // 反射ビームは alive を落とせば帯ごと消える（＝吸われた）
                 proj.alive = false;
                 proj.exploded = true;
+                audioManager.playBarrierAbsorb(proj.x);
+                this.flares.push({ y: proj.y, age: 0 });
+                this._spawnSuckParticles(proj.y);
             }
         }
 
@@ -148,6 +171,39 @@ export class FortressBarrier {
         entity.vy = BARRIER_KNOCKBACK_VY;
     }
 
+    /**
+     * 吸収の粒。**爆発とは逆に、外から中心へ集まって消える。**
+     * バリアの周りに円形に置き、中心へ向かう速度を与えるだけ。
+     */
+    _spawnSuckParticles(y) {
+        const cx = this.fieldX + this.fieldW / 2;
+        for (let i = 0; i < BARRIER_SUCK_COUNT; i++) {
+            const a = (i / BARRIER_SUCK_COUNT) * Math.PI * 2;
+            const px = cx + Math.cos(a) * BARRIER_SUCK_RADIUS;
+            const py = y + Math.sin(a) * BARRIER_SUCK_RADIUS;
+            // 寿命のあいだにちょうど中心へ着く速さ。着いた瞬間に消えるので
+            // 「吸い込まれた」で終わり、通り抜けて散らない
+            const vx = (cx - px) / BARRIER_SUCK_FRAMES;
+            const vy = (y - py) / BARRIER_SUCK_FRAMES;
+            this.game.particles.push(
+                new Particle(px, py, vx, vy, BARRIER_COLOR, BARRIER_SUCK_SIZE, BARRIER_SUCK_FRAMES),
+            );
+        }
+    }
+
+    /** 吸収の跡。**縮みながら**薄くなる輪（広げると爆発に見える）。 */
+    _drawFlares(ctx) {
+        for (const f of this.flares) {
+            const t = f.age / BARRIER_FLARE_FRAMES;
+            const w = BARRIER_FLARE_WIDTH * (1 - t * 0.8);   // 広がるのではなく縮む
+            const cx = this.fieldX + this.fieldW / 2;
+            ctx.globalAlpha = 1 - t;
+            ctx.fillStyle = BARRIER_COLOR;
+            ctx.fillRect(cx - w / 2, f.y - BARRIER_FLARE_HEIGHT / 2, w, BARRIER_FLARE_HEIGHT);
+            ctx.globalAlpha = 1;
+        }
+    }
+
     draw(ctx) {
         // ユニット（壊れていない側だけ）
         for (const which of ['top', 'bottom']) {
@@ -162,6 +218,7 @@ export class FortressBarrier {
                 ctx.fillRect(u.x + 2, u.y + u.height / 2 - 1, u.width - 4, 2);
             }
         }
+        this._drawFlares(ctx);
         if (!this.active) return;
 
         // バリア本体。芯を明滅させ、その外に淡いグロー

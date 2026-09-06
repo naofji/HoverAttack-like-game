@@ -96,3 +96,27 @@ export function stereoPan(sourceX, listenerX, range = AUDIO_PAN_RANGE) {
     const clamped = Math.max(-1, Math.min(1, ratio));
     return clamped * AUDIO_PAN_MAX;
 }
+
+/**
+ * 張られているバリアのうち、いちばん大きく聞こえる1本を返す。
+ *
+ * 合計しないのは敵のホバー音と同じ理由。7面には10本前後あるので、
+ * 足し合わせると本数ぶん音量が青天井になる。
+ *
+ * @param {Array} barriers game.barriers
+ * @param {{cx:number, cy:number, halfW:number, halfH:number}} view
+ * @returns {{x:number, y:number, volume:number}|null} 聞こえるバリアが無ければ null
+ */
+export function nearestActiveBarrier(barriers, view) {
+    if (!barriers || barriers.length === 0) return null;
+    let best = null;
+    for (const b of barriers) {
+        if (!b || !b.active) continue;
+        const x = b.fieldX + b.fieldW / 2;
+        const y = b.fieldY + b.fieldH / 2;
+        const volume = positionalVolume(x, y, view);
+        if (volume <= 0) continue;
+        if (!best || volume > best.volume) best = { x, y, volume };
+    }
+    return best;
+}

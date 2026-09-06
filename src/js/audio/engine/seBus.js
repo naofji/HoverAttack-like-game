@@ -67,6 +67,25 @@ export const AudioSeBus = {
     },
 
     /**
+     * 位置を持つ音の接続先。パンナーを1枚挟んでからバスへ落とす。
+     *
+     * StereoPannerNode が無い環境（古い Safari など）ではそのままバスへ返す。
+     * **パンナーを挟めないことを理由に音を鳴らさない、にはしない** — 定位は
+     * 付加価値であって、音そのものより優先されるものではない。
+     *
+     * @param {number|null} x 音源のワールドX。null なら定位しない
+     * @returns {AudioNode} ここへ繋げばバスに乗る
+     */
+    _panned(x = null) {
+        const dest = this._seDest();
+        if (x == null || typeof this.ctx.createStereoPanner !== 'function') return dest;
+        const panner = this.ctx.createStereoPanner();
+        panner.pan.value = this._panFor(x);
+        panner.connect(dest);
+        return panner;
+    },
+
+    /**
      * 鳴り続ける音の共通の骨格。
      *
      * 「無ければ作る → 毎回 setTargetAtTime で追従させる」という形は

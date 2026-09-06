@@ -23,7 +23,7 @@ test('simulation tick advances the environment', () => {
     env,
     _snapshotPrevPositions() {}, _updateCarrier() {}, _updatePlayer() {}, _updateDeathHold() {},
     _updateCamera() {}, _updateAndPrune() {}, _updateLandmines() {}, _updateAutoAim() {},
-    _updateOverdrive() {}, map: { update() {} }, _updateEnemyHoverSound() {}, _checkMissionClear() {},
+    _updateOverdrive() {}, map: { update() {} }, _updateEnemyHoverSound() {}, _updateBarrierSound() {}, _checkMissionClear() {},
     collisionManager: { update() {} }, _updateProximityAlert() {},
     projectiles: [], particles: [], smokeScreens: [], barriers: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
   };

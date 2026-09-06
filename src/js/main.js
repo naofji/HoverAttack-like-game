@@ -59,7 +59,7 @@ import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { centerOf } from './utils/Physics.js';
-import { nearestHoveringEnemy } from './utils/audioFalloff.js';
+import { nearestHoveringEnemy, nearestActiveBarrier } from './utils/audioFalloff.js';
 import { isEnemyConcealed } from './utils/concealment.js';
 import { MODES } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
@@ -532,6 +532,7 @@ export const Game = {
         this._updateLandmines();
         // バリアは弾の吸収を伴うので、弾の更新のあと・アイテムの前に置く
         for (const barrier of this.barriers) barrier.update();
+        this._updateBarrierSound();
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
@@ -647,6 +648,15 @@ export const Game = {
             return;
         }
         audioManager.setEnemyHover(nearest.volume, nearest.x);
+    },
+
+    /**
+     * バリアの唸り。敵のホバー音と同じく、いちばん近い1本だけを鳴らす
+     * （7面には10本前後あるので、足すと本数ぶん青天井になる）。
+     */
+    _updateBarrierSound() {
+        const nearest = nearestActiveBarrier(this.barriers, this._viewRect());
+        audioManager.setBarrierHum(nearest ? nearest.volume : 0, nearest ? nearest.x : null);
     },
 
     /**

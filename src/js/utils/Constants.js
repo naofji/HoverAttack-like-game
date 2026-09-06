@@ -956,6 +956,36 @@ export const BARRIER_COLOR = '#7FD8FF';      // 電磁パルスの芯
 export const BARRIER_GLOW_COLOR = 'rgba(127, 216, 255, 0.35)';
 export const BARRIER_UNIT_COLOR = '#4A5A6B';
 export const BARRIER_UNIT_LAMP_COLOR = '#7FD8FF';
+// バリアの音。**低い唸り＋速い振幅変調**で「電磁」を出す。純粋なトーンだと
+// 電子音になり、装置が唸っている感じにならない（回復ハムと同じ理由）。
+// 唸りだけだと母艦エンジンと紛らわしいので、11Hz の AM で「ジジジ」を足す
+export const BARRIER_HUM_FREQ = 72;          // 芯の唸り（Hz）
+export const BARRIER_HUM_HARMONIC = 148;     // 上に重ねる矩形波。倍音で金属感を出す
+export const BARRIER_HUM_FILTER = 760;       // ローパス。これより上を削って籠らせる
+export const BARRIER_HUM_AM_HZ = 11;         // 振幅変調。電磁の「ジジジ」
+export const BARRIER_HUM_AM_DEPTH = 0.45;
+export const BARRIER_HUM_GAIN = 0.055;       // 満音量のときの gain。A特性で -41.8dB（回復ハムとほぼ同じ）
+// 弾を吸ったときの単発。短いノイズのバースト＋落ちるブリップ
+export const BARRIER_ABSORB_FILTER = 2200;
+export const BARRIER_ABSORB_DECAY = 0.07;
+export const BARRIER_ABSORB_GAIN = 0.45;  // A特性で -39.7dB。唸り(-41.8dB)より 2dB 上げないと埋もれる（狭いバンドパスで捨てたぶんの補正）
+// 2基目のユニットが壊れてバリアが落ちたときの合図。電源が落ちる下降音
+export const BARRIER_DOWN_FREQ_FROM = 420;
+export const BARRIER_DOWN_FREQ_TO = 55;
+export const BARRIER_DOWN_TIME = 0.38;
+export const BARRIER_DOWN_GAIN = 0.20;       // A特性で -37.4dB。唸りより 4dB 上げて、開いたことが分かるように
+// 吸収の見た目。**弾が消えるだけだとバグに見える**（実機の指摘）。当たった高さに
+// 光の輪を残し、バリアが受け止めたことを見せる。輪は横に広がりながら薄くなる
+// **爆発とは向きが逆**でなければならない（実機の指摘）。爆発は外へ撒くが、吸収は
+// 内へ吸い寄せる。粒はバリアの周りから中心へ集まって消え、光の輪は広がるのではなく
+// 縮んでいく。ここを逆にすると「弾が爆発した」に見えて吸収に読めない
+export const BARRIER_FLARE_FRAMES = 14;      // 輪が消えるまで
+export const BARRIER_FLARE_WIDTH = 26;       // 輪の**最初**の横幅（px）。ここから縮む
+export const BARRIER_FLARE_HEIGHT = 5;       // 同、縦の厚み
+export const BARRIER_SUCK_COUNT = 6;         // 吸い寄せられる粒の数
+export const BARRIER_SUCK_RADIUS = 20;       // どれだけ外から集まってくるか（px）
+export const BARRIER_SUCK_FRAMES = 9;        // 集まりきるまで。短いほど「吸われた」が鋭く出る
+export const BARRIER_SUCK_SIZE = 2;
 
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、

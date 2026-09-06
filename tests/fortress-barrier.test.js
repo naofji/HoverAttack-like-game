@@ -9,7 +9,7 @@ import {
 
 function makeGame(over = {}) {
   return {
-    particles: [], projectiles: [], enemies: [],
+    particles: [], projectiles: [], enemyBullets: [], enemies: [],
     player: null, carrier: null, camera: null,
     spawnExplosion() {}, spawnDebris() {}, addScore() {},
     ...over,
@@ -163,4 +163,112 @@ test('バリアは階の中に収まる（床や天井に埋まらない）', as
       }
     }
   }
+});
+
+import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { BARRIER_FLARE_FRAMES, BARRIER_FLARE_HEIGHT } from '../src/js/utils/Constants.js';
+
+test('弾を吸うと、当たった高さに光の輪が残る（消えるだけにしない）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const hitY = b.fieldY + 10;
+  game.projectiles = [{ x: b.fieldX + 1, y: hitY, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  assert.equal(b.flares.length, 1, '吸収の跡が残っていない');
+  assert.ok(Math.abs(b.flares[0].y - hitY) < 1, '当たった高さと違う位置に出ている');
+  // 閃光の粒も出る（弾が「何かに当たった」ことが伝わるように）
+  assert.ok(game.particles.length > 0, '吸収で粒が出ていない');
+});
+
+test('光の輪は時間で消える', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  game.projectiles = [{ x: b.fieldX + 1, y: b.fieldY + 10, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  game.projectiles = [];
+  for (let i = 0; i < BARRIER_FLARE_FRAMES + 2; i++) b.update();
+  assert.equal(b.flares.length, 0, `${BARRIER_FLARE_FRAMES} フレーム経っても消えない`);
+});
+
+test('光の輪は描画に出る（バリア本体より手前で明るく）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  game.projectiles = [{ x: b.fieldX + 1, y: b.fieldY + 10, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  const plain = makeFakeCtx();
+  const withFlare = makeFakeCtx();
+  b.draw(withFlare);
+  b.flares.length = 0;
+  b.draw(plain);
+  const rects = (ctx) => ctx.calls.filter((c) => c.name === 'fillRect').length;
+  assert.ok(rects(withFlare) > rects(plain), '光の輪が描かれていない');
+});
+
+import { BARRIER_SUCK_COUNT, BARRIER_SUCK_FRAMES } from '../src/js/utils/Constants.js';
+
+test('吸収の粒は爆発とは逆に、外から中心へ向かう', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const hitY = b.fieldY + 10;
+  game.projectiles = [{ x: b.fieldX + 1, y: hitY, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  const parts = game.particles.filter((p) => p.vx !== undefined);
+  assert.equal(parts.length, BARRIER_SUCK_COUNT, '吸収の粒の数が違う');
+  const cx = b.fieldX + b.fieldW / 2;
+  for (const p of parts) {
+    // 速度が中心の方を向いていること。外向き（＝爆発）なら内積が正になる
+    const toCenterX = cx - p.x;
+    const toCenterY = hitY - p.y;
+    const dot = toCenterX * p.vx + toCenterY * p.vy;
+    assert.ok(dot > 0, `粒が外を向いている（爆発に見える） v=(${p.vx},${p.vy})`);
+  }
+});
+
+test('吸収の粒は寿命ぶんでちょうど中心に着く（通り抜けて散らない）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const hitY = b.fieldY + 10;
+  game.projectiles = [{ x: b.fieldX + 1, y: hitY, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  const p = game.particles[0];
+  const cx = b.fieldX + b.fieldW / 2;
+  const endX = p.x + p.vx * BARRIER_SUCK_FRAMES;
+  assert.ok(Math.abs(endX - cx) < 1, `寿命の終わりに中心へ着かない (${endX} vs ${cx})`);
+});
+
+test('光の輪は広がるのではなく縮む', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  game.projectiles = [{ x: b.fieldX + 1, y: b.fieldY + 10, alive: true, exploded: false, isPlayerOwned: false }];
+  b.update();
+  const widthAt = (age) => {
+    b.flares[0].age = age;
+    const ctx = makeFakeCtx();
+    b.draw(ctx);
+    // 輪は高さ BARRIER_FLARE_HEIGHT の矩形。ユニット(8px)・ランプ(2px)とは
+    // 高さで見分けられるので、それで拾う
+    const rect = ctx.calls.find(
+      (c) => c.name === 'fillRect' && c.args[3] === BARRIER_FLARE_HEIGHT);
+    assert.ok(rect, '輪が描かれていない');
+    return rect.args[2];
+  };
+  assert.ok(widthAt(0) > widthAt(BARRIER_FLARE_FRAMES - 1),
+    '輪が広がっている（爆発に見える）');
+});
+
+test('ホーミング・反射ビーム・敵の弾（enemyBullets）も吸収する', () => {
+  // 実機の指摘。自機の弾は game.projectiles、敵のホーミングと反射ビームは
+  // game.enemyBullets に入る。片方だけ見ていると素通りする
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const at = () => ({ x: b.fieldX + 1, y: b.fieldY + 6, alive: true, isPlayerOwned: false });
+  const homing = at();
+  const beam = at();
+  const bullet = at();
+  game.enemyBullets = [homing, beam, bullet];
+  b.update();
+  for (const [name, p] of [['ホーミング', homing], ['反射ビーム', beam], ['敵の弾', bullet]]) {
+    assert.equal(p.alive, false, `${name} が吸収されていない`);
+  }
+  assert.equal(b.flares.length, 3, '吸収した数だけ光の輪が出ていない');
 });
