@@ -6,6 +6,21 @@ import { Map } from '../src/js/world/Map.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, PLAYER_MAX_FALLING_SPEED } from '../src/js/utils/Constants.js';
 import { StageEnvironment, motionFor } from '../src/js/world/StageEnvironment.js';
+import { makeWaterMap } from './helpers/water-map.js';
+
+/**
+ * 実物の Map に water[] と grid を手で入れたあと、派生キャッシュを用意する。
+ * 水の無い面（missionLevel=1）として作った Map には waterKind が無いので、
+ * ここで確保して全列を作り直す。
+ */
+function primeWaterCache(map) {
+    const n = map.rows * map.cols;
+    map.waterKind = new Uint8Array(n);
+    map.waterSurfaceY = new Int16Array(n).fill(-1);
+    map._waterIsSolid = null;
+    map.dirtyWaterCols = new Set([...Array(map.cols).keys()]);
+    map._rebuildWaterCacheIfDirty();
+}
 
 before(() => {
     globalThis.document = {
@@ -68,32 +83,31 @@ test('Map: 水源から定期的に水が湧き出し、下へ落下して総水
     assert.ok(totalMassAfter > totalMassBefore, `Water mass should increase: before=${totalMassBefore}, after=${totalMassAfter}`);
 });
 
-test('isWaterfallAtPixel: 下に空きがある水流を滝と判定し、水底の静水は滝と判定しない', () => {
-    const rows = 10, cols = 10;
-    const map = {
-        rows, cols,
-        water: new Uint8Array(rows * cols),
-        isSolid(r, c) { return r >= 8; }, // r >= 8 が床
-        isWaterAtPixel(x, y) {
-            const r = Math.floor(y / 16);
-            const c = Math.floor(x / 16);
-            return map.water[r * cols + c] > 0;
-        },
-    };
-    // Map の isWaterfallAtPixel ロジックをテスト
-    map.isWaterfallAtPixel = Map.prototype.isWaterfallAtPixel.bind(map);
+test('isWaterfallAtPixel: 満水未満が縦に連なる水流を滝と判定し、水底の静水は滝と判定しない', () => {
+    // 滝の判定ルールを「自分より下のどこかに空気がある」から
+    // 「**自分も直下も満水未満**」へ変えたことに追随した。旧ルールは湖底に穴が
+    // 開いたときに湖を貫く縦縞を出すバグそのものだった（水が1ドットも動いて
+    // いないのに、その列が水面まで全部「滝」と判定されていた）。
+    // 満水セルは「落ち着いた水」として扱うので、水量8のセルは滝にならない。
+    const map = makeWaterMap(`
+        ##########
+        ##########
+        .....4....
+        .....4....
+        ..........
+        ..........
+        ..........
+        .....8....
+        ##########
+        ##########
+    `);
 
-    // (2, 5) に水、(3, 5) に水、(4, 5) は空気（下へ落ちる途中）
-    map.water[2 * cols + 5] = MAX_WATER_MASS;
-    map.water[3 * cols + 5] = 4;
+    // (2,5) と (3,5) は自分も直下も満水未満なので落下中
+    assert.ok(map.isWaterfallAtPixel(5 * 16 + 8, 2 * 16 + 8), '(2,5) は滝の中であるべき');
+    assert.ok(map.isWaterfallAtPixel(5 * 16 + 8, 3 * 16 + 8), '(3,5) は滝の中であるべき');
 
-    // (2, 5) と (3, 5) は滝の中
-    assert.ok(map.isWaterfallAtPixel(5 * 16 + 8, 2 * 16 + 8), 'Row 2 should be waterfall');
-    assert.ok(map.isWaterfallAtPixel(5 * 16 + 8, 3 * 16 + 8), 'Row 3 should be waterfall');
-
-    // (7, 5) は床 (8, 5) の直上で満水（水たまりの底）
-    map.water[7 * cols + 5] = MAX_WATER_MASS;
-    assert.ok(!map.isWaterfallAtPixel(5 * 16 + 8, 7 * 16 + 8), 'Row 7 (resting on floor) should not be waterfall');
+    // (7,5) は床 (8,5) の直上で満水（水たまりの底）
+    assert.ok(!map.isWaterfallAtPixel(5 * 16 + 8, 7 * 16 + 8), '(7,5) は床の上の静水なので滝ではない');
 });
 
 test('StageEnvironment: 滝の中にいる時は WATERFALL_MOTION（downforce, fallSpeedScale）が返る', () => {
@@ -152,20 +166,24 @@ test('Player: 滝の中では下向きのダウンフォースを受け、落下
 
 test('water.js: 離れて2層存在する水ブロックがある場合、それぞれの空気直下のトップが水面になる', async () => {
     const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 15, cols = 10;
-    const water = new Uint8Array(rows * cols);
-    // 上層の池: r = 3..4, c = 2..5 (r = 3 の上が空気)
-    for (let r = 3; r <= 4; r++) for (let c = 2; c <= 5; c++) water[r * cols + c] = 8;
-    // 中間 (r = 5..8) は空気
-    // 下層の池: r = 9..11, c = 2..5 (r = 9 の上が空気)
-    for (let r = 9; r <= 11; r++) for (let c = 2; c <= 5; c++) water[r * cols + c] = 8;
-
-    const map = {
-        rows, cols, width: cols * 16, height: rows * 16, water, waterCells: [],
-        isWater: (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && water[r * cols + c] > 0,
-        isSolid: () => false,
-        isWaterfallAtPixel: () => false,
-    };
+    // 上層の池 (r=3..4) と下層の池 (r=9..11)。あいだの r=5..8 は空気
+    const map = makeWaterMap(`
+        ..........
+        ..........
+        ..........
+        ..8888....
+        ..8888....
+        ..........
+        ..........
+        ..........
+        ..........
+        ..8888....
+        ..8888....
+        ..8888....
+        ..........
+        ..........
+        ..........
+    `);
     const env = { game: { map } };
     const renderer = createWaterRenderer(env);
 
@@ -182,20 +200,23 @@ test('water.js: 離れて2層存在する水ブロックがある場合、それ
 
 test('water.js: 横方向に広がった水面セグメントは各セルの水量がバラついていても平均化されて水平に描画される', async () => {
     const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-    const water = new Uint8Array(rows * cols);
-    // r = 5, c = 2..5 に水面がある。ただし水量は 8, 4, 6, 8 とバラバラ
-    water[5 * cols + 2] = 8;
-    water[5 * cols + 3] = 4;
-    water[5 * cols + 4] = 6;
-    water[5 * cols + 5] = 8;
-
-    const map = {
-        rows, cols, width: cols * 16, height: rows * 16, water, waterCells: [],
-        isWater: (r, c) => r >= 0 && r < rows && c >= 0 && c < cols && water[r * cols + c] > 0,
-        isSolid: () => false,
-        isWaterfallAtPixel: () => false,
-    };
+    // r=5, c=2..5 に水面。水量は 8, 4, 6, 8 とバラバラ。
+    // r=6 に床を敷いてあるのは、下が空気だと「落下中の水柱」と判定されて
+    // 水面ではなくなるため（滝の判定ルールC）。以前のモックは isSolid が
+    // 常に false で、描画側のフォールバック経路を通っていた。その経路は
+    // production では使われないので削除した
+    const map = makeWaterMap(`
+        ..........
+        ..........
+        ..........
+        ..........
+        ..........
+        ..8468....
+        ##########
+        ..........
+        ..........
+        ..........
+    `);
     const env = { game: { map } };
     const renderer = createWaterRenderer(env);
 
@@ -232,6 +253,7 @@ test('Map.getSurfaceY & isWaterAtPixel: 横方向に繋がった水たまりで�
     map.water[5 * cols + 3] = 4;
     map.water[5 * cols + 4] = 6;
     map.water[5 * cols + 5] = 8;
+    primeWaterCache(map);
 
     // 平均水位: ( (6 - 8/8)*16 + (6 - 4/8)*16 + (6 - 6/8)*16 + (6 - 8/8)*16 ) / 4 = 83px
     const expectedSurfaceY = 83;
@@ -271,6 +293,7 @@ test('water.js: 水ブロックの塗り（fillRect）の上端が平均水面�
     map.water[5 * cols + 3] = 4;
     map.water[5 * cols + 4] = 6;
     map.water[5 * cols + 5] = 8;
+    primeWaterCache(map);
 
     const fillCalls = [];
     const origCreateElement = document.createElement;
@@ -361,6 +384,7 @@ test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロッ�
     // (3, 5) に水量4の水。直下 (4, 5) は空気なので落下中（滝）
     map.water[3 * cols + 5] = 4;
     map.waterCells = [[3, 5]];
+    primeWaterCache(map);
 
     const fillCalls = [];
     const origCreateElement = document.createElement;
@@ -397,29 +421,22 @@ test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロッ�
 });
 
 test('Map.isWaterSurface & water.js: 落下中の水（滝）は水面（液面）と判定されず、液面の線を描画しない', async () => {
-    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-    const water = new Uint8Array(rows * cols);
-    // (2, 4) から (4, 4) まで落下水流（滝）
-    water[2 * cols + 4] = 4;
-    water[3 * cols + 4] = 4;
-    water[4 * cols + 4] = 4;
-    // (5, 4) に水たまりの床 (solid)
-    const map = {
-        rows, cols,
-        width: cols * 16,
-        height: rows * 16,
-        water,
-        waterCells: [[2, 4], [3, 4], [4, 4]],
-        isWater(r, c) { return this.water[r * cols + c] > 0; },
-        isSolid(r, c) { return r >= 5; },
-    };
-    // Map の prototype メソッドをバインド
-    const { Map } = await import('../src/js/world/Map.js');
-    map.isWaterfallCell = Map.prototype.isWaterfallCell.bind(map);
-    map.isWaterSurface = Map.prototype.isWaterSurface.bind(map);
-    map.getWaterSurfaceSegment = Map.prototype.getWaterSurfaceSegment.bind(map);
-    map.getSurfaceY = Map.prototype.getSurfaceY.bind(map);
+    // (2,4)〜(4,4) に水量4の水柱。(5,4) から下が床。
+    // 以前は Map.prototype のメソッドをプレーンなオブジェクトに bind して
+    // いたが、種別は waterKind（water[] から導く要約）を読むようになったので、
+    // 共通ヘルパーで同じ状況を組み立てる
+    const map = makeWaterMap(`
+        ..........
+        ..........
+        ....4.....
+        ....4.....
+        ....4.....
+        ##########
+        ##########
+        ##########
+        ##########
+        ##########
+    `);
 
     // 落下中のセル (2, 4), (3, 4) は絶対に水面（液面）になってはならない
     assert.equal(map.isWaterfallCell(2, 4), true, '(2, 4) は滝セルであるべき');
