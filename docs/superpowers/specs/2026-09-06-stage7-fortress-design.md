@@ -204,8 +204,21 @@ Step 9c 雪の階段（5面）
 | 敵 | 越えられない。守備隊は奥に籠もり、開けた瞬間に出てくる |
 | ユニット | バリアの手前側にあるので、バリアを開ける前でも撫でて壊せる |
 
-**段Aでやるのはここまで**: `fortressZones[].barriers` にユニットの座標（天井側・床側の対）を
-入れて返す。エンティティ・当たり判定・音・絵は段Cで作る。
+**実装済み**（`entities/FortressBarrier.js`）。置き場所は `fortressZones[].barriers`
+（`{c, top, bottom}`）で、`SpawnManager.spawnBarriers()` が `game.barriers` に立てる。
+
+実装で決めたこと:
+
+- **敵の一種にはしない。** `game.enemies` に入れると撃破数・スコア・Auto Aim の対象に
+  混ざる。地雷と同じく専用の配列に置いて自分で当たり判定を回す
+- **2基とも壊すまで消えない**（`active` は OR）。片方で消えると「両方を潰す」という核が
+  成立しない。残った1基が張り続けている、という絵として読ませる
+- 吸収した弾は `exploded` も立てる。立てないと着弾の爆発と地形破壊が走ってしまう
+- 弾の判定は**ユニットを先に見る**。バリアを先に見るとユニットに当てられず開けられない
+- ユニットの硬さは砲台と同じ 30（`DAMAGE_PLAYER_MISSILE * 2`）
+
+調整用の定数は `BARRIER_EMITTER_HP` / `BARRIER_TOUCH_DAMAGE` / `BARRIER_KNOCKBACK_*` /
+`BARRIER_FIELD_W` / `BARRIER_PULSE_PERIOD` / `BARRIER_COLOR`。
 
 ### 4c. お宝と守備隊
 
@@ -301,6 +314,9 @@ Step 9c 雪の階段（5面）
 | 右へ進むほど地形が固くなるのが分かるか | `HARD_BLOCK_CHANCE_BY_STAGE` の7行目 |
 | 守備隊の数（区画あたり砲台2・戦車2）が手応えに合うか | `FORTRESS_GARRISON_TURRETS` / `FORTRESS_GARRISON_TANKS` |
 | 奥のお宝3個が見つけたときに嬉しいか | `FORTRESS_TREASURE_COUNT` |
+| **バリアが「越えられない」と一目で分かるか。2基を壊す遊びが伝わるか** | `BARRIER_FIELD_W` / `BARRIER_COLOR` / `BARRIER_PULSE_PERIOD` |
+| ユニット2基（ミサイル4発）が重すぎないか。1本あたりの手間 | `BARRIER_EMITTER_HP` |
+| 接触の押し戻しが強すぎ／弱すぎないか | `BARRIER_KNOCKBACK_VX` / `BARRIER_TOUCH_DAMAGE` |
 
 ## 7. 段B・段Cへの申し送り
 
