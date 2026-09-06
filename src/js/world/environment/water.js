@@ -115,23 +115,6 @@ export function createWaterRenderer(env) {
     const initialBorder = collectBorderBlocks(map, map.waterCells);
     paintBehind(initialBorder);
 
-    // 水面の区間: 「水で、上が水でない」タイルの水面線。生成時に集めて、流入で足す
-    const surfaces = new Map(); // key r*cols+c → {x0, x1, y}
-    const collect = (cells) => {
-        for (const [r, c] of cells) {
-            const key = r * map.cols + c;
-            if (!map.isWater(r, c) || (r > 0 && map.isWater(r - 1, c))) {
-                surfaces.delete(key);
-                continue;
-            }
-            const mass = map.water ? map.water[key] : MAX_WATER_MASS;
-            const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
-            const y = (r + 1) * TILE_SIZE - h;
-            surfaces.set(key, { x0: c * TILE_SIZE, x1: (c + 1) * TILE_SIZE, y });
-        }
-    };
-    collect(map.waterCells);
-
     const renderer = {
         t: 0,
         ripples: [],
@@ -159,14 +142,26 @@ export function createWaterRenderer(env) {
             this.ripples.push({ x, strength });
         },
         invalidate(cells) {
-            paint(cells);
-            // 新たに水になったセルは下層水をクリア（前景の単一塗りに統一し、2重塗りを防止）
+            // 対象セルおよびその上下セルを漏れなく再描画（境目の高さ変化に対応）
+            const toRepaint = new Set();
             for (const [r, c] of cells) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    const nr = r + dr;
+                    if (nr >= 0 && nr < map.rows) {
+                        toRepaint.add(nr * map.cols + c);
+                    }
+                }
+            }
+            const repaintList = [];
+            for (const key of toRepaint) {
+                repaintList.push([Math.floor(key / map.cols), key % map.cols]);
+            }
+            paint(repaintList);
+            for (const [r, c] of repaintList) {
                 bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
-            const border = collectBorderBlocks(map, cells);
+            const border = collectBorderBlocks(map, repaintList);
             paintBehind(border);
-            collect(cells);
         },
         drawBehindTerrain(ctx, camX, camY) {
             const sx = Math.max(0, Math.floor(camX));
@@ -182,16 +177,47 @@ export function createWaterRenderer(env) {
             const sh = Math.min(CANVAS_HEIGHT, map.height - sy);
             if (sw > 0 && sh > 0) ctx.drawImage(cache, sx, sy, sw, sh, sx, sy, sw, sh);
 
-            // 水面。画面内の区間だけを1本のパスにまとめる（区間ごとに stroke しない）
+            // 水面。画面内の各列について、水たまり（地底湖）の「1層の水面」を引く
             ctx.strokeStyle = WATER_SURFACE_COLOR;
             ctx.lineWidth = WATER_SURFACE_LINE_WIDTH;
             ctx.beginPath();
-            for (const s of surfaces.values()) {
-                // 波紋(最大2.5)+波(1.5px)で水面は最大4px動くので、カリング余白は十分に広げてある
-                if (s.x1 < camX || s.x0 > camX + CANVAS_WIDTH || s.y < camY - 12 || s.y > camY + CANVAS_HEIGHT + 12) continue;
-                for (let x = s.x0; x <= s.x1; x += 8) {
-                    const y = s.y + surfaceOffset(x, this.t, this.ripples);
-                    if (x === s.x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+
+            const startCol = Math.max(0, Math.floor(camX / TILE_SIZE));
+            const endCol = Math.min(map.cols - 1, Math.ceil((camX + CANVAS_WIDTH) / TILE_SIZE));
+            const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
+            const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
+
+            let prevX = -999;
+            for (let c = startCol; c <= endCol; c++) {
+                // 列 c において、画面内で最も上にある「水たまりのトップセル」を探す
+                for (let r = startRow; r <= endRow; r++) {
+                    if (!map.isWater(r, c)) continue;
+                    // 上も水なら水中（内部）なので水面ではない
+                    if (r > 0 && map.isWater(r - 1, c)) continue;
+                    // 滝（直下が空洞で落下中の水流）なら、それは水面ではなく滝なので水面線は描かない！
+                    if (map.isWaterfallAtPixel && map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE)) {
+                        continue;
+                    }
+
+                    // 水たまりの液面を見つけた！
+                    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+                    const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+                    const baseY = (r + 1) * TILE_SIZE - h;
+
+                    const x0 = c * TILE_SIZE;
+                    const x1 = (c + 1) * TILE_SIZE;
+
+                    for (let x = x0; x <= x1; x += 8) {
+                        const y = baseY + surfaceOffset(x, this.t, this.ripples);
+                        if (x === x0 && Math.abs(x - prevX) > 1) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                        prevX = x;
+                    }
+                    // この列の水面はこれ1つ（1層）のみ
+                    break;
                 }
             }
             ctx.stroke();

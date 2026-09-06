@@ -36,7 +36,7 @@ import {
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
-import { generateWaterPools, generateWaterSprings, fillDestroyedCells } from './waterPools.js';
+import { generateWaterPools, generateWaterSprings } from './waterPools.js';
 import { stepWaterSimulation } from './waterSimulation.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
@@ -996,8 +996,18 @@ export class Map {
         if (this.blockHP[r][c] <= 0) {
             this.grid[r][c] = BLOCK_EMPTY;
             this.blockHP[r][c] = 0;
-            // 水面より下で水に接していれば、壊れた跡が即座に水で埋まる
-            if (this.water) fillDestroyedCells(this, [[r, c]]);
+            // 破壊されたブロックの周囲をアクティブ化し、水流セル・オートマトンで自然に流れ込ませる
+            if (this.water) {
+                if (!this.activeWaterCells) this.activeWaterCells = new Set();
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
+                            this.activeWaterCells.add(nr * this.cols + nc);
+                        }
+                    }
+                }
+            }
             this.invalidateTileRegion(r, c);
             return true;
         }
@@ -1049,10 +1059,7 @@ export class Map {
                 }
             }
         }
-        // 同時に壊れたクレーターは、水に接する破壊跡から順にまとめて埋める
-        // (damageBlock は1セルずつしか流入を試さないため、クレーターの奥まで届かない)
         if (this.water && destroyed.length) {
-            fillDestroyedCells(this, destroyed.map(({ r, c }) => [r, c]));
             if (!this.activeWaterCells) this.activeWaterCells = new Set();
             for (const { r, c } of destroyed) {
                 for (let dr = -1; dr <= 1; dr++) {
@@ -1252,7 +1259,11 @@ export class Map {
     /** 水タイルの水面の行。水でなければ -1。 */
     waterSurfaceRow(r, c) {
         if (!this.isWater(r, c)) return -1;
-        return this.waterSurface ? this.waterSurface[r * this.cols + c] : r;
+        let currR = r;
+        while (currR > 0 && this.isWater(currR - 1, c)) {
+            currR--;
+        }
+        return currR;
     }
 
     pixelToTile(x, y) {

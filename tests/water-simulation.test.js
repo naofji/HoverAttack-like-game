@@ -2,10 +2,20 @@
 // セル・オートマトン水流シミュレーション テスト
 // ============================================
 
-import { test } from 'node:test';
+import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
 import { MAX_WATER_MASS } from '../src/js/utils/Constants.js';
+
+before(() => {
+  globalThis.document = {
+    createElement: () => {
+      const ctx = makeFakeCtx();
+      return { width: 0, height: 0, getContext: () => ctx };
+    },
+  };
+});
 
 test('垂直落下: 縦穴の上空に置かれた水が直下へ重力で落ちて溜まる', () => {
   const rows = 5, cols = 3;
@@ -99,4 +109,47 @@ test('壁破壊による流出: 仕切り壁が破壊されると隣の低い空
   assert.ok(water[2 * cols + 3] > 0, '右の部屋に水が流れていない');
   assert.equal(water[2 * cols + 1] + water[2 * cols + 2] + water[2 * cols + 3], 8, '総水量が保存されていない');
 });
+
+test('Map.damageBlock: ブロック破壊時に即座に水ブロック化せず、自然に水が流れ込む（水増殖なし）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const { SeededRNG } = await import('../src/js/utils/SeededRNG.js');
+  const game = { rng: new SeededRNG(1), settings: {} };
+  const map = new Map(game, 3); // 4面: water
+
+  // 水ブロックに隣接する破壊可能ブロックを探す
+  let targetR = -1, targetC = -1;
+  for (let r = 5; r < map.rows - 5; r++) {
+    for (let c = 5; c < map.cols - 5; c++) {
+      if (map.grid[r][c] !== 0 && !map.isSolid(r, c)) continue;
+      // 固体ブロックで、左右上下のいずれかが水
+      if (map.isSolid(r, c) && map.grid[r][c] === 1) {
+        if (map.isWater(r, c - 1) || map.isWater(r, c + 1) || map.isWater(r - 1, c)) {
+          targetR = r;
+          targetC = c;
+          break;
+        }
+      }
+    }
+    if (targetR >= 0) break;
+  }
+
+  if (targetR >= 0) {
+    let totalWaterBefore = 0;
+    for (let i = 0; i < map.water.length; i++) totalWaterBefore += map.water[i];
+
+    // ブロックを破壊する
+    map.damageBlock(targetR, targetC, 10);
+    // 破壊された瞬間は水ブロック（以前の即時MAX_WATER）になっておらず、空洞であること
+    assert.equal(map.water[targetR * map.cols + targetC], 0, '破壊直後に水ブロックが即時生成されてしまっている');
+
+    let totalWaterImmediately = 0;
+    for (let i = 0; i < map.water.length; i++) totalWaterImmediately += map.water[i];
+    assert.equal(totalWaterImmediately, totalWaterBefore, 'ブロック破壊によって水が勝手に増殖してしまっている');
+
+    // シミュレーション更新を進めると、隣の水が自然に流れ込む
+    for (let i = 0; i < 20; i++) map.update();
+    assert.ok(map.water[targetR * map.cols + targetC] > 0, 'セル・オートマトンで水が流れ込んでいない');
+  }
+});
+
 
