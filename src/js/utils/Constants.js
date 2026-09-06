@@ -1074,9 +1074,9 @@ export const WATER_POOL_COUNT = 3;
 export const WATER_POOL_DEPTH_MIN = 3;      // 段（タイル）
 export const WATER_POOL_DEPTH_RANGE = 2;    // 3〜5段（depthMin + floor(rng*(range+1)) なので range=2）
 export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
-// 地底湖の描画。塗りは半透明（多層水描画：下層水＋前景水）。水面は区間ごとに sin で上下。
-export const WATER_BEHIND_FILL = 'rgba(40, 120, 200, 0.35)'; // 地形の下に敷く下層水（面取り隙間埋め＋水中深度）
-export const WATER_FILL = 'rgba(40, 120, 200, 0.35)';        // エンティティの上に重ねる前景水
+// 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
+export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
+export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）
 export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
 export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
 export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない

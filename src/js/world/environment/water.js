@@ -102,7 +102,7 @@ export function createWaterRenderer(env) {
 
     paint(map.waterCells);
     const initialBorder = collectBorderBlocks(map, map.waterCells);
-    paintBehind([...map.waterCells, ...initialBorder]);
+    paintBehind(initialBorder);
 
     // 水面の区間: 「水で、上が水でない」タイルの上辺。生成時に集めて、流入で足す
     const surfaces = new Map(); // key r*cols+c → {x0, x1, y}
@@ -127,8 +127,12 @@ export function createWaterRenderer(env) {
         },
         invalidate(cells) {
             paint(cells);
+            // 新たに水になったセルは下層水をクリア（前景の単一塗りに統一し、2重塗りを防止）
+            for (const [r, c] of cells) {
+                bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
             const border = collectBorderBlocks(map, cells);
-            paintBehind([...cells, ...border]);
+            paintBehind(border);
             collect(cells);
         },
         drawBehindTerrain(ctx, camX, camY) {
