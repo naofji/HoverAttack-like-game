@@ -43,6 +43,11 @@ export const BLOCK_EMPTY = 0;
 export const BLOCK_NORMAL = 1;   // Destructible (brown)
 export const BLOCK_HARD = 2;     // Takes multiple hits (blue/cyan)
 export const BLOCK_INDESTRUCTIBLE = 3; // Cannot be destroyed (gray)
+// 7面の要塞の壁。HardRock(HP 3)より硬く、絵は機械加工されたパネル。
+// **壊せないわけではない** — 外壁は厚さ2層なので 6x2 = 12発で抜ける（実質難攻不落）。
+// 壊せないブロックを使わずに同じ効果を出すのが要点で、副産物として要塞が
+// マップを分断する危険が原理的に消える（設計 2026-09-06-stage7-fortress-design.md 節3）
+export const BLOCK_METAL = 4;
 
 // --- Physics ---
 export const GRAVITY = 0.30;
@@ -1055,6 +1060,17 @@ export const HARD_BLOCK_TINT = 0.65;    // 0 = 面の色そのまま、1.0 = 灰
 export const HARD_BLOCK_DARKEN = 0.62;  // 硬い岩の輝度 ÷ 通常岩の輝度
 export const COLOR_INDESTRUCTIBLE_BLOCK = '#2a6496';
 export const COLOR_INDESTRUCTIBLE_BLOCK_BORDER = '#1a3d5c';
+// 要塞の金属。硬い岩と同じく面のパレットから作るが、寄せ先を青みの強い鋼にして
+// 岩と見分けられるようにする。硬い岩より明るいのは「磨かれた面」に見せるため
+export const COLOR_METAL_BLOCK = '#6B7A8C';
+export const COLOR_METAL_BLOCK_BORDER = '#3D4753';
+export const METAL_BLOCK_TINT = 0.75;   // 硬い岩(0.65)より寄せ先に近い＝面の色より素材感を優先
+export const METAL_BLOCK_DARKEN = 0.85; // 硬い岩(0.62)ほど暗くしない。金属は光を返す
+// 金属の被弾。**ひび割れさせない**（金属が割れるのは絵としておかしい、という実機の指摘）。
+// 代わりに熱で赤茶け、同時に鏡面ハイライトが落ちて艶が飛ぶ
+export const METAL_BLOCK_HP = 6;
+export const METAL_HEAT_COLOR = '#8C3A1E';   // 焼けた赤茶
+export const METAL_HEAT_GLOSS_LOSS = 0.85;   // 満身創痍でハイライトをこの割合まで削る
 export const COLOR_CAVE_BG = '#1a0a00';
 
 // --- Mini-map (実際の地形を縮小して焼く。tile cache を drawImage で縮小するだけなので

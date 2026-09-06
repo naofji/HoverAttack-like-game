@@ -4,8 +4,10 @@
 
 import {
     MIN_MAP_COLS, MIN_MAP_ROWS, MAX_MAP_COLS, MAX_MAP_ROWS,
-    BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE,
+    BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE, BLOCK_METAL,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER, HARD_BLOCK_TINT, HARD_BLOCK_DARKEN,
+    COLOR_METAL_BLOCK, COLOR_METAL_BLOCK_BORDER, METAL_BLOCK_TINT, METAL_BLOCK_DARKEN,
+    METAL_BLOCK_HP, METAL_HEAT_COLOR, METAL_HEAT_GLOSS_LOSS,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
@@ -47,6 +49,14 @@ function hardBlockColor(base, gray) {
     return withLuminance(lerpColor(base, gray, HARD_BLOCK_TINT), luminance(base) * HARD_BLOCK_DARKEN);
 }
 
+/**
+ * 要塞の金属の色。硬い岩と同じ2段構えだが、寄せ先が鋼色で、暗くする度合いも弱い。
+ * 岩（暗く彩度が低い）と金属（明るく青い）を並べたときに素材が違うと読めるようにする。
+ */
+function metalBlockColor(base, steel) {
+    return withLuminance(lerpColor(base, steel, METAL_BLOCK_TINT), luminance(base) * METAL_BLOCK_DARKEN);
+}
+
 export class Map {
     constructor(game, missionLevel = 0) {
         this.game = game;
@@ -65,6 +75,10 @@ export class Map {
                 border: hardBlockColor(palettes[palIdx].border, COLOR_HARD_BLOCK_BORDER),
             },
             [BLOCK_INDESTRUCTIBLE]: { fill: COLOR_INDESTRUCTIBLE_BLOCK, border: COLOR_INDESTRUCTIBLE_BLOCK_BORDER },
+            [BLOCK_METAL]: {
+                fill: metalBlockColor(palettes[palIdx].fill, COLOR_METAL_BLOCK),
+                border: metalBlockColor(palettes[palIdx].border, COLOR_METAL_BLOCK_BORDER),
+            },
         };
 
         // Scale map size based on mission level (levels 0 to 4 correspond to Mission 1 to 5)
@@ -936,8 +950,8 @@ export class Map {
                 this.tileCacheCtx.clearRect(c * S, r * S, S, S);
                 const block = this.grid[r][c];
                 if (block === BLOCK_EMPTY) continue;
-                if (block === BLOCK_INDESTRUCTIBLE) {
-                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S);
+                if (block === BLOCK_INDESTRUCTIBLE || block === BLOCK_METAL) {
+                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S, this.blockStyles[block], r, c);
                 } else {
                     this._drawRockyBlock(this.tileCacheCtx, r, c, block);
                 }
@@ -996,8 +1010,8 @@ export class Map {
             for (let c = 0; c < this.cols; c++) {
                 const block = this.grid[r][c];
                 if (block === BLOCK_EMPTY) continue;
-                if (block === BLOCK_INDESTRUCTIBLE) {
-                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S);
+                if (block === BLOCK_INDESTRUCTIBLE || block === BLOCK_METAL) {
+                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S, this.blockStyles[block], r, c);
                 } else {
                     this._drawRockyBlock(this.tileCacheCtx, r, c, block);
                 }
@@ -1427,19 +1441,33 @@ export class Map {
         ctx.restore();
     }
 
-    _drawPolishedBlock(ctx, x, y, S) {
-        const style = this.blockStyles[BLOCK_INDESTRUCTIBLE];
+    /**
+     * 機械加工されたパネルの絵。壊せない装甲と、7面の要塞の金属が共有する。
+     *
+     * 金属は被弾しても**割れない**（金属がひび割れるのは絵としておかしい、という
+     * 実機の指摘）。代わりに熱で赤茶け、同時に鏡面ハイライトが落ちて艶が飛ぶ。
+     * 焼け具合は blockHP から出すので、r/c を受け取る。
+     */
+    _drawPolishedBlock(ctx, x, y, S, style = this.blockStyles[BLOCK_INDESTRUCTIBLE], r = -1, c = -1) {
         const B = 3; // ベベル幅
 
+        // 金属の焼け。0 = 無傷、1 = あと1発
+        let heat = 0;
+        if (r >= 0 && this.grid[r] && this.grid[r][c] === BLOCK_METAL) {
+            heat = (METAL_BLOCK_HP - this.blockHP[r][c]) / METAL_BLOCK_HP;
+        }
+        // 艶は焼けるほど飛ぶ。色だけ変えても「焼けた」に見えないので両方動かす
+        const gloss = 1 - heat * METAL_HEAT_GLOSS_LOSS;
+
         // ベース塗り
-        ctx.fillStyle = style.fill;
+        ctx.fillStyle = heat > 0 ? lerpColor(style.fill, METAL_HEAT_COLOR, heat) : style.fill;
         ctx.fillRect(x, y, S, S);
 
         // 上面ハイライト（光が当たる面）
-        ctx.fillStyle = 'rgba(255,255,255,0.38)';
+        ctx.fillStyle = `rgba(255,255,255,${(0.38 * gloss).toFixed(3)})`;
         ctx.fillRect(x, y, S, B);
         // 左面ハイライト
-        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillStyle = `rgba(255,255,255,${(0.22 * gloss).toFixed(3)})`;
         ctx.fillRect(x, y + B, B, S - B);
 
         // 下面シャドウ
@@ -1450,17 +1478,17 @@ export class Map {
         ctx.fillRect(x + S - B, y, B, S - B);
 
         // 内側の陰刻ライン（機械加工されたタイル感）
-        ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+        ctx.strokeStyle = `rgba(255,255,255,${(0.13 * gloss).toFixed(3)})`;
         ctx.lineWidth = 1;
         ctx.strokeRect(x + B + 0.5, y + B + 0.5, S - 2 * B - 1, S - 2 * B - 1);
 
         // 光沢スポット（左上に小さな鏡面ハイライト）
         const inner = S - 2 * B;
-        ctx.fillStyle = 'rgba(255,255,255,0.24)';
+        ctx.fillStyle = `rgba(255,255,255,${(0.24 * gloss).toFixed(3)})`;
         ctx.fillRect(x + B, y + B, Math.ceil(inner * 0.55), Math.ceil(inner * 0.38));
 
-        // エッジラインで個々のタイル境界をくっきり示す
-        ctx.fillStyle = 'rgba(255,255,255,0.62)';
+        // エッジラインで個々のタイル境界をくっきり示す（焼けると縁の艶も落ちる）
+        ctx.fillStyle = `rgba(255,255,255,${(0.62 * gloss).toFixed(3)})`;
         ctx.fillRect(x, y, S, 1);           // 上端
         ctx.fillRect(x, y, 1, S);           // 左端
         ctx.fillStyle = 'rgba(0,0,0,0.68)';
@@ -1469,4 +1497,4 @@ export class Map {
     }
 }
 
-export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_HARD } from '../utils/Constants.js';
+export { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_HARD, BLOCK_METAL } from '../utils/Constants.js';
