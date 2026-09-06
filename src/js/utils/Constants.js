@@ -1053,6 +1053,10 @@ export const HARD_BLOCK_HP = 3;
 // 浮力は持たない（重力が弱いだけで、沈めば底を歩く）。実機で詰める前の初期値。
 export const WATER_SPEED_SCALE = 0.5;
 export const WATER_GRAVITY_SCALE = 0.3;
+// 水中での最大落下速度の倍率（空気中 MAX_FALLING_SPEED に対する係数）。
+// 0.42 を掛けることで、実移動量は空気中の約 0.21倍（現行の半分以下）に抑えられ、
+// 自機(実速度 約1.47)・グレネード(実速度 約1.26)ともに心地よい浮力と沈降感になる。
+export const WATER_FALL_SPEED_SCALE = 0.42;
 // 雪の地上で入力を離したときの速度の残存率（陸上は 0 = 即停止）。
 export const ICE_SLIDE = 0.94;  // 実機: もう少し滑る（0.9 → 0.94。止まるまでの距離が約1.7倍）
 export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない

@@ -8,6 +8,7 @@ import {
     GRENADE_BLOCK_DAMAGE, ENEMY_GRENADE_BLOCK_DAMAGE,
     GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
     GRENADE_LIFETIME,
+    WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
@@ -35,7 +36,10 @@ export class Grenade {
 
         // Apply gravity
         this.vy += GRENADE_GRAVITY * motion.gravity;
-        if (this.vy > GRENADE_MAX_FALLING_SPEED) this.vy = GRENADE_MAX_FALLING_SPEED;
+        const maxFall = motion.speed < 1
+            ? GRENADE_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
+            : GRENADE_MAX_FALLING_SPEED;
+        if (this.vy > maxFall) this.vy = maxFall;
 
         // Calculate next position
         let nextX = this.x + this.vx * motion.speed;

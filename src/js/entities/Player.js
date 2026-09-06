@@ -19,7 +19,8 @@ import {
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
     SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
-    SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE
+    SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
+    WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -368,7 +369,10 @@ export class Player {
 
     /** Clamp vertical speed within allowed limits. */
     _updateSpeedCaps() {
-        if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
+        const maxFall = this.motion.speed < 1
+            ? PLAYER_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
+            : PLAYER_MAX_FALLING_SPEED;
+        if (this.vy > maxFall) this.vy = maxFall;
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
     }
 

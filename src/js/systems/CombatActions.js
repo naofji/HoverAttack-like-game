@@ -16,6 +16,7 @@ import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
     GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION, GRENADE_LIFETIME,
+    WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { Missile } from '../entities/Missile.js';
 import { Grenade } from '../entities/Grenade.js';
@@ -229,7 +230,10 @@ export const CombatActions = {
             const motion = motionFor(this, x, y);
 
             vy += GRENADE_GRAVITY * motion.gravity;
-            if (vy > GRENADE_MAX_FALLING_SPEED) vy = GRENADE_MAX_FALLING_SPEED;
+            const maxFall = motion.speed < 1
+                ? GRENADE_MAX_FALLING_SPEED * WATER_FALL_SPEED_SCALE
+                : GRENADE_MAX_FALLING_SPEED;
+            if (vy > maxFall) vy = maxFall;
 
             let nextX = x + vx * motion.speed;
             let nextY = y + vy * motion.speed;
