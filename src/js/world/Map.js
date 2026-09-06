@@ -28,12 +28,14 @@ import {
     FORTRESS_SHAFT_W, FORTRESS_GATE_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
     FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
     FORTRESS_BARRIER_CLEARANCE, FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
-    HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP
+    HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP,
+    MAX_WATER_MASS, MIN_WATER_MASS,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, fillDestroyedCells } from './waterPools.js';
+import { stepWaterSimulation } from './waterSimulation.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
 import { stairDirection } from '../utils/slope.js';
@@ -125,9 +127,10 @@ export class Map {
         this.enemyTurretSpawns = [];
         this.enemyBaseSpawn = null;
 
-        this.water = null;          // Uint8Array(rows*cols)。1 = 水。水の無い面は null のまま
+        this.water = null;          // Uint8Array(rows*cols)。0..MAX_WATER_MASS。水の無い面は null のまま
         this.waterSurface = null;   // Int16Array。水タイルの水面の行。それ以外 -1
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
+        this.activeWaterCells = new Set(); // 現在水流シミュレーションがアクティブなセル
         this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
         // 地形の生成規則。'fortress' なら洞窟を掘ったあとに要塞区画を埋め込む
         this.envTerrain = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].terrain;
@@ -378,9 +381,10 @@ export class Map {
         });
         this.water = new Uint8Array(this.rows * this.cols);
         this.waterSurface = new Int16Array(this.rows * this.cols).fill(-1);
+        this.activeWaterCells = new Set();
         for (const pool of pools) {
             for (const [r, c] of pool.cells) {
-                this.water[r * this.cols + c] = 1;
+                this.water[r * this.cols + c] = MAX_WATER_MASS;
                 this.waterSurface[r * this.cols + c] = pool.surfaceRow;
                 this.waterCells.push([r, c]);
             }
@@ -1042,6 +1046,17 @@ export class Map {
         // (damageBlock は1セルずつしか流入を試さないため、クレーターの奥まで届かない)
         if (this.water && destroyed.length) {
             fillDestroyedCells(this, destroyed.map(({ r, c }) => [r, c]));
+            if (!this.activeWaterCells) this.activeWaterCells = new Set();
+            for (const { r, c } of destroyed) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
+                            this.activeWaterCells.add(nr * this.cols + nc);
+                        }
+                    }
+                }
+            }
         }
         return destroyed;
     }
@@ -1191,17 +1206,27 @@ export class Map {
     isWater(r, c) {
         if (!this.water) return false;
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
-        return this.water[r * this.cols + c] === 1;
+        return this.water[r * this.cols + c] >= MIN_WATER_MASS;
     }
 
     isWaterAtPixel(x, y) {
-        return this.isWater(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+        if (!this.water) return false;
+        const r = Math.floor(y / TILE_SIZE);
+        const c = Math.floor(x / TILE_SIZE);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        const mass = this.water[r * this.cols + c];
+        if (mass < MIN_WATER_MASS) return false;
+        // 真上も水なら満水状態（水中）
+        if (r > 0 && this.water[(r - 1) * this.cols + c] >= MIN_WATER_MASS) return true;
+        // 水面セル: 水量に応じた液面高さ判定
+        const surfaceY = (r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE;
+        return y >= surfaceY;
     }
 
     /** 水タイルの水面の行。水でなければ -1。 */
     waterSurfaceRow(r, c) {
         if (!this.isWater(r, c)) return -1;
-        return this.waterSurface[r * this.cols + c];
+        return this.waterSurface ? this.waterSurface[r * this.cols + c] : r;
     }
 
     pixelToTile(x, y) {
@@ -1216,7 +1241,20 @@ export class Map {
     // ------------------------------------------
 
     update() {
-        // Placeholder for future map animations
+        if (this.envKind === 'water' && this.water && this.activeWaterCells && this.activeWaterCells.size > 0) {
+            const isSolid = (r, c) => this.isSolid(r, c);
+            const res = stepWaterSimulation({
+                water: this.water,
+                rows: this.rows,
+                cols: this.cols,
+                isSolid,
+                activeCells: this.activeWaterCells,
+            });
+            this.activeWaterCells = res.nextActiveCells;
+            if (res.changedCells.length > 0) {
+                this.onWaterChanged(res.changedCells);
+            }
+        }
     }
 
     draw(ctx) {

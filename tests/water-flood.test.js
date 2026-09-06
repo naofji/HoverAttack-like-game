@@ -12,7 +12,7 @@ function mapStub() {
   const changed = [];
   return {
     rows, cols, water, waterSurface,
-    isWater(r, c) { return r >= 0 && c >= 0 && r < rows && c < cols && water[r * cols + c] === 1; },
+    isWater(r, c) { return r >= 0 && c >= 0 && r < rows && c < cols && water[r * cols + c] >= 1; },
     waterSurfaceRow(r, c) { return this.isWater(r, c) ? waterSurface[r * cols + c] : -1; },
     onWaterChanged(cells) { changed.push(...cells); },
     changed,

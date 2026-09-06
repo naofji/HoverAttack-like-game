@@ -1074,6 +1074,9 @@ export const WATER_POOL_COUNT = 3;
 export const WATER_POOL_DEPTH_MIN = 3;      // 段（タイル）
 export const WATER_POOL_DEPTH_RANGE = 2;    // 3〜5段（depthMin + floor(rng*(range+1)) なので range=2）
 export const WATER_POOL_MAX_TILES = 600;    // これを超える塗り広がりは「部屋に閉じていない」とみなして捨てる
+// 水流セル・オートマトン。1タイルを 8 段階の水量（mass）で管理する。
+export const MAX_WATER_MASS = 8;
+export const MIN_WATER_MASS = 1;
 // 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
 export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）

@@ -10,7 +10,7 @@
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS,
 } from '../../utils/Constants.js';
 
 const RIPPLE_WIDTH = 64; // px。波紋が効く横の範囲
@@ -88,7 +88,18 @@ export function createWaterRenderer(env) {
         cctx.fillStyle = WATER_FILL;
         for (const [r, c] of cells) {
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            if (!map.isWater(r, c)) continue;
+            const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+            if (mass === 0) continue;
+            // 真上も水なら満水状態（16x16）
+            if (r > 0 && map.isWater(r - 1, c)) {
+                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else {
+                // 水面セル: 水量に応じた高さだけ下から塗る
+                const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+                const y = (r + 1) * TILE_SIZE - h;
+                cctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, h);
+            }
         }
     };
 
@@ -104,12 +115,19 @@ export function createWaterRenderer(env) {
     const initialBorder = collectBorderBlocks(map, map.waterCells);
     paintBehind(initialBorder);
 
-    // 水面の区間: 「水で、上が水でない」タイルの上辺。生成時に集めて、流入で足す
+    // 水面の区間: 「水で、上が水でない」タイルの水面線。生成時に集めて、流入で足す
     const surfaces = new Map(); // key r*cols+c → {x0, x1, y}
     const collect = (cells) => {
         for (const [r, c] of cells) {
-            if (map.isWater(r - 1, c)) continue;
-            surfaces.set(r * map.cols + c, { x0: c * TILE_SIZE, x1: (c + 1) * TILE_SIZE, y: r * TILE_SIZE });
+            const key = r * map.cols + c;
+            if (!map.isWater(r, c) || (r > 0 && map.isWater(r - 1, c))) {
+                surfaces.delete(key);
+                continue;
+            }
+            const mass = map.water ? map.water[key] : MAX_WATER_MASS;
+            const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+            const y = (r + 1) * TILE_SIZE - h;
+            surfaces.set(key, { x0: c * TILE_SIZE, x1: (c + 1) * TILE_SIZE, y });
         }
     };
     collect(map.waterCells);

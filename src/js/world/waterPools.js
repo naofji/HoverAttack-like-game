@@ -9,7 +9,7 @@
 // 乱数は呼び出し側が派生ストリームを渡す。game.rng を消費すると敵の構成が
 // 変わって週の決定性が壊れる（CaveBackdrop と同じ理由）。
 
-import { BLOCK_EMPTY } from '../utils/Constants.js';
+import { BLOCK_EMPTY, MAX_WATER_MASS } from '../utils/Constants.js';
 
 function inRects(r, c, rects) {
     return rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
@@ -89,7 +89,7 @@ export function fillDestroyedCells(map, destroyed) {
                 if (s >= 0 && r >= s) { surface = s; break; }
             }
             if (surface < 0) continue;
-            map.water[key] = 1;
+            map.water[key] = MAX_WATER_MASS;
             map.waterSurface[key] = surface;
             filled.push([r, c]);
             pending.delete(key);
