@@ -1312,19 +1312,40 @@ export class Map {
         };
 
         if (!checkWater(r, c)) return false;
-        // 直下が固体なら水底なので滝ではない
+        // 直下が固体なら水底なので絶対に滝ではない（PoolingWater）
         if (r + 1 >= this.rows || (this.isSolid && this.isSolid(r + 1, c))) return false;
         // 直下が水でなければ下へ落下中（滝）
         if (!checkWater(r + 1, c)) return true;
-        // 直下が満水でなければ下へ落下中（滝）
-        const belowMass = this.water ? this.water[(r + 1) * this.cols + c] : 0;
-        if (belowMass < MAX_WATER_MASS) return true;
-        // 直下も満水だが、さらに下が空洞や落下中なら滝の柱の中
+
+        // 直下が水の場合: 下方向へ辿って、途中に水のない空洞（空気）が存在するか？
         let downR = r + 1;
-        while (downR < this.rows - 1 && !(this.isSolid && this.isSolid(downR, c)) && this.water[downR * this.cols + c] >= MAX_WATER_MASS) {
+        let hitsAir = false;
+        while (downR < this.rows && !(this.isSolid && this.isSolid(downR, c))) {
+            if (!checkWater(downR, c)) {
+                hitsAir = true;
+                break;
+            }
             downR++;
         }
-        return downR < this.rows && !(this.isSolid && this.isSolid(downR, c)) && this.water[downR * this.cols + c] < MAX_WATER_MASS;
+        if (hitsAir) {
+            // 下に空洞（空気）がある空間へ落ちていく途中なので、滝（FallingWater）
+            return true;
+        }
+
+        // 下がすべて水で底が床（solid）の場合:
+        // 基本的には水槽・プール（PoolingWater）である。
+        // 左右が水に繋がっているか、両側が壁で挟まれた水槽なら、間違いなく PoolingWater（滝ではない）
+        const leftIsWater = c > 0 && checkWater(r, c - 1);
+        const rightIsWater = c + 1 < this.cols && checkWater(r, c + 1);
+        const leftIsSolid = c > 0 && this.isSolid && this.isSolid(r, c - 1);
+        const rightIsSolid = c + 1 < this.cols && this.isSolid && this.isSolid(r, c + 1);
+
+        if (leftIsWater || rightIsWater || (leftIsSolid && rightIsSolid)) {
+            return false;
+        }
+
+        // 左右が空気（水たまりが横に広がっていない孤立した垂直水流）で、直下が床でないなら空中の滝の柱
+        return true;
     }
 
     /** ピクセル座標が落下中の滝（水流）の中にあるか */

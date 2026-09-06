@@ -431,3 +431,81 @@ test('Map.isWaterSurface & water.js: 落下中の水（滝）は水面（液面�
     assert.equal(map.isWaterSurface(4, 4), true, '(4, 4) は水面（液面）である');
 });
 
+test('getWaterfallPlacement: 左から水が供給される時は左端寄り、右から水が供給される時は右端寄り、空中は中央に配置される', async () => {
+    const { getWaterfallPlacement } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+
+    // ケース1: 左から水が供給される（(2, 3) が水、(2, 4) が滝）
+    const mapLeft = {
+        rows, cols,
+        isWater: (r, c) => (r === 2 && c === 3) || (r === 2 && c === 4),
+        isSolid: () => false,
+    };
+    const placementLeft = getWaterfallPlacement(mapLeft, 2, 4);
+    assert.equal(placementLeft.align, 'left', '左から供給される時は align=left');
+    assert.equal(placementLeft.x, 4 * 16 + 1, '左端寄りに配置されるべき (offset=1)');
+
+    // ケース2: 右から水が供給される（(2, 5) が水、(2, 4) が滝）
+    const mapRight = {
+        rows, cols,
+        isWater: (r, c) => (r === 2 && c === 5) || (r === 2 && c === 4),
+        isSolid: () => false,
+    };
+    const placementRight = getWaterfallPlacement(mapRight, 2, 4);
+    assert.equal(placementRight.align, 'right', '右から供給される時は align=right');
+    assert.equal(placementRight.x, 4 * 16 + (16 - 8 - 1), '右端寄りに配置されるべき');
+
+    // ケース3: 空中（左右とも空気）
+    const mapCenter = {
+        rows, cols,
+        isWater: (r, c) => (r === 2 && c === 4) || (r === 1 && c === 4),
+        isSolid: () => false,
+    };
+    const placementCenter = getWaterfallPlacement(mapCenter, 2, 4);
+    assert.equal(placementCenter.align, 'center', '空中からの落下は align=center');
+    assert.equal(placementCenter.x, 4 * 16 + 4, '中央に配置されるべき (offset=4)');
+});
+
+test('water.js: drawOverWorld で滝セルの中に流下する短い筋状パーティクルと飛沫が描画される', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const water = new Uint8Array(rows * cols);
+    // (3, 4) に滝セル
+    water[3 * cols + 4] = 4;
+    const map = {
+        rows, cols,
+        width: cols * 16, height: rows * 16,
+        water,
+        waterCells: [[3, 4]],
+        isWater: (r, c) => r === 3 && c === 4,
+        isSolid: () => false,
+        isWaterfallCell: (r, c) => r === 3 && c === 4,
+        isWaterSurface: () => false,
+        getWaterSurfaceSegment: () => null,
+        getSurfaceY: () => -1,
+    };
+    const env = { game: { map } };
+    const renderer = createWaterRenderer(env);
+
+    const fillCalls = [];
+    const ctx = {
+        drawImage() {},
+        beginPath() {},
+        moveTo() {},
+        lineTo() {},
+        stroke() {},
+        fillRect(x, y, w, h) {
+            fillCalls.push({ x, y, w, h });
+        }
+    };
+
+    renderer.drawOverWorld(ctx, 0, 0);
+
+    // 線状パーティクル（幅 1.5px, 長さ 6px）が描画されていること
+    const streak = fillCalls.find((c) => c.w === 1.5 && c.h === 6);
+    assert.ok(streak, '流下する線状パーティクルが描画されるべき');
+    // 着水飛沫（幅 1.5px, 高さ 1.5px）が描画されていること
+    const splash = fillCalls.find((c) => c.w === 1.5 && c.h === 1.5);
+    assert.ok(splash, '着水地点の微小飛沫が描画されるべき');
+});
+

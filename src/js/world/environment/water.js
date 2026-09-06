@@ -82,6 +82,48 @@ export function collectBorderBlocks(map, waterCells) {
     return Array.from(border.values());
 }
 
+/**
+ * 滝（水流帯）の横位置と幅を決定する。
+ * 左から水が供給される（または左が崖）なら左端寄り、右からなら右端寄り、それ以外は中央。
+ */
+export function getWaterfallPlacement(map, r, c) {
+    const streamWidth = 8;
+    const checkWater = (row, col) => {
+        if (row < 0 || row >= map.rows || col < 0 || col >= map.cols) return false;
+        return map.isWater ? map.isWater(row, col) : false;
+    };
+    const checkSolid = (row, col) => {
+        if (row < 0 || row >= map.rows || col < 0 || col >= map.cols) return false;
+        return map.isSolid ? map.isSolid(row, col) : (map.grid ? map.grid[row][col] !== 0 : false);
+    };
+
+    // 左側に崖（固体）がある、または左上/左から水が流出
+    const leftSource = (c > 0 && checkWater(r, c - 1)) ||
+                       (r > 0 && c > 0 && checkWater(r - 1, c - 1)) ||
+                       (c > 0 && checkSolid(r, c - 1) && !checkSolid(r, c + 1));
+
+    // 右側に崖（固体）がある、または右上/右から水が流出
+    const rightSource = (c + 1 < map.cols && checkWater(r, c + 1)) ||
+                        (r > 0 && c + 1 < map.cols && checkWater(r - 1, c + 1)) ||
+                        (c + 1 < map.cols && checkSolid(r, c + 1) && !checkSolid(r, c - 1));
+
+    let offsetX = Math.floor((TILE_SIZE - streamWidth) / 2); // デフォルト中央
+    let align = 'center';
+    if (leftSource && !rightSource) {
+        offsetX = 1; // 左端寄り（壁沿い）
+        align = 'left';
+    } else if (rightSource && !leftSource) {
+        offsetX = TILE_SIZE - streamWidth - 1; // 右端寄り（壁沿い）
+        align = 'right';
+    }
+
+    return {
+        x: c * TILE_SIZE + offsetX,
+        width: streamWidth,
+        align,
+    };
+}
+
 export function createWaterRenderer(env) {
     const map = env.game.map;
 
@@ -111,10 +153,9 @@ export function createWaterRenderer(env) {
             const isWaterfall = map.isWaterfallCell ? map.isWaterfallCell(r, c) : false;
 
             if (isWaterfall) {
-                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、水量に応じた細い水流として描画
-                const flowWidth = Math.max(2, Math.min(TILE_SIZE, Math.round((mass / MAX_WATER_MASS) * 8) + 2));
-                const flowX = c * TILE_SIZE + Math.floor((TILE_SIZE - flowWidth) / 2);
-                cctx.fillRect(flowX, r * TILE_SIZE, flowWidth, TILE_SIZE);
+                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、供給元に応じた左右配置の帯として描画
+                const placement = getWaterfallPlacement(map, r, c);
+                cctx.fillRect(placement.x, r * TILE_SIZE, placement.width, TILE_SIZE);
             } else if (map.isWaterSurface && map.isWaterSurface(r, c)) {
                 // 水面セル: 共通の getSurfaceY(r, c) で水面高さを完全に一致させる
                 const surfaceY = map.getSurfaceY ? map.getSurfaceY(r, c) : ((r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE);
@@ -371,6 +412,39 @@ export function createWaterRenderer(env) {
                     const dropOffset = (this.t * 1.5) % TILE_SIZE;
                     ctx.fillRect(bx + 6, by, 4, 2);
                     ctx.fillRect(bx + 7, by + dropOffset, 2, 3);
+                }
+            }
+
+            // 滝（落下水流）の流下線状パーティクルおよび着水飛沫の描画
+            ctx.fillStyle = 'rgba(220, 245, 255, 0.65)';
+            const streakLen = 6;
+            for (let c = startCol; c <= endCol; c++) {
+                for (let r = startRow; r <= endRow; r++) {
+                    if (!map.isWaterfallCell || !map.isWaterfallCell(r, c)) continue;
+                    const placement = getWaterfallPlacement(map, r, c);
+                    const flowX = placement.x;
+                    const flowW = placement.width;
+
+                    // 1セルあたり2本の流下する短い筋
+                    for (let k = 0; k < 2; k++) {
+                        const px = flowX + 1.5 + k * (flowW - 4);
+                        const phase = (this.t * 1.0 + k * 8 + c * 5 + r * 3) % TILE_SIZE;
+                        const py = r * TILE_SIZE + phase;
+                        ctx.fillRect(px, py, 1.5, streakLen);
+                    }
+
+                    // 着水地点（直下が水底またはPoolingWater水面）なら微小な白い飛沫を跳ねさせる
+                    const isSplashCell = (r + 1 >= map.rows) ||
+                                         (map.isSolid && map.isSolid(r + 1, c)) ||
+                                         (!map.isWaterfallCell(r + 1, c));
+                    if (isSplashCell) {
+                        const splashY = (r + 1) * TILE_SIZE - 2;
+                        for (let s = 0; s < 2; s++) {
+                            const sx = flowX + 1 + ((this.t * 2 + s * 4 + c * 3) % (flowW - 2));
+                            const sy = splashY - Math.abs(Math.sin(this.t * 0.35 + s * 2 + c) * 3);
+                            ctx.fillRect(sx, sy, 1.5, 1.5);
+                        }
+                    }
                 }
             }
         },
