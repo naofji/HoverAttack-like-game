@@ -526,3 +526,55 @@ test('water.js: drawOverWorld で滝セルの中に流下する短い筋状パ�
     assert.ok(splash, '着水地点の微小飛沫が描画されるべき');
 });
 
+
+test('水源から落ちる水は隙間なく連なる（滝が点線に見えない）', async () => {
+    // 実機の指摘「FallingWater が途切れ途切れ」。落ちる水の塊は
+    // WATER_FALL_INTERVAL フレームで1タイル進むので、湧き出る周期がそれより
+    // 長いと塊が「周期 ÷ 落下間隔」タイルおきに離れて並ぶ。
+    // 実測: 周期15 だと 3.75 タイルおきで、落下区間の連続性は 27% だった。
+    //
+    // 定数の値そのものではなく**落ちた水が途切れないこと**を縛る。値を書き
+    // 写すだけだと、なぜその値なのかが残らないうえ、落下側の定数を動かした
+    // ときに壊れたことに気づけない。
+    const { WATER_FALL_INTERVAL, WATER_SPRING_MASS: SPRING_MASS } =
+        await import('../src/js/utils/Constants.js');
+    const { stepWaterSimulation } = await import('../src/js/world/waterSimulation.js');
+
+    // 天井の水源から高さ14の縦穴へ落ちる滝。底に受け皿がある
+    const rows = 20, cols = 11;
+    const grid = Array.from({ length: rows }, () => new Array(cols).fill(1));
+    for (let r = 2; r <= 17; r++) grid[r][5] = 0;
+    for (let c = 1; c <= 9; c++) for (let r = 15; r <= 17; r++) grid[r][c] = 0;
+    const water = new Uint8Array(rows * cols);
+    const isSolid = (r, c) =>
+        (r < 0 || r >= rows || c < 0 || c >= cols) ? true : grid[r][c] !== 0;
+
+    const sp = { r: 2, c: 5, timer: 0 };
+    let active = new Set();
+    let fallTimer = 0;
+    for (let f = 1; f <= 300; f++) {
+        sp.timer++;
+        if (sp.timer >= WATER_SPRING_INTERVAL) {
+            sp.timer = 0;
+            const k = sp.r * cols + sp.c;
+            if (water[k] < MAX_WATER_MASS) {
+                water[k] = Math.min(MAX_WATER_MASS, water[k] + SPRING_MASS);
+                active.add(k);
+            }
+        }
+        if (active.size) {
+            fallTimer++;
+            const doFall = fallTimer >= WATER_FALL_INTERVAL;
+            if (doFall) fallTimer = 0;
+            active = stepWaterSimulation({
+                water, rows, cols, isSolid, activeCells: active, doFall,
+            }).nextActiveCells;
+        }
+    }
+
+    // 落下区間（行3..13）に隙間が無いこと
+    const gaps = [];
+    for (let r = 3; r <= 13; r++) if (water[r * cols + 5] === 0) gaps.push(r);
+    assert.deepEqual(gaps, [],
+        `滝に隙間がある（点線に見える）。水が無かった行: ${gaps.join(',')}`);
+});

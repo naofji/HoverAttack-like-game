@@ -1081,8 +1081,16 @@ export const WATER_MAX_FALL_FLOW = 2;   // 1垂直落下ステップあたりの
 export const WATER_FALL_INTERVAL = 4;   // 垂直落下の実行間隔（フレーム数。4フレームに1回実行でゆっくり落下）
 export const WATER_MAX_SPREAD_FLOW = 4; // 1ステップあたりの最大水平流出量（初期のスムーズな流出速度）
 // 水源（湧水）と滝の仕様
-export const WATER_SPRING_INTERVAL = 15;        // 湧き出る周期（フレーム）
-export const WATER_SPRING_MASS = 2;            // 1回あたりの湧出水量
+// 湧き出る周期は WATER_FALL_INTERVAL と同じにする。落ちる水の塊は
+// WATER_FALL_INTERVAL フレームで1タイル進むので、周期がそれより長いと
+// 塊が「周期 ÷ 落下間隔」タイルおきに離れて並び、滝が点線に見える。
+// 実測: 15 だと 15/4 = 3.75 タイルおき（落下区間の連続性 27%）。
+// 4 にすると隙間なく連なる（連続性 100%）。実機で「FallingWater が
+// 途切れ途切れ」と指摘されたのがこれ。
+export const WATER_SPRING_INTERVAL = 4;        // 湧き出る周期（フレーム）
+// 水量は 1。周期を 15→4 に縮めたぶん、1回あたりを 2→1 に減らして流入量の
+// 増加を 1.9 倍に抑える（2 のままだと 3.8 倍で水没がかなり速くなる）
+export const WATER_SPRING_MASS = 1;            // 1回あたりの湧出水量
 export const WATER_SPRING_COUNT = 2;           // 水源の数
 export const WATER_SPRING_MAX_ROW_RATIO = 0.5; // マップ上半分から水源を選ぶ
 export const WATER_SPRING_STOP_ROW = 6;        // この行まで水没したら水源停止（詰み防止）
