@@ -9,7 +9,7 @@
 
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
-    WATER_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
+    WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
     WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
 } from '../../utils/Constants.js';
 
@@ -41,12 +41,45 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
     ctx.stroke();
 }
 
+/**
+ * 水セルに8近傍で隣接する岩ブロックセルを収集する。
+ * ブロックの面取り（bevel）によって削られた角の隙間の下地に水を敷き、
+ * 水の欠けや背景の露出を防ぐため。
+ */
+export function collectBorderBlocks(map, waterCells) {
+    const border = new Map();
+    for (const [r, c] of waterCells) {
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const nr = r + dr;
+                const nc = c + dc;
+                if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
+                if (map.isWater(nr, nc)) continue;
+                const isSolid = map.isSolid ? map.isSolid(nr, nc) : (map.grid ? map.grid[nr][nc] !== 0 : true);
+                if (isSolid) {
+                    border.set(nr * map.cols + nc, [nr, nc]);
+                }
+            }
+        }
+    }
+    return Array.from(border.values());
+}
+
 export function createWaterRenderer(env) {
     const map = env.game.map;
+
+    // 前景水用キャッシュ（水セルのみ。エンティティの上に重ねる）
     const cache = document.createElement('canvas');
     cache.width = map.width;
     cache.height = map.height;
     const cctx = cache.getContext('2d');
+
+    // 下層水用キャッシュ（水セル＋境界ブロックセル。地形ブロックの下に敷く）
+    const behindCache = document.createElement('canvas');
+    behindCache.width = map.width;
+    behindCache.height = map.height;
+    const bctx = behindCache.getContext('2d');
 
     // invalidate は同じセルで何度も呼ばれ得る（クレーターの再通知）ので、
     // 塗る前に矩形をクリアしてから塗り直す。そうしないと半透明の水が
@@ -58,7 +91,18 @@ export function createWaterRenderer(env) {
             cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     };
+
+    const paintBehind = (cells) => {
+        bctx.fillStyle = WATER_BEHIND_FILL;
+        for (const [r, c] of cells) {
+            bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            bctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+    };
+
     paint(map.waterCells);
+    const initialBorder = collectBorderBlocks(map, map.waterCells);
+    paintBehind([...map.waterCells, ...initialBorder]);
 
     // 水面の区間: 「水で、上が水でない」タイルの上辺。生成時に集めて、流入で足す
     const surfaces = new Map(); // key r*cols+c → {x0, x1, y}
@@ -83,7 +127,16 @@ export function createWaterRenderer(env) {
         },
         invalidate(cells) {
             paint(cells);
+            const border = collectBorderBlocks(map, cells);
+            paintBehind([...cells, ...border]);
             collect(cells);
+        },
+        drawBehindTerrain(ctx, camX, camY) {
+            const sx = Math.max(0, Math.floor(camX));
+            const sy = Math.max(0, Math.floor(camY));
+            const sw = Math.min(CANVAS_WIDTH, map.width - sx);
+            const sh = Math.min(CANVAS_HEIGHT, map.height - sy);
+            if (sw > 0 && sh > 0) ctx.drawImage(behindCache, sx, sy, sw, sh, sx, sy, sw, sh);
         },
         drawOverWorld(ctx, camX, camY) {
             const sx = Math.max(0, Math.floor(camX));
@@ -106,7 +159,6 @@ export function createWaterRenderer(env) {
             }
             ctx.stroke();
         },
-        drawBehindTerrain() {},
         drawOverlay() {},
         drawDemoOverlay() {},
     };

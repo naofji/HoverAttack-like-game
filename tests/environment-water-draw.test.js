@@ -78,3 +78,30 @@ test('surface line is thin and the wave is fine', async () => {
   const widths = ctx.calls.filter((c) => c.name === 'set:lineWidth').map((c) => c.args[0]);
   assert.deepEqual(widths, [WATER_SURFACE_LINE_WIDTH]);
 });
+
+test('drawBehindTerrain transfers the behind water cache once', async () => {
+  const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
+  const game = { map: mapWithPool(), enemies: [], projectiles: [], enemyBullets: [], particles: [], player: null, carrier: null };
+  const env = new StageEnvironment(game, 3);
+  const ctx = makeFakeCtx();
+  env.drawBehindTerrain(ctx, 0, 0);
+  assert.equal(ctx.calls.filter((c) => c.name === 'drawImage').length, 1);
+});
+
+test('collectBorderBlocks extracts 8-neighbor solid blocks around water cells', async () => {
+  const { collectBorderBlocks } = await import('../src/js/world/environment/water.js');
+  // 3x3 のマップ: 中央 (1,1) が水、(0,0) と (1,0) が岩ブロック
+  const map = {
+    rows: 3,
+    cols: 3,
+    isWater(r, c) { return r === 1 && c === 1; },
+    isSolid(r, c) { return (r === 0 && c === 0) || (r === 1 && c === 0); },
+  };
+  const waterCells = [[1, 1]];
+  const border = collectBorderBlocks(map, waterCells);
+  // (0,0) は斜め隣接、(1,0) は横隣接。両方とも岩ブロックなので境界ブロックとして抽出される
+  assert.equal(border.length, 2);
+  const keys = border.map(([r, c]) => `${r},${c}`).sort();
+  assert.deepEqual(keys, ['0,0', '1,0']);
+});
+
