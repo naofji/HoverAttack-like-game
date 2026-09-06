@@ -10,7 +10,7 @@
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS, WATERFALL_HEAD_DROP,
 } from '../../utils/Constants.js';
 
 const RIPPLE_WIDTH = 64; // px。波紋が効く横の範囲
@@ -124,6 +124,19 @@ export function getWaterfallPlacement(map, r, c) {
     };
 }
 
+/**
+ * 滝セルを描き始める Y 座標。
+ *
+ * 列の一番上の落下セル（直上が落下セルでないもの）だけ WATERFALL_HEAD_DROP
+ * ぶん下げる。岩の縁でいきなり全高の帯が立ち上がると「滑り落ちる」感じに
+ * ならず、縁から下が急に滝になったように見えるため（実機の指摘）。
+ * 途中のセルを下げると帯が飛び飛びになるので、先頭だけ。
+ */
+export function waterfallTopY(map, r, c) {
+    const isHead = r <= 0 || !(map.isWaterfallCell && map.isWaterfallCell(r - 1, c));
+    return r * TILE_SIZE + (isHead ? WATERFALL_HEAD_DROP : 0);
+}
+
 export function createWaterRenderer(env) {
     const map = env.game.map;
 
@@ -153,9 +166,11 @@ export function createWaterRenderer(env) {
             const isWaterfall = map.isWaterfallCell ? map.isWaterfallCell(r, c) : false;
 
             if (isWaterfall) {
-                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、供給元に応じた左右配置の帯として描画
+                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、供給元に応じた左右配置の帯として描画。
+                // 先頭のセルだけ上辺を下げて、岩の縁から滑り落ちるように見せる
                 const placement = getWaterfallPlacement(map, r, c);
-                cctx.fillRect(placement.x, r * TILE_SIZE, placement.width, TILE_SIZE);
+                const topY = waterfallTopY(map, r, c);
+                cctx.fillRect(placement.x, topY, placement.width, (r + 1) * TILE_SIZE - topY);
             } else if (map.isWaterSurface && map.isWaterSurface(r, c)) {
                 // 水面セル: 共通の getSurfaceY(r, c) で水面高さを完全に一致させる
                 const surfaceY = map.getSurfaceY ? map.getSurfaceY(r, c) : ((r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE);
@@ -164,6 +179,17 @@ export function createWaterRenderer(env) {
                 const h = bottomY - topY;
                 if (h > 0) {
                     cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, h);
+                }
+                // 上から滝が落ちてきているなら、タイルの上辺から液面までを細い帯で埋める。
+                // ここを描かないと、滝の帯はタイルの境目で終わるのに液面はもっと下に
+                // あるため、最大14px の隙間ができて**水柱が地面から浮いて見える**
+                // （実機の指摘）。横位置は落ちてくる帯に合わせる
+                if (r > 0 && map.isWaterfallCell && map.isWaterfallCell(r - 1, c)) {
+                    const placement = getWaterfallPlacement(map, r - 1, c);
+                    const gap = topY - r * TILE_SIZE;
+                    if (gap > 0) {
+                        cctx.fillRect(placement.x, r * TILE_SIZE, placement.width, gap);
+                    }
                 }
             } else if (r > 0 && map.isWater(r - 1, c)) {
                 // 水中セル（上下とも水で完全水没しているセル）のみ、タイル全体（16x16）を満水として塗る
@@ -383,11 +409,14 @@ export function createWaterRenderer(env) {
                     const flowX = placement.x;
                     const flowW = placement.width;
 
-                    // 1セルあたり2本の流下する短い筋
+                    // 1セルあたり2本の流下する短い筋。帯と同じ範囲に収める
+                    // （先頭のセルは上辺が下がっているので、そこから下だけ）
+                    const topY = waterfallTopY(map, r, c);
+                    const bandH = (r + 1) * TILE_SIZE - topY;
                     for (let k = 0; k < 2; k++) {
                         const px = flowX + 1.5 + k * (flowW - 4);
-                        const phase = (this.t * 1.0 + k * 8 + c * 5 + r * 3) % TILE_SIZE;
-                        const py = r * TILE_SIZE + phase;
+                        const phase = (this.t * 1.0 + k * 8 + c * 5 + r * 3) % bandH;
+                        const py = topY + phase;
                         ctx.fillRect(px, py, 1.5, streakLen);
                     }
 

@@ -4,7 +4,7 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { generateWaterSprings } from '../src/js/world/waterPools.js';
 import { Map } from '../src/js/world/Map.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, PLAYER_MAX_FALLING_SPEED } from '../src/js/utils/Constants.js';
+import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, WATERFALL_HEAD_DROP, PLAYER_MAX_FALLING_SPEED } from '../src/js/utils/Constants.js';
 import { StageEnvironment, motionFor } from '../src/js/world/StageEnvironment.js';
 import { makeWaterMap } from './helpers/water-map.js';
 
@@ -411,10 +411,16 @@ test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロッ�
         const env = { game: { map } };
         createWaterRenderer(env);
 
-        // (3, 5) の描画（x ≈ 80px, y = 48px）
-        const waterfallFill = fillCalls.find((c) => c.y === 3 * 16);
-        assert.ok(waterfallFill, '滝セルの描画が行われるべき');
+        // (3, 5) は列の一番上の滝セルなので、上辺が WATERFALL_HEAD_DROP ぶん
+        // 下がる（岩の縁から滑り落ちるように見せるため。実機の指摘）
+        const top = 3 * 16 + WATERFALL_HEAD_DROP;
+        const waterfallFill = fillCalls.find((c) => c.y === top);
+        assert.ok(waterfallFill, `滝セルの描画が y=${top} で行われるべき`);
         assert.ok(waterfallFill.w < 16, `滝は16pxブロックではなく細水流として描画されるべき: got width ${waterfallFill.w}px`);
+        assert.equal(waterfallFill.h, 16 - WATERFALL_HEAD_DROP,
+            '先頭の滝セルはタイルの下辺までを描く');
+        assert.equal(fillCalls.filter((c) => c.y === 3 * 16 && c.h === 16).length, 0,
+            'タイルの上辺から全高で描いてはいけない');
     } finally {
         document.createElement = origCreateElement;
     }
@@ -577,4 +583,65 @@ test('水源から落ちる水は隙間なく連なる（滝が点線に見え�
     for (let r = 3; r <= 13; r++) if (water[r * cols + 5] === 0) gaps.push(r);
     assert.deepEqual(gaps, [],
         `滝に隙間がある（点線に見える）。水が無かった行: ${gaps.join(',')}`);
+});
+
+test('滝が浅い水たまりへ落ちるとき、液面までの隙間が埋まる（水柱が浮かない）', async () => {
+    // 実機の指摘「着水の高さに関しては地面から水柱が浮いているような感じ」。
+    // 滝の帯はタイルの境目で終わるのに、その下の水面セルは水量が少ないと
+    // タイルの下のほうにしか描かれない。あいだの最大14px が誰にも塗られず、
+    // 水柱が地面から浮いて見えていた。
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const map = new Map({ rng: { next: () => 0 } }, 1);
+    map.rows = rows;
+    map.cols = cols;
+    map.width = cols * 16;
+    map.height = rows * 16;
+    map.water = new Uint8Array(rows * cols);
+    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
+    for (let c = 0; c < cols; c++) map.grid[5][c] = 1;   // r=5 が床
+
+    // (3,5) と (4,5) が落下中。(4,5) の直下は床なので (4,5) が着水セル…
+    // ではなく、(4,5) は「直下が固体」なので滝ではなく水面になる。
+    // つまり (3,5) が一番下の滝セルで、(4,5) が浅い水たまり
+    map.water[3 * cols + 5] = 2;
+    map.water[4 * cols + 5] = 2;
+    map.waterCells = [[3, 5], [4, 5]];
+    primeWaterCache(map);
+
+    const fillCalls = [];
+    const origCreateElement = document.createElement;
+    document.createElement = (tag) => {
+        const el = origCreateElement.call(document, tag);
+        if (tag === 'canvas') {
+            const origGetContext = el.getContext;
+            el.getContext = (type) => {
+                const ctx = origGetContext.call(el, type);
+                if (type === '2d') {
+                    const origFillRect = ctx.fillRect;
+                    ctx.fillRect = function(x, y, w, h) {
+                        fillCalls.push({ x, y, w, h });
+                        return origFillRect.apply(this, arguments);
+                    };
+                }
+                return ctx;
+            };
+        }
+        return el;
+    };
+
+    try {
+        createWaterRenderer({ game: { map } });
+
+        const surfaceY = map.getSurfaceY(4, 5);
+        assert.ok(surfaceY > 4 * 16, '前提: 水量が少ないので液面はタイルの上辺より下');
+
+        // (4,5) のタイル上辺から液面までを埋める細い帯があること
+        const filler = fillCalls.find((f) => f.y === 4 * 16 && f.w < 16 && f.h > 0);
+        assert.ok(filler, '滝から液面までの隙間を埋める帯が描かれるべき');
+        assert.equal(filler.y + filler.h, Math.round(surfaceY),
+            `隙間を埋める帯は液面ちょうどまで届くべき: ${filler.y}+${filler.h} vs ${Math.round(surfaceY)}`);
+    } finally {
+        document.createElement = origCreateElement;
+    }
 });
