@@ -1009,6 +1009,10 @@ export class Map {
                 }
             }
             this.invalidateTileRegion(r, c);
+            const env = this.game && this.game.env;
+            if (env && env.renderer && env.renderer.onBlockDestroyed) {
+                env.renderer.onBlockDestroyed(r, c);
+            }
             return true;
         }
         // 非致命ダメージ: ブロック自身のひび割れ表現が変わるため中心タイルを再描画する。

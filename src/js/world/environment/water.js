@@ -92,12 +92,14 @@ export function createWaterRenderer(env) {
             const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
             if (mass === 0) continue;
 
-            const isSurface = map.isWaterSurface ? map.isWaterSurface(r, c) : (r === 0 || !map.isWater(r - 1, c));
+            const isWaterfall = map.isWaterfallCell ? map.isWaterfallCell(r, c) : false;
 
-            if (!isSurface) {
-                // 水中セルまたは天井水: タイル全体（16x16）を満水として塗る
-                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            } else {
+            if (isWaterfall) {
+                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、水量に応じた細い水流として描画
+                const flowWidth = Math.max(2, Math.min(TILE_SIZE, Math.round((mass / MAX_WATER_MASS) * 8) + 2));
+                const flowX = c * TILE_SIZE + Math.floor((TILE_SIZE - flowWidth) / 2);
+                cctx.fillRect(flowX, r * TILE_SIZE, flowWidth, TILE_SIZE);
+            } else if (map.isWaterSurface && map.isWaterSurface(r, c)) {
                 // 水面セル: 共通の getSurfaceY(r, c) で水面高さを完全に一致させる
                 const surfaceY = map.getSurfaceY ? map.getSurfaceY(r, c) : ((r + 1 - mass / MAX_WATER_MASS) * TILE_SIZE);
                 const bottomY = (r + 1) * TILE_SIZE;
@@ -105,6 +107,19 @@ export function createWaterRenderer(env) {
                 const h = bottomY - topY;
                 if (h > 0) {
                     cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, h);
+                }
+            } else if (r > 0 && map.isWater(r - 1, c)) {
+                // 水中セル（上下とも水で完全水没しているセル）のみ、タイル全体（16x16）を満水として塗る
+                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else if (r > 0 && map.isSolid && map.isSolid(r - 1, c)) {
+                // 天井に張り付いた満水セル
+                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else {
+                // 水面判定に入らなかった場合の安全策（水位に応じた高さのみ塗る。決して16x16で埋めない）
+                const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+                const y = (r + 1) * TILE_SIZE - h;
+                if (h > 0) {
+                    cctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, h);
                 }
             }
         }
@@ -145,6 +160,11 @@ export function createWaterRenderer(env) {
         },
         addRipple(x, strength) {
             this.ripples.push({ x, strength });
+        },
+        onBlockDestroyed(r, c) {
+            // ブロックが破壊されて空間になったので、下層水および前景水キャッシュを必ず消去する
+            bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         },
         invalidate(cells) {
             // 対象セルおよびその上下セルを漏れなく再描画（境目の高さ変化に対応）

@@ -308,3 +308,90 @@ test('water.js: 水ブロックの塗り（fillRect）の上端が平均水面�
         document.createElement = origCreateElement;
     }
 });
+
+test('Map.damageBlock & water.js: 水に隣接するブロックを破壊した際、下層水・前景水がクリアされ空間が水ブロックで上書きされない', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const game = { rng: { next: () => 0 } };
+    const map = new Map(game, 1);
+    game.map = map;
+    map.rows = rows;
+    map.cols = cols;
+    map.width = cols * 16;
+    map.height = rows * 16;
+    map.water = new Uint8Array(rows * cols);
+    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
+    map.blockHP = Array.from({ length: rows }, () => new Uint8Array(cols));
+
+    // (5, 2) は水ブロック、(5, 3) は隣接する岩ブロック（HP=1）
+    map.water[5 * cols + 2] = 8;
+    map.waterCells = [[5, 2]];
+    map.grid[5][3] = 1;
+    map.blockHP[5][3] = 1;
+
+    let clearedBehind = false;
+    const renderer = {
+        onBlockDestroyed(r, c) {
+            if (r === 5 && c === 3) clearedBehind = true;
+        },
+        invalidate() {},
+    };
+    game.env = { renderer };
+
+    // (5, 3) のブロックを破壊
+    const destroyed = map.damageBlock(5, 3, 1);
+    assert.equal(destroyed, true, 'ブロックが破壊されるべき');
+    assert.equal(map.grid[5][3], 0, '破壊されたセルは空洞（BLOCK_EMPTY）になるべき');
+    assert.equal(clearedBehind, true, '破壊されたセルの水キャッシュ消去ハンドラが呼ばれるべき');
+    // 破壊直後、まだ水流シミュレーションが届いていなければ水量は 0
+    assert.equal(map.water[5 * cols + 3], 0, '破壊直後は水ブロックで空間が上書きされず 0 であるべき');
+});
+
+test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロックではなく細い水流として描画される', async () => {
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const rows = 10, cols = 10;
+    const map = new Map({ rng: { next: () => 0 } }, 1);
+    map.rows = rows;
+    map.cols = cols;
+    map.width = cols * 16;
+    map.height = rows * 16;
+    map.water = new Uint8Array(rows * cols);
+    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
+
+    // (3, 5) に水量4の水。直下 (4, 5) は空気なので落下中（滝）
+    map.water[3 * cols + 5] = 4;
+    map.waterCells = [[3, 5]];
+
+    const fillCalls = [];
+    const origCreateElement = document.createElement;
+    document.createElement = (tag) => {
+        const el = origCreateElement.call(document, tag);
+        if (tag === 'canvas') {
+            const origGetContext = el.getContext;
+            el.getContext = (type) => {
+                const ctx = origGetContext.call(el, type);
+                if (type === '2d') {
+                    const origFillRect = ctx.fillRect;
+                    ctx.fillRect = function(x, y, w, h) {
+                        fillCalls.push({ x, y, w, h });
+                        return origFillRect.apply(this, arguments);
+                    };
+                }
+                return ctx;
+            };
+        }
+        return el;
+    };
+
+    try {
+        const env = { game: { map } };
+        createWaterRenderer(env);
+
+        // (3, 5) の描画（x ≈ 80px, y = 48px）
+        const waterfallFill = fillCalls.find((c) => c.y === 3 * 16);
+        assert.ok(waterfallFill, '滝セルの描画が行われるべき');
+        assert.ok(waterfallFill.w < 16, `滝は16pxブロックではなく細水流として描画されるべき: got width ${waterfallFill.w}px`);
+    } finally {
+        document.createElement = origCreateElement;
+    }
+});
