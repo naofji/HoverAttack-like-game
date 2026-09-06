@@ -936,6 +936,27 @@ export const FORTRESS_TREASURE_COUNT = 3;
 export const FORTRESS_GARRISON_TURRETS = 2;
 export const FORTRESS_GARRISON_TANKS = 2;
 
+// --- 電磁パルスのバリア（要塞の各階に1本）---
+// 天井と床の2基のユニットが対で立ち、その間に縦のバリアが張られる。**両方**壊すと
+// 消える。壁を壊して進むのではなく装置を倒して進む形にすることで、横視点の遊びとして
+// 成立させる（真上から見た間取り図に見える、という実機の指摘への答えでもある）。
+export const BARRIER_EMITTER_HP = 30;        // = DAMAGE_PLAYER_MISSILE * 2。砲台と同じ硬さ
+export const BARRIER_UNIT_W = 12;            // ユニットの見た目の幅（px）
+export const BARRIER_UNIT_H = 8;             // 同、高さ
+export const BARRIER_FIELD_W = 6;            // バリアの幅（px）。細いほど「すり抜けられそう」に見えない程度
+// 接触時。**ダメージだけでは強行突破できてしまう**ので押し戻しとセットにする。
+// 押し戻しは「来た方向へ」返す（貫通しかけて向こう側に出るのを防ぐ）
+export const BARRIER_TOUCH_DAMAGE = 6;       // 毎フレーム。触れ続けると一気に減る
+export const BARRIER_KNOCKBACK_VX = 4;
+export const BARRIER_KNOCKBACK_VY = -2;
+// **敵はダメージを受けない。** 守備隊が自分のバリアに触れて自滅すると、
+// 「開けた瞬間に出てくる」という狙いが成立しなくなる。押し戻すだけにする
+export const BARRIER_PULSE_PERIOD = 24;      // 明滅の周期（フレーム）
+export const BARRIER_COLOR = '#7FD8FF';      // 電磁パルスの芯
+export const BARRIER_GLOW_COLOR = 'rgba(127, 216, 255, 0.35)';
+export const BARRIER_UNIT_COLOR = '#4A5A6B';
+export const BARRIER_UNIT_LAMP_COLOR = '#7FD8FF';
+
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、
 // missionLevel は剰余で丸める（debugStartMission で面数を超えた値が来るため）。

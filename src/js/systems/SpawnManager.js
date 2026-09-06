@@ -11,6 +11,7 @@ import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { OverdriveKit } from '../entities/OverdriveKit.js';
+import { FortressBarrier } from '../entities/FortressBarrier.js';
 
 export class SpawnManager {
     constructor(game) {
@@ -72,6 +73,21 @@ export class SpawnManager {
                 this.game.missileKits.push(new OverdriveKit(this.game, t.x, t.y));
             } else {
                 this.game.repairKits.push(new RepairKit(this.game, t.x, t.y));
+            }
+        }
+    }
+
+    /**
+     * 要塞の電磁パルスのバリアを立てる（7面だけ）。
+     *
+     * 敵の一種にはしない。game.enemies に入れると撃破数・スコア・Auto Aim の
+     * 対象に混ざるので、地雷と同じく専用の配列に置く。
+     */
+    spawnBarriers() {
+        this.game.barriers = [];
+        for (const zone of this.game.map.fortressZones || []) {
+            for (const spec of zone.barriers) {
+                this.game.barriers.push(new FortressBarrier(this.game, spec));
             }
         }
     }

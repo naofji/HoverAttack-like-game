@@ -114,6 +114,7 @@ export const Game = {
     repairKits: [],
     autoAimUnits: [],
     missileKits: [],
+    barriers: [],   // 7面の要塞の電磁パルスのバリア
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
@@ -224,6 +225,7 @@ export const Game = {
 
         this.spawnManager.spawnLandmines();
         this.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
+        this.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
         this.spawnManager.spawnEnemies();
 
         this.camera.follow(this.player);
@@ -528,6 +530,8 @@ export const Game = {
         this._updateAndPrune(this.particles);
         this._updateAndPrune(this.smokeScreens);
         this._updateLandmines();
+        // バリアは弾の吸収を伴うので、弾の更新のあと・アイテムの前に置く
+        for (const barrier of this.barriers) barrier.update();
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
@@ -1000,6 +1004,10 @@ export const Game = {
         for (const mine of this.landmines) {
             if (!isInView(mine, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             mine.draw(ctx);
+        }
+        for (const barrier of this.barriers) {
+            if (!isInView(barrier.fieldRect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
+            barrier.draw(ctx);
         }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);
