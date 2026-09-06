@@ -32,6 +32,7 @@ import {
     MAX_WATER_MASS, MIN_WATER_MASS,
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
     WATER_SPRING_MAX_ROW_RATIO, WATER_SPRING_STOP_ROW,
+    WATER_SIM_INTERVAL,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -1393,17 +1394,21 @@ export class Map {
             }
 
             if (this.activeWaterCells && this.activeWaterCells.size > 0) {
-                const isSolid = (r, c) => this.isSolid(r, c);
-                const res = stepWaterSimulation({
-                    water: this.water,
-                    rows: this.rows,
-                    cols: this.cols,
-                    isSolid,
-                    activeCells: this.activeWaterCells,
-                });
-                this.activeWaterCells = res.nextActiveCells;
-                if (res.changedCells.length > 0) {
-                    this.onWaterChanged(res.changedCells);
+                this.waterSimTimer = (this.waterSimTimer || 0) + 1;
+                if (this.waterSimTimer >= WATER_SIM_INTERVAL) {
+                    this.waterSimTimer = 0;
+                    const isSolid = (r, c) => this.isSolid(r, c);
+                    const res = stepWaterSimulation({
+                        water: this.water,
+                        rows: this.rows,
+                        cols: this.cols,
+                        isSolid,
+                        activeCells: this.activeWaterCells,
+                    });
+                    this.activeWaterCells = res.nextActiveCells;
+                    if (res.changedCells.length > 0) {
+                        this.onWaterChanged(res.changedCells);
+                    }
                 }
             }
         }
