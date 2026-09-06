@@ -42,13 +42,29 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
 }
 
 /**
+ * セル (r, c) が「満タンの水ブロック」であるかを判定する。
+ * 岩ブロックの面取り（bevel）の隙間対策として背後に水を敷くのは、
+ * 隣接する水が満タンの場合のみ（水面・落下水流・少量の水・空気の場合は敷かない）。
+ */
+export function isFullWaterBlock(map, r, c) {
+    if (!map.isWater(r, c)) return false;
+    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+    if (mass < MAX_WATER_MASS) return false;
+    if (map.isWaterSurface && map.isWaterSurface(r, c)) return false;
+    if (map.isWaterfallCell && map.isWaterfallCell(r, c)) return false;
+    return true;
+}
+
+/**
  * 水セルに8近傍で隣接する岩ブロックセルを収集する。
  * ブロックの面取り（bevel）によって削られた角の隙間の下地に水を敷き、
  * 水の欠けや背景の露出を防ぐため。
+ * ※隣接する水が「満タンの水ブロック」である場合のみ対象とする。
  */
 export function collectBorderBlocks(map, waterCells) {
     const border = new Map();
     for (const [r, c] of waterCells) {
+        if (!isFullWaterBlock(map, r, c)) continue;
         for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
                 if (dr === 0 && dc === 0) continue;
@@ -194,11 +210,61 @@ export function createWaterRenderer(env) {
                 repaintList.push([Math.floor(key / map.cols), key % map.cols]);
             }
             paint(repaintList);
+
+            // 下層水キャッシュ（behindCache）の更新:
+            // 1. repaintList 自体（水・空間セル）をクリア
             for (const [r, c] of repaintList) {
                 bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
-            const border = collectBorderBlocks(map, repaintList);
-            paintBehind(border);
+
+            // 2. repaintList の周囲8マスにある岩ブロック（境界候補）を収集
+            const borderCandidateKeys = new Set();
+            for (const [r, c] of repaintList) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const nr = r + dr;
+                        const nc = c + dc;
+                        if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
+                        if (map.isWater(nr, nc)) continue;
+                        const isSolid = map.isSolid ? map.isSolid(nr, nc) : (map.grid ? map.grid[nr][nc] !== 0 : true);
+                        if (isSolid) {
+                            borderCandidateKeys.add(nr * map.cols + nc);
+                        }
+                    }
+                }
+            }
+
+            // 3. 影響範囲の岩ブロックの behindCache をいったんクリアし、
+            //    現在も周囲8マスに「満タンの水ブロック」が存在するものだけ再描画する
+            const borderToRepaint = [];
+            for (const key of borderCandidateKeys) {
+                const r = Math.floor(key / map.cols);
+                const c = key % map.cols;
+                bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                let hasFullWaterNeighbor = false;
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const nr = r + dr;
+                        const nc = c + dc;
+                        if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
+                        if (isFullWaterBlock(map, nr, nc)) {
+                            hasFullWaterNeighbor = true;
+                            break;
+                        }
+                    }
+                    if (hasFullWaterNeighbor) break;
+                }
+
+                if (hasFullWaterNeighbor) {
+                    borderToRepaint.push([r, c]);
+                }
+            }
+
+            // 4. 現在も満タンの水ブロックに隣接している岩ブロックのみ背後に水を塗る
+            paintBehind(borderToRepaint);
         },
         drawBehindTerrain(ctx, camX, camY) {
             const sx = Math.max(0, Math.floor(camX));

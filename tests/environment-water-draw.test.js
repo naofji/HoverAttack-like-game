@@ -105,3 +105,104 @@ test('collectBorderBlocks extracts 8-neighbor solid blocks around water cells', 
   assert.deepEqual(keys, ['0,0', '1,0']);
 });
 
+test('isFullWaterBlock returns true only for full non-surface non-waterfall cells', async () => {
+  const { isFullWaterBlock } = await import('../src/js/world/environment/water.js');
+  const { MAX_WATER_MASS } = await import('../src/js/utils/Constants.js');
+  const map = {
+    rows: 4,
+    cols: 4,
+    water: new Float32Array(16),
+    isWater(r, c) { return this.water[r * 4 + c] > 0; },
+    isWaterSurface(r, c) { return r === 1 && c === 1; },
+    isWaterfallCell(r, c) { return r === 2 && c === 1; },
+  };
+  // (1,1): 水面（MAX_WATER_MASS だが水面判定） -> false
+  map.water[1 * 4 + 1] = MAX_WATER_MASS;
+  assert.equal(isFullWaterBlock(map, 1, 1), false);
+
+  // (2,1): 滝セル（MAX_WATER_MASS だが滝判定） -> false
+  map.water[2 * 4 + 1] = MAX_WATER_MASS;
+  assert.equal(isFullWaterBlock(map, 2, 1), false);
+
+  // (3,1): 水量が満タン未満（MAX_WATER_MASS * 0.5） -> false
+  map.water[3 * 4 + 1] = MAX_WATER_MASS * 0.5;
+  assert.equal(isFullWaterBlock(map, 3, 1), false);
+
+  // (3,2): 満水水中セル（MAX_WATER_MASS、水面でも滝でもない） -> true
+  map.water[3 * 4 + 2] = MAX_WATER_MASS;
+  assert.equal(isFullWaterBlock(map, 3, 2), true);
+});
+
+test('invalidate clears behindCache when adjacent water drops or disappears', async () => {
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+  const { MAX_WATER_MASS } = await import('../src/js/utils/Constants.js');
+  // 3x3 マップ:
+  // (0,0)=岩, (0,1)=岩, (0,2)=岩
+  // (1,0)=岩, (1,1)=水(最初は満水), (1,2)=岩
+  // (2,0)=岩, (2,1)=岩, (2,2)=岩
+  const map = {
+    rows: 3,
+    cols: 3,
+    width: 48,
+    height: 48,
+    water: new Float32Array(9),
+    waterCells: [[1, 1]],
+    isWater(r, c) { return this.water[r * 3 + c] > 0; },
+    isSolid(r, c) { return !(r === 1 && c === 1); },
+    isWaterSurface(r, c) { return false; },
+    isWaterfallCell(r, c) { return false; },
+  };
+  map.water[1 * 3 + 1] = MAX_WATER_MASS;
+
+  const fakeEnv = { game: { map } };
+  const clearRectCalls = [];
+  const fillRectCalls = [];
+  const origCreateElement = document.createElement;
+  document.createElement = function(tag) {
+    const el = origCreateElement.call(document, tag);
+    if (tag === 'canvas') {
+      const origGetContext = el.getContext;
+      el.getContext = function(type) {
+        const ctx = origGetContext.call(el, type);
+        const origClear = ctx.clearRect;
+        const origFill = ctx.fillRect;
+        ctx.clearRect = function(...args) {
+          clearRectCalls.push(args);
+          return origClear.apply(ctx, args);
+        };
+        ctx.fillRect = function(...args) {
+          fillRectCalls.push(args);
+          return origFill.apply(ctx, args);
+        };
+        return ctx;
+      };
+    }
+    return el;
+  };
+
+  let renderer;
+  try {
+    renderer = createWaterRenderer(fakeEnv);
+  } finally {
+    document.createElement = origCreateElement;
+  }
+
+  // 初期化時の呼び出しをリセット
+  clearRectCalls.length = 0;
+  fillRectCalls.length = 0;
+
+  // 今、(1,1) の水が抜けて水位が 0 になったとする
+  map.water[1 * 3 + 1] = 0;
+
+  // invalidate を呼び出す
+  renderer.invalidate([[1, 1]]);
+
+  // invalidate で、岩ブロック (1,0) (x=0, y=16) および (0,0), (0,1), etc. の背後が clearRect されること
+  const cleared10 = clearRectCalls.some(([x, y, w, h]) => x === 0 && y === 16 && w === 16 && h === 16);
+  assert.equal(cleared10, true, '岩ブロック (1,0) の背後が clearRect されること');
+
+  // 水位が 0 になり周囲に満水ブロックがないので、(1,0) に fillRect（下層水の再描画）は呼ばれないこと
+  const filled10 = fillRectCalls.some(([x, y, w, h]) => x === 0 && y === 16 && w === 16 && h === 16);
+  assert.equal(filled10, false, '岩ブロック (1,0) に下層水が再描画されないこと');
+});
+
