@@ -254,12 +254,11 @@ test('階は横に長い（真上から見た格子ではない）', () => {
   }
 });
 
-test('階の境目は金属2層の床（シャフトを使うのが正解になる厚さ）', () => {
+test('階の境目は金属の床（掘って抜けるが手間）', () => {
   const b = blankBoard();
   buildZoneWalls(b.grid, b.blockHP, ZONE, FORTRESS_WALL_THICKNESS);
   const { floors, shafts } = buildZoneInterior(b.grid, b.blockHP, ZONE, interiorOpts(new SeededRNG(5)));
   const T = FORTRESS_WALL_THICKNESS;
-  assert.equal(FORTRESS_FLOOR_H, 2, '床は2層');
   for (let i = 0; i + 1 < floors.length; i++) {
     const shaft = shafts[i];
     for (let r = floors[i].r1 + 1; r <= floors[i + 1].r0 - 1; r++) {
@@ -598,14 +597,14 @@ test('お宝が実際にゲームへ置かれる（7面だけ）', async () => {
   }
 });
 
-test('床を抜くよりシャフトを使うほうが安い', () => {
-  // 床は金属2層 = 12発。硬い岩1層(3発)から上げたので「掘って階を抜く」は
-  // 最後の手段になり、シャフトを探すのが正解になる（実機の指摘）
-  assert.equal(FORTRESS_FLOOR_H, 2, '床が2層でない');
-  assert.equal(METAL_BLOCK_HP * FORTRESS_FLOOR_H, 12,
-    `床を抜くのに要る弾が 12 発でない (${METAL_BLOCK_HP * FORTRESS_FLOOR_H})`);
-  assert.ok(METAL_BLOCK_HP * FORTRESS_FLOOR_H > HARD_BLOCK_HP * 2,
-    '床が硬い岩2層より柔らかい');
+test('床は金属1層。シャフトのほうが速いが、掘るのも現実的な範囲', () => {
+  // 硬い岩1層(3発)では掘るほうが速すぎ、金属2層(12発)では重すぎた。
+  // 金属1層(6発)が実機で決めた着地点（ミサイル1発では抜けない、という線）
+  assert.equal(FORTRESS_FLOOR_H, 1, '床が1層でない');
+  assert.equal(METAL_BLOCK_HP * FORTRESS_FLOOR_H, 6,
+    `床を抜くのに要る弾が 6 発でない (${METAL_BLOCK_HP * FORTRESS_FLOOR_H})`);
+  assert.ok(METAL_BLOCK_HP * FORTRESS_FLOOR_H > HARD_BLOCK_HP,
+    '床が硬い岩1層より柔らかい');
 });
 
 import { FORTRESS_BARRIER_CLEARANCE } from '../src/js/utils/Constants.js';

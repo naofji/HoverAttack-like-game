@@ -131,8 +131,8 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
     // 最下階が少し高くなるが、吹き抜けの1階に見えるので都合がよい
     if (floors.length > 0) floors[floors.length - 1].r1 = r1;
 
-    // 階と階の間に床を敷く。**金属2層**（12発）— 硬い岩1層（3発）だと掘って
-    // 抜くほうが速く、シャフトの意味が薄かった（実機の指摘）
+    // 階と階の間に床を敷く。金属（6発）— 硬い岩（3発）だと掘って抜くほうが速く、
+    // シャフトの意味が薄かった。厚さは FORTRESS_FLOOR_H が決める
     for (let i = 0; i + 1 < floors.length; i++) {
         fillRect(grid, blockHP,
             { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0, c1 }, BLOCK_METAL, METAL_BLOCK_HP);
