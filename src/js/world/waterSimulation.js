@@ -20,7 +20,7 @@
 //
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
-import { MAX_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
+import { MAX_WATER_MASS, MIN_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
 
 /**
  * 1ステップの水流計算（行単位水槽レベリングモデル）。
@@ -224,4 +224,39 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
 
     const changedCells = Array.from(changedSet).map((k) => [Math.floor(k / cols), k % cols]);
     return { changedCells, nextActiveCells };
+}
+
+/**
+ * 取りこぼされた「幅1タイルの縦穴」の入口を見つける（純関数）。
+ *
+ * この反応式シミュレーションは、水量が動いたセルの周囲しか再びアクティブに
+ * しない。幅1タイルの縦穴は両脇が壁の「独立した1マス区間」になり、フェーズ2
+ * （横方向の水位平準化）では隣の水たまりから水を受け取れず、フェーズ1
+ * （真上から落ちる）でしか埋まらない。その真上のセルがアクティブに変化する
+ * 瞬間に居合わせられなかった縦穴は、隣の水たまりが先に落ち着いてしまうと
+ * 二度と再挑戦されずに乾いたまま取り残される（実機のスクリーンショットで
+ * 報告されたバグ）。
+ *
+ * 「両脇が壁」だけを条件にしているのは、湖面の真上の開けた空気（左右に壁が
+ * 無い、正しく乾いている場所）まで拾うと、呼ぶたびにほぼ全マップを
+ * 再アクティブ化してしまい、反応式にした意味が無くなるため。
+ *
+ * @returns {number[]} 見つかった入口セルの key (r*cols+c) の配列
+ */
+export function findStuckDryPockets({ water, rows, cols, isSolid }) {
+    const found = [];
+    for (let r = 1; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (isSolid(r, c)) continue;
+            const k = r * cols + c;
+            if (water[k] >= MIN_WATER_MASS) continue;
+
+            const leftSolid = c - 1 < 0 || isSolid(r, c - 1);
+            const rightSolid = c + 1 >= cols || isSolid(r, c + 1);
+            if (!leftSolid || !rightSolid) continue;
+
+            if (water[k - cols] >= MIN_WATER_MASS) found.push(k);
+        }
+    }
+    return found;
 }

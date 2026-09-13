@@ -1101,6 +1101,15 @@ export const WATER_MAX_SPREAD_FLOW = 4; // 1ステップあたりの最大水平
 // 4 にすると隙間なく連なる（連続性 100%）。実機で「FallingWater が
 // 途切れ途切れ」と指摘されたのがこれ。
 export const WATER_SPRING_INTERVAL = 4;        // 湧き出る周期（フレーム）
+// 取りこぼされた縦穴（findStuckDryPockets）を拾い直す周期（フレーム）。実機の
+// 指摘: 幅1タイルの縦穴に水が入らないまま取り残されることがあった。
+// 反応式シミュレーションは変化があったセルの周囲しか再アクティブにしないため、
+// 縦穴の入口がたまたま「水を受け取れる瞬間」に居合わせられないと、隣の
+// 水たまりが先に落ち着いて二度と再挑戦されなくなる。
+// 全セル走査（最大 300x150）だが単純な配列参照だけなので、生成直後の
+// キャッシュ全列作り直し（実測 235.7µs、Map.js 参照）と同程度に軽く、
+// 90フレーム(1.5秒)に1回で十分（頻度を上げても体感は変わらない）
+export const WATER_DRY_POCKET_SWEEP_INTERVAL = 90;
 // 水量は 1。周期を 15→4 に縮めたぶん、1回あたりを 2→1 に減らして流入量の
 // 増加を 1.9 倍に抑える（2 のままだと 3.8 倍で水没がかなり速くなる）
 export const WATER_SPRING_MASS = 1;            // 1回あたりの湧出水量
@@ -1129,6 +1138,17 @@ export const WATER_WAVE_SPEED = 0.05;       // rad/frame
 export const WATER_RIPPLE_DECAY = 0.94;     // しぶきが落ちた場所の波の減衰（毎フレーム）
 export const WATER_RIPPLE_MAX = 2.5;        // しぶきの波紋の強さの上限（実機: 爆発の波動は穏やかに。6 → 2.5）
 export const WATER_RIPPLE_MIN = 0.2;        // これ未満になった波紋は捨てる
+// 水中での爆発（グレネード・ミサイル・敵機の破壊。すべて spawnExplosion() に相乗り）の波紋。
+// しぶき(spawnSplash)の最大と同じ強さにしてある。爆発はしぶきよりずっと激しい現象だが、
+// 波紋の見た目自体の上限が WATER_RIPPLE_MAX なので、それ以上強くしても変わらない（実機の指摘）
+export const EXPLOSION_RIPPLE_STRENGTH = WATER_RIPPLE_MAX;
+// 水中爆発の水柱。SplashParticle をそのまま流用し、しぶき(SPLASH_*)よりずっと
+// 勢いよく・まっすぐ上向きに多く打ち上げて「水柱が上がった」印象にする（実機の指摘:
+// グレネードが敵機の爆発より地味に見える）
+export const WATER_COLUMN_PARTICLE_COUNT = 40;
+export const WATER_COLUMN_SPEED_MIN = 4;
+export const WATER_COLUMN_SPEED_MAX = 9;
+export const WATER_COLUMN_SPREAD = 0.5; // rad。SPLASH(1.2)よりだいぶ狭く、まっすぐ上に近い
 // しぶき。粒の数は |vy| に比例（速く落ちるほど盛大）。
 export const SPLASH_PARTICLES_PER_VY = 3;
 export const SPLASH_MAX_PARTICLES = 24;

@@ -204,9 +204,20 @@ export function createWaterRenderer(env) {
                 continue;
             }
 
-            // 液面を持たない水＝天井に張り付いた水など。タイル全体が水
+            // 液面を持たない水＝天井付き（水中セル、または浮いた岩の真下）。
+            // 満水ならタイル全体でよいが、満ちていないなら実際の水量ぶんだけ
+            // 浅く塗る。ここを常にタイル全体で塗ると、浅い湖に浮いた岩がある
+            // とき、その真下だけ水面より高く塗られて「水面が岩に吸い付いて」
+            // 見える（実機の指摘。水面側は液面クランプで浅く塗れているのに、
+            // 天井付きセルだけ水量を見ずに常にタイル全体を塗っていたのが原因）
             if (map.isWater(r, c)) {
-                cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
+                if (mass < MAX_WATER_MASS) {
+                    const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+                    if (h > 0) cctx.fillRect(c * TILE_SIZE, bottomY - h, TILE_SIZE, h);
+                } else {
+                    cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     };

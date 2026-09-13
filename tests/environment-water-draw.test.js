@@ -327,3 +327,57 @@ test('滝は始点が WATERFALL_HEAD_DROP ぶん下がり、終点は着水先�
       `飛沫が液面 ${level} の直上で跳ねていない: got ${y}`);
   }
 });
+
+test('浮いた岩の真下の浅い水は、実際の水量ぶんだけ浅く塗る（水面が岩に吸い付かない）', async () => {
+  // 実機のスクリーンショットの指摘。浅い湖の途中に浮いた岩（下は水でつながっている）
+  // があると、その真下のセルは「天井付き＝水面を持たない」扱いになり、実際の
+  // 水量に関わらずタイル全体を塗っていた。浅い湖（水量4/8）で水面が半分の高さ
+  // なのに、岩の真下だけタイル全体まで塗られ、水面が岩に吸い付いたように見える。
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+
+  // 行4が水面の行。列4-7に浮いた岩(行0-3)があり、その真下(行4)もつながった
+  // 同じ浅い水たまり（水量4=半分）。行5以降は満水。
+  const map = makeWaterMap(`
+    ............
+    ....####....
+    ....####....
+    ....####....
+    44444444444.
+    88888888888.
+  `);
+
+  const fills = [];
+  const origCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    const ctx = makeFakeCtx();
+    const orig = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (x, y, w, h) => { fills.push({ x, y, w, h }); return orig(x, y, w, h); };
+    return { width: 0, height: 0, getContext: () => ctx };
+  };
+  try {
+    createWaterRenderer({ game: { map } });
+  } finally {
+    globalThis.document.createElement = origCreateElement;
+  }
+
+  // 列ごとの、行4のタイル内での塗りの上端
+  const topByCol = new Map();
+  for (const f of fills) {
+    if (f.h <= 0) continue;
+    if (f.y < 4 * TILE_SIZE || f.y >= 5 * TILE_SIZE) continue; // 行4のタイル範囲だけ見る
+    const c = Math.floor(f.x / TILE_SIZE);
+    const cur = topByCol.get(c);
+    if (cur === undefined || f.y < cur) topByCol.set(c, f.y);
+  }
+
+  // 水面(列0-3)の塗りの上端
+  const surfaceTop = topByCol.get(1);
+  assert.notEqual(surfaceTop, undefined, '水面側に塗りがあるはず');
+  assert.ok(surfaceTop > 4 * TILE_SIZE, '前提: 水量4/8なので満タンより浅いはず');
+
+  // 岩の真下(列4-7、水量は同じ4)も、同じ高さから塗られるべき
+  for (let c = 4; c <= 7; c++) {
+    assert.equal(topByCol.get(c), surfaceTop,
+      `列${c}(岩の真下)の塗りの上端 ${topByCol.get(c)} が水面側 ${surfaceTop} と違う（吸い付いている）`);
+  }
+});

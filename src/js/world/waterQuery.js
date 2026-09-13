@@ -52,6 +52,29 @@ export function isFallingCell(water, cols, isSolid, r, c) {
 }
 
 /**
+ * 行 r の、(r, c) を含む「壁(isSolid(r,・))で区切られた連結区間」の中に、
+ * 天井が開いている（岩でない）セルが1つでもあるか。
+ *
+ * 地形(isSolid)だけで決まる純粋な問い合わせで、水量には一切依存しない。
+ * これが重要で、水が動くたびに答えが変わる水たまりの連結成分（BFS）を使うと、
+ * 一度「孤立している」と判定したセルを後から昇格させる手段が無くなる
+ * （kind[] を書き換えてしまうと、次に自分の列が dirty にならない限り
+ * classifyWaterColumn がもう呼ばれず、水量が変わって答えが変わっても
+ * 古いままになる）。地形だけを見れば、地形が変わった列は damageBlock 側で
+ * 必ず dirtyWaterCols に入る（Map.js 参照）ので、キャッシュとして安全に扱える。
+ */
+function rowSegmentHasOpenCeiling(isSolid, r, c, cols) {
+    let c0 = c;
+    while (c0 - 1 >= 0 && !isSolid(r, c0 - 1)) c0--;
+    let c1 = c;
+    while (c1 + 1 < cols && !isSolid(r, c1 + 1)) c1++;
+    for (let cc = c0; cc <= c1; cc++) {
+        if (r === 0 || !isSolid(r - 1, cc)) return true;
+    }
+    return false;
+}
+
+/**
  * 1列ぶんの kind を決める。
  * 判定はすべて O(1) なので走査の向きは問わない（上から下へ1回）。
  * @returns {Array<number>} この列で見つかった水面セルの行
@@ -74,14 +97,24 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
             continue;
         }
 
-        // 水面か水中か。直上が岩なら「天井に張り付いた水」で液面ではない。
+        // 水面か水中か。直上が岩なら基本は「天井に張り付いた水」で液面ではない
+        // （満水ならタイル全体を塗るだけでよく、波を持たせる意味が無い）。
+        // ただし満ちていなくて、かつ同じ行の（壁で区切られた）連結区間のどこかに
+        // 本当に開けた（天井が岩でない）セルがあるなら、地続きの本物の液面が
+        // すぐ隣に見えているということなので水面として扱う（実機の指摘: 浮いた
+        // 岩の下だけ波の線が途切れる）。区間の中に開けたセルが1つも無い
+        // （完全に閉じた孤立した水たまり）ときは、量子化の残りかすのような
+        // 孤立した浅い水を独立した波にしてしまうと不自然に見えるので水面にしない
+        // （実機の指摘: 岩の先端の下に浮いた水面）。
+        // この判定はセルの水量ではなく地形(isSolid)だけで決まるので、水が
+        // 動いても答えは変わらない（結果を worker cache に焼く必要が無い）
         // 直上が水でも、その水が落下中（滝）なら、こちらが液面になる
         // ＝滝が水たまりへ落ちてくる境目。旧 isWaterSurface と同じ扱い
         let isSurface;
         if (r === 0) {
             isSurface = true;
         } else if (isSolid(r - 1, c)) {
-            isSurface = false;
+            isSurface = mass < MAX_WATER_MASS && rowSegmentHasOpenCeiling(isSolid, r, c, cols);
         } else {
             const above = water[k - cols];
             const aboveIsWater = above >= MIN_WATER_MASS;

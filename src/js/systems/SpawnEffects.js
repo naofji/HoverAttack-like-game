@@ -12,6 +12,9 @@
 import {
     DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY, WATER_RIPPLE_MAX,
     CASING_EJECT_SPREAD, CASING_EJECT_SPEED_MIN, CASING_EJECT_SPEED_MAX, CASING_EJECT_ANGLE_FROM_UP,
+    EXPLOSION_RIPPLE_STRENGTH,
+    WATER_COLUMN_PARTICLE_COUNT, WATER_COLUMN_SPEED_MIN, WATER_COLUMN_SPEED_MAX, WATER_COLUMN_SPREAD,
+    TILE_SIZE,
 } from '../utils/Constants.js';
 import { createExplosion, createSparks, SplashParticle, SnowKickParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
@@ -23,6 +26,16 @@ export const SpawnEffects = {
     spawnExplosion(x, y, size, opts) {
         this.particles.push(...createExplosion(x, y, size, opts));
         audioManager.playExplosion(size > 10, x);
+
+        // 水中での爆発（グレネード・ミサイル・敵機の破壊。全部ここを通る）は水面を揺らし、
+        // 水柱を上げる。spawnSplash と違って「面をまたいだ」タイミングを検出する必要はなく、
+        // 爆発の中心が水中にあれば毎回でよい
+        const map = this.map;
+        if (map && map.isWaterAtPixel && map.isWaterAtPixel(x, y)) {
+            const r = this.env && this.env.renderer;
+            if (r && r.addRipple) r.addRipple(x, EXPLOSION_RIPPLE_STRENGTH);
+            this.spawnWaterColumn(x, y);
+        }
 
         for (const mine of this.landmines) {
             if (!mine.alive) continue;
@@ -83,6 +96,26 @@ export const SpawnEffects = {
         }
         const r = this.env && this.env.renderer;
         if (r && r.addRipple) r.addRipple(x, Math.min(WATER_RIPPLE_MAX, Math.abs(vy)));
+    },
+
+    /**
+     * 水中爆発の水柱。SplashParticle をしぶきよりずっと勢いよく・まっすぐ上向きに
+     * 多めに打ち上げる（実機の指摘: グレネードの爆発が敵機の爆発より地味に見える）。
+     * (x, y) は爆発の中心（水中）。水面の Y は map.getSurfaceY から求める。
+     */
+    spawnWaterColumn(x, y) {
+        const map = this.map;
+        if (!map || !map.getSurfaceY) return;
+        const r = Math.floor(y / TILE_SIZE);
+        const c = Math.floor(x / TILE_SIZE);
+        const surfaceY = map.getSurfaceY(r, c);
+        if (surfaceY < 0) return;
+
+        for (let i = 0; i < WATER_COLUMN_PARTICLE_COUNT; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * WATER_COLUMN_SPREAD;
+            const s = WATER_COLUMN_SPEED_MIN + Math.random() * (WATER_COLUMN_SPEED_MAX - WATER_COLUMN_SPEED_MIN);
+            this.particles.push(new SplashParticle(x, surfaceY, Math.cos(a) * s, Math.sin(a) * s));
+        }
     },
 
     /**

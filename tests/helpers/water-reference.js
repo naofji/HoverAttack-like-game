@@ -22,12 +22,34 @@ const isFalling = (ctx, r, c) => {
     return ctx.water[(r + 1) * ctx.cols + c] < MAX_WATER_MASS;
 };
 
-// 旧 Map.isWaterSurface をそのまま写したもの
+/**
+ * 行 r の、(r, c) を含む壁(isSolid(r,・))区切りの連結区間に、天井が開いている
+ * （岩でない）セルが1つでもあるか。waterQuery.js の rowSegmentHasOpenCeiling
+ * と同じルールの、地形だけを見る独立した実装（水量には依存しない）。
+ */
+function rowSegmentHasOpenCeiling(ctx, r, c) {
+    let c0 = c;
+    while (c0 - 1 >= 0 && !ctx.isSolid(r, c0 - 1)) c0--;
+    let c1 = c;
+    while (c1 + 1 < ctx.cols && !ctx.isSolid(r, c1 + 1)) c1++;
+    for (let cc = c0; cc <= c1; cc++) {
+        if (r === 0 || !ctx.isSolid(r - 1, cc)) return true;
+    }
+    return false;
+}
+
+// 旧 Map.isWaterSurface をそのまま写したもの。
+// 天井(岩)が直上にあるセルは、満ちていなくて、かつ同じ行の連結区間の中に
+// 本当に開けたセルがあるときだけ水面として扱う（実機の指摘: 浮いた岩の下の
+// 浅い水たまりで波の線が途切れる／完全に孤立した浅い水だまりに波が浮く）。
+// waterQuery.js の classifyWaterColumn と同じルールに更新してある
 const isSurface = (ctx, r, c) => {
     if (!isWater(ctx, r, c)) return false;
     if (isFalling(ctx, r, c)) return false;
+    if (r > 0 && ctx.isSolid(r - 1, c)) {
+        return ctx.water[r * ctx.cols + c] < MAX_WATER_MASS && rowSegmentHasOpenCeiling(ctx, r, c);
+    }
     if (r > 0 && isWater(ctx, r - 1, c) && !isFalling(ctx, r - 1, c)) return false;
-    if (r > 0 && ctx.isSolid(r - 1, c)) return false;
     return true;
 };
 
