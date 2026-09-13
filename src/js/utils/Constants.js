@@ -1641,10 +1641,18 @@ export const LEAD_MARKER_DASH = [3, 3];      // 破線のパターン
 export const DEATH_HOLD_FRAMES = 90;
 
 // --- Destruction Debris ---
-// 破片は当たり判定を持たない純粋な演出。地形も無視して落下し続ける。
+// 破片は当たり判定を持たない純粋な演出。ただし薬莢(CasingParticle)と同じく、
+// 地形には Grenade 相当の2Dバウンスで跳ね返り、水中では motionFor の
+// gravity 倍率でゆっくり沈む（実機の指摘: 薬莢と同じように障害物・水の
+// 影響を受けてほしい）。game.map が無い（テストのスタブ等）ときは
+// CasingParticle と同じく素通りするフォールバックにしてある。
 export const DEBRIS_GRAVITY = GRAVITY / 6; // 通常の1/6。吹き飛んで舞う時間を長く取る
 export const DEBRIS_MAX_FALL_SPEED = 4;    // 落下速度の上限。これ以上は速くならない
 export const DEBRIS_DRAG = 0.985;          // 毎フレーム vx に乗算する空気抵抗
+// 跳ね返り。薬莢(CASING_BOUNCE=0.55)より重く大きいパーツなので、
+// より多くの運動エネルギーを失う想定で弱めにしてある
+export const DEBRIS_BOUNCE = 0.4;
+export const DEBRIS_FRICTION = 0.5;        // 地面に着いてから転がる速度の残存率（毎フレーム）
 export const DEBRIS_LIFETIME = 55;         // frames
 export const DEBRIS_LIFETIME_JITTER = 20;  // 寿命に加算する乱数の幅
 // 回転は爆風のトルクから決める。破片の長辺が爆心方向となす角が45度のとき最大。

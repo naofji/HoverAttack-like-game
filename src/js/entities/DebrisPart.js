@@ -2,14 +2,18 @@
 // Debris Part - 破壊された機体のパーツ1個
 // ============================================
 // 既存の Particle と同じ「update() / draw() / alive」契約に従うので、
-// game.particles[] に混ぜるだけでゲームループに乗る。
-// 当たり判定は一切持たず、地形も無視して落下し続ける純粋な演出。
+// game.particles[] に混ぜるだけでゲームループに乗る。当たり判定は一切
+// 持たないが、CasingParticle と同じく地形には跳ね返り、水中では
+// motionFor の gravity 倍率でゆっくり沈む（実機の指摘: 薬莢と同じように
+// 障害物・水の影響を受けてほしい）。game.map が無い（テストのスタブ等）
+// ときは、CasingParticle と同じく素通りするフォールバックにしてある。
 
 import {
     DEBRIS_GRAVITY, DEBRIS_DRAG, DEBRIS_MAX_FALL_SPEED,
-    DEBRIS_FLASH_COLOR, DEBRIS_FADE_START,
+    DEBRIS_FLASH_COLOR, DEBRIS_FADE_START, DEBRIS_BOUNCE, DEBRIS_FRICTION,
 } from '../utils/Constants.js';
 import { isInView } from '../utils/viewCull.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 export class DebrisPart {
     /**
@@ -25,7 +29,8 @@ export class DebrisPart {
      * @param {number} opts.spin 角速度（ラジアン/フレーム）
      * @param {number} opts.holdFrames 飛散開始までの静止フレーム数
      * @param {number} opts.lifetime 飛散開始後の寿命（フレーム）
-     * @param {object} [opts.game] 画面外カリング用。無ければカリングしない
+     * @param {object} [opts.game] 画面外カリング・地形の跳ね返り・水中判定に使う。
+     *   無ければカリングせず、地形も無視して素通りする
      */
     constructor(opts) {
         this.x = opts.x;
@@ -70,10 +75,37 @@ export class DebrisPart {
             return;
         }
 
-        // 局面2: 飛散。地形は見ない。
-        this.x += this.vx;
-        this.y += this.vy;
-        this.vy = Math.min(this.vy + DEBRIS_GRAVITY, DEBRIS_MAX_FALL_SPEED);
+        // 局面2: 飛散。CasingParticle と同じ2Dバウンス（Grenade 相当）＋
+        // 水中の減速。game.map が無ければ地形を無視して素通りする。
+        // 移動は「今の速度」で行い、重力は移動のあとで次フレームぶんだけ足す
+        // （既存の自由落下の数値をそのまま保つため。Grenade/CasingParticle は
+        // 先に重力を足すが、DebrisPart は既存テストが厳密な数値を固定して
+        // いるので、この関数だけは元の順序を崩さない）
+        const motion = motionFor(this.game, this.x, this.y);
+        let nextX = this.x + this.vx * motion.speed;
+        let nextY = this.y + this.vy * motion.speed;
+
+        const map = this.game && this.game.map;
+        if (map && map.isSolidAtPixel) {
+            if (map.isSolidAtPixel(nextX, this.y)) {
+                this.vx *= -DEBRIS_BOUNCE;
+                nextX = this.x + this.vx * motion.speed;
+            }
+            if (map.isSolidAtPixel(this.x, nextY)) {
+                // 落ちてきた勢いが弱ければ跳ねずに転がって止まる（Grenade と同じ考え方）
+                if (Math.abs(this.vy) > 0.5) {
+                    this.vy *= -DEBRIS_BOUNCE;
+                } else {
+                    this.vy = 0;
+                    this.vx *= DEBRIS_FRICTION;
+                }
+                nextY = this.y + this.vy * motion.speed;
+            }
+        }
+        this.x = nextX;
+        this.y = nextY;
+
+        this.vy = Math.min(this.vy + DEBRIS_GRAVITY * motion.gravity, DEBRIS_MAX_FALL_SPEED);
         this.vx *= DEBRIS_DRAG;
         this.angle += this.spin;
 
