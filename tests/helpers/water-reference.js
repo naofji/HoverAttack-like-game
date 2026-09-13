@@ -6,7 +6,7 @@
 // 「実装から期待値を導く」ことになり、テストが恒真になる。
 
 import { MAX_WATER_MASS, MIN_WATER_MASS, TILE_SIZE } from '../../src/js/utils/Constants.js';
-import { WATER_NONE, WATER_BODY, WATER_SURFACE, WATER_FALL } from '../../src/js/world/waterQuery.js';
+import { WATER_NONE, WATER_BODY, WATER_SURFACE, WATER_FALL, SEGMENT_LOOKUP_RANGE } from '../../src/js/world/waterQuery.js';
 
 const isWater = (ctx, r, c) => {
     if (r < 0 || r >= ctx.rows || c < 0 || c >= ctx.cols) return false;
@@ -23,31 +23,48 @@ const isFalling = (ctx, r, c) => {
 };
 
 /**
- * 行 r の、(r, c) を含む壁(isSolid(r,・))区切りの連結区間に、天井が開いている
- * （岩でない）セルが1つでもあるか。waterQuery.js の rowSegmentHasOpenCeiling
- * と同じルールの、地形だけを見る独立した実装（水量には依存しない）。
+ * (r, c) を覆っている岩の上に水が乗っているか＝このセルは沈んでいるか。
+ * 岩を上へ抜けた先の最初の非岩セルを見る。
  */
-function rowSegmentHasOpenCeiling(ctx, r, c) {
+function coveredByWaterAbove(ctx, r, c) {
+    let rr = r - 1;
+    while (rr >= 0 && ctx.isSolid(rr, c)) rr--;
+    return rr >= 0 && isWater(ctx, rr, c);
+}
+
+/**
+ * 行 r の、(r, c) を含む壁区切りの連結区間（左右 range 列まで）に、
+ * 「空気に face した水セル」＝自分が水で、真上が岩でも水でもないセルがあるか。
+ */
+function rowSegmentHasExposedWater(ctx, r, c, range) {
+    if (r === 0) return true;
+    const lo = Math.max(0, c - range);
+    const hi = Math.min(ctx.cols - 1, c + range);
     let c0 = c;
-    while (c0 - 1 >= 0 && !ctx.isSolid(r, c0 - 1)) c0--;
+    while (c0 - 1 >= lo && !ctx.isSolid(r, c0 - 1)) c0--;
     let c1 = c;
-    while (c1 + 1 < ctx.cols && !ctx.isSolid(r, c1 + 1)) c1++;
+    while (c1 + 1 <= hi && !ctx.isSolid(r, c1 + 1)) c1++;
     for (let cc = c0; cc <= c1; cc++) {
-        if (r === 0 || !ctx.isSolid(r - 1, cc)) return true;
+        if (ctx.isSolid(r - 1, cc)) continue;
+        if (!isWater(ctx, r, cc)) continue;
+        if (isWater(ctx, r - 1, cc)) continue;
+        return true;
     }
     return false;
 }
 
-// 旧 Map.isWaterSurface をそのまま写したもの。
-// 天井(岩)が直上にあるセルは、満ちていなくて、かつ同じ行の連結区間の中に
-// 本当に開けたセルがあるときだけ水面として扱う（実機の指摘: 浮いた岩の下の
-// 浅い水たまりで波の線が途切れる／完全に孤立した浅い水だまりに波が浮く）。
-// waterQuery.js の classifyWaterColumn と同じルールに更新してある
+// 天井(岩)が直上にあるセルを水面として扱うのは、次の3つが揃ったときだけ:
+//   満ちていない／覆う岩の上に水が乗っていない（沈んでいない）／
+//   同じ行の区間に空気に face した水がある（地続きの本物の液面が隣に見えている）
+// 実機の指摘は2件で、どちらもここが緩すぎる・厳しすぎることから出ていた:
+//   「水面下のはずなのにブロックの下面に水面が出る」「浮いた岩の下で波の線が途切れる」
 const isSurface = (ctx, r, c) => {
     if (!isWater(ctx, r, c)) return false;
     if (isFalling(ctx, r, c)) return false;
     if (r > 0 && ctx.isSolid(r - 1, c)) {
-        return ctx.water[r * ctx.cols + c] < MAX_WATER_MASS && rowSegmentHasOpenCeiling(ctx, r, c);
+        return ctx.water[r * ctx.cols + c] < MAX_WATER_MASS
+            && !coveredByWaterAbove(ctx, r, c)
+            && rowSegmentHasExposedWater(ctx, r, c, SEGMENT_LOOKUP_RANGE);
     }
     if (r > 0 && isWater(ctx, r - 1, c) && !isFalling(ctx, r - 1, c)) return false;
     return true;

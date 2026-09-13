@@ -52,24 +52,61 @@ export function isFallingCell(water, cols, isSolid, r, c) {
 }
 
 /**
- * 行 r の、(r, c) を含む「壁(isSolid(r,・))で区切られた連結区間」の中に、
- * 天井が開いている（岩でない）セルが1つでもあるか。
+ * 岩に覆われたセルが「沈んでいる」か。覆っている岩を上へ抜けた先に水があれば沈んでいる。
  *
- * 地形(isSolid)だけで決まる純粋な問い合わせで、水量には一切依存しない。
- * これが重要で、水が動くたびに答えが変わる水たまりの連結成分（BFS）を使うと、
- * 一度「孤立している」と判定したセルを後から昇格させる手段が無くなる
- * （kind[] を書き換えてしまうと、次に自分の列が dirty にならない限り
- * classifyWaterColumn がもう呼ばれず、水量が変わって答えが変わっても
- * 古いままになる）。地形だけを見れば、地形が変わった列は damageBlock 側で
- * 必ず dirtyWaterCols に入る（Map.js 参照）ので、キャッシュとして安全に扱える。
+ * 同じ列しか見ないので、この答えが変わるときは必ずその列が dirty になる
+ * （水量が動いた列は onWaterChanged、地形が変わった列は damageBlock が入れる）。
+ * キャッシュとして安全に扱えるのはそのため。
  */
-function rowSegmentHasOpenCeiling(isSolid, r, c, cols) {
+export function isSubmergedFromAbove(water, isSolid, cols, r, c) {
+    let rr = r - 1;
+    while (rr >= 0 && isSolid(rr, c)) rr--;
+    if (rr < 0) return false;           // 岩がマップの天井まで続いている＝上に水は乗れない
+    return water[rr * cols + c] >= MIN_WATER_MASS;
+}
+
+/**
+ * 行 r の、(r, c) を含む「壁(isSolid(r,・))で区切られた連結区間」の中に、
+ * **空気に face している水セル**（自分は水で、真上が岩でなく水でもない）があるか。
+ *
+ * 以前は「天井が岩でないセルが1つでもあるか」という地形だけの条件だった。
+ * 地形だけなら水量が動いても答えが変わらず、キャッシュとして安全という利点が
+ * あったが、条件が緩すぎて**深く沈んだ岩の下面に水面の線が出る**（実機の指摘）。
+ * 区間の端が乾いた横穴に伸びているだけでも「天井が開いている」に当たるため。
+ *
+ * 実測（4面を6シード×2400フレーム、途中で爆破しながら、水塊の本当の液面と
+ * 突き合わせて数えた。滝＝落下中の水柱は液面の候補から除く）:
+ *
+ *   条件                                   偽の液面(延べ/実セル)  取りこぼし
+ *   旧「区間に岩でない天井がある」              493 / 63            0
+ *   「区間に空気に face した水がある」だけ       80 / 20            0
+ *   「覆う岩の上に水が無い」だけ                171 / 16            0
+ *   両方 ← これ                               48 /  8            1
+ *
+ * 水量を読むので、隣の列の水が変わるとこの列の答えも変わりうる。dirty は列単位
+ * なので、そのままでは「隣の列だけ作り直されて自分は古いまま」が起きる（実測で
+ * 6シード×2400フレームに 109 セル、キャッシュと全列作り直しがずれた）。
+ * そこで**探す範囲を左右 SEGMENT_LOOKUP_RANGE 列までに限り**、rebuildWaterCache
+ * 側で dirty 列をその幅だけ広げて作り直す。これで「水が変わったのに作り直されない
+ * 列」は構造的に存在しなくなる（tests/water-query.test.js が全列作り直しとの一致を縛る）。
+ * 16 列に狭めても取りこぼしは増えない（実測: 無制限 48/8・±16 47/7・±8 47/7 だが
+ * ±8 は取りこぼしが 1→26 に増える）。
+ */
+export const SEGMENT_LOOKUP_RANGE = 16;
+
+function rowSegmentHasExposedWater(water, isSolid, r, c, cols) {
+    if (r === 0) return true;
+    const lo = Math.max(0, c - SEGMENT_LOOKUP_RANGE);
+    const hi = Math.min(cols - 1, c + SEGMENT_LOOKUP_RANGE);
     let c0 = c;
-    while (c0 - 1 >= 0 && !isSolid(r, c0 - 1)) c0--;
+    while (c0 - 1 >= lo && !isSolid(r, c0 - 1)) c0--;
     let c1 = c;
-    while (c1 + 1 < cols && !isSolid(r, c1 + 1)) c1++;
+    while (c1 + 1 <= hi && !isSolid(r, c1 + 1)) c1++;
     for (let cc = c0; cc <= c1; cc++) {
-        if (r === 0 || !isSolid(r - 1, cc)) return true;
+        if (isSolid(r - 1, cc)) continue;
+        if (water[r * cols + cc] < MIN_WATER_MASS) continue;      // 乾いた横穴は液面ではない
+        if (water[(r - 1) * cols + cc] >= MIN_WATER_MASS) continue; // 上も水＝そこも沈んでいる
+        return true;
     }
     return false;
 }
@@ -99,22 +136,23 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
 
         // 水面か水中か。直上が岩なら基本は「天井に張り付いた水」で液面ではない
         // （満水ならタイル全体を塗るだけでよく、波を持たせる意味が無い）。
-        // ただし満ちていなくて、かつ同じ行の（壁で区切られた）連結区間のどこかに
-        // 本当に開けた（天井が岩でない）セルがあるなら、地続きの本物の液面が
-        // すぐ隣に見えているということなので水面として扱う（実機の指摘: 浮いた
-        // 岩の下だけ波の線が途切れる）。区間の中に開けたセルが1つも無い
-        // （完全に閉じた孤立した水たまり）ときは、量子化の残りかすのような
-        // 孤立した浅い水を独立した波にしてしまうと不自然に見えるので水面にしない
-        // （実機の指摘: 岩の先端の下に浮いた水面）。
-        // この判定はセルの水量ではなく地形(isSolid)だけで決まるので、水が
-        // 動いても答えは変わらない（結果を worker cache に焼く必要が無い）
+        // 岩の下でも水面として扱うのは、次の3つが揃ったときだけ:
+        //   1. 満ちていない（満水なら液面はもっと上にある）
+        //   2. 覆っている岩の上に水が乗っていない（乗っていれば沈んでいる。
+        //      実機の指摘「水面下のはずなのにブロックの下面に水面が出る」）
+        //   3. 同じ行の連結区間に、空気に face した水セルがある
+        //      （地続きの本物の液面がすぐ隣に見えている。実機の指摘「浮いた岩の
+        //      下だけ波の線が途切れる」。区間に1つも無いときは、量子化の残りかす
+        //      のような孤立した浅い水を独立した波にしないため水面にしない）
         // 直上が水でも、その水が落下中（滝）なら、こちらが液面になる
         // ＝滝が水たまりへ落ちてくる境目。旧 isWaterSurface と同じ扱い
         let isSurface;
         if (r === 0) {
             isSurface = true;
         } else if (isSolid(r - 1, c)) {
-            isSurface = mass < MAX_WATER_MASS && rowSegmentHasOpenCeiling(isSolid, r, c, cols);
+            isSurface = mass < MAX_WATER_MASS
+                && !isSubmergedFromAbove(water, isSolid, cols, r, c)
+                && rowSegmentHasExposedWater(water, isSolid, r, c, cols);
         } else {
             const above = water[k - cols];
             const aboveIsWater = above >= MIN_WATER_MASS;
@@ -228,8 +266,19 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
  * 既に正しい（水量が変わっていない）ので、そのまま伸ばして構わない。
  */
 export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols }) {
-    // まず kind を決め直す。ここは水量が変わった列だけでよい
+    // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
+    // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
+    // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
+    // 広げておく（重複は Set が畳む。実測で全列作り直しとの差が 0 になる）
+    const cols2 = new Set();
     for (const c of dirtyCols) {
+        const lo = Math.max(0, c - SEGMENT_LOOKUP_RANGE);
+        const hi = Math.min(cols - 1, c + SEGMENT_LOOKUP_RANGE);
+        for (let cc = lo; cc <= hi; cc++) cols2.add(cc);
+    }
+
+    // まず kind を決め直す
+    for (const c of cols2) {
         classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c });
     }
 
@@ -240,7 +289,7 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
     // （ランダムな水を30ステップ動かす突き合わせで実際に 257 vs 256 のずれが出た）。
     // 分裂は変化した列の場所でしか起きないので、1つ隣まで見れば足りる。
     const seedCols = new Set();
-    for (const c of dirtyCols) {
+    for (const c of cols2) {
         if (c - 1 >= 0) seedCols.add(c - 1);
         seedCols.add(c);
         if (c + 1 < cols) seedCols.add(c + 1);
