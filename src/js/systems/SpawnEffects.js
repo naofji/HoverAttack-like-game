@@ -9,8 +9,11 @@
 // settingsFlow.js と同じく **Object.assign で Game に混ぜる前提**の
 // オブジェクトリテラルで、`this` は Game を指す。
 
-import { DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY, WATER_RIPPLE_MAX } from '../utils/Constants.js';
-import { createExplosion, createSparks, SplashParticle, SnowKickParticle } from '../entities/Particle.js';
+import {
+    DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY, WATER_RIPPLE_MAX,
+    CASING_EJECT_SPREAD, CASING_EJECT_SPEED_MIN, CASING_EJECT_SPEED_MAX, CASING_EJECT_ANGLE_FROM_UP,
+} from '../utils/Constants.js';
+import { createExplosion, createSparks, SplashParticle, SnowKickParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -94,5 +97,19 @@ export const SpawnEffects = {
                 (Math.random() - 0.5) * 2, -(1 + Math.random() * 1.5),
             ));
         }
+    },
+
+    /**
+     * マシンガンの薬莢を1個排出する。狙いの角度ではなく自機の向き（facingRight）基準で、
+     * 常に「背中側・上」（右向きなら左上、左向きなら右上）へ飛ぶ。狙いの角度に追従すると
+     * 上を向いて撃ったときなどに変な方向へ飛んでしまうため、左右反転にだけ追従させる（実機の指摘）。
+     */
+    spawnCasing(x, y, facingRight) {
+        // 真上(-90°)から背中側へ CASING_EJECT_ANGLE_FROM_UP だけ傾けた方向。
+        // 右向きなら背中は左(-方向)なので上へ足す、左向きなら背中は右なので引く
+        const base = -Math.PI / 2 + (facingRight ? -1 : 1) * CASING_EJECT_ANGLE_FROM_UP;
+        const eject = base + (Math.random() - 0.5) * CASING_EJECT_SPREAD;
+        const speed = CASING_EJECT_SPEED_MIN + Math.random() * (CASING_EJECT_SPEED_MAX - CASING_EJECT_SPEED_MIN);
+        this.particles.push(new CasingParticle(this, x, y, Math.cos(eject) * speed, Math.sin(eject) * speed));
     },
 };

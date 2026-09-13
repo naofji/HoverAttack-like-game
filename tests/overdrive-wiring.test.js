@@ -29,7 +29,7 @@ function makeGame() {
 
 /** 本物の _fireMachineGun を、弾を溜めるだけの最小の Game で走らせる。 */
 function fireOnce(player) {
-  const host = { projectiles: [] };
+  const host = { projectiles: [], spawnCasing() { } };
   Game._fireMachineGun.call(host, player, 0, 0, 0);
   return host.projectiles.length;
 }

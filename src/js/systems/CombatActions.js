@@ -206,6 +206,7 @@ export const CombatActions = {
 
         const finalAngle = angle + (Math.random() - 0.5) * PLAYER_MG_SPREAD;
         this.projectiles.push(new PlayerBullet(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, finalAngle));
+        this.spawnCasing(px, py, player.facingRight);
 
         player.mgFireTimer = PLAYER_MG_BURST_DELAY;
         // 減算そのものは Player 側。オーバードライブ中に減らさない判定を

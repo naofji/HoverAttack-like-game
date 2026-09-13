@@ -116,8 +116,8 @@ export class StageEnvironment {
         for (const e of g.enemies) check(e);
         for (const p of g.projectiles) check(p);
         for (const b of g.enemyBullets) check(b);
-        // 破片も水面をまたぐとしぶきを出す。particles には煙や火花など他の演出も
-        // 混ざっているので isDebris で破片だけを拾う
+        // 破片（マシンガンの薬莢も含む）も水面をまたぐとしぶきを出す。particles には
+        // 煙や火花など他の演出も混ざっているので isDebris で拾う対象だけを選ぶ
         for (const p of g.particles) if (p.isDebris) check(p);
     }
 

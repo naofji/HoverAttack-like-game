@@ -1057,6 +1057,19 @@ export const WATER_GRAVITY_SCALE = 0.3;
 // 0.42 を掛けることで、実移動量は空気中の約 0.21倍（現行の半分以下）に抑えられ、
 // 自機(実速度 約1.47)・グレネード(実速度 約1.26)ともに心地よい浮力と沈降感になる。
 export const WATER_FALL_SPEED_SCALE = 0.42;
+// マシンガン弾（Bullet.js、自機・敵共通）が水中で受ける抗力。1フレームごとに
+// vx/vy へ掛けて速度そのものを弱める（motion.speed のような「その場だけ遅くなる」
+// 倍率ではない）。水中に入ったら減速し続け、水中→空中へ出た瞬間は減速済みの速度の
+// まま飛び続ける（実機の指摘: 出た瞬間に元の速さへ戻るのは不自然）。
+// 0.85 は減速が急すぎた（実機の指摘）ので 0.96 に緩和。初速4px/frameが
+// BULLET_WATER_MIN_SPEED を下回るまで約51フレーム(0.85秒)かかる
+export const BULLET_WATER_DRAG = 0.96;
+// これを下回ったら「止まって漂う」のではなく自然消滅させる（実機の指摘:
+// 寿命が尽きるまで水中に静止したままなのは不自然）。0.5 だと消えるまで
+// 約51フレームかかり長すぎた（実機の指摘）ので 1.0 に引き上げ、約34フレーム(0.57秒)で消える
+export const BULLET_WATER_MIN_SPEED = 1.0;
+// 水中を進む弾の白い尾。Missile の TrailParticle と同じ仕組みに乗る（実機の指摘）
+export const BULLET_WATER_TRAIL_INTERVAL = 2; // フレームおきに1個
 // 雪の地上で入力を離したときの速度の残存率（陸上は 0 = 即停止）。
 export const ICE_SLIDE = 0.94;  // 実機: もう少し滑る（0.9 → 0.94。止まるまでの距離が約1.7倍）
 export const ICE_MAX_SLIDE_SPEED = 3.0;    // 斜面で加速し続けても超えない
@@ -1120,6 +1133,30 @@ export const WATER_RIPPLE_MIN = 0.2;        // これ未満になった波紋は
 export const SPLASH_PARTICLES_PER_VY = 3;
 export const SPLASH_MAX_PARTICLES = 24;
 export const SPLASH_LIFETIME = 28;
+
+// マシンガンの薬莢。当たり判定を持たない純粋な演出で、DebrisPart と同じく
+// 地形は無視して落下するが、水中かどうかだけは motionFor で見てゆっくり沈める
+// （水面をまたいだ瞬間のしぶきは isDebris フラグに乗せて StageEnvironment に任せる）。
+export const CASING_COLOR = '#D4A537';      // 真鍮色
+export const CASING_LENGTH = 3;             // 排出方向を向く長辺
+export const CASING_WIDTH = 1.5;
+export const CASING_GRAVITY = 0.18;         // DebrisPart(0.1〜)より軽い金属片なので少し強め
+export const CASING_MAX_FALL_SPEED = 4;
+export const CASING_SPIN = 0.5;             // 転がりながら落ちる回転（rad/frame、±半分）
+export const CASING_LIFETIME = 50;          // 約0.83秒でフェードアウトしながら消える
+// 地形に当たったときの跳ね返り。GRENADE_BOUNCE と同じ考え方（速度を反転させつつ減衰）
+// だが薬莢は軽い金属片なのでより弾む（0.5弱→0.55）。何度か跳ねてから転がって止まる見た目にする
+export const CASING_BOUNCE = 0.55;
+export const CASING_FRICTION = 0.6;         // 地面に着いてから転がる速度の残存率（毎フレーム）
+export const CASING_FADE_START = 0.6;       // 経過60%(DebrisPartのDEBRIS_FADE_STARTと同じ考え方)からフェード開始
+// 排出口は発射角の右直角（実銃の排出方向）。EJECT_SPREAD でばらつかせる
+export const CASING_EJECT_SPREAD = 0.9;
+export const CASING_EJECT_SPEED_MIN = 1.2;
+export const CASING_EJECT_SPEED_MAX = 2.6;
+// 排出方向は狙いの角度ではなく自機の向き（facingRight）基準。真上から
+// この角度だけ背中側へ傾けた方向へ飛ぶ（実機の指摘: 狙いの角度に追従すると
+// 上を向いて撃ったときに変な方向へ飛ぶ。自機の左右反転にだけ追従してほしい）
+export const CASING_EJECT_ANGLE_FROM_UP = Math.PI / 4; // 45°: 右斜め上後方 / 左斜め上後方
 
 // 降雪。板（オフスクリーン）を層ごとにスクロールする。粒を個別に描かないのは
 // 縮尺（タイル16px）に見合う 1〜2px の粒を数千出したいから。

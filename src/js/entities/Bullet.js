@@ -4,6 +4,8 @@
 
 import { audioManager } from '../audio/AudioManager.js';
 import { motionFor } from '../world/StageEnvironment.js';
+import { BULLET_WATER_DRAG, BULLET_WATER_MIN_SPEED, BULLET_WATER_TRAIL_INTERVAL, PARTICLE_LIFETIME } from '../utils/Constants.js';
+import { TrailParticle } from './Particle.js';
 
 /**
  * マシンガン弾の土台。自機と敵で、速さ・大きさ・寿命・音・色が違うだけで、
@@ -35,6 +37,7 @@ export class Bullet {
         this.radius = spec.radius;
         this.alive = true;
         this.lifetime = spec.lifetime;
+        this.frameCounter = 0;
 
         audioManager.playWeapon(spec.sound, this.x, this.y);
     }
@@ -42,9 +45,28 @@ export class Bullet {
     update() {
         if (!this.alive) return;
 
+        // 水中(滝含む)では motion.speed をその場の倍率として移動量に掛けるのではなく、
+        // vx/vy 自体を毎フレーム弱める。前者だと「水中だけ遅いが空気に出た瞬間に
+        // 元の速さへ戻る」不自然な動きになる（実機の指摘）。抗力方式なら水中でどんどん
+        // 減速して止まり、空気に出ても減速済みの速度のまま飛び続ける
         const motion = motionFor(this.game, this.x, this.y);
-        this.x += this.vx * motion.speed;
-        this.y += this.vy * motion.speed;
+        if (motion.speed < 1) {
+            this.vx *= BULLET_WATER_DRAG;
+            this.vy *= BULLET_WATER_DRAG;
+            // 寿命が尽きるまで水中に静止したまま漂うのは不自然なので、
+            // 十分弱まったら寿命を待たずに自然消滅させる
+            if (Math.hypot(this.vx, this.vy) < BULLET_WATER_MIN_SPEED) {
+                this.alive = false;
+                return;
+            }
+            // 水中を進んでいることが分かるよう、白い尾を引く（Missile と同じ仕組み）
+            this.frameCounter++;
+            if (this.frameCounter % BULLET_WATER_TRAIL_INTERVAL === 0) {
+                this.game.particles.push(new TrailParticle(this.x, this.y, PARTICLE_LIFETIME));
+            }
+        }
+        this.x += this.vx;
+        this.y += this.vy;
         this.lifetime--;
 
         if (this.lifetime <= 0) {

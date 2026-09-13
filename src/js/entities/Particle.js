@@ -11,8 +11,11 @@ import {
     COLOR_RICOCHET, COLOR_RICOCHET_FADE,
     SPLASH_LIFETIME,
     SNOW_KICK_COLOR, SNOW_KICK_LIFETIME,
+    CASING_COLOR, CASING_LENGTH, CASING_WIDTH, CASING_GRAVITY, CASING_MAX_FALL_SPEED,
+    CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
+import { motionFor } from '../world/StageEnvironment.js';
 
 /**
  * 本物のパーツ破片を撒く6機体（Player / Carrier / Drone / Tank / Turret / Attacker）が
@@ -232,6 +235,91 @@ export class SnowKickParticle {
         ctx.fillStyle = SNOW_KICK_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
         ctx.globalAlpha = 1.0;
+    }
+}
+
+// --------------------------------------------
+// Casing Particle - マシンガンの薬莢
+// --------------------------------------------
+// DebrisPart と違い、地形に当たると跳ね返る（Grenade と同じ2D バウンス）。
+// 「破片は地形を無視して落ちる」既存の演出用パーティクルとは違う挙動だが、
+// 薬莢は数が多く近くで繰り返し見えるので、跳ねて転がる方が臨場感が出る（実機の指摘）。
+// game.map が無い（テストのスタブなど）場合は衝突を見ずに素通りする、DebrisPart 相当の
+// フォールバックにしておく。
+// 水中かどうかだけは motionFor で見て、ゆっくり沈む見た目にする
+// （Bullet の抗力方式とは違い、こちらは重力そのものを弱めるだけでよい。
+// 水から出て加速して見える問題は起きない ― 薬莢は沈むだけで浮き上がらないため）。
+export class CasingParticle {
+    constructor(game, x, y, vx, vy) {
+        this.game = game;
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.angle = Math.random() * Math.PI * 2;
+        this.spin = (Math.random() - 0.5) * 1.0; // rad/frame。転がりながら落ちる見た目
+        this.maxLife = CASING_LIFETIME;
+        this.life = CASING_LIFETIME;
+        this.alive = true;
+        // 水面をまたいだ瞬間のしぶきは StageEnvironment._trackWaterCrossings が
+        // isDebris を目印に particles から拾う。薬莢も同じ仕組みに乗せる
+        this.isDebris = true;
+    }
+
+    update() {
+        if (!this.alive) return;
+
+        const motion = motionFor(this.game, this.x, this.y);
+        this.vy = Math.min(this.vy + CASING_GRAVITY * motion.gravity, CASING_MAX_FALL_SPEED);
+
+        const map = this.game && this.game.map;
+        if (map && map.isSolidAtPixel) {
+            let nextX = this.x + this.vx * motion.speed;
+            if (map.isSolidAtPixel(nextX, this.y)) {
+                this.vx *= -CASING_BOUNCE;
+                nextX = this.x + this.vx * motion.speed;
+            }
+            this.x = nextX;
+
+            let nextY = this.y + this.vy * motion.speed;
+            if (map.isSolidAtPixel(this.x, nextY)) {
+                // 落ちてきた勢いが弱ければ跳ねずに転がって止まる（Grenade と同じ考え方）
+                if (Math.abs(this.vy) > 0.5) {
+                    this.vy *= -CASING_BOUNCE;
+                } else {
+                    this.vy = 0;
+                    this.vx *= CASING_FRICTION;
+                }
+                nextY = this.y + this.vy * motion.speed;
+            }
+            this.y = nextY;
+        } else {
+            this.x += this.vx * motion.speed;
+            this.y += this.vy * motion.speed;
+        }
+
+        this.angle += this.spin;
+
+        if (--this.life <= 0) this.alive = false;
+    }
+
+    /** 不透明度。DebrisPart と同じ考え方（経過が CASING_FADE_START 未満は不透明のまま）。 */
+    get alpha() {
+        const p = 1 - this.life / this.maxLife;
+        if (p < CASING_FADE_START) return 1;
+        return Math.max(0, (1 - p) / (1 - CASING_FADE_START));
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = CASING_COLOR;
+        ctx.fillRect(-CASING_LENGTH / 2, -CASING_WIDTH / 2, CASING_LENGTH, CASING_WIDTH);
+        ctx.restore();
     }
 }
 
