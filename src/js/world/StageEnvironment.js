@@ -28,8 +28,15 @@ import { createSnowRenderer } from './environment/snow.js';
 /** 陸上。陸上の面では全エンティティがこれを受け取り、掛けても値が変わらない。 */
 export const LAND_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: 0 });
 export const WATER_MOTION = Object.freeze({ speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0 });
+/**
+ * 滝（落下中の水柱）の中。**水中ではないので浮力も水の抵抗も無い**。
+ * 以前は水中と同じ speed 0.5 / gravity 0.3 を掛けていたため、滝に触れた瞬間から
+ * 実落下速度が 2.45px/frame（空気中 7.0 の 1/3）に落ち、「滝の中をゆっくり沈んで
+ * いく」という実機の指摘になっていた。滝は空気と同じ重力・同じ速度で、
+ * 上から水に打たれるぶんの押し下げ（downforce）だけが余分に掛かる。
+ */
 export const WATERFALL_MOTION = Object.freeze({
-    speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0,
+    speed: 1, gravity: 1, slide: 0,
     downforce: WATERFALL_DOWNFORCE, fallSpeedScale: WATERFALL_FALL_SPEED_SCALE,
 });
 export const SNOW_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: ICE_SLIDE });

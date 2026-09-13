@@ -1125,8 +1125,14 @@ export const WATER_SPRING_STOP_ROW = 6;        // この行まで水没したら
 // 見た目だけの値で、当たり判定（isWaterfallAtPixel）はタイル単位のまま
 export const WATERFALL_HEAD_DROP = 16;         // px
 
-export const WATERFALL_DOWNFORCE = 0.18;       // 下方向への押し下げ加速度
-export const WATERFALL_FALL_SPEED_SCALE = 0.70;// 滝の中での落下速度上限スケール
+// 下方向への押し下げ加速度。GRAVITY(0.30) に**足す**。滝が水中と同じ弱い重力
+// (0.09) だった頃の 0.18 は、空気と同じ重力(0.30)に直すと合計 0.48 になり、
+// ホバーの推力 0.50 とほぼ釣り合って滝が登れない壁になる。合計 0.36（空気の1.2倍）
+// にして、「重いが登れる」ようにした。上昇の実効加速度は空気中 -0.20 に対し -0.14。
+// 滝の押しをもっと強くしたいならここだけ上げる（0.20 でホバーがほぼ釣り合う）
+export const WATERFALL_DOWNFORCE = 0.06;
+// 滝の中での落下速度上限スケール。1.0 ＝ 空気中と同じ（滝に浮力は無い）
+export const WATERFALL_FALL_SPEED_SCALE = 1.0;
 // 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
 export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）

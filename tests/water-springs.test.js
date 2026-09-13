@@ -4,8 +4,8 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { generateWaterSprings } from '../src/js/world/waterPools.js';
 import { Map } from '../src/js/world/Map.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, WATERFALL_HEAD_DROP, PLAYER_MAX_FALLING_SPEED } from '../src/js/utils/Constants.js';
-import { StageEnvironment, motionFor } from '../src/js/world/StageEnvironment.js';
+import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, WATERFALL_HEAD_DROP, PLAYER_MAX_FALLING_SPEED, GRAVITY } from '../src/js/utils/Constants.js';
+import { StageEnvironment, motionFor, WATERFALL_MOTION, WATER_MOTION } from '../src/js/world/StageEnvironment.js';
 import { makeWaterMap } from './helpers/water-map.js';
 
 /**
@@ -128,9 +128,18 @@ test('StageEnvironment: 滝の中にいる時は WATERFALL_MOTION（downforce, f
     assert.notEqual(motionInPool.fallSpeedScale, WATERFALL_FALL_SPEED_SCALE);
 });
 
-test('Player: 滝の中では下向きのダウンフォースを受け、落下速度上限が WATERFALL_FALL_SPEED_SCALE になる', async () => {
+test('滝の中は水中ではない: 重力も移動速度も空気と同じで、押し下げだけが増える', () => {
+    // 実機の指摘「滝に触れるとゆっくり沈んでいく」。滝に水中と同じ
+    // speed 0.5 / gravity 0.3 を掛けていたのが原因だった
+    assert.equal(WATERFALL_MOTION.speed, 1, '滝の中で移動が遅くなってはいけない');
+    assert.equal(WATERFALL_MOTION.gravity, 1, '滝の中で重力が弱くなってはいけない');
+    assert.ok(WATERFALL_MOTION.downforce > 0, '水に打たれるぶんの押し下げはある');
+    assert.ok(WATER_MOTION.speed < 1 && WATER_MOTION.gravity < 1, '水中はこれまでどおり遅い');
+});
+
+test('Player: 滝の中では空気中より速く落ち、水中より明確に速い', async () => {
     const { Player } = await import('../src/js/entities/Player.js');
-    const game = {
+    const makeGame = (motion) => ({
         settings: {},
         camera: { x: 0, y: 0 },
         map: { isSolidAtPixel: () => false, isSolid: () => false },
@@ -142,26 +151,36 @@ test('Player: 滝の中では下向きのダウンフォースを受け、落下
             mouse: { x: 0, y: 0, left: false },
             getTargetWorld: () => ({ x: 0, y: 0 }),
         },
-        env: {
-            motionAt: () => ({
-                speed: 0.5, gravity: 0.3, slide: 0, downforce: WATERFALL_DOWNFORCE, fallSpeedScale: WATERFALL_FALL_SPEED_SCALE,
-            }),
-        },
+        env: { motionAt: () => motion },
+    });
+    const fallDistance = (motion, frames) => {
+        const p = new Player(makeGame(motion), 50, 50);
+        p.docked = false; p.onGround = false; p.hovering = false; p.vy = 0;
+        const y0 = p.y;
+        for (let i = 0; i < frames; i++) p.update();
+        return p.y - y0;
     };
-    const player = new Player(game, 50, 50);
-    player.docked = false;
-    player.onGround = false;
-    player.hovering = false;
-    player.vy = 0;
-    player.update();
-    // 重力(0.25 * 0.3 = 0.075) + downforce(0.18) = 0.255
-    assert.ok(player.vy > 0.2, `vy should include downforce: got ${player.vy}`);
+    const air = fallDistance({ speed: 1, gravity: 1, slide: 0 }, 60);
+    const fall = fallDistance(WATERFALL_MOTION, 60);
+    const under = fallDistance(WATER_MOTION, 60);
+    assert.ok(fall > air, `滝は空気より速く落ちる: 滝 ${fall} / 空気 ${air}`);
+    assert.ok(fall > under * 3, `滝は水中よりはるかに速い: 滝 ${fall} / 水中 ${under}`);
 
-    // 落下速度上限テスト
-    player.vy = 100;
-    player.update();
-    const expectedMax = PLAYER_MAX_FALLING_SPEED * WATERFALL_FALL_SPEED_SCALE;
-    assert.ok(Math.abs(player.vy - expectedMax) < 1e-4, `vy clamped to waterfall max: expected ${expectedMax}, got ${player.vy}`);
+    // 落下速度の上限も空気と同じ（滝に浮力は無い）
+    const p = new Player(makeGame(WATERFALL_MOTION), 50, 50);
+    p.docked = false; p.onGround = false; p.hovering = false;
+    p.vy = 100;
+    p.update();
+    assert.ok(Math.abs(p.vy - PLAYER_MAX_FALLING_SPEED * WATERFALL_FALL_SPEED_SCALE) < 1e-4);
+    assert.equal(WATERFALL_FALL_SPEED_SCALE, 1.0, '滝の落下上限は空気中と同じ');
+});
+
+test('滝の押し下げは、ホバーで登れる強さに収める（滝が通れない壁にならない）', async () => {
+    const { HOVER_THRUST } = await import('../src/js/utils/Constants.js');
+    // ホバーの推力（上向き）と、滝の中の下向き加速度の釣り合い
+    const down = GRAVITY * WATERFALL_MOTION.gravity + WATERFALL_DOWNFORCE;
+    assert.ok(down < Math.abs(HOVER_THRUST), `滝の中でホバーが負ける: 下 ${down} / 推力 ${Math.abs(HOVER_THRUST)}`);
+    assert.ok(down > GRAVITY, '滝の中は空気中より重いはず');
 });
 
 test('water.js: 離れて2層存在する水ブロックがある場合、それぞれの空気直下のトップが水面になる', async () => {
