@@ -93,49 +93,61 @@ test('drawBehindTerrain transfers the behind water cache once', async () => {
   assert.equal(ctx.calls.filter((c) => c.name === 'drawImage').length, 1);
 });
 
-test('collectBorderBlocks extracts 8-neighbor solid blocks around water cells', async () => {
+test('collectBorderBlocks は水に接する岩を集めるが、液面より上の岩は集めない', async () => {
   const { collectBorderBlocks } = await import('../src/js/world/environment/water.js');
-  // 3x3 のマップ: 中央 (1,1) が水、(0,0) と (1,0) が岩ブロック
+  // 3x3 のマップ: 中央 (1,1) が満水、(0,0) と (1,0) が岩ブロック
   const map = {
     rows: 3,
     cols: 3,
     isWater(r, c) { return r === 1 && c === 1; },
     isSolid(r, c) { return (r === 0 && c === 0) || (r === 1 && c === 0); },
   };
-  const waterCells = [[1, 1]];
-  const border = collectBorderBlocks(map, waterCells);
-  // (0,0) は斜め隣接、(1,0) は横隣接。両方とも岩ブロックなので境界ブロックとして抽出される
-  assert.equal(border.length, 2);
-  const keys = border.map(([r, c]) => `${r},${c}`).sort();
-  assert.deepEqual(keys, ['0,0', '1,0']);
+  const border = collectBorderBlocks(map, [[1, 1]]);
+  // (1,0) は水と同じ行なので背後を埋める必要がある。(0,0) は水面(y=16)より
+  // 完全に上のタイルなので、面取りの隙間は水の外＝埋めてはいけない
+  assert.deepEqual(border.map(([r, c]) => `${r},${c}`).sort(), ['1,0']);
 });
 
-test('isFullWaterBlock returns true only for full non-surface non-waterfall cells', async () => {
-  const { isFullWaterBlock } = await import('../src/js/world/environment/water.js');
-  const { MAX_WATER_MASS } = await import('../src/js/utils/Constants.js');
+test('waterBackdropTopY は隣の水の液面から下だけを埋める（水際の岩が黒く抜けない）', async () => {
+  const { waterBackdropTopY } = await import('../src/js/world/environment/water.js');
+  const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
+  // 4x4。列2が水で、液面は行1の途中 y=26（行1のタイルは 16..32）
+  const cols = 4;
+  const surfaceY = new Int16Array(16).fill(-1);
+  surfaceY[1 * cols + 2] = 26;
+  surfaceY[2 * cols + 2] = 26;
+  const water = new Uint8Array(16);
+  water[1 * cols + 2] = 3;
+  water[2 * cols + 2] = 8;
   const map = {
-    rows: 4,
-    cols: 4,
-    water: new Float32Array(16),
-    isWater(r, c) { return this.water[r * 4 + c] > 0; },
-    isWaterSurface(r, c) { return r === 1 && c === 1; },
-    isWaterfallCell(r, c) { return r === 2 && c === 1; },
+    rows: 4, cols, water, waterSurfaceY: surfaceY,
+    isWater(r, c) { return water[r * cols + c] > 0; },
+    isSolid(r, c) { return c !== 2; },
+    isWaterfallCell() { return false; },
   };
-  // (1,1): 水面（MAX_WATER_MASS だが水面判定） -> false
-  map.water[1 * 4 + 1] = MAX_WATER_MASS;
-  assert.equal(isFullWaterBlock(map, 1, 1), false);
+  // 水際の岩 (1,1): 液面 26 から下だけ。以前はここが「隣が満水でない」として
+  // 1ドットも塗られず、面取りの角が黒く抜けていた（実機の指摘）
+  assert.equal(waterBackdropTopY(map, 1, 1), 26);
+  // 水中の岩 (2,1): 液面はタイルより上なのでタイルの上辺から
+  assert.equal(waterBackdropTopY(map, 2, 1), 2 * TILE_SIZE);
+  // 液面より完全に上の岩 (0,1): 埋めない
+  assert.equal(waterBackdropTopY(map, 0, 1), -1);
+  // 水から離れた岩: 埋めない
+  assert.equal(waterBackdropTopY(map, 3, 0), -1);
+});
 
-  // (2,1): 滝セル（MAX_WATER_MASS だが滝判定） -> false
-  map.water[2 * 4 + 1] = MAX_WATER_MASS;
-  assert.equal(isFullWaterBlock(map, 2, 1), false);
-
-  // (3,1): 水量が満タン未満（MAX_WATER_MASS * 0.5） -> false
-  map.water[3 * 4 + 1] = MAX_WATER_MASS * 0.5;
-  assert.equal(isFullWaterBlock(map, 3, 1), false);
-
-  // (3,2): 満水水中セル（MAX_WATER_MASS、水面でも滝でもない） -> true
-  map.water[3 * 4 + 2] = MAX_WATER_MASS;
-  assert.equal(isFullWaterBlock(map, 3, 2), true);
+test('滝の帯は岩の背後を埋める根拠にしない（帯は細いので周りは水ではない）', async () => {
+  const { waterBackdropTopY } = await import('../src/js/world/environment/water.js');
+  const cols = 3;
+  const water = new Uint8Array(9);
+  water[1 * cols + 1] = 2;
+  const map = {
+    rows: 3, cols, water, waterSurfaceY: new Int16Array(9).fill(-1),
+    isWater(r, c) { return water[r * cols + c] > 0; },
+    isSolid(r, c) { return c !== 1; },
+    isWaterfallCell(r, c) { return r === 1 && c === 1; },
+  };
+  assert.equal(waterBackdropTopY(map, 1, 0), -1);
 });
 
 test('invalidate clears behindCache when adjacent water drops or disappears', async () => {
@@ -379,5 +391,44 @@ test('浮いた岩の真下の浅い水は、実際の水量ぶんだけ浅く�
   for (let c = 4; c <= 7; c++) {
     assert.equal(topByCol.get(c), surfaceTop,
       `列${c}(岩の真下)の塗りの上端 ${topByCol.get(c)} が水面側 ${surfaceTop} と違う（吸い付いている）`);
+  }
+});
+
+test('沈んだ岩の真下は、水量が満タンに届いていなくてもタイル全体を塗る', async () => {
+  // 上のテストの裏返し。浮いた岩（上が空気）の下は水量ぶんだけ浅く塗るのが
+  // 正しいが、**沈んだ岩**（上にも水がある）の下をそれでやると、量子化で
+  // 1つ足りないだけのセルに透明な帯が残り、岩の真下に黒い線が見える。
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+
+  const map = makeWaterMap(`
+    ............
+    88888888888.
+    8888####888.
+    88887777888.
+    88888888888.
+  `);
+
+  const fills = [];
+  const origCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    const ctx = makeFakeCtx();
+    const orig = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (x, y, w, h) => { fills.push({ x, y, w, h }); return orig(x, y, w, h); };
+    return { width: 0, height: 0, getContext: () => ctx };
+  };
+  try {
+    createWaterRenderer({ game: { map } });
+  } finally {
+    globalThis.document.createElement = origCreateElement;
+  }
+
+  for (let c = 4; c <= 7; c++) {
+    const inTile = fills.filter((f) => f.h > 0
+      && Math.floor(f.x / TILE_SIZE) === c
+      && f.y >= 3 * TILE_SIZE && f.y < 4 * TILE_SIZE);
+    assert.ok(inTile.length > 0, `列${c} の行3 に塗りが無い`);
+    const top = Math.min(...inTile.map((f) => f.y));
+    assert.equal(top, 3 * TILE_SIZE,
+      `列${c}(沈んだ岩の真下, 水量7/8) の塗りがタイル上辺から始まっていない: ${top}`);
   }
 });

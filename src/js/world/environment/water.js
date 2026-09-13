@@ -7,6 +7,7 @@
 // sin で上下させる。当たり判定は波打たない（水面の行は固定）。
 // しぶきが落ちた場所は波紋として一時的に振幅を足し、毎フレーム減衰する。
 
+import { isSubmergedFromAbove } from '../waterQuery.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
@@ -41,30 +42,57 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
     ctx.stroke();
 }
 
+/** 水セル (r, c) の塗りの上端 Y。paint() と同じ決め方。水でなければ -1。 */
+function waterTopY(map, r, c) {
+    if (r < 0 || r >= map.rows || c < 0 || c >= map.cols) return -1;
+    if (map.isSolid && map.isSolid(r, c)) return -1;
+    // 滝は細い帯でしか塗らないので、岩の背後を埋める根拠にはしない
+    if (map.isWaterfallCell && map.isWaterfallCell(r, c)) return -1;
+    const k = r * map.cols + c;
+    const level = map.waterSurfaceY ? map.waterSurfaceY[k] : -1;
+    if (level >= 0) return level;
+    if (!map.isWater(r, c)) return -1;
+    const mass = map.water ? map.water[k] : MAX_WATER_MASS;
+    return (r + 1) * TILE_SIZE - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+}
+
 /**
- * セル (r, c) が「満タンの水ブロック」であるかを判定する。
- * 岩ブロックの面取り（bevel）の隙間対策として背後に水を敷くのは、
- * 隣接する水が満タンの場合のみ（水面・落下水流・少量の水・空気の場合は敷かない）。
+ * 岩ブロック (r, c) の背後に水を敷き始める Y。敷く必要が無ければ -1。
+ *
+ * 岩は面取り（bevel）で角が削られるので、水に面した角は背景が透けて**黒く抜ける**。
+ * そこを埋めるために同じ色の水を岩の下に敷いている。
+ *
+ * 以前は「隣が満タンの水ブロックなら**タイル全体**に敷く」だった。これだと
+ * 水際（液面のある行）や、水量が満たない浅い水の隣の岩には1ドットも敷かれず、
+ * 湖のふちに沿って黒い三角の欠けが並ぶ（実測: 4面で面取りが水に面する岩 91個の
+ * うち 33個が未処理のまま居座っていた。実機の指摘「黒く抜ける」）。
+ *
+ * 隣の水の**液面**を見て、そこから下だけ敷くようにする。水際の岩は液面から下だけが
+ * 青くなり、液面より上の面取りは背景のまま＝水の外なので、これが正しい見え方になる。
  */
-export function isFullWaterBlock(map, r, c) {
-    if (!map.isWater(r, c)) return false;
-    const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-    if (mass < MAX_WATER_MASS) return false;
-    if (map.isWaterSurface && map.isWaterSurface(r, c)) return false;
-    if (map.isWaterfallCell && map.isWaterfallCell(r, c)) return false;
-    return true;
+export function waterBackdropTopY(map, r, c) {
+    let top = Infinity;
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const y = waterTopY(map, r + dr, c + dc);
+            if (y >= 0 && y < top) top = y;
+        }
+    }
+    const bottom = (r + 1) * TILE_SIZE;
+    if (top === Infinity || top >= bottom) return -1;   // 隣の水はこのタイルより下
+    return Math.max(top, r * TILE_SIZE);
 }
 
 /**
  * 水セルに8近傍で隣接する岩ブロックセルを収集する。
- * ブロックの面取り（bevel）によって削られた角の隙間の下地に水を敷き、
- * 水の欠けや背景の露出を防ぐため。
- * ※隣接する水が「満タンの水ブロック」である場合のみ対象とする。
+ * 実際に敷くかどうか（と、どの高さから敷くか）は waterBackdropTopY が決めるので、
+ * ここは候補を漏れなく集めるだけ。
  */
 export function collectBorderBlocks(map, waterCells) {
     const border = new Map();
     for (const [r, c] of waterCells) {
-        if (!isFullWaterBlock(map, r, c)) continue;
+        if (!map.isWater(r, c)) continue;
         for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
                 if (dr === 0 && dc === 0) continue;
@@ -73,7 +101,7 @@ export function collectBorderBlocks(map, waterCells) {
                 if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
                 if (map.isWater(nr, nc)) continue;
                 const isSolid = map.isSolid ? map.isSolid(nr, nc) : (map.grid ? map.grid[nr][nc] !== 0 : true);
-                if (isSolid) {
+                if (isSolid && waterBackdropTopY(map, nr, nc) >= 0) {
                     border.set(nr * map.cols + nc, [nr, nc]);
                 }
             }
@@ -209,10 +237,20 @@ export function createWaterRenderer(env) {
             // 浅く塗る。ここを常にタイル全体で塗ると、浅い湖に浮いた岩がある
             // とき、その真下だけ水面より高く塗られて「水面が岩に吸い付いて」
             // 見える（実機の指摘。水面側は液面クランプで浅く塗れているのに、
-            // 天井付きセルだけ水量を見ずに常にタイル全体を塗っていたのが原因）
+            // 天井付きセルだけ水量を見ずに常にタイル全体を塗っていたのが原因）。
+            // 残っている穴: 岩に囲まれた1マスの横穴が湖の深さにあると、水量が
+            // 7 で止まったまま「上はずっと岩＝沈んでいない」と判定され、タイルの
+            // 上に 2px の透明な帯が残る（実測: 3000フレームで 8px ぶん1か所）。
+            // 直すには液面を横方向にも塗り広げる必要があり、列単位の dirty 管理を
+            // 作り替えることになるので見送った。
+            // ただし**沈んでいる**セル（覆う岩の上にも水がある）は別で、そこは
+            // タイル全体が水の中。水量の量子化で 8 に1つ足りないだけのことが
+            // 多く、水量ぶんだけ塗ると岩の真下に細い透明な帯が残る（黒く見える）
             if (map.isWater(r, c)) {
                 const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-                if (mass < MAX_WATER_MASS) {
+                const submerged = map.water && map.isSolid
+                    && isSubmergedFromAbove(map.water, (rr, cc) => map.isSolid(rr, cc), map.cols, r, c);
+                if (mass < MAX_WATER_MASS && !submerged) {
                     const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
                     if (h > 0) cctx.fillRect(c * TILE_SIZE, bottomY - h, TILE_SIZE, h);
                 } else {
@@ -226,7 +264,10 @@ export function createWaterRenderer(env) {
         bctx.fillStyle = WATER_BEHIND_FILL;
         for (const [r, c] of cells) {
             bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            bctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            // 隣の水の液面から下だけ敷く（水際の岩で液面より上まで青くしない）
+            const topY = waterBackdropTopY(map, r, c);
+            if (topY < 0) continue;
+            bctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, (r + 1) * TILE_SIZE - topY);
         }
     };
 
@@ -335,35 +376,13 @@ export function createWaterRenderer(env) {
                 }
             }
 
-            // 3. 影響範囲の岩ブロックの behindCache をいったんクリアし、
-            //    現在も周囲8マスに「満タンの水ブロック」が存在するものだけ再描画する
+            // 3. 影響範囲の岩ブロックを塗り直す。paintBehind が自分でクリアしてから
+            //    液面より下だけを敷くので、ここは候補をそのまま渡せばよい
+            //    （敷く必要が無いものは waterBackdropTopY が -1 を返してクリアだけで終わる）
             const borderToRepaint = [];
             for (const key of borderCandidateKeys) {
-                const r = Math.floor(key / map.cols);
-                const c = key % map.cols;
-                bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
-                let hasFullWaterNeighbor = false;
-                for (let dr = -1; dr <= 1; dr++) {
-                    for (let dc = -1; dc <= 1; dc++) {
-                        if (dr === 0 && dc === 0) continue;
-                        const nr = r + dr;
-                        const nc = c + dc;
-                        if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
-                        if (isFullWaterBlock(map, nr, nc)) {
-                            hasFullWaterNeighbor = true;
-                            break;
-                        }
-                    }
-                    if (hasFullWaterNeighbor) break;
-                }
-
-                if (hasFullWaterNeighbor) {
-                    borderToRepaint.push([r, c]);
-                }
+                borderToRepaint.push([Math.floor(key / map.cols), key % map.cols]);
             }
-
-            // 4. 現在も満タンの水ブロックに隣接している岩ブロックのみ背後に水を塗る
             paintBehind(borderToRepaint);
         },
         drawBehindTerrain(ctx, camX, camY) {
