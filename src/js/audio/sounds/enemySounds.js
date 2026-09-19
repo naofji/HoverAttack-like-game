@@ -23,6 +23,10 @@ import {
     DRONE_MOVE_FREQ_FROM, DRONE_MOVE_FREQ_TO, DRONE_MOVE_DURATION,
     DRONE_MOVE_FILTER_Q, DRONE_MOVE_FILTER_MULT, DRONE_MOVE_FILTER_END_MULT,
     DRONE_MOVE_DETUNE, DRONE_MOVE_GAIN, DRONE_MOVE_SUB_GAIN,
+    RIVAL_DASH_SND_FREQ_FROM, RIVAL_DASH_SND_FREQ_TO, RIVAL_DASH_SND_DURATION,
+    RIVAL_DASH_SND_RISE_AT, RIVAL_DASH_SND_KNEE, RIVAL_DASH_SND_HOLD,
+    RIVAL_DASH_SND_FILTER_Q, RIVAL_DASH_SND_FILTER_MULT, RIVAL_DASH_SND_DETUNE,
+    RIVAL_DASH_SND_GAIN, RIVAL_DASH_SND_SUB_GAIN, RIVAL_DASH_SND_ATTACK,
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
 } from '../../utils/Constants.js';
@@ -223,6 +227,82 @@ export const AudioEnemySounds = {
         sub.frequency.exponentialRampToValueAtTime(DRONE_MOVE_FREQ_TO / 2, end);
         const subGain = this.ctx.createGain();
         subGain.gain.value = DRONE_MOVE_SUB_GAIN;
+        sub.connect(subGain);
+        subGain.connect(filter);
+        voices.push(sub);
+
+        for (const v of voices) { v.start(t); v.stop(end); }
+    },
+
+    /**
+     * ライバルの瞬間加速の音「ヴーン」。回避の立ち上がりで1回だけ鳴る
+     * （entities/attacker/movement.js）。
+     *
+     * 作りはドローンの移動音（playDroneMove）と同じ系統 ── detune した鋸波に
+     * 1オクターブ下のサイン波を足し、共鳴の強いローパスで掃く。違うのは向きで、
+     * あちらは高→低（ポーーン）、こちらは**低→高**（ヴーン）。上がる音にすると
+     * 「加速している」ほうへ耳が素直に付いてくる。兄弟の音色なので、同じ画面で
+     * 鳴っても敵の種類が混ざって聞こえない程度には近い。
+     *
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     */
+    playRivalDash(x, y) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        const end = t + RIVAL_DASH_SND_DURATION;
+        const out = this._out(x);
+
+        // 音程は「前半はほぼ平ら → 後半で一気に2オクターブ上がる」の2段。
+        // 全体を等しく掃くと、減衰で消える頃にようやく高くなるので、
+        // 上がっていることが聞き取れなかった（実機の指摘）
+        const riseT = t + RIVAL_DASH_SND_DURATION * RIVAL_DASH_SND_RISE_AT;
+        const kneeF = RIVAL_DASH_SND_FREQ_FROM * RIVAL_DASH_SND_KNEE;
+        /** 上の2段を、どの周波数の系列にも同じ形で掛けるための小さな補助。 */
+        const sweep = (param, scale) => {
+            param.setValueAtTime(RIVAL_DASH_SND_FREQ_FROM * scale, t);
+            param.exponentialRampToValueAtTime(kneeF * scale, riseT);
+            param.exponentialRampToValueAtTime(RIVAL_DASH_SND_FREQ_TO * scale, end);
+        };
+
+        // ローパスは基音の定数倍を保ったまま一緒に上がる。倍率を固定にすると
+        // 上昇の後半で倍音が開きすぎ、「ヴーン」ではなく「ビーン」に寄る
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.Q.value = RIVAL_DASH_SND_FILTER_Q;
+        sweep(filter.frequency, RIVAL_DASH_SND_FILTER_MULT);
+
+        // 音量は HOLD まで保ってから落とす。先頭から減衰させると、上がりきる
+        // 前に消えてしまい、上の音程の作り込みが全部聞こえなくなる
+        const gain = this.ctx.createGain();
+        const peak = RIVAL_DASH_SND_GAIN * level;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(peak, t + RIVAL_DASH_SND_ATTACK);
+        gain.gain.setValueAtTime(peak, t + RIVAL_DASH_SND_DURATION * RIVAL_DASH_SND_HOLD);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+        filter.connect(gain);
+        gain.connect(out);
+
+        const voices = [];
+        for (const cents of RIVAL_DASH_SND_DETUNE) {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.detune.value = cents;
+            sweep(osc.frequency, 1);
+            osc.connect(filter);
+            voices.push(osc);
+        }
+
+        // 1オクターブ下のサイン波。「ヴ」の低い胴鳴りはここから出る
+        const sub = this.ctx.createOscillator();
+        sub.type = 'sine';
+        sweep(sub.frequency, 0.5);
+        const subGain = this.ctx.createGain();
+        subGain.gain.value = RIVAL_DASH_SND_SUB_GAIN;
         sub.connect(subGain);
         subGain.connect(filter);
         voices.push(sub);

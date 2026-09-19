@@ -182,6 +182,43 @@ export const RIVAL_EVADE_DURATION = 40;       // frames an evade maneuver lasts
 export const RIVAL_DASH_FRAMES = 12;   // ダッシュが効くフレーム数。回避の 40 より十分短く保つこと
 export const RIVAL_DASH_MULT = 3.0;    // 初速の倍率。ここから 1.0 へ線形に落ちる
 
+// ダッシュ音「ヴーン」。ドローンの移動音（DRONE_MOVE_*）と同じ作り方
+// （detune した鋸波＋1オクターブ下のサイン波を共鳴ローパスで掃く）だが、
+// あちらは高→低の「ポーーン」。こちらは**低→高**に上げて、短く切る。
+// 上げるのは、加速＝速度が乗っていく感じに耳が素直に付いてくるため。
+// 音程は2度直している。90→220 は「低すぎる」、120→294 は「他の音に混ざって
+// 判別しづらい」（どちらも実機の指摘）。
+//
+// 後者の正体は音程ではなく**包絡**だった。減衰が先頭から効いていたので、
+// 聞こえているのは低い出だしだけで、音程が上がる頃にはほぼ消えていた
+// ＝「上がる音」として聞き取れない。そこで
+//   - 上昇を後半に寄せる（RIVAL_DASH_SND_RISE_AT まではほぼ平ら）
+//   - 音量を RIVAL_DASH_SND_HOLD まで保ってから落とす
+//   - 上がり幅を 1.3 → **2オクターブ**に広げる
+// の3つで、後半の上昇をはっきり聞かせる形にした。
+// 実測: 後半30%のゼロ交差が前半30%の **2.54倍**（前: 1.96倍）、
+// 後半30%の RMS が全体の **0.80**（前: 0.52）。どちらもテストで縛ってある。
+export const RIVAL_DASH_SND_FREQ_FROM = 120;   // Hz: ここから
+export const RIVAL_DASH_SND_FREQ_TO = 480;     // Hz: ここまで上がる（2オクターブ）
+export const RIVAL_DASH_SND_RISE_AT = 0.5;     // 全体のどこから本格的に上がるか（0〜1）
+export const RIVAL_DASH_SND_KNEE = 1.12;       // それまでに上がる倍率。完全に平らだと「詰まった音」になるので少しだけ動かす
+export const RIVAL_DASH_SND_HOLD = 0.8;        // 音量を保つ割合。ここから終端へ落とす
+export const RIVAL_DASH_SND_DURATION = 0.40;   // 秒。ダッシュ本体(12フレーム=0.2秒)より長い。後半の上昇を聞かせるために 0.35 から伸ばした
+export const RIVAL_DASH_SND_FILTER_Q = 6;      // 共鳴の強さ。高いほど「ヴ」の芯が立つ
+export const RIVAL_DASH_SND_FILTER_MULT = 2.2; // 基音の何倍にローパスを置くか。1 を下回ると籠もる
+export const RIVAL_DASH_SND_DETUNE = [-9, 9];  // セント。2声を離して厚みを出す
+// A特性の transientLevel で実測して決めた値（長さの違う音どうしを比べられる
+// 測り方。aWeightedRms を窓ごと使うと、短いこの音だけ不当に小さく出る）。
+// ドローンの移動音(-34.1dB)に対して **-3.2dB**。回避のたびに鳴るので、
+// 兄弟の音より気持ち控えめにしてある。
+// **音程や包絡を変えたらここも取り直すこと。** A特性は低音を大きく削るので
+// 音程を上げると聞こえが大きくなるし、音量を保つ区間(HOLD)を伸ばしても
+// 大きくなる。この2つをやって据え置いたら +1.7dB まで出た
+// （履歴: 90→220Hz の減衰包絡で 0.18 → 120→294Hz で 0.13 → 今の形で 0.04）
+export const RIVAL_DASH_SND_GAIN = 0.04;
+export const RIVAL_DASH_SND_SUB_GAIN = 0.5;    // 1オクターブ下のサイン波の混ぜ量。低音の「ウ」の成分
+export const RIVAL_DASH_SND_ATTACK = 0.02;     // 秒。立ち上がり。短すぎるとクリックノイズになる
+
 // --- Rival afterimage（残像）---
 // どの型が残像を出すかは ENEMY_ATTACKER_TYPES の `afterimage` 行で決める。
 // ここにあるのは「どう見えるか」の数値だけ。

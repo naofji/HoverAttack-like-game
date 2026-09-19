@@ -230,6 +230,8 @@ export const AttackerMovement = {
             // それが実質のクールダウンになる（二重に持つと調整点が増える）
             if (this.config.dashOnEvade) {
                 this.dashTimer = RIVAL_DASH_FRAMES;
+                audioManager.playRivalDash(
+                    this.x + this.width / 2, this.y + this.height / 2);
             }
         }
 
