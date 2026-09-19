@@ -27,6 +27,7 @@ import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
 import { AttackerCombat } from './attacker/combat.js';
 import { AttackerMovement } from './attacker/movement.js';
+import { AttackerAfterimage } from './attacker/afterimage.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -242,6 +243,8 @@ export class EnemyAttacker {
         this._updateWalkAnimation();
         if (this.smokeCooldown > 0) this.smokeCooldown--;
         this._handleShooting();
+        // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
+        this._recordAfterimage();
     }
 
     // ------------------------------------------
@@ -300,6 +303,7 @@ export class EnemyAttacker {
 Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
+    AttackerAfterimage,
 );
 
 // プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で

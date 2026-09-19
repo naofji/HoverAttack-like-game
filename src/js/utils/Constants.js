@@ -168,6 +168,26 @@ export const RIVAL_EVADE_OFFSET_MIN = 60;     // px: evade goal offset from targ
 export const RIVAL_EVADE_OFFSET_MAX = 120;    // px: evade goal offset from target (max)
 export const RIVAL_EVADE_DURATION = 40;       // frames an evade maneuver lasts
 
+// --- Rival afterimage（残像）---
+// どの型が残像を出すかは ENEMY_ATTACKER_TYPES の `afterimage` 行で決める。
+// ここにあるのは「どう見えるか」の数値だけ。
+//
+// 速さの判定は hypot(vx, vy)。rival の最高速は 1.20px/frame なので、横移動だけで
+// この 1.6 には届かない＝「走っているだけ」では出ない。ジグザグ＋落下や、
+// ホバーで突っ込むときのように**縦横が合わさって速いとき**だけ尾が出る。
+// 落下でも出るのは意図どおり（高速落下は見た目にも速い）。
+export const RIVAL_AFTERIMAGE_SPEED = 1.6;    // px/frame: これを超えたフレームだけ残像の種になる
+// 尾の長さは COUNT × INTERVAL フレームぶん。3枚(=6フレーム)では実機で「短い」と
+// 出たので 6枚(=12フレーム)にした。枚数で伸ばすのは、間隔を広げて伸ばすと
+// 残像どうしが離れて粒に分かれ、「にじんだ尾」ではなくなるため
+export const RIVAL_AFTERIMAGE_COUNT = 6;      // 枚数。増やすと尾が長い
+export const RIVAL_AFTERIMAGE_INTERVAL = 2;   // 何フレーム前をたどるか。間隔が広いほど残像どうしが離れ、粒が分かれて見える
+// 一番濃い（＝一番新しい）残像の不透明度。以降は等差で薄くなり、
+// 6枚なら 0.30 → 0.25 → 0.20 → 0.15 → 0.10 → 0.05。枚数を増やしても
+// 先頭の濃さは変わらず、末尾が薄く伸びるだけなので、尾を伸ばしても机上が汚れない
+export const RIVAL_AFTERIMAGE_ALPHA = 0.30;
+export const RIVAL_AFTERIMAGE_COLOR = '#CC3333'; // 機体の赤と同じ。別の色にすると「分身」ではなく「エフェクト」に見えてしまう
+
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
@@ -509,6 +529,9 @@ export const ENEMY_ATTACKER_TYPES = {
         flameColor: '#33DDFF',   // 水色（機体は赤）
         flameWidth: 4,           // 細い。速さを出すため鋭く
         flameX: 4, flameY: 14,   // 背中のバックパック直下
+        // 速いフレームだけ残像を引く（この型だけ）。見え方の数値は
+        // RIVAL_AFTERIMAGE_* 、描画は entities/attacker/afterimage.js
+        afterimage: true,
     },
     artillery: {
         name: 'artillery',

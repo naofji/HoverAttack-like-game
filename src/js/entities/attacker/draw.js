@@ -14,6 +14,10 @@ export const AttackerDraw = {
     draw(ctx) {
         if (!this.alive) return;
 
+        // 残像は本体より先＝後ろに。_ghostPass 中は残像自身の描画なので飛ばす
+        // （attacker/afterimage.js。この draw() を再入して同じ絵を薄く描いている）
+        if (!this._ghostPass) this._drawAfterimages(ctx);
+
         const x = Math.round(this.x);
         const y = Math.round(this.y);
         const cfg = this.config;
@@ -130,7 +134,8 @@ export const AttackerDraw = {
         }
 
         // --- Hover Exhaust (Common) ---
-        if (this.hovering) {
+        // 残像には炎を付けない。3重に重なると水色の炎が赤い機体を埋めてしまう
+        if (this.hovering && !this._ghostPass) {
             // 炎はノズル中心に左右対称なので、scale(-1, 1) 済みのこの座標系でも
             // 向きの場合分けなしで置ける。
             //
