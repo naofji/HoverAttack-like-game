@@ -18,6 +18,7 @@ import {
     ATTACKER_SLOW_RISE_CAP, ATTACKER_BOOST_MAX_FRAMES,
     RIVAL_ALIGN_THRESHOLD, RIVAL_ALIGN_TRIGGER_FRAMES,
     RIVAL_EVADE_OFFSET_MIN, RIVAL_EVADE_OFFSET_MAX, RIVAL_EVADE_DURATION,
+    RIVAL_DASH_FRAMES, RIVAL_DASH_MULT,
     ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
     EMERGENCY_DEFENSE_SPEED_MULT,
     SMOKE_COOLDOWN,
@@ -223,12 +224,26 @@ export const AttackerMovement = {
             this.evadeTimer = this.config.evadeDuration || RIVAL_EVADE_DURATION;
             this.alignXFrames = 0;
             this.alignYFrames = 0;
+
+            // 瞬間加速は「回避に入る瞬間」だけ。専用のクールダウンは持たせて
+            // いない ── 回避そのものが軸合わせ 45フレームを必要とするので、
+            // それが実質のクールダウンになる（二重に持つと調整点が増える）
+            if (this.config.dashOnEvade) {
+                this.dashTimer = RIVAL_DASH_FRAMES;
+            }
         }
 
         if (this.evadeTimer > 0) {
             this.evadeTimer--;
             const cx = this.x + this.width / 2;
-            this.vx = this.evadeGoalX > cx ? this.maxSpeed : -this.maxSpeed;
+            // ダッシュの倍率は RIVAL_DASH_MULT から 1.0 へ線形に落とす。
+            // 一定倍率で切ると、切れたフレームで急停止したように見えた
+            let speed = this.maxSpeed;
+            if (this.dashTimer > 0) {
+                speed *= 1 + (RIVAL_DASH_MULT - 1) * (this.dashTimer / RIVAL_DASH_FRAMES);
+                this.dashTimer--;
+            }
+            this.vx = this.evadeGoalX > cx ? speed : -speed;
             if (this.evadeVertical === -1) {
                 if (this.onGround && this.jumpCooldown <= 0) this._jump();
                 else if (!this.onGround) this._applyAerialThrust(-4.0);

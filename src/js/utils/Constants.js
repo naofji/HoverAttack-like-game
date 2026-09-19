@@ -168,6 +168,20 @@ export const RIVAL_EVADE_OFFSET_MIN = 60;     // px: evade goal offset from targ
 export const RIVAL_EVADE_OFFSET_MAX = 120;    // px: evade goal offset from target (max)
 export const RIVAL_EVADE_DURATION = 40;       // frames an evade maneuver lasts
 
+// --- Rival dash（回避の立ち上がりだけ瞬間加速する）---
+// 「照準を合わせた瞬間に残像を残して横へ消える」ための加速。回避
+// （_updateAlignmentAvoidance）の**開始フレームだけ**速く、そこから線形に
+// 通常速度へ戻す。一定倍率で切ると、切れた瞬間に急停止して見えた。
+//
+// 初速は maxSpeed(1.20) × 3.0 = 3.6px/frame。残像のしきい値 1.6 の倍以上あるので、
+// ダッシュの瞬間は必ず尾が出て、減速に合わせて尾が短くなって消える。
+// **この2つは連動している**（RIVAL_DASH_MULT を 1.4 未満に下げると尾が出なくなる）。
+//
+// 移動量は 12フレームで約29px。回避の目標オフセット(60〜120px)の内側なので、
+// 立ち位置のバランス（standoff distance）は変えない。
+export const RIVAL_DASH_FRAMES = 12;   // ダッシュが効くフレーム数。回避の 40 より十分短く保つこと
+export const RIVAL_DASH_MULT = 3.0;    // 初速の倍率。ここから 1.0 へ線形に落ちる
+
 // --- Rival afterimage（残像）---
 // どの型が残像を出すかは ENEMY_ATTACKER_TYPES の `afterimage` 行で決める。
 // ここにあるのは「どう見えるか」の数値だけ。
@@ -532,6 +546,9 @@ export const ENEMY_ATTACKER_TYPES = {
         // 速いフレームだけ残像を引く（この型だけ）。見え方の数値は
         // RIVAL_AFTERIMAGE_* 、描画は entities/attacker/afterimage.js
         afterimage: true,
+        // 回避の立ち上がりで瞬間加速する（RIVAL_DASH_*）。上の afterimage と
+        // 対で効く ── 加速で残像のしきい値を超えるから尾が出る
+        dashOnEvade: true,
     },
     artillery: {
         name: 'artillery',

@@ -43,6 +43,8 @@ export class EnemyAttacker {
         this.motion = LAND_MOTION;
         this.recoilProfile = ENEMY_RECOIL_PROFILES[config.name] || ENEMY_RECOIL_PROFILES.standard;
         this.recoilTimer = 0;
+        // 回避の立ち上がりの瞬間加速（rival のみ。attacker/movement.js）
+        this.dashTimer = 0;
         this.alive = true;
         this.onGround = false;
         this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
