@@ -106,3 +106,58 @@ test('戦車は陸上では今までどおり即座に反転する', () => {
   t.update();
   assert.ok(t.vx < 0, `陸上なのに反転が鈍っている: ${t.vx}`);
 });
+
+// --- 敵アタッカーの雪煙 --------------------------------------------------------
+
+import { SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED } from '../src/js/utils/Constants.js';
+
+/** 雪煙の記録を取る世界。画面内判定のために camera / canvas も置く。 */
+function kickGame() {
+  const game = snowGame();
+  game.snowKicks = [];
+  game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
+  game.camera = { x: 0, y: 0 };
+  game.canvas = { width: 1366, height: 768 };
+  return game;
+}
+
+test('雪の地形を歩く敵アタッカーは雪を蹴る', () => {
+  const game = kickGame();
+  const e = grounded(game);
+  game.snowKicks.length = 0;
+  e.vx = ENEMY_SNOW_KICK_MIN_SPEED + 0.5;
+  e._kickSnow();
+  assert.deepEqual(game.snowKicks, [SNOW_KICK_WALK]);
+});
+
+test('止まっている敵アタッカーは雪を蹴らない', () => {
+  const game = kickGame();
+  const e = grounded(game);
+  game.snowKicks.length = 0;
+  e.vx = 0;
+  e._kickSnow();
+  assert.deepEqual(game.snowKicks, []);
+});
+
+test('空中の敵アタッカーは雪を蹴らない', () => {
+  const game = kickGame();
+  const e = grounded(game);
+  game.snowKicks.length = 0;
+  e.onGround = false;
+  e.onTerrain = false;
+  e.vx = 2;
+  e._kickSnow();
+  assert.deepEqual(game.snowKicks, []);
+});
+
+test('陸上の面では雪を蹴らない', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  game.snowKicks = [];
+  game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
+  game.camera = { x: 0, y: 0 };
+  game.canvas = { width: 1366, height: 768 };
+  const e = grounded(game);
+  e.vx = 2;
+  e._kickSnow();
+  assert.deepEqual(game.snowKicks, []);
+});

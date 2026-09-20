@@ -1285,6 +1285,9 @@ export const SNOW_KICK_COLOR = '#D5DDE8';
 export const SNOW_KICK_WALK = 1;     // 雪の地上を動いているあいだ、毎フレーム
 export const SNOW_KICK_LAND = 10;    // 着地
 export const SNOW_KICK_SLIDE = 3;    // 斜面を滑っているあいだ、毎フレーム
+// 敵が雪を蹴り始める速さ。自機は |vx| > 0.1 で蹴るが、敵は巡回で微速のまま
+// 長く動くので、同じ値だと画面内の敵全員が常時撒き続けることになる
+export const ENEMY_SNOW_KICK_MIN_SPEED = 0.4;
 export const SNOW_KICK_LIFETIME = 30;
 // 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
 export const SNOW_CAP_THICKNESS = 5;

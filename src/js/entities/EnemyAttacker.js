@@ -8,6 +8,7 @@ import {
     LANDING_MIN_AIRBORNE_FRAMES, HOVER_MAX_FUEL, HOVER_FUEL_RECOVERY,
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
+    SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
 } from '../utils/Constants.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
@@ -22,6 +23,7 @@ import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
 import { groundSlide, approachVx } from '../utils/surface.js';
+import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
@@ -251,8 +253,24 @@ export class EnemyAttacker {
         this._updateWalkAnimation();
         if (this.smokeCooldown > 0) this.smokeCooldown--;
         this._handleShooting();
+        this._kickSnow();
         // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
         this._recordAfterimage();
+    }
+
+    /**
+     * 雪の地形を歩くときの雪煙。自機・戦車と同じ床の規則に従う。
+     * 粒は**画面内の敵だけ**（画面外の9割で撒くと particles を食い潰す。
+     * 戦車が同じ理由で同じ条件を持っている）。
+     */
+    _kickSnow() {
+        if (!this.game.spawnSnowKick) return;
+        if (!groundSlide(this, this.game)) return;
+        // しきい値が自機より高いのは、巡回の微速で撒き続けさせないため
+        if (Math.abs(this.vx) < ENEMY_SNOW_KICK_MIN_SPEED) return;
+        if (this.game.camera && this.game.canvas
+            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
+        this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, SNOW_KICK_WALK);
     }
 
     /**
