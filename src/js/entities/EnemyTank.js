@@ -11,6 +11,7 @@ import {
     
     ENEMY_RECOIL_PROFILES,
     VIEW_CULL_MARGIN, SLOPE_DOWNHILL_ACCEL, ICE_MAX_SLIDE_SPEED,
+    ENEMY_TANK_SLIDE_SCALE,
     SNOW_KICK_WALK, SNOW_KICK_SLIDE
 } from '../utils/Constants.js';
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
@@ -38,6 +39,9 @@ export class EnemyTank {
         this.motion = LAND_MOTION;
         // 前フレームの接地。雪の粒を接地中だけに絞るのに使う（自機の onGround と対）
         this.grounded = false;
+        // 履帯なので雪でも滑らない（utils/surface.js の groundSlide が読む）。
+        // 雪煙のほうは床の性質なので、滑らなくても今までどおり上がる
+        this.slideScale = ENEMY_TANK_SLIDE_SCALE;
         this.recoilProfile = ENEMY_RECOIL_PROFILES.tank;
         this.recoilTimer = 0;
         this.alive = true;

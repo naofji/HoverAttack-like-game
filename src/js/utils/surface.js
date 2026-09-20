@@ -14,7 +14,25 @@
 import { motionFor } from '../world/StageEnvironment.js';
 
 /**
- * その足元の床の滑り具合。0 なら滑らない（＝陸上と同じ即時停止）。
+ * その足元の**床**の滑り具合。0 なら滑らない床（陸上・甲板・敵の頭・空中）。
+ *
+ * 「床が滑るか」と「その機体が滑るか」は別物なので分けてある。戦車は履帯なので
+ * 雪の上でも滑らない（slideScale 0）が、**雪煙は上げてほしい** ── 雪煙は
+ * 機体ではなく床の性質なので、こちらを見る。
+ *
+ * @param {object} entity onTerrain を持つ
+ * @param {object} game env と map を持つ（無ければ 0）
+ * @returns {number} 0〜1
+ */
+export function floorSlide(entity, game) {
+    if (!entity || !entity.onTerrain) return 0;
+    const motion = motionFor(game, entity.x + entity.width / 2, entity.y + entity.height / 2);
+    return motion.slide || 0;
+}
+
+/**
+ * その機体に実際に効く滑り。床の滑りに、機体ごとの滑りやすさ
+ * （`slideScale`。既定 1、戦車は 0）を掛けたもの。
  *
  * 接地していることを条件にしているのが要点。**空中のフレームでは滑りを
  * 切ってはいけない** ── 雪の階段の吸着（Player._probeGroundBelowFeet）が
@@ -28,14 +46,13 @@ import { motionFor } from '../world/StageEnvironment.js';
  * フレームだけ陸上の摩擦に落ちて、氷の上でも即座に反転していた。
  * 各エンティティは「地形に乗っている」と言える条件で onTerrain を立てること。
  *
- * @param {object} entity onTerrain を持つ
+ * @param {object} entity onTerrain と、任意で slideScale を持つ
  * @param {object} game env と map を持つ（無ければ 0）
  * @returns {number} 0〜1
  */
 export function groundSlide(entity, game) {
-    if (!entity || !entity.onTerrain) return 0;
-    const motion = motionFor(game, entity.x + entity.width / 2, entity.y + entity.height / 2);
-    return motion.slide || 0;
+    if (!entity) return 0;
+    return floorSlide(entity, game) * (entity.slideScale ?? 1);
 }
 
 /**

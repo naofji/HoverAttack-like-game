@@ -1288,6 +1288,13 @@ export const SNOW_KICK_SLIDE = 3;    // 斜面を滑っているあいだ、毎�
 // 敵が雪を蹴り始める速さ。自機は |vx| > 0.1 で蹴るが、敵は巡回で微速のまま
 // 長く動くので、同じ値だと画面内の敵全員が常時撒き続けることになる
 export const ENEMY_SNOW_KICK_MIN_SPEED = 0.4;
+// 機体ごとの滑りやすさ（床の滑りに掛ける）。戦車は履帯なので雪でも滑らない。
+// 滑らせたら実機で「坂を上れない」となった ── _applySnowSlope の下り加速
+// (-0.06/frame) が、以前は毎フレーム巡回速度で上書きされて消えていたのに、
+// 速度追従を入れたことで前フレームへ持ち越され、約 -0.94px/frame の定常
+// ドリフトになって上り速度(0.5)を食い潰していた。
+// **雪煙は別物**（床の性質なので floorSlide が決める）。滑らないが煙は上がる
+export const ENEMY_TANK_SLIDE_SCALE = 0;
 export const SNOW_KICK_LIFETIME = 30;
 // 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
 export const SNOW_CAP_THICKNESS = 5;

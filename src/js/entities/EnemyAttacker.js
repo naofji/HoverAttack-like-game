@@ -22,7 +22,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { groundSlide, approachVx } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
@@ -265,7 +265,9 @@ export class EnemyAttacker {
      */
     _kickSnow() {
         if (!this.game.spawnSnowKick) return;
-        if (!groundSlide(this, this.game)) return;
+        // 見るのは**床**の性質。滑らない機体（戦車のような slideScale 0）でも
+        // 雪の上を走れば雪煙は上がる、という切り分け
+        if (!floorSlide(this, this.game)) return;
         // しきい値が自機より高いのは、巡回の微速で撒き続けさせないため
         if (Math.abs(this.vx) < ENEMY_SNOW_KICK_MIN_SPEED) return;
         if (this.game.camera && this.game.canvas

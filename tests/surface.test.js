@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groundSlide, approachVx } from '../src/js/utils/surface.js';
+import { floorSlide, groundSlide, approachVx } from '../src/js/utils/surface.js';
 import { ICE_SLIDE } from '../src/js/utils/Constants.js';
 
 const SNOW_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
@@ -73,4 +73,23 @@ test('滑る床で目標 0 を与え続ければ必ず止まる', () => {
   let v = 3;
   for (let i = 0; i < 600; i++) v = approachVx(v, 0, 0.94);
   assert.ok(Math.abs(v) < 0.05, `止まらない: ${v}`);
+});
+
+// --- 床が滑るかと、その機体が滑るかは別物 -------------------------------------
+// 戦車（履帯）は雪の上でも滑らないが、雪煙は上げてほしい。雪煙は床の性質なので
+// floorSlide を見る、という切り分け。
+
+test('滑らない機体（slideScale 0）でも、床は滑る床のまま', () => {
+  const tank = { x: 0, y: 0, width: 32, height: 12, onTerrain: true, slideScale: 0 };
+  assert.equal(groundSlide(tank, world(SNOW_ENV)), 0, '機体が滑ってしまっている');
+  assert.equal(floorSlide(tank, world(SNOW_ENV)), ICE_SLIDE, '床の性質まで消えている');
+});
+
+test('slideScale を指定しない機体は床の滑りがそのまま効く', () => {
+  assert.equal(groundSlide(entity(), world(SNOW_ENV)), floorSlide(entity(), world(SNOW_ENV)));
+});
+
+test('陸上では床も機体も滑らない', () => {
+  assert.equal(floorSlide(entity(), world(LAND_ENV)), 0);
+  assert.equal(groundSlide(entity(), world(LAND_ENV)), 0);
 });

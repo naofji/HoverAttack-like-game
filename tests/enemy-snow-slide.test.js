@@ -84,27 +84,75 @@ function tankOn(game) {
   return t;
 }
 
-test('戦車は雪の地形で向きを変えても即座には反転しない（滑る）', () => {
+// 戦車は履帯なので滑らない（実機の指摘）。滑らせたら雪の坂を上れなくなった。
+// 原因は _applySnowSlope の下り加速(-0.06/frame)で、以前は毎フレーム巡回速度で
+// 上書きされて消えていたものが、速度追従を入れたことで前フレームに持ち越され、
+// 約 -0.94px/frame の定常ドリフトになって上り速度を食い潰していた。
+
+/** 右へ下る階段（列 10..19）。左へ進む＝上り。 */
+function slopeRows() {
+  const rows = [];
+  for (let r = 0; r < 24; r++) {
+    let s = '';
+    for (let c = 0; c < 30; c++) {
+      let floor = 20;
+      if (c >= 10 && c < 20) floor = 11 + (c - 10);
+      if (c < 10) floor = 11;
+      s += r >= floor ? '#' : '.';
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+
+/** 階段の下端から上りへ向かわせ、600フレームで稼いだ高さを返す。 */
+function climbHeight(game) {
+  const t = new EnemyTank(game, 19 * TILE_SIZE, 19 * TILE_SIZE);
+  game.enemies.push(t);
+  t.patrolDir = -1;
+  const y0 = t.y;
+  for (let i = 0; i < 600; i++) {
+    t.update();
+    if (t.patrolDir > 0) t.patrolDir = -1;   // 端で折り返しても上りへ向け直す
+  }
+  return y0 - t.y;
+}
+
+test('戦車は雪の坂も陸上と同じように上れる（滑らない）', () => {
+  const land = makeGame(makeMap(slopeRows()));
+  land.spawnSnowKick = () => {};
+  const snow = makeGame(makeMap(slopeRows()));
+  snow.env = SNOW;
+  snow.spawnSnowKick = () => {};
+
+  const onLand = climbHeight(land);
+  const onSnow = climbHeight(snow);
+  assert.ok(onLand > 100, `前提が崩れている（陸上でも上れていない）: ${onLand}`);
+  assert.ok(onSnow > onLand * 0.8,
+    `雪で坂を上れなくなっている: 陸上 ${onLand}px に対し ${onSnow}px`);
+});
+
+test('戦車は雪の上でも即座に反転する（履帯なので滑らない）', () => {
   const game = snowGame();
   const t = tankOn(game);
-  // 右へ進みきった状態から、巡回方向だけ反転させる
   t.patrolDir = 1;
   for (let i = 0; i < 60; i++) t.update();
   assert.ok(t.vx > 0, `右へ進んでいない: ${t.vx}`);
   t.patrolDir = -1;
   t.update();
-  assert.ok(t.vx > 0, `氷の上で1フレームで反転している: ${t.vx}`);
+  assert.ok(t.vx < 0, `雪の上で反転が鈍っている: ${t.vx}`);
 });
 
-test('戦車は陸上では今までどおり即座に反転する', () => {
-  const game = makeGame(makeMap(flatFloorRows()));   // 陸上
-  game.spawnSnowKick = () => {};
+test('滑らなくても雪煙は上がる（床が雪かどうかで決まる）', () => {
+  const game = snowGame();
+  game.snowKicks = [];
+  game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
+  game.camera = { x: 0, y: 0 };
+  game.canvas = { width: 1366, height: 768 };
   const t = tankOn(game);
-  t.patrolDir = 1;
-  for (let i = 0; i < 60; i++) t.update();
-  t.patrolDir = -1;
-  t.update();
-  assert.ok(t.vx < 0, `陸上なのに反転が鈍っている: ${t.vx}`);
+  game.snowKicks.length = 0;
+  for (let i = 0; i < 10; i++) t.update();
+  assert.ok(game.snowKicks.length > 0, '雪の上を走っているのに雪煙が出ない');
 });
 
 // --- 敵アタッカーの雪煙 --------------------------------------------------------
@@ -160,4 +208,16 @@ test('陸上の面では雪を蹴らない', () => {
   e.vx = 2;
   e._kickSnow();
   assert.deepEqual(game.snowKicks, []);
+});
+
+test('滑らない設定のアタッカーでも雪煙は出る（雪煙は床の性質）', () => {
+  // 戦車と同じ「履帯なので滑らない」設定を敵アタッカーに与えても、雪煙だけは
+  // 残ること。雪煙の判定を機体の滑り(groundSlide)で書くとここが落ちる
+  const game = kickGame();
+  const e = grounded(game);
+  e.slideScale = 0;
+  game.snowKicks.length = 0;
+  e.vx = ENEMY_SNOW_KICK_MIN_SPEED + 0.5;
+  e._kickSnow();
+  assert.deepEqual(game.snowKicks, [SNOW_KICK_WALK]);
 });
