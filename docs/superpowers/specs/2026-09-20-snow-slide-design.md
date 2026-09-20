@@ -42,7 +42,7 @@
 
 ```
 groundSlide(entity, game)   → 0〜1
-approachVx(entity, desiredVx, slide) → number
+approachVx(currentVx, desiredVx, slide) → number
 ```
 
 - `groundSlide` は **「接地していて、その接地面が地形で、その場所の環境が滑る床」**
