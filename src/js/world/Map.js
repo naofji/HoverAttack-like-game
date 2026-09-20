@@ -276,8 +276,10 @@ export class Map {
         // 以前はミニマップ用に独自にタイルを塗り直していて、実際の地形(面取り多角形・
         // ひび割れ)と見え方が食い違っていた。tile cache から drawImage で縮小するだけに
         // すれば、本編の見た目とミニマップが常に一致する。
-        // 生成時に上が空洞だったブロック。雪はここにだけ積もる（壊して新しく出た面は素の岩。
-        // 掘った跡が読める）。破壊の再描画は _drawRockyBlock がこのビットを見る
+        // 上が空洞になっているブロックの積雪ビット。生成時に一括で立てたあと、
+        // 爆発で新しく上面が露出したマスも _snowDressExposedBelow() で同じビットを立てる
+        // （5面で爆発跡がいつまでも素の岩のままだと不自然なため）。
+        // 破壊の再描画は _drawRockyBlock がこのビットを見る
         this.exposedAtGen = new Uint8Array(this.rows * this.cols);
         for (let r = 1; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
@@ -998,6 +1000,17 @@ export class Map {
     // Block Destruction
     // ------------------------------------------
 
+    /** 5面で、(r, c) が空洞化したことで直下 (r+1, c) の上面が新しく露出した場合に
+     *  積雪ビットを立てる。即時に積もる見た目でよい（実測1件・低リスク優先）。
+     *  雪面でない環境では exposedAtGen 自体を _drawRockyBlock が見ないので早期returnで十分。 */
+    _snowDressExposedBelow(r, c) {
+        if (this.envKind !== 'snow') return;
+        const nr = r + 1;
+        if (nr >= this.rows) return;
+        if (this.grid[nr][c] === BLOCK_EMPTY) return;
+        this.exposedAtGen[nr * this.cols + c] = 1;
+    }
+
     /** Damage a single block. Returns true if destroyed. */
     damageBlock(r, c, damage = 1) {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
@@ -1027,6 +1040,9 @@ export class Map {
                     if (nc >= 0 && nc < this.cols) this.dirtyWaterCols.add(nc);
                 }
             }
+            // envKind を先に見てから呼ぶ: metal-block.test.js などが Map.prototype.damageBlock を
+            // envKind の無いフェイクオブジェクトへ bind しているため、無条件呼び出しだと落ちる
+            if (this.envKind === 'snow') this._snowDressExposedBelow(r, c);
             this.invalidateTileRegion(r, c);
             const env = this.game && this.game.env;
             if (env && env.renderer && env.renderer.onBlockDestroyed) {
