@@ -16,7 +16,7 @@ import {
     WATER_COLUMN_PARTICLE_COUNT, WATER_COLUMN_SPEED_MIN, WATER_COLUMN_SPEED_MAX, WATER_COLUMN_SPREAD,
     TILE_SIZE,
 } from '../utils/Constants.js';
-import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, CasingParticle } from '../entities/Particle.js';
+import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -153,6 +153,23 @@ export const SpawnEffects = {
                 : (onSlope ? Math.PI + tilt : Math.PI - tilt);
             const s = 0.4 + Math.random() * 0.8;
             this.particles.push(new SnowMistParticle(
+                this, x + (Math.random() - 0.5) * 24, y,
+                Math.cos(theta) * s, -Math.sin(theta) * s,
+            ));
+        }
+    },
+
+    /**
+     * ホバー中、水面の少し上空で水面に舞う水滴。spawnSnowMist の平地(onSlope=false)
+     * ケースと同じ角度分布 ── 水面は雪と違って斜面が無いので、その場合分けだけ無い。
+     */
+    spawnWaterMist(x, y, count) {
+        for (let i = 0; i < (count | 0); i++) {
+            const dirSign = Math.random() < 0.5 ? 1 : -1; // 右 or 左
+            const tilt = Math.random() * (Math.PI / 4); // 水平から最大45度
+            const theta = dirSign > 0 ? tilt : Math.PI - tilt;
+            const s = 0.4 + Math.random() * 0.8;
+            this.particles.push(new WaterMistParticle(
                 this, x + (Math.random() - 0.5) * 24, y,
                 Math.cos(theta) * s, -Math.sin(theta) * s,
             ));

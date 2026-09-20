@@ -1314,6 +1314,19 @@ export const HOVER_SNOW_MIST_COUNT = 12;
 export const HOVER_SNOW_MIST_LIFETIME = 75;
 // SNOW_KICK より少し暗めにして重ならず見分けやすく（実測ではなく既存の雪色からの派生）
 export const HOVER_SNOW_MIST_COLOR = '#C7D2DF';
+
+// ホバーで水面の少し上を漂っているときに水面で舞う水滴（HOVER_SNOW_MIST の水面版）。
+// 「床の性質(slide)」で判定していた雪と違い、水は env.kind === 'water' と
+// waterClearance（水面までの距離）で判定する。範囲・間隔・個数は雪と同じ値を出発点にし、
+// 実機で見て調整する（このファイルの他の値と同じ流儀）
+export const HOVER_WATER_MIST_MIN_ALT = TILE_SIZE * 0.5;
+export const HOVER_WATER_MIST_MAX_ALT = TILE_SIZE * 3;
+export const HOVER_WATER_MIST_INTERVAL = 4;
+export const HOVER_WATER_MIST_COUNT = 12;
+// 水滴は雪の粉より重く早く落ちるので、SnowMist(75F)より短命にする
+export const HOVER_WATER_MIST_LIFETIME = 50;
+// SPLASH_PARTICLE と同じ水色（水しぶきと同系に見せる）
+export const HOVER_WATER_MIST_COLOR = '#BFE3FF';
 // 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
 export const SNOW_CAP_THICKNESS = 5;
 export const SNOW_CAP_COLOR = '#EEF4FB';

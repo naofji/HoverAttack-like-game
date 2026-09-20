@@ -21,12 +21,13 @@ import {
     SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
+    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
     WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
-import { groundSlide, groundClearance, groundSlopeDirection } from '../utils/surface.js';
+import { groundSlide, groundClearance, groundSlopeDirection, waterClearance } from '../utils/surface.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -189,6 +190,7 @@ export class Player {
             audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
         }
         if (this.motion.slide > 0) { this._kickSnow(landed); this._kickHoverSnowMist(); }
+        this._kickHoverWaterMist();
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
         // くの字の先端には描いた坂が無いので、階段(slopeDir)を優先しつつ、
@@ -350,6 +352,25 @@ export class Player {
         const fy = this.y + this.height + clearance;
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
         this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
+    }
+
+    /**
+     * 水面の少し上空をホバーしているときだけ、水面で水滴が舞う（_kickHoverSnowMist
+     * の水面版）。雪は「床の slide」で面を判定したが、水面には onTerrain が
+     * 立たない（水は衝突しない）ので、面の種類は env.kind、距離は
+     * waterClearance で見る。すでに水に触れていれば null が返るので、
+     * その場合はしぶき(spawnSplash)に任せて何もしない。
+     */
+    _kickHoverWaterMist() {
+        if (!this.game.spawnWaterMist) return;
+        if (!this.game.env || this.game.env.kind !== 'water') return;
+        const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
+        if (clearance === null || clearance < HOVER_WATER_MIST_MIN_ALT) return;
+        this._hoverWaterMistTimer = (this._hoverWaterMistTimer || 0) + 1;
+        if (this._hoverWaterMistTimer % HOVER_WATER_MIST_INTERVAL !== 0) return;
+        const fx = this.x + this.width / 2;
+        const fy = this.y + this.height + clearance;
+        this.game.spawnWaterMist(fx, fy, HOVER_WATER_MIST_COUNT);
     }
 
     /** Handle burst jump and hovering. */

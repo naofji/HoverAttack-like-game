@@ -2,9 +2,14 @@
 import { TILE_SIZE, ENEMY_ATTACKER_TYPES } from '../../src/js/utils/Constants.js';
 import { EnemyAttacker } from '../../src/js/entities/EnemyAttacker.js';
 
-/** Build a map mock from ASCII rows ('#' = solid). Out of bounds is solid. */
-export function makeMap(rows) {
+/**
+ * Build a map mock from ASCII rows ('#' = solid). Out of bounds is solid.
+ * `waterRows`（'w' = 水）を渡すと isWater/isWaterAtPixel/getSurfaceY も使えるようになる
+ * （渡さなければ既存の挙動どおり常に水なし）。
+ */
+export function makeMap(rows, waterRows) {
   const grid = rows.map((s) => s.split(''));
+  const waterGrid = waterRows ? waterRows.map((s) => s.split('')) : null;
   return {
     rows: grid.length,
     cols: grid[0].length,
@@ -15,7 +20,20 @@ export function makeMap(rows) {
     isSolidAtPixel(x, y) {
       return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     },
-    isWaterAtPixel: () => false,
+    isWater(r, c) {
+      if (!waterGrid) return false;
+      if (r < 0 || c < 0 || r >= waterGrid.length || c >= waterGrid[0].length) return false;
+      return waterGrid[r][c] === 'w';
+    },
+    isWaterAtPixel(x, y) {
+      return this.isWater(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    },
+    getSurfaceY(r, c) {
+      if (!this.isWater(r, c)) return -1;
+      let top = r;
+      while (top > 0 && this.isWater(top - 1, c)) top--;
+      return top * TILE_SIZE;
+    },
     pixelToTile(x, y) {
       return { r: Math.floor(y / TILE_SIZE), c: Math.floor(x / TILE_SIZE) };
     },
@@ -61,5 +79,13 @@ export function flatFloorRows() {
   const rows = [];
   for (let r = 0; r < 20; r++) rows.push('.'.repeat(24));
   for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  return rows;
+}
+
+/** 水面用。row 20 から下が水（makeMap の第2引数として渡す）。地形(rows)側はソリッド無しで使う想定。 */
+export function flatWaterRows() {
+  const rows = [];
+  for (let r = 0; r < 20; r++) rows.push('.'.repeat(24));
+  for (let r = 20; r < 24; r++) rows.push('w'.repeat(24));
   return rows;
 }

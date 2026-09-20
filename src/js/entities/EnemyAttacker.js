@@ -10,6 +10,7 @@ import {
     ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
+    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
 } from '../utils/Constants.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
@@ -23,7 +24,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection, waterClearance } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
@@ -256,6 +257,7 @@ export class EnemyAttacker {
         this._handleShooting();
         this._kickSnow();
         this._kickHoverSnowMist();
+        this._kickHoverWaterMist();
         // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
         this._recordAfterimage();
     }
@@ -294,6 +296,23 @@ export class EnemyAttacker {
         if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
         this.game.spawnSnowMist(this.x + this.width / 2, this.y + this.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
+    }
+
+    /**
+     * 水面の少し上空をホバーしているときだけ、水面で水滴が舞う（_kickHoverSnowMist
+     * の水面版）。面の種類は env.kind、距離は waterClearance で見る。粒は自機と
+     * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
+     */
+    _kickHoverWaterMist() {
+        if (!this.game.spawnWaterMist) return;
+        if (!this.game.env || this.game.env.kind !== 'water') return;
+        if (this.game.camera && this.game.canvas
+            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
+        const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
+        if (clearance === null || clearance < HOVER_WATER_MIST_MIN_ALT) return;
+        this._hoverWaterMistTimer = (this._hoverWaterMistTimer || 0) + 1;
+        if (this._hoverWaterMistTimer % HOVER_WATER_MIST_INTERVAL !== 0) return;
+        this.game.spawnWaterMist(this.x + this.width / 2, this.y + this.height + clearance, HOVER_WATER_MIST_COUNT);
     }
 
     /**

@@ -120,3 +120,27 @@ export function groundSlopeDirection(entity, game, clearance) {
     const c = Math.floor((entity.x + entity.width / 2) / TILE_SIZE);
     return stairDirection(map, r, c);
 }
+
+/**
+ * 足元の中心から下方向に水面を探し、見つかるまでの距離(px)を返す。副作用なし。
+ * `groundClearance` の水面版（ホバー中の水滴ミスト用）。
+ *
+ * 足元がすでに水に触れている（水中）場合は null を返す ── その場面は
+ * `spawnSplash`（水面をまたいだ瞬間のしぶき）の領分なので、ここでは扱わない。
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ（無ければ null）
+ * @param {number} maxPx 探索する最大距離
+ * @returns {number|null}
+ */
+export function waterClearance(entity, game, maxPx) {
+    const map = game && game.map;
+    if (!map || !map.isWaterAtPixel) return null;
+    const cx = entity.x + entity.width / 2;
+    const feetY = entity.y + entity.height;
+    if (map.isWaterAtPixel(cx, feetY)) return null;
+    for (let d = 0; d <= maxPx; d += GROUND_CLEARANCE_STEP) {
+        if (map.isWaterAtPixel(cx, feetY + d)) return d;
+    }
+    return null;
+}

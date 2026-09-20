@@ -12,6 +12,7 @@ import {
     SPLASH_LIFETIME,
     SNOW_KICK_COLOR, SNOW_KICK_LIFETIME,
     HOVER_SNOW_MIST_COLOR, HOVER_SNOW_MIST_LIFETIME,
+    HOVER_WATER_MIST_COLOR, HOVER_WATER_MIST_LIFETIME,
     CASING_COLOR, CASING_LENGTH, CASING_WIDTH, CASING_GRAVITY, CASING_MAX_FALL_SPEED,
     CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION,
 } from '../utils/Constants.js';
@@ -276,6 +277,44 @@ export class SnowMistParticle {
         if (!this.alive) return;
         ctx.globalAlpha = Math.max(0.1, (this.lifetime / HOVER_SNOW_MIST_LIFETIME) * 0.9);
         ctx.fillStyle = HOVER_SNOW_MIST_COLOR;
+        ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --------------------------------------------
+// Water Mist - ホバー中に水面で舞う水滴（SnowMistParticle の水面版）
+// --------------------------------------------
+//
+// 形は SnowMistParticle と同じ（漂って、触れたら跳ねずに吸収されて消える）。
+// 重力だけ変えてある: 水滴は雪の粉より重いので SnowMist(0.02)より強く、
+// 派手に跳ねる水しぶき SplashParticle(0.18)ほどではない中間の値にする。
+// 当たるのは地面(isSolidAtPixel)ではなく水面(isWaterAtPixel)。
+export class WaterMistParticle {
+    constructor(game, x, y, vx, vy) {
+        this.game = game;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.lifetime = HOVER_WATER_MIST_LIFETIME;
+        this.alive = true;
+    }
+    update() {
+        if (!this.alive) return;
+        this.vy += 0.06;
+        const nextX = this.x + this.vx;
+        const nextY = this.y + this.vy;
+        const map = this.game && this.game.map;
+        if (map && map.isWaterAtPixel && map.isWaterAtPixel(nextX, nextY)) {
+            this.alive = false;
+            return;
+        }
+        this.x = nextX;
+        this.y = nextY;
+        if (--this.lifetime <= 0) this.alive = false;
+    }
+    draw(ctx) {
+        if (!this.alive) return;
+        ctx.globalAlpha = Math.max(0.1, (this.lifetime / HOVER_WATER_MIST_LIFETIME) * 0.9);
+        ctx.fillStyle = HOVER_WATER_MIST_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
         ctx.globalAlpha = 1.0;
     }

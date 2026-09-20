@@ -10,10 +10,11 @@ import {
     WATER_FALL_SPEED_SCALE,
     GRAVITY, FRICTION,
     HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
+    HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
-import { groundClearance, groundSlopeDirection } from '../utils/surface.js';
+import { groundClearance, groundSlopeDirection, waterClearance } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 
@@ -76,6 +77,7 @@ export class Carrier {
 
         // Movement with collision
         this._moveAndCollide();
+        this._applyBuoyancy();
 
         // Keep docked player on top
         if (player && player.docked) {
@@ -89,6 +91,7 @@ export class Carrier {
         }
 
         this._kickHoverSnowMist();
+        this._kickHoverWaterMist();
     }
 
     /**
@@ -133,6 +136,30 @@ export class Carrier {
         this.game.spawnSnowMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
+    /**
+     * 水面の上にいるあいだ、船体の下で水滴が舞う（_kickHoverSnowMist の水面版）。
+     * キャリアは _applyBuoyancy で水面にぴったり浮くので、雪と同じ理由で下限は
+     * 設けない（浮いた位置の clearance はほぼ0になる）。左・中央・右の3等分も同じ。
+     */
+    _kickHoverWaterMist() {
+        if (!this.game.spawnWaterMist) return;
+        if (!this.game.env || this.game.env.kind !== 'water') return;
+        const thirdWidth = this.width / 3;
+        this._kickHoverWaterMistSide('L', this.x);
+        this._kickHoverWaterMistSide('C', this.x + thirdWidth);
+        this._kickHoverWaterMistSide('R', this.x + thirdWidth * 2);
+    }
+
+    _kickHoverWaterMistSide(side, footX) {
+        const footprint = { x: footX, y: this.y, width: this.width / 3, height: this.height - CARRIER_FLOAT_DRAW_OFFSET };
+        const clearance = waterClearance(footprint, this.game, HOVER_WATER_MIST_MAX_ALT);
+        if (clearance === null) return;
+        const timerKey = `_hoverWaterMistTimer${side}`;
+        this[timerKey] = (this[timerKey] || 0) + 1;
+        if (this[timerKey] % HOVER_WATER_MIST_INTERVAL !== 0) return;
+        this.game.spawnWaterMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, HOVER_WATER_MIST_COUNT);
+    }
+
     // ------------------------------------------
     // Physics
     // ------------------------------------------
@@ -168,6 +195,34 @@ export class Carrier {
                 this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
             }
             this.vy = 0;
+        }
+    }
+
+    /**
+     * 水面に浮く。キャリアには重力に逆らうホバー推力が無く、水は衝突しない
+     * （isSolidAtPixel が false）ので、_moveAndCollide だけでは水域で床の
+     * 無い場所まで沈み続けてしまう。船体中心の直下が水なら、その水塊の液面
+     * (map.getSurfaceY)を疑似的な床として扱い、底(y+height)がそこに届いたら
+     * それ以上沈ませない。
+     *
+     * 陸地に来れば(直下が水でなくなれば)何もしないので、通常のソリッド衝突に
+     * そのまま戻る。
+     */
+    _applyBuoyancy() {
+        if (!this.game.env || this.game.env.kind !== 'water') return;
+        const map = this.game.map;
+        if (!map || !map.isWater || !map.getSurfaceY) return;
+        const cx = this.x + this.width / 2;
+        const bottomY = this.y + this.height;
+        const r = Math.floor(bottomY / TILE_SIZE);
+        const c = Math.floor(cx / TILE_SIZE);
+        if (!map.isWater(r, c)) return;
+        const surfaceY = map.getSurfaceY(r, c);
+        if (surfaceY < 0) return;
+        const floatY = surfaceY - this.height;
+        if (this.y > floatY) {
+            this.y = floatY;
+            if (this.vy > 0) this.vy = 0;
         }
     }
 
