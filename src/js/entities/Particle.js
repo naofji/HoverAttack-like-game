@@ -11,6 +11,7 @@ import {
     COLOR_RICOCHET, COLOR_RICOCHET_FADE,
     SPLASH_LIFETIME,
     SNOW_KICK_COLOR, SNOW_KICK_LIFETIME,
+    HOVER_SNOW_MIST_COLOR, HOVER_SNOW_MIST_LIFETIME,
     CASING_COLOR, CASING_LENGTH, CASING_WIDTH, CASING_GRAVITY, CASING_MAX_FALL_SPEED,
     CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION,
 } from '../utils/Constants.js';
@@ -233,6 +234,48 @@ export class SnowKickParticle {
         if (!this.alive) return;
         ctx.globalAlpha = Math.max(0.15, this.lifetime / SNOW_KICK_LIFETIME);
         ctx.fillStyle = SNOW_KICK_COLOR;
+        ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --------------------------------------------
+// Snow Mist - ホバー中に地表で舞う粉雪
+// --------------------------------------------
+//
+// SnowKickParticle は「蹴る」ので重力 0.12 で素早く落ちるが、こちらは接地せず
+// 漂うだけなので重力を 1/6 (0.02) に弱め、寿命も伸ばしてふわっと漂わせる。
+// 見分けやすいよう、alpha の上限は SnowKick(1.0) よりわずかに低く抑える程度に留める
+// （実機の指摘: 巻き上げの勢いが伝わるくらい、はっきり見えてよい）。
+//
+// 地面とは CasingParticle と同じ考え方であたる（game.map.isSolidAtPixel）が、
+// 跳ね返らずそのまま地面に吸収されて消える（実機の指摘: 粉雪が跳ねるのは不自然）。
+// game.map が無ければ（テストの簡易呼び出しなど）衝突を見ずに素通りする。
+export class SnowMistParticle {
+    constructor(game, x, y, vx, vy) {
+        this.game = game;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.lifetime = HOVER_SNOW_MIST_LIFETIME;
+        this.alive = true;
+    }
+    update() {
+        if (!this.alive) return;
+        this.vy += 0.02;
+        const nextX = this.x + this.vx;
+        const nextY = this.y + this.vy;
+        const map = this.game && this.game.map;
+        if (map && map.isSolidAtPixel && map.isSolidAtPixel(nextX, nextY)) {
+            this.alive = false;
+            return;
+        }
+        this.x = nextX;
+        this.y = nextY;
+        if (--this.lifetime <= 0) this.alive = false;
+    }
+    draw(ctx) {
+        if (!this.alive) return;
+        ctx.globalAlpha = Math.max(0.1, (this.lifetime / HOVER_SNOW_MIST_LIFETIME) * 0.9);
+        ctx.fillStyle = HOVER_SNOW_MIST_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
         ctx.globalAlpha = 1.0;
     }

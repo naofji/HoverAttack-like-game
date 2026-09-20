@@ -8,12 +8,18 @@ import {
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
     WATER_FALL_SPEED_SCALE,
-    GRAVITY, FRICTION
+    GRAVITY, FRICTION,
+    HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
+import { groundClearance, groundSlopeDirection } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
+
+// draw() は当たり判定より上に船体を描く（「浮いている感じを出すため」）。
+// 雪煙の高さ判定は見た目の船底基準にしたいので、判定側でも同じ分だけ差し引く。
+const CARRIER_FLOAT_DRAW_OFFSET = 8;
 
 export class Carrier {
     constructor(game, x, y) {
@@ -81,6 +87,50 @@ export class Carrier {
         if (this.damageTimer > 0) {
             this.damageTimer--;
         }
+
+        this._kickHoverSnowMist();
+    }
+
+    /**
+     * 雪面の上にいるあいだ、船体の下で粉雪が舞う。
+     *
+     * 自機・敵アタッカーは重力に逆らうホバー推力を持ち、「浮いている(MIN_ALT
+     * 以上)」と「接地して歩いている(SNOW_KICK)」を高さで住み分けられる。
+     * キャリアにはそのホバー推力が無く、重力で落ちて地形に密着した位置で
+     * そのまま止まるだけ（実機の指摘: SpawnManager は床にぴったり乗る高さへ
+     * 配置するため、実プレイでは地面から16px以上浮いた状態がほぼ発生しない
+     * ── 下限を自機・敵アタッカーと同じ MIN_ALT にすると事実上一度も鳴らない）。
+     * 「止まっていても常にスラスターは動いている」という設定なので、
+     * キャリアだけは下限を設けず、上限(MAX_ALT)以内なら接地に近い高さでも出す。
+     *
+     * 横幅が広い（CARRIER_WIDTH=64px=4タイル）ので、船体中心1点ではなく
+     * 左・中央・右の3等分それぞれの下で独立に判定する（実機の指摘: 左右2カ所では
+     * 足りず、片側が段差にかかっているようなときのためにも中央が要る）。
+     */
+    _kickHoverSnowMist() {
+        if (!this.game.spawnSnowMist) return;
+        if (this.motion.slide <= 0) return;
+        const thirdWidth = this.width / 3;
+        this._kickHoverSnowMistSide('L', this.x);
+        this._kickHoverSnowMistSide('C', this.x + thirdWidth);
+        this._kickHoverSnowMistSide('R', this.x + thirdWidth * 2);
+    }
+
+    /**
+     * 船体の1/3ぶんの footprint で1カ所だけ判定する。距離は当たり判定ではなく
+     * **見た目の船底**基準にする。draw() が船体を CARRIER_FLOAT_DRAW_OFFSET だけ
+     * 上にずらして描く（浮いている感じを出すため）ぶん、判定側の足元もその分だけ
+     * 浅くした footprint で見る（実機の指摘）。
+     */
+    _kickHoverSnowMistSide(side, footX) {
+        const footprint = { x: footX, y: this.y, width: this.width / 3, height: this.height - CARRIER_FLOAT_DRAW_OFFSET };
+        const clearance = groundClearance(footprint, this.game, HOVER_SNOW_MIST_MAX_ALT);
+        if (clearance === null) return;
+        const timerKey = `_hoverMistTimer${side}`;
+        this[timerKey] = (this[timerKey] || 0) + 1;
+        if (this[timerKey] % HOVER_SNOW_MIST_INTERVAL !== 0) return;
+        const onSlope = groundSlopeDirection(footprint, this.game, clearance) !== 0;
+        this.game.spawnSnowMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
     // ------------------------------------------
@@ -233,7 +283,7 @@ export class Carrier {
 
         const x = Math.round(this.x);
         const y = Math.round(this.y);
-        const drawY = y - 8; // Shifted up to simulate float
+        const drawY = y - CARRIER_FLOAT_DRAW_OFFSET; // Shifted up to simulate float
 
         this._drawHull(ctx, x, drawY);
         this._drawEngines(ctx, x, drawY);

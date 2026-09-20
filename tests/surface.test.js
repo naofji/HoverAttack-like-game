@@ -5,8 +5,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { floorSlide, groundSlide, approachVx } from '../src/js/utils/surface.js';
-import { ICE_SLIDE } from '../src/js/utils/Constants.js';
+import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection } from '../src/js/utils/surface.js';
+import { ICE_SLIDE, TILE_SIZE } from '../src/js/utils/Constants.js';
 
 const SNOW_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
 const LAND_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: 0 }), sightScale: 1, kind: 'none' };
@@ -92,4 +92,78 @@ test('slideScale を指定しない機体は床の滑りがそのまま効く', 
 test('陸上では床も機体も滑らない', () => {
   assert.equal(floorSlide(entity(), world(LAND_ENV)), 0);
   assert.equal(groundSlide(entity(), world(LAND_ENV)), 0);
+});
+
+// --- groundClearance: 足元から地面までの距離 -----------------------------------
+// ホバー中の雪煙（地表から1〜2ブロック上空だけ舞う）の判定に使う、
+// 副作用のない純粋な探索関数。
+
+/** 足元 y (entity.y + height) から指定 px 下に地面がある世界。 */
+function worldWithGroundBelow(feetY, groundOffsetPx) {
+  const groundY = feetY + groundOffsetPx;
+  return { map: { isSolidAtPixel: (x, y) => y >= groundY, cols: 100, rows: 100 } };
+}
+
+test('足元のすぐ下（1ブロック未満）に地面があれば、その距離を返す', () => {
+  const e = entity({ y: 100 }); // feetY = 124
+  const d = groundClearance(e, worldWithGroundBelow(124, 8), 32);
+  assert.ok(d !== null && d >= 4 && d <= 12, `期待した範囲外: ${d}`);
+});
+
+test('探索範囲(maxPx)より遠い地面は見つからない扱い', () => {
+  const e = entity({ y: 100 }); // feetY = 124
+  const d = groundClearance(e, worldWithGroundBelow(124, 48), 32);
+  assert.equal(d, null);
+});
+
+test('足元がすでに地面に接していれば距離0', () => {
+  const e = entity({ y: 100 }); // feetY = 124
+  const d = groundClearance(e, worldWithGroundBelow(124, 0), 32);
+  assert.equal(d, 0);
+});
+
+test('map が無い世界（デモ画面など）では null', () => {
+  const e = entity({ y: 100 });
+  assert.equal(groundClearance(e, { map: null }, 32), null);
+});
+
+// --- groundSlopeDirection: 探した地面が階段(斜面)かどうか ----------------------
+// ホバー中の雪煙を、平地では横に・斜面では斜辺に沿わせるための判定。
+// stairDirection(map, r, c) を「足元中心 x・地面の見つかった行」に当てはめるだけの薄いラッパ。
+
+/** 中心列(c=10)に右上がりの階段を1つ持つ最小マップ。stairDirection の条件どおりに立てる。 */
+function stairMap() {
+  return {
+    isSolid(r, c) {
+      if (r === 9 && c === 11) return true;   // rightUp: r-1, c+1
+      if (r === 10 && c === 9) return false;  // leftDown: r, c-1 (空いている)
+      if (r === 11 && c === 9) return true;   // leftDown: r+1, c-1
+      return false; // r-2,c+1 を含め、それ以外は空
+    },
+  };
+}
+
+test('階段の途中では stairDirection と同じ向きを返す', () => {
+  const e = entity({ x: 160 - 8, y: 0, height: 0 }); // 中心 x = 160 → c = 10
+  const d = groundSlopeDirection(e, { map: stairMap() }, 10 * TILE_SIZE); // groundY = 160 → r = 10
+  assert.equal(d, 1);
+});
+
+test('平地（階段でない）では 0', () => {
+  const flat = { isSolid: () => false };
+  const e = entity({ x: 160 - 8, y: 0, height: 0 });
+  const d = groundSlopeDirection(e, { map: flat }, 10 * TILE_SIZE);
+  assert.equal(d, 0);
+});
+
+test('地面が見つかっていない(clearance が null)なら 0', () => {
+  const e = entity({ x: 160 - 8, y: 0, height: 0 });
+  const d = groundSlopeDirection(e, { map: stairMap() }, null);
+  assert.equal(d, 0);
+});
+
+test('map が無い世界では 0', () => {
+  const e = entity({ x: 160 - 8, y: 0, height: 0 });
+  const d = groundSlopeDirection(e, { map: null }, 10 * TILE_SIZE);
+  assert.equal(d, 0);
 });

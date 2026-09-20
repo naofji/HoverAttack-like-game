@@ -9,6 +9,7 @@ import {
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
+    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
 } from '../utils/Constants.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
@@ -22,7 +23,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { floorSlide, groundSlide, approachVx } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
@@ -254,6 +255,7 @@ export class EnemyAttacker {
         if (this.smokeCooldown > 0) this.smokeCooldown--;
         this._handleShooting();
         this._kickSnow();
+        this._kickHoverSnowMist();
         // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
         this._recordAfterimage();
     }
@@ -273,6 +275,25 @@ export class EnemyAttacker {
         if (this.game.camera && this.game.canvas
             && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
         this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, SNOW_KICK_WALK);
+    }
+
+    /**
+     * 雪面の1〜2ブロック上空をホバーしているときだけ、地表で粉雪が舞う。
+     * 接地中は _kickSnow の担当なので onTerrain を見て住み分ける。粒は自機と
+     * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
+     */
+    _kickHoverSnowMist() {
+        if (!this.game.spawnSnowMist) return;
+        if (this.onTerrain) return;
+        if (this.motion.slide <= 0) return;
+        if (this.game.camera && this.game.canvas
+            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
+        const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
+        if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
+        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
+        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
+        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
+        this.game.spawnSnowMist(this.x + this.width / 2, this.y + this.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
     /**

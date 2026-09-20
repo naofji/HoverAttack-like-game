@@ -16,7 +16,7 @@ import {
     WATER_COLUMN_PARTICLE_COUNT, WATER_COLUMN_SPEED_MIN, WATER_COLUMN_SPEED_MAX, WATER_COLUMN_SPREAD,
     TILE_SIZE,
 } from '../utils/Constants.js';
-import { createExplosion, createSparks, SplashParticle, SnowKickParticle, CasingParticle } from '../entities/Particle.js';
+import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -128,6 +128,33 @@ export const SpawnEffects = {
             this.particles.push(new SnowKickParticle(
                 x + (Math.random() - 0.5) * 12, y,
                 (Math.random() - 0.5) * 2, -(1 + Math.random() * 1.5),
+            ));
+        }
+    },
+
+    /**
+     * ホバー中、雪面の1〜2ブロック上空で地表に舞う粉雪。count は毎回まとめて
+     * （HOVER_SNOW_MIST_COUNT）で、呼ぶ側が既に発生間隔で間引いている。
+     *
+     * スラスターの風は真上から受けるので、平地では真上には吹き上がらず
+     * 横（水平から最大45度）に拡散する。`onSlope` が立っていれば、風が
+     * 斜辺に逃げる形として水平から下向きに最大45度で舞わせる（実機の指摘:
+     * 以前の全方位・高速な版は勢いよすぎた）。
+     *
+     * 角度は「右=0度、上=+90度」の独自基準（キャンバスは下が正なので
+     * vy = -sin）。平地は [0,45]∪[135,180]、斜面は [-45,0]∪[180,225]。
+     */
+    spawnSnowMist(x, y, count, onSlope) {
+        for (let i = 0; i < (count | 0); i++) {
+            const dirSign = Math.random() < 0.5 ? 1 : -1; // 右 or 左
+            const tilt = Math.random() * (Math.PI / 4); // 水平から最大45度
+            const theta = dirSign > 0
+                ? (onSlope ? -tilt : tilt)
+                : (onSlope ? Math.PI + tilt : Math.PI - tilt);
+            const s = 0.4 + Math.random() * 0.8;
+            this.particles.push(new SnowMistParticle(
+                this, x + (Math.random() - 0.5) * 24, y,
+                Math.cos(theta) * s, -Math.sin(theta) * s,
             ));
         }
     },

@@ -20,12 +20,13 @@ import {
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
     SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
+    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
-import { groundSlide } from '../utils/surface.js';
+import { groundSlide, groundClearance, groundSlopeDirection } from '../utils/surface.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -187,7 +188,7 @@ export class Player {
         if (landed && this.airborneFrames >= LANDING_MIN_AIRBORNE_FRAMES) {
             audioManager.playLanding(impactVy > PLAYER_STUN_FALL_SPEED);
         }
-        if (this.motion.slide > 0) this._kickSnow(landed);
+        if (this.motion.slide > 0) { this._kickSnow(landed); this._kickHoverSnowMist(); }
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
         // くの字の先端には描いた坂が無いので、階段(slopeDir)を優先しつつ、
@@ -330,6 +331,25 @@ export class Player {
         if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
         if (!this.onGround || Math.abs(this.vx) < 0.1) return;
         this.game.spawnSnowKick(fx, fy, (this.slopeDir !== 0 || this.plateDir !== 0) ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
+    }
+
+    /**
+     * 雪面の1〜2ブロック上空をホバーしているときだけ、地表で粉雪が舞う。
+     * 接地中（着地・滑走・歩行）は _kickSnow の担当なので、ここでは onTerrain を
+     * 見て住み分ける。地面までの距離は groundClearance が持つ（副作用なし）。
+     */
+    _kickHoverSnowMist() {
+        if (!this.game.spawnSnowMist) return;
+        if (this.onTerrain) return;
+        if (this.motion.slide <= 0) return;
+        const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
+        if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
+        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
+        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
+        const fx = this.x + this.width / 2;
+        const fy = this.y + this.height + clearance;
+        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
+        this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
     /** Handle burst jump and hovering. */

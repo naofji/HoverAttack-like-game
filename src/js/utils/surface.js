@@ -12,6 +12,8 @@
 // DOM もマップの中身も要らない純関数なので、単体で試せる。
 
 import { motionFor } from '../world/StageEnvironment.js';
+import { stairDirection } from './slope.js';
+import { TILE_SIZE } from './Constants.js';
 
 /**
  * その足元の**床**の滑り具合。0 なら滑らない床（陸上・甲板・敵の頭・空中）。
@@ -73,4 +75,48 @@ export function approachVx(currentVx, desiredVx, slide) {
     // ごく小さい速度は 0 に落とす。残すと、止まっているのに歩行アニメや
     // 雪煙の条件（|vx| のしきい値）を跨ぎ続けてちらつく
     return Math.abs(v) < 0.05 ? 0 : v;
+}
+
+/** 探索の刻み幅(px)。着地判定ほどの精度は要らないので粗く見る（探索回数を抑える）。 */
+const GROUND_CLEARANCE_STEP = 4;
+
+/**
+ * 足元の中心から下方向に地面を探し、見つかるまでの距離(px)を返す。副作用なし。
+ * ホバー中の「地表から何px上か」を知りたいだけの用途（例: 雪煙）向け。
+ * `maxPx` 以内に地面が無ければ null（=「近くない」）。
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ（無ければ null）
+ * @param {number} maxPx 探索する最大距離
+ * @returns {number|null}
+ */
+export function groundClearance(entity, game, maxPx) {
+    const map = game && game.map;
+    if (!map || !map.isSolidAtPixel) return null;
+    const cx = entity.x + entity.width / 2;
+    const feetY = entity.y + entity.height;
+    for (let d = 0; d <= maxPx; d += GROUND_CLEARANCE_STEP) {
+        if (map.isSolidAtPixel(cx, feetY + d)) return d;
+    }
+    return null;
+}
+
+/**
+ * `groundClearance` が見つけた地面が階段(斜面)かどうか。0=平地、±1=階段
+ * （stairDirection と同じ符号）。ホバー中の雪煙を、平地では横に・斜面では
+ * 斜辺に沿わせて舞わせるために使う。地面が見つかっていない(clearance が
+ * null)、または map が無ければ平地扱い(0)。
+ *
+ * @param {object} entity x, width, height を持つ
+ * @param {object} game map を持つ（無ければ 0）
+ * @param {number|null} clearance groundClearance の戻り値
+ * @returns {-1|0|1}
+ */
+export function groundSlopeDirection(entity, game, clearance) {
+    const map = game && game.map;
+    if (!map || clearance === null || clearance === undefined) return 0;
+    const groundY = entity.y + entity.height + clearance;
+    const r = Math.floor(groundY / TILE_SIZE);
+    const c = Math.floor((entity.x + entity.width / 2) / TILE_SIZE);
+    return stairDirection(map, r, c);
 }

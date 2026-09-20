@@ -1296,6 +1296,24 @@ export const ENEMY_SNOW_KICK_MIN_SPEED = 0.4;
 // **雪煙は別物**（床の性質なので floorSlide が決める）。滑らないが煙は上がる
 export const ENEMY_TANK_SLIDE_SCALE = 0;
 export const SNOW_KICK_LIFETIME = 30;
+// ホバーで雪面の少し上を漂っているときに地表で舞う粉雪（SNOW_KICK とは別の粒。
+// 接地していないので「蹴る」のではなく「舞い上がる」見た目にする）。
+// 0.5〜3ブロック上空 = TILE_SIZE*0.5(8) 〜 TILE_SIZE*3(48)px。それより低ければ普通の
+// SNOW_KICK（着地・滑走）の対象になり、高ければただ飛んでいるだけに見える
+// （実機の指摘: 1〜2ブロック(16〜32px)は範囲が狭すぎたので緩めた）
+export const HOVER_SNOW_MIST_MIN_ALT = TILE_SIZE * 0.5;
+export const HOVER_SNOW_MIST_MAX_ALT = TILE_SIZE * 3;
+// 発生間隔(F)。歩行の SNOW_KICK_WALK と違い滞空は何秒も続きうるので、毎フレーム
+// 撒くと粒が多すぎる。4F(≈0.07秒 @60fps) おきにまとめて
+// （実機の指摘: 自機ほどの図体を持ち上げるスラスターなので、もっと派手に巻き上げていい。
+// 初期値の8F/2粒は控えめすぎた）
+export const HOVER_SNOW_MIST_INTERVAL = 4;
+// 地面との当たり判定を付けたぶん、下向きに飛んだ粒の半分近くが着地直後に
+// 吸収されて消える（実機の指摘: 見た目の量が半減した）。その分を見込んで増量
+export const HOVER_SNOW_MIST_COUNT = 12;
+export const HOVER_SNOW_MIST_LIFETIME = 75;
+// SNOW_KICK より少し暗めにして重ならず見分けやすく（実測ではなく既存の雪色からの派生）
+export const HOVER_SNOW_MIST_COLOR = '#C7D2DF';
 // 積雪の帯（地形キャッシュに焼く。生成時に露出していた上面だけ）。
 export const SNOW_CAP_THICKNESS = 5;
 export const SNOW_CAP_COLOR = '#EEF4FB';
