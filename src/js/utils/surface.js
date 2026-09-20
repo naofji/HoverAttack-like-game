@@ -21,17 +21,19 @@ import { motionFor } from '../world/StageEnvironment.js';
  * 「滑る面かどうか」を空中で見ているので、そこを 0 にすると段を跳ねる
  * 以前の動きに戻る。あちらは面の性質（motion.slide）を直接見たままにしてある。
  *
- * @param {object} entity onGround か grounded、および onTerrain を持つ
+ * 見るのは `onTerrain` **ひとつだけ**。これは「地形に接地している」という意味の
+ * フラグなので、`onGround` と AND を取ると同じことを2系統で判定することになり、
+ * 食い違ったときに片方だけ falseになる。実際それで踏んだ: ホバー戦車は床の
+ * 0.3px 上を上下していて `grounded` が1フレームおきに途切れるため、途切れた
+ * フレームだけ陸上の摩擦に落ちて、氷の上でも即座に反転していた。
+ * 各エンティティは「地形に乗っている」と言える条件で onTerrain を立てること。
+ *
+ * @param {object} entity onTerrain を持つ
  * @param {object} game env と map を持つ（無ければ 0）
  * @returns {number} 0〜1
  */
 export function groundSlide(entity, game) {
-    if (!entity) return 0;
-    const onGround = entity.onGround ?? entity.grounded ?? false;
-    // onTerrain が未定義の相手（まだ対応していないエンティティ）は、
-    // 従来どおり「地形の上」とみなす。黙って滑らなくなるより分かりやすい
-    const onTerrain = entity.onTerrain ?? true;
-    if (!onGround || !onTerrain) return 0;
+    if (!entity || !entity.onTerrain) return 0;
     const motion = motionFor(game, entity.x + entity.width / 2, entity.y + entity.height / 2);
     return motion.slide || 0;
 }

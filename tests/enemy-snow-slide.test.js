@@ -65,8 +65,44 @@ test('雪の上では急に止まれない（目標 0 を出しても数フレ�
 test('空中では滑りを掛けない（従来どおり AI の値がそのまま出る）', () => {
   const game = snowGame();
   const e = grounded(game);
+  // 空中＝地形に乗っていない。_moveAndCollide が毎フレームこの2つを倒す
   e.onGround = false;
+  e.onTerrain = false;
   e.vx = 0;
   e._applyGroundSlide(e.maxSpeed);
   assert.equal(e.vx, e.maxSpeed);
+});
+
+// --- 敵戦車 -------------------------------------------------------------------
+
+import { EnemyTank } from '../src/js/entities/EnemyTank.js';
+
+function tankOn(game) {
+  const t = new EnemyTank(game, 200, 20 * TILE_SIZE - 20);
+  game.enemies.push(t);
+  for (let i = 0; i < 3; i++) t.update();
+  return t;
+}
+
+test('戦車は雪の地形で向きを変えても即座には反転しない（滑る）', () => {
+  const game = snowGame();
+  const t = tankOn(game);
+  // 右へ進みきった状態から、巡回方向だけ反転させる
+  t.patrolDir = 1;
+  for (let i = 0; i < 60; i++) t.update();
+  assert.ok(t.vx > 0, `右へ進んでいない: ${t.vx}`);
+  t.patrolDir = -1;
+  t.update();
+  assert.ok(t.vx > 0, `氷の上で1フレームで反転している: ${t.vx}`);
+});
+
+test('戦車は陸上では今までどおり即座に反転する', () => {
+  const game = makeGame(makeMap(flatFloorRows()));   // 陸上
+  game.spawnSnowKick = () => {};
+  const t = tankOn(game);
+  t.patrolDir = 1;
+  for (let i = 0; i < 60; i++) t.update();
+  t.patrolDir = -1;
+  t.update();
+  assert.ok(t.vx < 0, `陸上なのに反転が鈍っている: ${t.vx}`);
 });

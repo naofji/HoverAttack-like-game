@@ -28,17 +28,24 @@ test('接地面が地形でなければ滑らない（甲板・敵の頭）', ()
   assert.equal(groundSlide(entity({ onTerrain: false }), world(SNOW_ENV)), 0);
 });
 
-test('空中では滑らない（接地していない）', () => {
-  assert.equal(groundSlide(entity({ onGround: false }), world(SNOW_ENV)), 0);
+test('空中では滑らない（地形に乗っていない）', () => {
+  assert.equal(groundSlide(entity({ onTerrain: false, onGround: false }), world(SNOW_ENV)), 0);
+});
+
+// 見るのは onTerrain ひとつだけ。onGround と AND を取ると、ホバー戦車のように
+// 接地判定が1フレームおきに途切れる相手で「氷なのに即反転」が起きる（実測）
+test('接地判定が途切れているフレームでも、地形に乗っていれば滑る', () => {
+  const hovering = { x: 0, y: 0, width: 32, height: 12, grounded: false, onTerrain: true };
+  assert.equal(groundSlide(hovering, world(SNOW_ENV)), ICE_SLIDE);
+});
+
+test('onTerrain を持たない相手は滑らない', () => {
+  const legacy = { x: 0, y: 0, width: 16, height: 24, onGround: true };
+  assert.equal(groundSlide(legacy, world(SNOW_ENV)), 0);
 });
 
 test('雪でない面では滑らない', () => {
   assert.equal(groundSlide(entity(), world(LAND_ENV)), 0);
-});
-
-test('grounded しか持たない敵戦車でも読める', () => {
-  const tank = { x: 0, y: 0, width: 32, height: 20, grounded: true, onTerrain: true };
-  assert.equal(groundSlide(tank, world(SNOW_ENV)), ICE_SLIDE);
 });
 
 test('env が無い世界（デモ画面やテストの最小 game）では 0', () => {

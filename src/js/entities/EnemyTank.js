@@ -16,6 +16,7 @@ import {
 import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
 import { stairDirection, supportColumn } from '../utils/slope.js';
 import { isInView } from '../utils/viewCull.js';
+import { groundSlide, approachVx } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
@@ -67,7 +68,8 @@ export class EnemyTank {
         const recoiling = tickRecoil(this);
 
         // --- Patrol Movement ---
-        if (!recoiling) this.vx = this.patrolDir * ENEMY_TANK_SPEED;
+        // ここで決めるのは「こう動きたい」。実際に出る速度は下で床が決める
+        const desiredVx = recoiling ? this.vx : this.patrolDir * ENEMY_TANK_SPEED;
 
         // --- Gravity (hover tanks float but are affected by gravity) ---
         // 中心座標で環境を引く。_moveAndCollide はこの後に呼ばれるので、
@@ -77,7 +79,12 @@ export class EnemyTank {
         if (this.vy > ENEMY_TANK_MAX_FALLING_SPEED) this.vy = ENEMY_TANK_MAX_FALLING_SPEED;
 
         // --- Friction ---
-        this.vx *= FRICTION;
+        // 陸上は今までどおり FRICTION で落ち着く。雪の地形の上では前フレームの
+        // 速度が残るので、止まるのにも反転にも時間がかかる（自機と同じ床）
+        const slide = groundSlide(this, this.game);
+        this.vx = slide
+            ? approachVx(this.vx, desiredVx, slide)
+            : desiredVx * FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
 
         // 雪の階段では下りに加速し、雪を蹴る（自機と同じ規則。ホバー戦車なので45度の補間は無し）
@@ -127,6 +134,14 @@ export class EnemyTank {
         const grounded = this._collidesWithMap();
         this.y -= 1;
         this.grounded = grounded;
+        // 滑りの判定用。**grounded をそのまま使ってはいけない** ── ホバー戦車は
+        // 床の 0.3px 上を上下していて、grounded は1フレームおきに途切れる
+        // （実測: G / - / G / -）。途切れたフレームだけ陸上の摩擦に落ちて、
+        // 氷の上でも即座に反転していた。足元に地形があるかを直接見る。
+        // 戦車は甲板にも敵の頭にも乗らないので、地形以外に乗ることはない
+        const probeY = this.y + this.height + 1;
+        this.onTerrain = map.isSolidAtPixel(this.x + 2, probeY)
+            || map.isSolidAtPixel(this.x + this.width - 2, probeY);
 
         // --- Predictive Navigation (User Rules) ---
         if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
