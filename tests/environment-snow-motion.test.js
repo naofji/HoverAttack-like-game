@@ -266,3 +266,68 @@ test('sliding off a plate tip kicks the slide-sized snow puff', () => {
   for (let i = 0; i < 5; i++) p.update();
   assert.ok(game.snowKicks.includes(SNOW_KICK_SLIDE), JSON.stringify(game.snowKicks));
 });
+
+// --- 甲板・敵の頭の上では滑らない（実機の指摘: 鉄板の上で滑るのはおかしい）---
+
+/** 母艦を持つ雪の世界。甲板の高さは自機の足がちょうど乗る位置に置く。 */
+function snowWorldWithCarrier() {
+  const game = snowWorld();
+  game.carrier = {
+    alive: true, x: 200, y: 100, width: 96, height: 32,
+    platformLeft: 0, platformRight: 96, vx: 0,
+  };
+  return game;
+}
+
+/**
+ * 甲板の上に立たせた自機。甲板への着地は「前フレームの足元が甲板の上、今フレームが
+ * 下」を見るので、1フレームでは届かない（重力で降りてくるのを数フレーム待つ）。
+ */
+function playerOnDeck(game, held = new Set()) {
+  const p = new Player(game, game.carrier.x + 20, game.carrier.y - PLAYER_HEIGHT - 2);
+  game.player = p;
+  game.input = inputWith(held);
+  for (let i = 0; i < 10 && !p.onGround; i++) p.update();
+  return p;
+}
+
+test('甲板の上では onTerrain が立たない', () => {
+  const game = snowWorldWithCarrier();
+  const p = playerOnDeck(game);
+  assert.equal(p.onGround, true, '甲板に乗れていない');
+  assert.equal(p.onTerrain, false);
+});
+
+test('甲板の上ではキーを離すと即止まる（滑らない）', () => {
+  const game = snowWorldWithCarrier();
+  const p = playerOnDeck(game);
+  p.vx = 2;
+  game.input = inputWith(new Set());
+  p.update();
+  assert.equal(p.vx, 0, `甲板の上で滑っている: ${p.vx}`);
+});
+
+test('甲板の上では雪が舞わない（着地の瞬間も）', () => {
+  const game = snowWorldWithCarrier();
+  game.snowKicks.length = 0;
+  const p = playerOnDeck(game);
+  p.vx = 2;
+  game.input = inputWith(new Set(['KeyD']));
+  p.update();
+  assert.deepEqual(game.snowKicks, [], '甲板の上で雪が舞っている');
+});
+
+test('雪の地形の上では今までどおり滑り、雪が舞う（回帰）', () => {
+  const game = snowWorld();
+  const p = new Player(game, 100, 11 * TILE_SIZE - PLAYER_HEIGHT);
+  game.player = p;
+  game.input = inputWith(new Set(['KeyD']));
+  for (let i = 0; i < 10; i++) p.update();
+  assert.equal(p.onTerrain, true, '地形の上なのに onTerrain が立っていない');
+
+  game.snowKicks.length = 0;
+  game.input = inputWith(new Set());
+  p.update();
+  assert.ok(Math.abs(p.vx) > 0.1, `地形の上で滑らなくなっている: ${p.vx}`);
+  assert.ok(game.snowKicks.length > 0, '地形の上で雪が舞わなくなっている');
+});

@@ -25,6 +25,7 @@ import {
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
+import { groundSlide } from '../utils/surface.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -78,6 +79,8 @@ export class Player {
         this.vx = 0;
         this.vy = 0;
         this.onGround = false;
+        // 接地面が地形か。滑りと雪煙がこれを見る（utils/surface.js）
+        this.onTerrain = false;
         this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
         this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
         // 今フレームの環境係数。update() が毎フレーム引き直すが、docked 中や
@@ -257,8 +260,9 @@ export class Player {
         } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
             this.vx = PLAYER_MAX_SPEED;
         } else if (this.onGround) {
-            // 陸上は slide=0 で従来どおり即停止。氷では残存率ぶん滑る
-            this.vx *= this.motion.slide;
+            // 滑るのは「雪の積もった地形の上」だけ。陸上も、甲板や敵の頭の上も
+            // slide=0 で即停止になる（utils/surface.js）
+            this.vx *= groundSlide(this, this.game);
             if (Math.abs(this.vx) < 0.05) this.vx = 0;
         } else {
             this.vx *= AIR_FRICTION;
@@ -318,6 +322,9 @@ export class Player {
     /** 雪の地上での粒。着地で多め、滑っているあいだは毎フレーム。 */
     _kickSnow(landed) {
         if (!this.game.spawnSnowKick) return;
+        // 着地したフレームは motion がまだ「雪の面」のまま（係数はフレーム先頭、
+        // 着地は _moveAndCollide の中）なので、ここでも接地面を見る必要がある
+        if (!this.onTerrain) return;
         const fx = this.x + this.width / 2;
         const fy = this.y + this.height;
         if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
@@ -420,6 +427,9 @@ export class Player {
         // --- 縦 ---
         this.y += this.vy * this.motion.speed;
         this.onGround = false;
+        // 接地面の種別。地形が接地させたときだけ立てる（甲板・敵の頭では立てない）。
+        // 鉄板の上で滑る・雪が舞うのはおかしい、という実機の指摘への対応
+        this.onTerrain = false;
         this._landOnMapOrHitCeiling();
         this._landOnCarrier();
         this._liftCarrierFromBelow();
@@ -531,6 +541,7 @@ export class Player {
                 }
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
                 this.onGround = true;
+                this.onTerrain = true;
                 this.walkFrame = 2; // Reset to standing straight
             } else if (this.vy < 0) {
                 // Hit ceiling
@@ -650,6 +661,7 @@ export class Player {
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
                 if (!this._collidesWithMap()) {
                     this.onGround = true;
+                    this.onTerrain = true;
                     this.vy = 0;
                     return;
                 }
@@ -665,6 +677,7 @@ export class Player {
             const rightFoot = map.isSolidAtPixel(this.x + this.width - 4, probeY);
             if (leftFoot || rightFoot) {
                 this.onGround = true;
+                this.onTerrain = true;
                 this.vy = 0;
                 // Snap to surface
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
