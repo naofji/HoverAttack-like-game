@@ -21,6 +21,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
+import { groundSlide, approachVx } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
@@ -207,7 +208,12 @@ export class EnemyAttacker {
 
         // --- Movement ---
         // 反動中は自前の移動制御を飛ばす。重力・地形衝突・射撃はそのまま動く。
-        if (!tickRecoil(this)) this._updateMovement(target);
+        if (!tickRecoil(this)) {
+            this._updateMovement(target);
+            // AI が出した vx は「こう動きたい」。実際に出る速度は床が決める
+            // （雪の地形の上では滑るので、止まるのにも曲がるのにも時間がかかる）
+            this._applyGroundSlide(this.vx);
+        }
 
         // --- Hover Fuel Recovery ---
         if (this.onGround) {
@@ -247,6 +253,14 @@ export class EnemyAttacker {
         this._handleShooting();
         // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
         this._recordAfterimage();
+    }
+
+    /**
+     * AI が決めた「こう動きたい」を、床の性質を通して実際の vx にする。
+     * 陸上（slide 0）では目標がそのまま出るので、雪以外の面の挙動は変わらない。
+     */
+    _applyGroundSlide(desiredVx) {
+        this.vx = approachVx(this.vx, desiredVx, groundSlide(this, this.game));
     }
 
     // ------------------------------------------

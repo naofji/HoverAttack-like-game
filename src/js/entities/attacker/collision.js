@@ -97,12 +97,16 @@ export const AttackerCollision = {
         // --- Vertical ---
         this.y += this.vy * this.motion.speed;
         this.onGround = false;
+        // 接地面が地形か。滑りと雪煙がこれを見る（utils/surface.js）。
+        // 他機の頭の上（_checkVerticalEntities）では立てない
+        this.onTerrain = false;
 
         if (this._collidesWithMap()) {
             if (this.vy > 0) {
                 // Landing
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
                 this.onGround = true;
+                this.onTerrain = true;
                 this.walkFrame = 2;
             } else if (this.vy < 0) {
                 // Hit ceiling
@@ -123,6 +127,7 @@ export const AttackerCollision = {
             const rightFoot = map.isSolidAtPixel(this.x + this.width - 4, probeY);
             if (leftFoot || rightFoot) {
                 this.onGround = true;
+                this.onTerrain = true;
                 this.vy = 0;
                 this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
             }
