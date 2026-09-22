@@ -108,9 +108,10 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     const activeRows = Array.from(new Set(cellsToProcess.map((c) => c.r)))
         .sort((a, b) => b - a);
 
-    // 落ち口の最寄り探索用。区間の中の位置で引く（行ごとに使い回す）
+    // 落ち口の最寄り探索用・均しの下書き用。列で引く（区間ごとに使い回す）
     const nearLeft = new Int32Array(cols);
     const nearRight = new Int32Array(cols);
+    const flowGrant = new Int32Array(cols);  // 均しの余りの配り先
 
     // どの行の処理でその列を区間に含めたか（同じ区間を2度処理しないため）
     const coveredRow = new Int32Array(cols).fill(-1);
@@ -171,6 +172,14 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 // ケースA: 区間内に落ち口（滝・穴）がある場合
                 // 水は最も近い落ち口へ向かって横に流れる（直下落下はフェーズ1で実行済み）。
                 // 等距離なら左の落ち口を選ぶ（以前の「左から見て最初に見つかった最短」と同じ）
+                //
+                // 既知の非対称: その場で書き換えながら左から右へ走査するので、右へ流れる
+                // 水は同じフレームのうちに何マスも進み（受け取ったばかりの水をまた流す）、
+                // 左へは1マスしか進まない。流量を処理前の水量で決めてまとめて適用する形に
+                // 直すと左右差は減る（左右反転したマップとの食い違い 532→288 セル）が、
+                // 横の流れが遅くなって満ちていないセルが長く残り、滝⇄水の点滅が
+                // 41,757→69,961（+68%）に増えた。見えにくい左右差より見える点滅を
+                // 嫌って、あえて直していない（2026-09-23、tools/measure-water.mjs）
                 for (let sc = segStart; sc <= segEnd; sc++) {
                     const mass = water[rowBase + sc];
                     if (mass === 0) continue;
@@ -209,10 +218,18 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 const base = Math.floor(sumMass / len);
                 const rem = sumMass % len;
 
-                // 余りは均等に配る
-                for (let i = 0; i < len; i++) {
-                    const sc = segStart + i;
-                    const targetMass = base + (i < rem ? 1 : 0);
+                // 余りは区間の中央から外へ1つずつ配る。以前は左端から配っていたので、
+                // 平らな床の上の浅い水たまりは必ず左の壁に寄っていた（左右非対称）。
+                // 偶数幅で余りが奇数のときの最後の1つだけは左寄りになる
+                for (let sc = segStart; sc <= segEnd; sc++) flowGrant[sc] = 0;
+                let lo = segStart + ((len - 1) >> 1);
+                let hi = segStart + (len >> 1);
+                for (let left = rem; left > 0; lo--, hi++) {
+                    flowGrant[lo]++; left--;
+                    if (hi !== lo && left > 0) { flowGrant[hi]++; left--; }
+                }
+                for (let sc = segStart; sc <= segEnd; sc++) {
+                    const targetMass = base + flowGrant[sc];
                     if (water[rowBase + sc] !== targetMass) {
                         water[rowBase + sc] = targetMass;
                         markChanged(r, sc);

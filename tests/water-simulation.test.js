@@ -277,3 +277,23 @@ test('doFall 分離: doFall=false 時は垂直落下をスキップしつつ落�
 });
 
 
+
+test('落ち口の無い層の均しは、余りを中央から配る（浅い水たまりが左の壁に寄らない）', () => {
+  // 以前は余りを左端から配っていたので、水量1の水たまりは必ず左の壁に張り付いた
+  const cases = [
+    { width: 5, mass: 1, expect: [0, 0, 1, 0, 0] },
+    { width: 4, mass: 2, expect: [0, 1, 1, 0] },
+    { width: 5, mass: 8, expect: [1, 2, 2, 2, 1] },
+  ];
+  for (const { width, mass, expect } of cases) {
+    const rows = 2, cols = width + 2;
+    const isSolid = (r, c) => r === 1 || c === 0 || c === cols - 1;
+    const water = new Uint8Array(rows * cols);
+    water[1] = mass;   // 左端に置く
+    let active = new Set([1]);
+    for (let step = 0; step < 4; step++) {
+      active = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active }).nextActiveCells;
+    }
+    assert.deepEqual(Array.from(water.slice(1, 1 + width)), expect, `幅${width} 水量${mass}`);
+  }
+});
