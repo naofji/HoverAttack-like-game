@@ -1023,7 +1023,6 @@ export class Map {
             this.blockHP[r][c] = 0;
             // 破壊されたブロックの周囲をアクティブ化し、水流セル・オートマトンで自然に流れ込ませる
             if (this.water) {
-                if (!this.activeWaterCells) this.activeWaterCells = new Set();
                 for (let dr = -1; dr <= 1; dr++) {
                     for (let dc = -1; dc <= 1; dc++) {
                         const nr = r + dr, nc = c + dc;
@@ -1098,19 +1097,7 @@ export class Map {
                 }
             }
         }
-        if (this.water && destroyed.length) {
-            if (!this.activeWaterCells) this.activeWaterCells = new Set();
-            for (const { r, c } of destroyed) {
-                for (let dr = -1; dr <= 1; dr++) {
-                    for (let dc = -1; dc <= 1; dc++) {
-                        const nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
-                            this.activeWaterCells.add(nr * this.cols + nc);
-                        }
-                    }
-                }
-            }
-        }
+        // 水のアクティブ化は damageBlock が壊れたブロックごとに済ませている
         return destroyed;
     }
 
@@ -1136,17 +1123,22 @@ export class Map {
      */
     _rebuildWaterCacheIfDirty() {
         if (!this.water || this.dirtyWaterCols.size === 0) return;
-        if (!this._waterIsSolid) this._waterIsSolid = (r, c) => this.isSolid(r, c);
         rebuildWaterCache({
             water: this.water,
             kind: this.waterKind,
             surfaceY: this.waterSurfaceY,
             rows: this.rows,
             cols: this.cols,
-            isSolid: this._waterIsSolid,
+            isSolid: this._waterSolidFn(),
             dirtyCols: this.dirtyWaterCols,
         });
         this.dirtyWaterCols.clear();
+    }
+
+    /** 水の純関数群に渡す isSolid。毎フレーム作り直さないよう1本を使い回す */
+    _waterSolidFn() {
+        if (!this._waterIsSolid) this._waterIsSolid = (r, c) => this.isSolid(r, c);
+        return this._waterIsSolid;
     }
 
     /**
@@ -1156,10 +1148,7 @@ export class Map {
      */
     _sweepDryPockets() {
         if (!this.water) return;
-        const isSolid = (r, c) => this.isSolid(r, c);
-        const found = findStuckDryPockets({ water: this.water, rows: this.rows, cols: this.cols, isSolid });
-        if (found.length === 0) return;
-        if (!this.activeWaterCells) this.activeWaterCells = new Set();
+        const found = findStuckDryPockets({ water: this.water, rows: this.rows, cols: this.cols, isSolid: this._waterSolidFn() });
         for (const k of found) this.activeWaterCells.add(k);
     }
 
@@ -1399,14 +1388,12 @@ export class Map {
                         const cur = this.water[key];
                         if (cur < MAX_WATER_MASS) {
                             this.water[key] = Math.min(MAX_WATER_MASS, cur + WATER_SPRING_MASS);
-                            if (!this.activeWaterCells) this.activeWaterCells = new Set();
                             this.activeWaterCells.add(key);
                         } else if (sp.r + 1 < this.rows && !this.isSolid(sp.r + 1, sp.c)) {
                             const downKey = (sp.r + 1) * this.cols + sp.c;
                             const downCur = this.water[downKey];
                             if (downCur < MAX_WATER_MASS) {
                                 this.water[downKey] = Math.min(MAX_WATER_MASS, downCur + WATER_SPRING_MASS);
-                                if (!this.activeWaterCells) this.activeWaterCells = new Set();
                                 this.activeWaterCells.add(downKey);
                             }
                         }
@@ -1421,18 +1408,17 @@ export class Map {
                 this._sweepDryPockets();
             }
 
-            if (this.activeWaterCells && this.activeWaterCells.size > 0) {
+            if (this.activeWaterCells.size > 0) {
                 this.waterFallTimer = (this.waterFallTimer || 0) + 1;
                 const doFall = (this.waterFallTimer >= WATER_FALL_INTERVAL);
                 if (doFall) {
                     this.waterFallTimer = 0;
                 }
-                const isSolid = (r, c) => this.isSolid(r, c);
                 const res = stepWaterSimulation({
                     water: this.water,
                     rows: this.rows,
                     cols: this.cols,
-                    isSolid,
+                    isSolid: this._waterSolidFn(),
                     activeCells: this.activeWaterCells,
                     doFall,
                 });

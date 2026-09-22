@@ -4,8 +4,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Map } from '../src/js/world/Map.js';
 
+// 水のある面では activeWaterCells は _generateWater が必ず作る（null にはならない）。
+// 偽 map も本物と同じ状態から始め、Map.prototype の isSolid 取り出しをそのまま通す
 function makeStub({ rows, cols, water, isSolid }) {
-  return { rows, cols, water, isSolid, activeWaterCells: null };
+  return {
+    rows, cols, water, isSolid, activeWaterCells: new Set(),
+    _waterSolidFn: Map.prototype._waterSolidFn,
+  };
 }
 
 test('_sweepDryPockets は取りこぼされた縦穴を activeWaterCells に追加する', () => {
@@ -17,7 +22,6 @@ test('_sweepDryPockets は取りこぼされた縦穴を activeWaterCells に追
 
   Map.prototype._sweepDryPockets.call(map);
 
-  assert.ok(map.activeWaterCells instanceof Set);
   assert.ok(map.activeWaterCells.has(2 * cols + 1));
 });
 
@@ -35,7 +39,7 @@ test('_sweepDryPockets は既存の activeWaterCells を消さずに足す', () 
   assert.ok(map.activeWaterCells.has(2 * cols + 1));
 });
 
-test('_sweepDryPockets は何も見つからなければ activeWaterCells を作らない', () => {
+test('_sweepDryPockets は何も見つからなければ activeWaterCells に何も足さない', () => {
   const rows = 3, cols = 3;
   const water = new Uint8Array(rows * cols);
   const isSolid = () => false;
@@ -43,7 +47,7 @@ test('_sweepDryPockets は何も見つからなければ activeWaterCells を作
 
   Map.prototype._sweepDryPockets.call(map);
 
-  assert.equal(map.activeWaterCells, null);
+  assert.equal(map.activeWaterCells.size, 0);
 });
 
 test('_sweepDryPockets は water が無ければ何もしない', () => {
