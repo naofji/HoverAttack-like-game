@@ -15,7 +15,11 @@
 //   state  … water[] / waterKind / waterSurfaceY / activeWaterCells
 //   query  … 全セルでの isWaterAtPixel(3点) / isWaterfallAtPixel / getSurfaceY /
 //            waterSurfaceRow / isWaterSurface
-//   paint  … 水のオフスクリーン canvas 2枚への描画呼び出しの累積
+//   paint  … 水のオフスクリーン canvas 2枚の「タイルごとの最終的な描画内容」。
+//            clearRect でそのタイルの記録を捨て、以後の fillRect をタイルに積む。
+//            タイルをまたぐ順序は無視する（塗り直しはタイルの中でしか描かないので、
+//            塗る順が変わっても絵は同じ。区間の処理順を変えたとき、呼び出し順の
+//            指紋だけがずれて「変わった」と誤判定した）
 //   frame  … drawOverWorld が画面に出す呼び出し
 
 import { createHash } from 'node:crypto';
@@ -56,10 +60,39 @@ function hashingCtx() {
     return ctx;
 }
 
+/** タイル単位で最終的な描画内容を持つ疑似 ctx（水のオフスクリーン canvas 用） */
+function tileCtx() {
+    const S = TILE_SIZE;
+    const tiles = new Map();
+    let fill = '';
+    const tileOf = (x, y) => `${Math.floor(x / S)},${Math.floor(y / S)}`;
+    // 地形キャッシュなど水以外の canvas もこれで作られるので、知らないメソッドは黙って受ける
+    const noop = () => ({ addColorStop() {} });
+    const own = {
+        set fillStyle(v) { fill = v; },
+        get fillStyle() { return fill; },
+        clearRect(x, y) { tiles.delete(tileOf(x, y)); },
+        fillRect(x, y, w, h) {
+            const key = tileOf(x, y);
+            if (!tiles.has(key)) tiles.set(key, []);
+            tiles.get(key).push(`${fill}:${x},${y},${w},${h}`);
+        },
+        __digest() {
+            const h = createHash('sha1');
+            for (const key of [...tiles.keys()].sort()) h.update(`${key}=${tiles.get(key).join(';')}|`);
+            return h.digest('hex').slice(0, 16);
+        },
+    };
+    return new Proxy(own, {
+        get: (t, p) => (p in t ? t[p] : noop),
+        set: (t, p, v) => { if (p === 'fillStyle') t.fillStyle = v; return true; },
+    });
+}
+
 const canvases = [];
 globalThis.document = {
     createElement: () => {
-        const ctx = hashingCtx();
+        const ctx = tileCtx();
         const cv = { width: 0, height: 0, getContext: () => ctx, ctx };
         canvases.push(cv);
         return cv;
