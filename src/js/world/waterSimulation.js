@@ -94,10 +94,14 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     const activeRows = Array.from(new Set(cellsToProcess.map((c) => c.r)))
         .sort((a, b) => b - a);
 
-    const processedSegments = new Set();
+    // 落ち口の最寄り探索用。区間の中の位置で引く（行ごとに使い回す）
+    const nearLeft = new Int32Array(cols);
+    const nearRight = new Int32Array(cols);
 
     for (const r of activeRows) {
-        // 行 r において、アクティブなセルを含む連結空洞区間を探す
+        // 行 r において、アクティブなセルを含む連結空洞区間を探す。
+        // 区間は左から右へ1回ずつしか作らないので、同じ区間を2度処理することはない
+        // （以前ここにあった「処理済み区間」の Set は一度も当たっていなかった）
         for (let c = 0; c < cols; c++) {
             if (isSolid(r, c)) continue;
 
@@ -107,81 +111,58 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 c++;
             }
             const segEnd = c;
-
-            const segKey = `${r}:${segStart}:${segEnd}`;
-            if (processedSegments.has(segKey)) continue;
-            processedSegments.add(segKey);
+            const rowBase = r * cols;
 
             // この区間に水が存在するか確認
-            let hasWater = false;
             let sumMass = 0;
-            const segCols = [];
+            for (let sc = segStart; sc <= segEnd; sc++) sumMass += water[rowBase + sc];
+            if (sumMass === 0) continue;
+
+            // 区間内の各セルについて、直下に落ちられるか（落ち口か）判定し、
+            // 各セルから見た左右それぞれの最寄りの落ち口を1回ずつの走査で求める
+            let hasDrain = false;
+            let last = -1;
             for (let sc = segStart; sc <= segEnd; sc++) {
-                segCols.push(sc);
-                const m = water[r * cols + sc];
-                if (m > 0) {
-                    hasWater = true;
-                    sumMass += m;
+                if (r + 1 < rows && !isSolid(r + 1, sc) && water[rowBase + cols + sc] < MAX_WATER_MASS) {
+                    last = sc;
+                    hasDrain = true;
                 }
+                nearLeft[sc] = last;
             }
-            if (!hasWater) continue;
-
-            // 区間内の各セルについて、直下に落ちられるか（落ち口か）判定
-            const drainCols = [];
-            for (const sc of segCols) {
-                if (r + 1 < rows && !isSolid(r + 1, sc)) {
-                    const downMass = water[(r + 1) * cols + sc];
-                    if (downMass < MAX_WATER_MASS) {
-                        drainCols.push(sc);
-                    }
+            if (hasDrain) {
+                last = -1;
+                for (let sc = segEnd; sc >= segStart; sc--) {
+                    if (nearLeft[sc] === sc) last = sc;
+                    nearRight[sc] = last;
                 }
             }
 
-            if (drainCols.length > 0) {
+            if (hasDrain) {
                 // ケースA: 区間内に落ち口（滝・穴）がある場合
-                // 水は最も近い落ち口へ向かって横に流れる（直下落下はフェーズ1で実行済み）
-                for (const sc of segCols) {
-                    let mass = water[r * cols + sc];
+                // 水は最も近い落ち口へ向かって横に流れる（直下落下はフェーズ1で実行済み）。
+                // 等距離なら左の落ち口を選ぶ（以前の「左から見て最初に見つかった最短」と同じ）
+                for (let sc = segStart; sc <= segEnd; sc++) {
+                    const mass = water[rowBase + sc];
                     if (mass === 0) continue;
 
-                    // 最も近い落ち口へ向かって隣のセルへ流す
-                    let closestDrain = drainCols[0];
-                    let minDist = Math.abs(sc - closestDrain);
-                    for (const dc of drainCols) {
-                        const dist = Math.abs(sc - dc);
-                        if (dist < minDist) {
-                            minDist = dist;
-                            closestDrain = dc;
-                        }
-                    }
+                    const L = nearLeft[sc];
+                    const R = nearRight[sc];
+                    let closestDrain;
+                    if (L < 0) closestDrain = R;
+                    else if (R < 0) closestDrain = L;
+                    else closestDrain = (sc - L <= R - sc) ? L : R;
 
-                    if (closestDrain < sc) {
-                        // 左へ流す
-                        const targetCol = sc - 1;
-                        const targetKey = r * cols + targetCol;
-                        const targetMass = water[targetKey];
-                        if (targetMass < MAX_WATER_MASS) {
-                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, WATER_MAX_SPREAD_FLOW);
-                            if (flow > 0) {
-                                water[r * cols + sc] -= flow;
-                                water[targetKey] += flow;
-                                markChanged(r, sc);
-                                markChanged(r, targetCol);
-                            }
-                        }
-                    } else if (closestDrain > sc) {
-                        // 右へ流す
-                        const targetCol = sc + 1;
-                        const targetKey = r * cols + targetCol;
-                        const targetMass = water[targetKey];
-                        if (targetMass < MAX_WATER_MASS) {
-                            const flow = Math.min(mass, MAX_WATER_MASS - targetMass, WATER_MAX_SPREAD_FLOW);
-                            if (flow > 0) {
-                                water[r * cols + sc] -= flow;
-                                water[targetKey] += flow;
-                                markChanged(r, sc);
-                                markChanged(r, targetCol);
-                            }
+                    if (closestDrain === sc) continue;
+                    const targetCol = closestDrain < sc ? sc - 1 : sc + 1;
+                    const targetKey = rowBase + targetCol;
+                    const targetMass = water[targetKey];
+                    if (targetMass < MAX_WATER_MASS) {
+                        const flow = Math.min(mass, MAX_WATER_MASS - targetMass, WATER_MAX_SPREAD_FLOW);
+                        if (flow > 0) {
+                            water[rowBase + sc] -= flow;
+                            water[targetKey] += flow;
+                            markChanged(r, sc);
+                            markChanged(r, targetCol);
                         }
                     }
                 }
@@ -194,21 +175,19 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 // 容量（len * MAX_WATER_MASS）を超えることはあり得ず、到達不能だった。
                 // 水位が上がるのは、下の行が満ちて落ちられなくなった水がフェーズ1で
                 // 積み上がる自然な結果である
-                const len = segCols.length;
+                const len = segEnd - segStart + 1;
                 const base = Math.floor(sumMass / len);
                 const rem = sumMass % len;
 
                 // 余りは均等に配る
                 for (let i = 0; i < len; i++) {
-                    const sc = segCols[i];
+                    const sc = segStart + i;
                     const targetMass = base + (i < rem ? 1 : 0);
-                    const oldMass = water[r * cols + sc];
-                    if (oldMass !== targetMass) {
-                        water[r * cols + sc] = targetMass;
+                    if (water[rowBase + sc] !== targetMass) {
+                        water[rowBase + sc] = targetMass;
                         markChanged(r, sc);
                     }
                 }
-
             }
         }
     }
