@@ -662,3 +662,32 @@ test('滝が浅い水たまりへ落ちるとき、液面までの隙間が埋�
         document.createElement = origCreateElement;
     }
 });
+
+test('滝の着水の波紋は、水源の列ではなく実際に滝が水面へ落ちている列で起こる', async () => {
+    // 水源は列2だが、水は棚を伝って列6から落ち、下の水たまりへ着水している。
+    // 以前は水源の列を下へ辿って最初の水で波紋を起こしていたので、着水して
+    // いない列2（下の水たまりの端）で波が立っていた
+    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+    const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
+    const map = makeWaterMap(`
+        ##########
+        #........#
+        #......#.#
+        ######.#.#
+        #.....4..#
+        #.....4..#
+        #88888888#
+        ##########
+    `);
+    map.waterSprings = [{ r: 1, c: 2, timer: 0 }];
+    // 満水の水たまりのすぐ上のセルは滝ではなく水面になる（判定ルールC）ので、
+    // 滝の最下段は (4,6)、その真下 (5,6) が着水点
+    assert.ok(map.isWaterfallCell(4, 6), '前提: 列6は滝');
+    assert.ok(map.isWater(5, 6) && !map.isWaterfallCell(5, 6), '前提: 滝の真下は滝でない水');
+    assert.ok(!map.isWaterfallCell(4, 2) && !map.isWaterfallCell(5, 2), '前提: 水源の列2は滝ではない');
+    const renderer = createWaterRenderer({ game: { map } });
+    const xs = [];
+    renderer.addRipple = (x) => xs.push(x);
+    for (let i = 0; i < 12; i++) renderer.update();
+    assert.deepEqual(xs, [(6 + 0.5) * TILE_SIZE]);
+});

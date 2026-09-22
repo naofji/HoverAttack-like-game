@@ -303,17 +303,12 @@ export function createWaterRenderer(env) {
             for (const rp of this.ripples) rp.strength *= WATER_RIPPLE_DECAY;
             this.ripples = this.ripples.filter((rp) => rp.strength >= WATER_RIPPLE_MIN);
 
-            // 滝の着水波紋（12フレームごとに小さな波紋を励起）
+            // 滝の着水波紋（12フレームごとに小さな波紋を励起）。
+            // 着水点＝滝のセルの真下が滝でない水。以前は水源の列を下へ辿って最初の
+            // 水で起こしていたが、水は棚を伝って横へずれながら落ちるので、着水して
+            // いない列で波が立っていた
             if (this.t % 12 === 0) {
-                for (const sp of map.waterSprings) {
-                    const c = sp.c;
-                    for (let r = sp.r; r < map.rows; r++) {
-                        if (map.isWater(r, c) && !map.isWaterfallCell(r, c)) {
-                            this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
-                            break;
-                        }
-                    }
-                }
+                for (const c of map.waterfallLandingCols()) this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
             }
         },
         addRipple(x, strength) {
