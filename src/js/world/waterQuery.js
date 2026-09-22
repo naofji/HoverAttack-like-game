@@ -112,8 +112,8 @@ function rowSegmentHasExposedWater(water, isSolid, r, c, cols) {
 }
 
 /**
- * 1列ぶんの kind を決める。
- * 判定はすべて O(1) なので走査の向きは問わない（上から下へ1回）。
+ * 1列ぶんの kind を決める。上から下へ1回走査する。
+ * 水面かどうかは直上のセルの種別を読むので、この向きでなければならない。
  * @returns {Array<number>} この列で見つかった水面セルの行
  */
 export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c }) {
@@ -145,7 +145,11 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
         //      下だけ波の線が途切れる」。区間に1つも無いときは、量子化の残りかす
         //      のような孤立した浅い水を独立した波にしないため水面にしない）
         // 直上が水でも、その水が落下中（滝）なら、こちらが液面になる
-        // ＝滝が水たまりへ落ちてくる境目。旧 isWaterSurface と同じ扱い
+        // ＝滝が水たまりへ落ちてくる境目。
+        // 直上の種別は、上から走査しているので既に決まっている（kind[k - cols]）。
+        // 以前は「直上が落下中か」を isFallingCell とは別の式で書き直していた
+        // （展開すると同値だったが、定義が2つあると片方だけ直す事故が起きる。
+        // 実際に別ブランチで isFallingCell だけに条件を足し、ずれを出した）
         let isSurface;
         if (r === 0) {
             isSurface = true;
@@ -154,10 +158,8 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
                 && !isSubmergedFromAbove(water, isSolid, cols, r, c)
                 && rowSegmentHasExposedWater(water, isSolid, r, c, cols);
         } else {
-            const above = water[k - cols];
-            const aboveIsWater = above >= MIN_WATER_MASS;
-            const aboveIsFalling = aboveIsWater && above < MAX_WATER_MASS && mass < MAX_WATER_MASS;
-            isSurface = !aboveIsWater || aboveIsFalling;
+            const aboveKind = kind[k - cols];
+            isSurface = aboveKind === WATER_NONE || aboveKind === WATER_FALL;
         }
 
         if (isSurface) {
