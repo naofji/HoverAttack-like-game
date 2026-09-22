@@ -1,14 +1,17 @@
-// 水のテスト用の偽 map。grid・water・派生キャッシュを揃えて返す。
-// 実装（Map クラス）は canvas を要求するので node --test では作れない。
-// 問い合わせは Map.prototype と同じ意味になるよう waterQuery を通す。
+// 水のテスト用の map。grid・water・派生キャッシュを揃えて返す。
+// Map のコンストラクタは地形生成と canvas を要求するので node --test では
+// そのまま作れない。そこで**コンストラクタだけを飛ばして** Map.prototype を
+// 持たせ、問い合わせ（isWaterAtPixel / getSurfaceY など）は本物のメソッドを通す。
+//
+// 以前は問い合わせを手で写していて、getSurfaceY と isWaterAtPixel が本物と
+// 違う答えを返していた（本物は液面のかかった水量0のセルも水として扱う）。
+// 写しが本物とずれると、テストは本番で通らない経路を確かめることになる。
 
 import { MIN_WATER_MASS, TILE_SIZE } from '../../src/js/utils/Constants.js';
-import {
-    rebuildWaterCache, WATER_NONE, WATER_SURFACE, WATER_FALL,
-} from '../../src/js/world/waterQuery.js';
+import { Map as GameMap } from '../../src/js/world/Map.js';
 
 /**
- * 文字の絵から偽 map を作る。'#'=岩 '.'=空 数字=水量(1..8)
+ * 文字の絵から map を作る。'#'=岩 '.'=空 数字=水量(1..8)
  * 行頭の空白は捨てるので、テストの中でインデントして書ける。
  */
 export function makeWaterMap(art) {
@@ -22,58 +25,25 @@ export function makeWaterMap(art) {
         if (ch === '#') grid[r][c] = 1;
         else if (ch >= '1' && ch <= '8') {
             water[r * cols + c] = Number(ch);
-            waterCells.push([r, c]);
+            if (Number(ch) >= MIN_WATER_MASS) waterCells.push([r, c]);
         }
     }));
 
-    const waterKind = new Uint8Array(rows * cols);
-    const waterSurfaceY = new Int16Array(rows * cols).fill(-1);
-
-    const map = {
-        rows, cols, grid, water, waterKind, waterSurfaceY, waterCells,
+    const map = Object.create(GameMap.prototype);
+    Object.assign(map, {
+        envKind: 'water',
+        rows, cols, grid, water, waterCells,
+        waterKind: new Uint8Array(rows * cols),
+        waterSurfaceY: new Int16Array(rows * cols).fill(-1),
+        dirtyWaterCols: new Set(),
+        activeWaterCells: new Set(),
         width: cols * TILE_SIZE, height: rows * TILE_SIZE,
         waterSprings: [],
-        isSolid(r, c) {
-            if (r < 0 || r >= rows || c < 0 || c >= cols) return true;
-            return grid[r][c] !== 0;
-        },
-        isWater(r, c) {
-            if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
-            return water[r * cols + c] >= MIN_WATER_MASS;
-        },
-        isWaterSurface(r, c) {
-            if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
-            return waterKind[r * cols + c] === WATER_SURFACE;
-        },
-        isWaterfallCell(r, c) {
-            if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
-            return waterKind[r * cols + c] === WATER_FALL;
-        },
-        getSurfaceY(r, c) {
-            if (!map.isWater(r, c)) return -1;
-            const k = r * cols + c;
-            return waterKind[k] === WATER_SURFACE ? waterSurfaceY[k] : r * TILE_SIZE;
-        },
-        isWaterAtPixel(x, y) {
-            const r = Math.floor(y / TILE_SIZE);
-            const c = Math.floor(x / TILE_SIZE);
-            if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
-            const k = r * cols + c;
-            if (waterKind[k] === WATER_NONE) return false;
-            if (waterKind[k] === WATER_SURFACE) return y >= waterSurfaceY[k];
-            return true;
-        },
-        isWaterfallAtPixel(x, y) {
-            return map.isWaterfallCell(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
-        },
-        /** grid や water を直に書き換えたあとに呼ぶ */
-        refresh() {
-            rebuildWaterCache({
-                water, kind: waterKind, surfaceY: waterSurfaceY, rows, cols,
-                isSolid: map.isSolid, dirtyCols: [...Array(cols).keys()],
-            });
-        },
-        onWaterChanged() {},
+    });
+    /** grid や water を直に書き換えたあとに呼ぶ */
+    map.refresh = () => {
+        for (let c = 0; c < cols; c++) map.dirtyWaterCols.add(c);
+        map._rebuildWaterCacheIfDirty();
     };
     map.refresh();
     return map;

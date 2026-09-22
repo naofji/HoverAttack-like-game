@@ -45,14 +45,14 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
 /** 水セル (r, c) の塗りの上端 Y。paint() と同じ決め方。水でなければ -1。 */
 function waterTopY(map, r, c) {
     if (r < 0 || r >= map.rows || c < 0 || c >= map.cols) return -1;
-    if (map.isSolid && map.isSolid(r, c)) return -1;
+    if (map.isSolid(r, c)) return -1;
     // 滝は細い帯でしか塗らないので、岩の背後を埋める根拠にはしない
-    if (map.isWaterfallCell && map.isWaterfallCell(r, c)) return -1;
+    if (map.isWaterfallCell(r, c)) return -1;
     const k = r * map.cols + c;
-    const level = map.waterSurfaceY ? map.waterSurfaceY[k] : -1;
+    const level = map.waterSurfaceY[k];
     if (level >= 0) return level;
     if (!map.isWater(r, c)) return -1;
-    const mass = map.water ? map.water[k] : MAX_WATER_MASS;
+    const mass = map.water[k];
     return (r + 1) * TILE_SIZE - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
 }
 
@@ -100,8 +100,7 @@ export function collectBorderBlocks(map, waterCells) {
                 const nc = c + dc;
                 if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
                 if (map.isWater(nr, nc)) continue;
-                const isSolid = map.isSolid ? map.isSolid(nr, nc) : (map.grid ? map.grid[nr][nc] !== 0 : true);
-                if (isSolid && waterBackdropTopY(map, nr, nc) >= 0) {
+                if (map.isSolid(nr, nc) && waterBackdropTopY(map, nr, nc) >= 0) {
                     border.set(nr * map.cols + nc, [nr, nc]);
                 }
             }
@@ -116,13 +115,11 @@ export function collectBorderBlocks(map, waterCells) {
  */
 export function getWaterfallPlacement(map, r, c) {
     const streamWidth = 8;
-    const checkWater = (row, col) => {
-        if (row < 0 || row >= map.rows || col < 0 || col >= map.cols) return false;
-        return map.isWater ? map.isWater(row, col) : false;
-    };
+    const checkWater = (row, col) => map.isWater(row, col);
+    // マップの外は「崖ではない」扱い（Map.isSolid は外を岩と答えるので、ここで分ける）
     const checkSolid = (row, col) => {
         if (row < 0 || row >= map.rows || col < 0 || col >= map.cols) return false;
-        return map.isSolid ? map.isSolid(row, col) : (map.grid ? map.grid[row][col] !== 0 : false);
+        return map.isSolid(row, col);
     };
 
     // 左側に崖（固体）がある、または左上/左から水が流出
@@ -166,7 +163,7 @@ export function getWaterfallPlacement(map, r, c) {
  */
 export function waterfallTopY(map, r, c) {
     let headR = r;
-    while (headR - 1 >= 0 && map.isWaterfallCell && map.isWaterfallCell(headR - 1, c)) headR--;
+    while (headR - 1 >= 0 && map.isWaterfallCell(headR - 1, c)) headR--;
     const startY = headR * TILE_SIZE + WATERFALL_HEAD_DROP;
     return Math.max(r * TILE_SIZE, Math.min((r + 1) * TILE_SIZE, startY));
 }
@@ -189,15 +186,14 @@ export function createWaterRenderer(env) {
     // invalidate は同じセルで何度も呼ばれ得る（クレーターの再通知）ので、
     // 塗る前に矩形をクリアしてから塗り直す。そうしないと半透明の水が
     // 重ね塗りで濃くなってしまう
+    const isSolid = (r, c) => map.isSolid(r, c);
     const paint = (cells) => {
         cctx.fillStyle = WATER_FILL;
         for (const [r, c] of cells) {
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
             const bottomY = (r + 1) * TILE_SIZE;
-            const isWaterfall = map.isWaterfallCell ? map.isWaterfallCell(r, c) : false;
-
-            if (isWaterfall) {
+            if (map.isWaterfallCell(r, c)) {
                 // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、供給元に応じた左右配置の帯として描画。
                 // 先頭のセルだけ上辺を下げて、岩の縁から滑り落ちるように見せる
                 const placement = getWaterfallPlacement(map, r, c);
@@ -212,7 +208,7 @@ export function createWaterRenderer(env) {
             // 塗りが段々になる（実機の指摘。線 73px に対し塗り 80px だった）。
             // 水量が 0 のセルでも液面がかかっていれば塗る（量子化のせいで水量が
             // 届いていないだけで、水面はそこにある）
-            const level = map.waterSurfaceY ? map.waterSurfaceY[r * map.cols + c] : -1;
+            const level = map.waterSurfaceY[r * map.cols + c];
             if (level >= 0) {
                 const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, Math.round(level)));
                 if (bottomY - topY > 0) {
@@ -222,7 +218,7 @@ export function createWaterRenderer(env) {
                 // ここを描かないと、滝の帯はタイルの境目で終わるのに液面はもっと下に
                 // あるため、最大14px の隙間ができて**水柱が地面から浮いて見える**
                 // （実機の指摘）。横位置は落ちてくる帯に合わせる
-                if (r > 0 && map.isWaterfallCell && map.isWaterfallCell(r - 1, c)) {
+                if (r > 0 && map.isWaterfallCell(r - 1, c)) {
                     const placement = getWaterfallPlacement(map, r - 1, c);
                     const gap = topY - r * TILE_SIZE;
                     if (gap > 0) {
@@ -247,9 +243,8 @@ export function createWaterRenderer(env) {
             // タイル全体が水の中。水量の量子化で 8 に1つ足りないだけのことが
             // 多く、水量ぶんだけ塗ると岩の真下に細い透明な帯が残る（黒く見える）
             if (map.isWater(r, c)) {
-                const mass = map.water ? map.water[r * map.cols + c] : MAX_WATER_MASS;
-                const submerged = map.water && map.isSolid
-                    && isSubmergedFromAbove(map.water, (rr, cc) => map.isSolid(rr, cc), map.cols, r, c);
+                const mass = map.water[r * map.cols + c];
+                const submerged = isSubmergedFromAbove(map.water, isSolid, map.cols, r, c);
                 if (mass < MAX_WATER_MASS && !submerged) {
                     const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
                     if (h > 0) cctx.fillRect(c * TILE_SIZE, bottomY - h, TILE_SIZE, h);
@@ -302,11 +297,11 @@ export function createWaterRenderer(env) {
             this.ripples = this.ripples.filter((rp) => rp.strength >= WATER_RIPPLE_MIN);
 
             // 滝の着水波紋（12フレームごとに小さな波紋を励起）
-            if (this.t % 12 === 0 && map.waterSprings) {
+            if (this.t % 12 === 0) {
                 for (const sp of map.waterSprings) {
                     const c = sp.c;
                     for (let r = sp.r; r < map.rows; r++) {
-                        if (map.isWater(r, c) && (!map.isWaterfallAtPixel || !map.isWaterfallAtPixel((c + 0.5) * TILE_SIZE, (r + 0.5) * TILE_SIZE))) {
+                        if (map.isWater(r, c) && !map.isWaterfallCell(r, c)) {
                             this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
                             break;
                         }
@@ -368,8 +363,7 @@ export function createWaterRenderer(env) {
                         const nc = c + dc;
                         if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
                         if (map.isWater(nr, nc)) continue;
-                        const isSolid = map.isSolid ? map.isSolid(nr, nc) : (map.grid ? map.grid[nr][nc] !== 0 : true);
-                        if (isSolid) {
+                        if (map.isSolid(nr, nc)) {
                             borderCandidateKeys.add(nr * map.cols + nc);
                         }
                     }
@@ -437,17 +431,15 @@ export function createWaterRenderer(env) {
             ctx.stroke();
 
             // 水源（湧水）の口の滴り・飛沫演出
-            if (map.waterSprings) {
-                ctx.fillStyle = WATER_SURFACE_COLOR;
-                for (const sp of map.waterSprings) {
-                    const bx = sp.c * TILE_SIZE;
-                    const by = sp.r * TILE_SIZE;
-                    if (bx + TILE_SIZE < camX || bx > camX + CANVAS_WIDTH ||
-                        by + TILE_SIZE < camY || by > camY + CANVAS_HEIGHT) continue;
-                    const dropOffset = (this.t * 1.5) % TILE_SIZE;
-                    ctx.fillRect(bx + 6, by, 4, 2);
-                    ctx.fillRect(bx + 7, by + dropOffset, 2, 3);
-                }
+            ctx.fillStyle = WATER_SURFACE_COLOR;
+            for (const sp of map.waterSprings) {
+                const bx = sp.c * TILE_SIZE;
+                const by = sp.r * TILE_SIZE;
+                if (bx + TILE_SIZE < camX || bx > camX + CANVAS_WIDTH ||
+                    by + TILE_SIZE < camY || by > camY + CANVAS_HEIGHT) continue;
+                const dropOffset = (this.t * 1.5) % TILE_SIZE;
+                ctx.fillRect(bx + 6, by, 4, 2);
+                ctx.fillRect(bx + 7, by + dropOffset, 2, 3);
             }
 
             // 滝（落下水流）の流下線状パーティクルおよび着水飛沫の描画
@@ -455,7 +447,7 @@ export function createWaterRenderer(env) {
             const streakLen = 6;
             for (let c = startCol; c <= endCol; c++) {
                 for (let r = startRow; r <= endRow; r++) {
-                    if (!map.isWaterfallCell || !map.isWaterfallCell(r, c)) continue;
+                    if (!map.isWaterfallCell(r, c)) continue;
                     const placement = getWaterfallPlacement(map, r, c);
                     const flowX = placement.x;
                     const flowW = placement.width;
@@ -476,10 +468,10 @@ export function createWaterRenderer(env) {
                     // 水量が少ない水たまりへ落ちるときは最大16px 高いところで跳ねていた
                     // （実機の指摘「終点が高い」）
                     const isSplashCell = (r + 1 >= map.rows) ||
-                                         (map.isSolid && map.isSolid(r + 1, c)) ||
+                                         map.isSolid(r + 1, c) ||
                                          (!map.isWaterfallCell(r + 1, c));
                     if (isSplashCell) {
-                        const landLevel = (r + 1 < map.rows && map.isWater && map.isWater(r + 1, c) && map.getSurfaceY)
+                        const landLevel = (r + 1 < map.rows && map.isWater(r + 1, c))
                             ? map.getSurfaceY(r + 1, c)
                             : (r + 1) * TILE_SIZE;
                         const splashY = Math.round(landLevel) - 2;

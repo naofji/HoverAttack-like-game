@@ -510,22 +510,20 @@ test('getWaterfallPlacement: 左から水が供給される時は左端寄り、
 
 test('water.js: drawOverWorld で滝セルの中に流下する短い筋状パーティクルと飛沫が描画される', async () => {
     const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-    const water = new Uint8Array(rows * cols);
-    // (3, 4) に滝セル
-    water[3 * cols + 4] = 4;
-    const map = {
-        rows, cols,
-        width: cols * 16, height: rows * 16,
-        water,
-        waterCells: [[3, 4]],
-        isWater: (r, c) => r === 3 && c === 4,
-        isSolid: () => false,
-        isWaterfallCell: (r, c) => r === 3 && c === 4,
-        isWaterSurface: () => false,
-        getWaterSurfaceSegment: () => null,
-        getSurfaceY: () => -1,
-    };
+    // (3, 4) に滝セル（満ちていない水で、直下も満ちていない）
+    const map = makeWaterMap(`
+        ..........
+        ..........
+        ..........
+        ....4.....
+        ..........
+        ..........
+        ..........
+        ..........
+        ..........
+        ..........
+    `);
+    assert.ok(map.isWaterfallCell(3, 4), '前提: (3,4) は滝');
     const env = { game: { map } };
     const renderer = createWaterRenderer(env);
 

@@ -96,12 +96,11 @@ test('drawBehindTerrain transfers the behind water cache once', async () => {
 test('collectBorderBlocks は水に接する岩を集めるが、液面より上の岩は集めない', async () => {
   const { collectBorderBlocks } = await import('../src/js/world/environment/water.js');
   // 3x3 のマップ: 中央 (1,1) が満水、(0,0) と (1,0) が岩ブロック
-  const map = {
-    rows: 3,
-    cols: 3,
-    isWater(r, c) { return r === 1 && c === 1; },
-    isSolid(r, c) { return (r === 0 && c === 0) || (r === 1 && c === 0); },
-  };
+  const map = makeWaterMap(`
+    #..
+    #8.
+    ...
+  `);
   const border = collectBorderBlocks(map, [[1, 1]]);
   // (1,0) は水と同じ行なので背後を埋める必要がある。(0,0) は水面(y=16)より
   // 完全に上のタイルなので、面取りの隙間は水の外＝埋めてはいけない
@@ -153,23 +152,12 @@ test('滝の帯は岩の背後を埋める根拠にしない（帯は細いの�
 test('invalidate clears behindCache when adjacent water drops or disappears', async () => {
   const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
   const { MAX_WATER_MASS } = await import('../src/js/utils/Constants.js');
-  // 3x3 マップ:
-  // (0,0)=岩, (0,1)=岩, (0,2)=岩
-  // (1,0)=岩, (1,1)=水(最初は満水), (1,2)=岩
-  // (2,0)=岩, (2,1)=岩, (2,2)=岩
-  const map = {
-    rows: 3,
-    cols: 3,
-    width: 48,
-    height: 48,
-    water: new Float32Array(9),
-    waterCells: [[1, 1]],
-    isWater(r, c) { return this.water[r * 3 + c] > 0; },
-    isSolid(r, c) { return !(r === 1 && c === 1); },
-    isWaterSurface(r, c) { return false; },
-    isWaterfallCell(r, c) { return false; },
-  };
-  map.water[1 * 3 + 1] = MAX_WATER_MASS;
+  // 3x3 マップ: 中央 (1,1) だけが満水で、周りは全部岩
+  const map = makeWaterMap(`
+    ###
+    #${MAX_WATER_MASS}#
+    ###
+  `);
 
   const fakeEnv = { game: { map } };
   const clearRectCalls = [];
@@ -208,8 +196,10 @@ test('invalidate clears behindCache when adjacent water drops or disappears', as
   clearRectCalls.length = 0;
   fillRectCalls.length = 0;
 
-  // 今、(1,1) の水が抜けて水位が 0 になったとする
+  // 今、(1,1) の水が抜けて水位が 0 になったとする（本番では onWaterChanged が
+  // キャッシュを dirty にしてから invalidate を呼ぶので、その順を再現する）
   map.water[1 * 3 + 1] = 0;
+  map.refresh();
 
   // invalidate を呼び出す
   renderer.invalidate([[1, 1]]);
