@@ -42,18 +42,45 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
     ctx.stroke();
 }
 
-/** 水セル (r, c) の塗りの上端 Y。paint() と同じ決め方。水でなければ -1。 */
+/**
+ * 液面を持たない水セル（天井付き＝水中セル、または浮いた岩の真下）の塗りの上端 Y。
+ * 水でなければ -1。前景の塗り（paint）と岩の背後（waterTopY）の両方がこれを読む。
+ *
+ * 満水ならタイル全体。満ちていないなら実際の水量ぶんだけ浅く塗る。常にタイル
+ * 全体で塗ると、浅い湖に浮いた岩があるとき、その真下だけ水面より高く塗られて
+ * 「水面が岩に吸い付いて」見える（実機の指摘）。
+ * ただし**沈んでいる**セル（覆う岩の上にも水がある）はタイル全体が水の中。
+ * 水量の量子化で 8 に1つ足りないだけのことが多く、水量ぶんだけ塗ると岩の真下に
+ * 細い透明な帯が残る（黒く見える）。
+ *
+ * 以前はこの判定を paint() と waterTopY() に別々に書いていて、waterTopY のほうに
+ * 沈み判定が無かった。沈んだ水量7のセルの隣の岩は、塗りより 2px 低い位置から
+ * 背後の水が始まり、面取りの角が黒く抜けていた。
+ *
+ * 残っている穴: 岩に囲まれた1マスの横穴が湖の深さにあると、水量が 7 で止まった
+ * まま「上はずっと岩＝沈んでいない」と判定され、タイルの上に 2px の透明な帯が
+ * 残る（実測: 3000フレームで 8px ぶん1か所）。直すには液面を横方向にも塗り広げる
+ * 必要があり、列単位の dirty 管理を作り替えることになるので見送った。
+ */
+function ceiledWaterTopY(map, r, c) {
+    if (!map.isWater(r, c)) return -1;
+    const mass = map.water[r * map.cols + c];
+    const bottomY = (r + 1) * TILE_SIZE;
+    if (mass >= MAX_WATER_MASS || isSubmergedFromAbove(map.water, (rr, cc) => map.isSolid(rr, cc), map.cols, r, c)) {
+        return r * TILE_SIZE;
+    }
+    return bottomY - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+}
+
+/** 水セル (r, c) の塗りの上端 Y（液面がタイルより上にあれば液面そのもの）。水でなければ -1。 */
 function waterTopY(map, r, c) {
     if (r < 0 || r >= map.rows || c < 0 || c >= map.cols) return -1;
     if (map.isSolid(r, c)) return -1;
     // 滝は細い帯でしか塗らないので、岩の背後を埋める根拠にはしない
     if (map.isWaterfallCell(r, c)) return -1;
-    const k = r * map.cols + c;
-    const level = map.waterSurfaceY[k];
+    const level = map.waterSurfaceY[r * map.cols + c];
     if (level >= 0) return level;
-    if (!map.isWater(r, c)) return -1;
-    const mass = map.water[k];
-    return (r + 1) * TILE_SIZE - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+    return ceiledWaterTopY(map, r, c);
 }
 
 /**
@@ -186,7 +213,6 @@ export function createWaterRenderer(env) {
     // invalidate は同じセルで何度も呼ばれ得る（クレーターの再通知）ので、
     // 塗る前に矩形をクリアしてから塗り直す。そうしないと半透明の水が
     // 重ね塗りで濃くなってしまう
-    const isSolid = (r, c) => map.isSolid(r, c);
     const paint = (cells) => {
         cctx.fillStyle = WATER_FILL;
         for (const [r, c] of cells) {
@@ -228,29 +254,10 @@ export function createWaterRenderer(env) {
                 continue;
             }
 
-            // 液面を持たない水＝天井付き（水中セル、または浮いた岩の真下）。
-            // 満水ならタイル全体でよいが、満ちていないなら実際の水量ぶんだけ
-            // 浅く塗る。ここを常にタイル全体で塗ると、浅い湖に浮いた岩がある
-            // とき、その真下だけ水面より高く塗られて「水面が岩に吸い付いて」
-            // 見える（実機の指摘。水面側は液面クランプで浅く塗れているのに、
-            // 天井付きセルだけ水量を見ずに常にタイル全体を塗っていたのが原因）。
-            // 残っている穴: 岩に囲まれた1マスの横穴が湖の深さにあると、水量が
-            // 7 で止まったまま「上はずっと岩＝沈んでいない」と判定され、タイルの
-            // 上に 2px の透明な帯が残る（実測: 3000フレームで 8px ぶん1か所）。
-            // 直すには液面を横方向にも塗り広げる必要があり、列単位の dirty 管理を
-            // 作り替えることになるので見送った。
-            // ただし**沈んでいる**セル（覆う岩の上にも水がある）は別で、そこは
-            // タイル全体が水の中。水量の量子化で 8 に1つ足りないだけのことが
-            // 多く、水量ぶんだけ塗ると岩の真下に細い透明な帯が残る（黒く見える）
-            if (map.isWater(r, c)) {
-                const mass = map.water[r * map.cols + c];
-                const submerged = isSubmergedFromAbove(map.water, isSolid, map.cols, r, c);
-                if (mass < MAX_WATER_MASS && !submerged) {
-                    const h = Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
-                    if (h > 0) cctx.fillRect(c * TILE_SIZE, bottomY - h, TILE_SIZE, h);
-                } else {
-                    cctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                }
+            // 液面を持たない水＝天井付き（水中セル、または浮いた岩の真下）
+            const topY = ceiledWaterTopY(map, r, c);
+            if (topY >= 0 && bottomY - topY > 0) {
+                cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
             }
         }
     };

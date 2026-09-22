@@ -422,3 +422,21 @@ test('沈んだ岩の真下は、水量が満タンに届いていなくても�
       `列${c}(沈んだ岩の真下, 水量7/8) の塗りがタイル上辺から始まっていない: ${top}`);
   }
 });
+
+test('沈んだ浅いセルの隣の岩は、前景の塗りと同じ高さ（タイルの上辺）から背後を埋める', async () => {
+  // 塗り（paint）は「沈んでいる＝覆う岩の上にも水がある」セルをタイル全体で塗るのに、
+  // 背後の水（waterBackdropTopY）は沈み判定を持たず水量ぶんの高さから敷いていた。
+  // 水量7だと 2px ずれて、面取りの角が黒く抜ける。塗りの上端の決め方を1つにする
+  const { waterBackdropTopY } = await import('../src/js/world/environment/water.js');
+  const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
+  const map = makeWaterMap(`
+    #...#
+    #888#
+    #####
+    ##7##
+    #####
+  `);
+  assert.equal(map.waterSurfaceY[3 * map.cols + 2], -1, '前提: (3,2) は液面を持たない（天井付き）');
+  // (3,1) の岩にとって、水に接しているのは (3,2) だけ
+  assert.equal(waterBackdropTopY(map, 3, 1), 3 * TILE_SIZE);
+});
