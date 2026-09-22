@@ -14,7 +14,7 @@
 // 記録するのは次の指紋（SHA-1）:
 //   state  … water[] / waterKind / waterSurfaceY / activeWaterCells
 //   query  … 全セルでの isWaterAtPixel(3点) / isWaterfallAtPixel / getSurfaceY /
-//            waterSurfaceRow / isWaterSurface
+//            isWaterSurface
 //   paint  … 水のオフスクリーン canvas 2枚の「タイルごとの最終的な描画内容」。
 //            clearRect でそのタイルの記録を捨て、以後の fillRect をタイルに積む。
 //            タイルをまたぐ順序は無視する（塗り直しはタイルの中でしか描かないので、
@@ -124,7 +124,6 @@ function queryFingerprint(map) {
                 map.isWaterfallAtPixel(x, y + 8) ? 1 : 0,
                 map.isWaterSurface(r, c) ? 1 : 0,
                 map.getSurfaceY(r, c),
-                map.waterSurfaceRow(r, c),
             );
         }
         h.update(out.join(','));

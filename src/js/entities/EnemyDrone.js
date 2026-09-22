@@ -450,14 +450,13 @@ export class EnemyDrone {
             const nextBottom = this.y + this.height + this.vy;
             const centerX = this.x + this.width / 2;
             if (map.isWaterAtPixel(centerX, nextBottom)) {
-                // プールは斜めの縁を持つので、タイルの底ではなく実際の水面行で止める。
-                // waterSurfaceRow が使えない（プール未対応マップ）ときだけ旧来のタイル境界に戻す
+                // 実際の液面（タイルの途中にある）で止める。液面の取れない水
+                // （isWaterAtPixel は水と答えるが getSurfaceY が -1）は無いはずだが、
+                // 念のためタイルの上辺に戻す
                 const r = Math.floor(nextBottom / TILE_SIZE);
                 const c = Math.floor(centerX / TILE_SIZE);
-                const surfaceRow = map.waterSurfaceRow ? map.waterSurfaceRow(r, c) : -1;
-                const surfaceY = surfaceRow >= 0
-                    ? surfaceRow * TILE_SIZE
-                    : Math.floor(nextBottom / TILE_SIZE) * TILE_SIZE;
+                const level = map.getSurfaceY(r, c);
+                const surfaceY = level >= 0 ? level : r * TILE_SIZE;
                 this.y = surfaceY - this.height;
                 this.vy = 0;
             }

@@ -110,11 +110,13 @@ export class StageEnvironment {
             if (e._inWater === undefined) { e._inWater = inWater; return; } // 初回は記録だけ
             if (inWater !== e._inWater) {
                 e._inWater = inWater;
-                // 水面の y はまたいだタイルの上辺（水に入る側のタイル）
+                // しぶきは実際の液面に出す。中心のタイルに液面がかかっていなければ
+                // （水から出た直後）、ひとつ下のタイルの液面を見る
                 const r = Math.floor(cy / TILE_SIZE);
                 const c = Math.floor(cx / TILE_SIZE);
-                const sr = map.waterSurfaceRow ? map.waterSurfaceRow(inWater ? r : r + 1, c) : r;
-                const surfaceY = (sr >= 0 ? sr : r) * TILE_SIZE;
+                let surfaceY = map.getSurfaceY(r, c);
+                if (surfaceY < 0) surfaceY = map.getSurfaceY(r + 1, c);
+                if (surfaceY < 0) surfaceY = r * TILE_SIZE;
                 if (g.spawnSplash) g.spawnSplash(cx, surfaceY, e.vy || 0);
             }
         };

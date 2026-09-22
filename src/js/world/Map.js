@@ -1299,14 +1299,23 @@ export class Map {
     }
 
     /**
-     * セル (r, c) にかかっている水塊の液面 Y 座標 (px)。
-     * 液面を持たない水（天井に張り付いた水など）はタイルの上辺を返す。
+     * セル (r, c) にかかっている水塊の液面 Y 座標 (px)。水がかかっていなければ -1。
+     * 液面を持たない水（天井に張り付いた水、滝）はタイルの上辺を返す。
+     *
+     * 「かかっている」の意味は isWaterAtPixel と同じ。水量が0でも、液面が
+     * このタイルまで上がっていれば液面を返す（以前は水量だけを見て -1 を返し、
+     * isWaterAtPixel が水と答えるセルで液面が取れなかった）。
+     * 水面の「行」だけを返す waterSurfaceRow もあったが、液面はタイルの途中にある
+     * ので、しぶきやドローンの停止位置が最大15px ずれ、滝の中では滝のてっぺんまで
+     * 遡っていた。水面の定義をこれ1つにした。
      */
     getSurfaceY(r, c) {
-        if (!this.isWater(r, c)) return -1;
+        if (!this.water) return -1;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return -1;
         this._rebuildWaterCacheIfDirty();
         const level = this.waterSurfaceY[r * this.cols + c];
-        return level >= 0 ? level : r * TILE_SIZE;
+        if (level >= 0) return level;
+        return this.isWater(r, c) ? r * TILE_SIZE : -1;
     }
 
     isWaterAtPixel(x, y) {
@@ -1334,16 +1343,6 @@ export class Map {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
         this._rebuildWaterCacheIfDirty();
         return this.waterKind[r * this.cols + c] === WATER_FALL;
-    }
-
-    /** 水タイルの水面の行。水でなければ -1。 */
-    waterSurfaceRow(r, c) {
-        if (!this.isWater(r, c)) return -1;
-        let currR = r;
-        while (currR > 0 && this.isWater(currR - 1, c)) {
-            currR--;
-        }
-        return currR;
     }
 
     pixelToTile(x, y) {
