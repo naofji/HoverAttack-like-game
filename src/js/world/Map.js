@@ -31,7 +31,7 @@ import {
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP,
     MAX_WATER_MASS, MIN_WATER_MASS,
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
-    WATER_SPRING_MAX_ROW_RATIO, WATER_SPRING_STOP_ROW,
+    WATER_SPRING_MAX_ROW_RATIO,
     WATER_FALL_INTERVAL,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
@@ -1378,15 +1378,17 @@ export class Map {
     update() {
         if (this.envKind === 'water' && this.water) {
             // 水源（湧水）の処理
+            // **水源は止まらない**。面がゆっくり水没していくのは仕様（ユーザー判断、
+            // 2026-09-06 の問い合わせ層キャッシュ化の設計書）。水源のセルと真下が
+            // 満水なら注ぎ足す先が無いので、そのときだけ自然に止まる。
+            //
+            // 以前はここに停止ガードが2つあり、どちらも「構造的に成立しない」と
+            // コメントされていたが誤りだった。「sp.r <= WATER_SPRING_STOP_ROW(6)」は
+            // 生成時に決まる定数条件で、その行の水源（200シードで 400個中 7個）は
+            // 最初から永久に湧かず、口から滴る演出だけが出ていた。「真上が満水」は、
+            // プレイヤーが真上の岩を壊せば成立する。どちらも仕様と食い違うので外した
             if (this.waterSprings && this.waterSprings.length > 0) {
                 for (const sp of this.waterSprings) {
-                    // この2つのガードはどちらも構造的に成立しない。sp.r は生成時に
-                    // 決まって以後変わらず、sp.r-1 は水源の定義（天井直下の空洞）から
-                    // 必ず岩なので water[] は常に 0。つまり**水源は止まらない**。
-                    // これは意図した挙動で、面がゆっくり水没していくのは仕様。
-                    // 止めたくなったら、実際の水位（水面の行）を見る条件に書き直すこと
-                    if (sp.r <= WATER_SPRING_STOP_ROW) continue;
-                    if (sp.r > 0 && this.water[(sp.r - 1) * this.cols + sp.c] >= MAX_WATER_MASS) continue;
                     sp.timer++;
                     if (sp.timer >= WATER_SPRING_INTERVAL) {
                         sp.timer = 0;

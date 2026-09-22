@@ -1183,7 +1183,6 @@ export const WATER_SPRING_INTERVAL = 4;        // 湧き出る周期（フレー
 export const WATER_SPRING_MASS = 1;            // 1回あたりの湧出水量
 export const WATER_SPRING_COUNT = 2;           // 水源の数
 export const WATER_SPRING_MAX_ROW_RATIO = 0.5; // マップ上半分から水源を選ぶ
-export const WATER_SPRING_STOP_ROW = 6;        // この行まで水没したら水源停止（詰み防止）
 // 滝（落下水流）の中の物理
 // 滝の描き始めを、一番上の落下セルのタイルの上辺からこれだけ下げる。
 // 0 にすると岩の縁のところでいきなり全高の帯が立ち上がり、「岩から滑り落ちる」

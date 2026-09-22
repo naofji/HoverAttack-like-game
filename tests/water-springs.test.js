@@ -691,3 +691,23 @@ test('滝の着水の波紋は、水源の列ではなく実際に滝が水面�
     for (let i = 0; i < 12; i++) renderer.update();
     assert.deepEqual(xs, [(6 + 0.5) * TILE_SIZE]);
 });
+
+test('天井に近い行の水源も湧く（以前は行6以下の水源が永久に止まっていた）', () => {
+    // 以前の停止ガード「sp.r <= WATER_SPRING_STOP_ROW(6)」は生成時に決まる定数条件で、
+    // その行の水源は口から滴る演出だけ出して一度も湧かなかった（200シードで 400個中 7個）
+    const map = makeWaterMap(`
+        ########
+        #......#
+        #......#
+        #......#
+        #......#
+        #......#
+        #......#
+        #......#
+        ########
+    `);
+    map.waterSprings = [{ r: 1, c: 3, timer: 0 }];
+    for (let i = 0; i < 40; i++) map.update();
+    const total = map.water.reduce((a, b) => a + b, 0);
+    assert.ok(total > 0, `水が湧いていない（総量 ${total}）`);
+});
