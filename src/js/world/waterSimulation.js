@@ -37,6 +37,15 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     const nextActiveCells = new Set();
     const changedSet = new Set();
 
+    // フェーズ2で「動きのある区間」を探す種。行ごとの列の一覧で、前のフレームからの
+    // アクティブと、このフレームで変化したセルの周り（markChanged が足す）の両方が入る
+    const seedsByRow = new Map();
+    const addSeed = (r, c) => {
+        let list = seedsByRow.get(r);
+        if (!list) seedsByRow.set(r, list = []);
+        list.push(c);
+    };
+
     const markChanged = (r, c) => {
         const key = r * cols + c;
         changedSet.add(key);
@@ -47,7 +56,11 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 const nc = c + dc;
                 if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
                     if (!isSolid(nr, nc)) {
-                        nextActiveCells.add(nr * cols + nc);
+                        const nk = nr * cols + nc;
+                        if (!nextActiveCells.has(nk)) {
+                            nextActiveCells.add(nk);
+                            addSeed(nr, nc);
+                        }
                     }
                 }
             }
@@ -62,6 +75,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     const cellsToProcess = Array.from(activeCells)
         .map((k) => ({ r: Math.floor(k / cols), c: k % cols, k }))
         .sort((a, b) => b.r - a.r);
+    for (const { r, c } of cellsToProcess) addSeed(r, c);
 
     // ----------------------------------------------------
     // フェーズ1: 垂直落下（重力・滝）
@@ -98,24 +112,40 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     const nearLeft = new Int32Array(cols);
     const nearRight = new Int32Array(cols);
 
+    // どの行の処理でその列を区間に含めたか（同じ区間を2度処理しないため）
+    const coveredRow = new Int32Array(cols).fill(-1);
+
     for (const r of activeRows) {
-        // 行 r において、アクティブなセルを含む連結空洞区間を探す。
-        // 区間は左から右へ1回ずつしか作らないので、同じ区間を2度処理することはない
-        // （以前ここにあった「処理済み区間」の Set は一度も当たっていなかった）
-        for (let c = 0; c < cols; c++) {
-            if (isSolid(r, c)) continue;
+        // 行 r の「動きのある区間」だけを処理する。種の列から左右の壁まで広げたものが
+        // 区間。以前は「アクティブなセルがある行」の全区間をマップの端から端まで
+        // 走査していた（コメントの「アクティブなセルを含む区間」と食い違っていた）。
+        //
+        // 種には、前のフレームからのアクティブに加えて、**このフレームで既に変化した
+        // セルの周り**も入る。フェーズ1でたった今落ちてきた水や、先に処理した下の行で
+        // 落ち口が開いた区間がそれで、前のフレームのアクティブだけを見ると横へ
+        // 流れ出すのが1フレーム遅れる（実測で水量が変わった）。
+        //
+        // 同じ行の区間どうしは壁で隔てられていて互いの水量も落ち口も読まないので、
+        // 処理する順序は結果に影響しない（trace-water.mjs で全区間走査と一致を確認）。
+        // 処理中にこの行へ足された種は、いま処理した区間の中にしか落ちない
+        // （区間の両端の外は壁で、markChanged は壁を種にしない）ので、既に済んでいる
+        const seeds = seedsByRow.get(r);
+        const rowBase = r * cols;
+        for (let i = 0; i < seeds.length; i++) {
+            const c0 = seeds[i];
+            if (coveredRow[c0] === r || isSolid(r, c0)) continue;
 
             // 区間の探索 [segStart .. segEnd]
-            const segStart = c;
-            while (c + 1 < cols && !isSolid(r, c + 1)) {
-                c++;
-            }
-            const segEnd = c;
-            const rowBase = r * cols;
+            let segStart = c0;
+            while (segStart - 1 >= 0 && !isSolid(r, segStart - 1)) segStart--;
+            let segEnd = c0;
+            while (segEnd + 1 < cols && !isSolid(r, segEnd + 1)) segEnd++;
 
-            // この区間に水が存在するか確認
             let sumMass = 0;
-            for (let sc = segStart; sc <= segEnd; sc++) sumMass += water[rowBase + sc];
+            for (let sc = segStart; sc <= segEnd; sc++) {
+                coveredRow[sc] = r;
+                sumMass += water[rowBase + sc];
+            }
             if (sumMass === 0) continue;
 
             // 区間内の各セルについて、直下に落ちられるか（落ち口か）判定し、
