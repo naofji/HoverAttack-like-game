@@ -33,13 +33,12 @@ import {
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
     WATER_SPRING_MAX_ROW_RATIO, WATER_SPRING_STOP_ROW,
     WATER_FALL_INTERVAL,
-    WATER_DRY_POCKET_SWEEP_INTERVAL,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, generateWaterSprings } from './waterPools.js';
-import { stepWaterSimulation, findStuckDryPockets } from './waterSimulation.js';
+import { stepWaterSimulation } from './waterSimulation.js';
 import {
     rebuildWaterCache, WATER_NONE, WATER_SURFACE, WATER_FALL,
 } from './waterQuery.js';
@@ -1141,17 +1140,6 @@ export class Map {
         return this._waterIsSolid;
     }
 
-    /**
-     * 取りこぼされた縦穴（findStuckDryPockets）を activeWaterCells に戻す。
-     * update() から周期的に呼ぶ。判定ロジック自体は純関数に切り出してあり、
-     * ここは見つかった入口をアクティブ化するだけの薄い配線。
-     */
-    _sweepDryPockets() {
-        if (!this.water) return;
-        const found = findStuckDryPockets({ water: this.water, rows: this.rows, cols: this.cols, isSolid: this._waterSolidFn() });
-        for (const k of found) this.activeWaterCells.add(k);
-    }
-
     // ------------------------------------------
     // Tile Render Cache
     // ------------------------------------------
@@ -1401,12 +1389,9 @@ export class Map {
                 }
             }
 
-            // 取りこぼされた縦穴を定期的に拾い直す（詳しくは findStuckDryPockets のコメント参照）
-            this.waterDryPocketTimer = (this.waterDryPocketTimer || 0) + 1;
-            if (this.waterDryPocketTimer >= WATER_DRY_POCKET_SWEEP_INTERVAL) {
-                this.waterDryPocketTimer = 0;
-                this._sweepDryPockets();
-            }
+            // 以前はここで90フレームごとに「取りこぼされた縦穴」を全マップ走査で
+            // 拾い直していたが、実測で一度も何も拾っておらず、漏れはアクティブ管理で
+            // 構造的に塞がっていたので撤去した（tests/water-active-invariant.test.js）
 
             if (this.activeWaterCells.size > 0) {
                 this.waterFallTimer = (this.waterFallTimer || 0) + 1;

@@ -14,7 +14,6 @@
 //   active        … アクティブなセル数の中央値・最大
 //   flicker       … 1フレームで「滝 ⇄ 滝以外」が入れ替わったセルの延べ数
 //   floatingHeads … 真上が岩でも水でもない滝セル（宙に浮いた滝の始まり）の延べ数
-//   sweepHits     … 乾いた縦穴の拾い直し（findStuckDryPockets）が何かを拾った回数と個数
 //   mirrorDiff    … 左右反転したマップで同じだけ回し、結果を反転して比べたときに
 //                   水量が食い違うセルの数（左右対称なら 0）
 
@@ -131,24 +130,10 @@ function run(seed, { mirrored = false, measure = true, blast = true } = {}) {
     };
 }
 
-// 乾いた縦穴の拾い直しが本当に何かを拾っているかは、Map._sweepDryPockets を
-// 包んで数える（ESM の名前付き export は差し替えられないため）
-let sweepHits = 0, sweepCells = 0;
-const origSweep = GameMap.prototype._sweepDryPockets;
-GameMap.prototype._sweepDryPockets = function () {
-    const snapshot = new Set(this.activeWaterCells);
-    origSweep.call(this);
-    let added = 0;
-    for (const k of this.activeWaterCells) if (!snapshot.has(k)) added++;
-    if (added > 0) { sweepHits++; sweepCells += added; }
-};
-
 const out = { perSeed: {}, total: {} };
 let violations = 0, flick = 0, heads = 0, mirrorDiff = 0;
 for (const seed of SEEDS) {
-    sweepHits = 0; sweepCells = 0;
     const a = run(seed);
-    const hits = { sweepHits, sweepCells };
     // 左右対称性は爆破なしで比べる（爆破位置の選び方自体が左右非対称なので）
     const m = run(seed, { mirrored: true, measure: false });
     const ref = run(seed, { measure: false, blast: false }).map;
@@ -159,7 +144,7 @@ for (const seed of SEEDS) {
             if (ref.water[r * cols + c] !== m.map.water[r * cols + (cols - 1 - c)]) diff++;
         }
     }
-    out.perSeed[seed] = { ...a.stats, ...hits, mirrorDiff: diff };
+    out.perSeed[seed] = { ...a.stats, mirrorDiff: diff };
     violations += a.stats.massViolations; flick += a.stats.flicker; heads += a.stats.floatingHeads; mirrorDiff += diff;
 }
 
@@ -168,6 +153,4 @@ const seeds = Object.values(out.perSeed);
 out.total.stepUsP95Max = Math.max(...seeds.map((s) => s.stepUs.p95));
 out.total.stepUsMaxMax = Math.max(...seeds.map((s) => s.stepUs.max));
 out.total.rebuildUsP95Max = Math.max(...seeds.map((s) => s.rebuildUs.p95));
-out.total.sweepHits = seeds.reduce((a, s) => a + s.sweepHits, 0);
-out.total.sweepCells = seeds.reduce((a, s) => a + s.sweepCells, 0);
 console.log(JSON.stringify(out, null, 1));
