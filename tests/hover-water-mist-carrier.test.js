@@ -16,8 +16,10 @@ import {
 const WATER = { motionAt: () => ({ speed: 1, gravity: 1, slide: 0 }), sightScale: 1, kind: 'water' };
 const SURFACE_Y = 20 * TILE_SIZE; // flatWaterRows(): row 20 から下が水
 
+const EMPTY_WORLD_ROWS = Array.from({ length: 24 }, () => '.'.repeat(24));
+
 function hoveringCarrier(env, clearance) {
-  const game = makeGame(makeMap(['.'.repeat(24)], flatWaterRows()));
+  const game = makeGame(makeMap(EMPTY_WORLD_ROWS, flatWaterRows()));
   game.env = env;
   const mists = [];
   game.spawnWaterMist = (x, y, n) => mists.push({ x, y, n });

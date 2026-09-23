@@ -27,7 +27,7 @@ import {
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
-import { groundSlide, groundClearance, groundSlopeDirection, waterClearance } from '../utils/surface.js';
+import { groundSlide, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -362,6 +362,8 @@ export class Player {
      * その場合はしぶき(spawnSplash)に任せて何もしない。
      */
     _kickHoverWaterMist() {
+        if (!this.hovering) return;
+        if (this.onGround || this.onTerrain) return;
         if (!this.game.spawnWaterMist) return;
         if (!this.game.env || this.game.env.kind !== 'water') return;
         const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
@@ -370,7 +372,9 @@ export class Player {
         if (this._hoverWaterMistTimer % HOVER_WATER_MIST_INTERVAL !== 0) return;
         const fx = this.x + this.width / 2;
         const fy = this.y + this.height + clearance;
-        this.game.spawnWaterMist(fx, fy, HOVER_WATER_MIST_COUNT);
+        const count = hoverWaterMistCount(clearance);
+        const closeness = hoverWaterMistCloseness(clearance);
+        this.game.spawnWaterMist(fx, fy, count, closeness);
     }
 
     /** Handle burst jump and hovering. */

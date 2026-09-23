@@ -1319,8 +1319,10 @@ export const HOVER_SNOW_MIST_COLOR = '#C7D2DF';
 // 実機で見て調整する（このファイルの他の値と同じ流儀）
 export const HOVER_WATER_MIST_MIN_ALT = TILE_SIZE * 0.5;
 export const HOVER_WATER_MIST_MAX_ALT = TILE_SIZE * 3;
-export const HOVER_WATER_MIST_INTERVAL = 4;
-export const HOVER_WATER_MIST_COUNT = 12;
+export const HOVER_WATER_MIST_INTERVAL = 2; // より連続して湧き出るように間隔を短縮
+export const HOVER_WATER_MIST_MIN_COUNT = 6;  // 水面から離れているとき（最遠付近）の最小粒数
+export const HOVER_WATER_MIST_MAX_COUNT = 24; // 水面に最も近いときの最大粒数
+export const HOVER_WATER_MIST_COUNT = 18;    // 互換・中間値（固定指定用）
 // 水滴は雪の粉より重く早く落ちるので、SnowMist(75F)より短命にする
 export const HOVER_WATER_MIST_LIFETIME = 50;
 // SPLASH_PARTICLE と同じ水色（水しぶきと同系に見せる）

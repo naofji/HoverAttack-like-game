@@ -13,7 +13,13 @@
 
 import { motionFor } from '../world/StageEnvironment.js';
 import { stairDirection } from './slope.js';
-import { TILE_SIZE } from './Constants.js';
+import {
+    TILE_SIZE,
+    HOVER_WATER_MIST_MIN_ALT,
+    HOVER_WATER_MIST_MAX_ALT,
+    HOVER_WATER_MIST_MIN_COUNT,
+    HOVER_WATER_MIST_MAX_COUNT,
+} from './Constants.js';
 
 /**
  * その足元の**床**の滑り具合。0 なら滑らない床（陸上・甲板・敵の頭・空中）。
@@ -138,9 +144,41 @@ export function waterClearance(entity, game, maxPx) {
     if (!map || !map.isWaterAtPixel) return null;
     const cx = entity.x + entity.width / 2;
     const feetY = entity.y + entity.height;
-    if (map.isWaterAtPixel(cx, feetY)) return null;
+    // 機体自体が水中にいる（水没中）、あるいは足元がすでに水に触れている場合は null
+    if (entity.inWater || map.isWaterAtPixel(cx, entity.y + entity.height * 0.5) || map.isWaterAtPixel(cx, feetY)) {
+        return null;
+    }
     for (let d = 0; d <= maxPx; d += GROUND_CLEARANCE_STEP) {
-        if (map.isWaterAtPixel(cx, feetY + d)) return d;
+        const py = feetY + d;
+        // 地形（岩や床）に遮られたら、その先にある水面にはスラスターの風が届かない
+        if (map.isSolidAtPixel && map.isSolidAtPixel(cx, py)) return null;
+        if (map.isWaterAtPixel(cx, py)) return d;
     }
     return null;
+}
+
+/**
+ * 水面までの距離(clearance)に対する近さの度合い（0: 最遠〜1: 至近）。
+ * @param {number} clearance
+ * @returns {number} 0.0〜1.0
+ */
+export function hoverWaterMistCloseness(clearance) {
+    if (clearance === null || clearance === undefined) return 0;
+    const minAlt = HOVER_WATER_MIST_MIN_ALT;
+    const maxAlt = HOVER_WATER_MIST_MAX_ALT;
+    const range = maxAlt - minAlt;
+    if (range <= 0) return 0.5;
+    return Math.max(0, Math.min(1, (maxAlt - clearance) / range));
+}
+
+/**
+ * 水面までの距離(clearance)に応じて水煙の粒子数を計算する。
+ * スラスターが水面に近いほど風圧が強く多くの水滴が舞い、遠ざかるほど少なくなる。
+ *
+ * @param {number} clearance waterClearance で得られた距離(px)
+ * @returns {number}
+ */
+export function hoverWaterMistCount(clearance) {
+    const closeness = hoverWaterMistCloseness(clearance);
+    return Math.round(HOVER_WATER_MIST_MIN_COUNT + (HOVER_WATER_MIST_MAX_COUNT - HOVER_WATER_MIST_MIN_COUNT) * closeness);
 }

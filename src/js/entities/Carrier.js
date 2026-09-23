@@ -14,7 +14,7 @@ import {
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
-import { groundClearance, groundSlopeDirection, waterClearance } from '../utils/surface.js';
+import { groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 
@@ -157,7 +157,9 @@ export class Carrier {
         const timerKey = `_hoverWaterMistTimer${side}`;
         this[timerKey] = (this[timerKey] || 0) + 1;
         if (this[timerKey] % HOVER_WATER_MIST_INTERVAL !== 0) return;
-        this.game.spawnWaterMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, HOVER_WATER_MIST_COUNT);
+        const count = hoverWaterMistCount(clearance);
+        const closeness = hoverWaterMistCloseness(clearance);
+        this.game.spawnWaterMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, count, closeness);
     }
 
     // ------------------------------------------

@@ -295,6 +295,7 @@ export class WaterMistParticle {
         this.game = game;
         this.x = x; this.y = y; this.vx = vx; this.vy = vy;
         this.lifetime = HOVER_WATER_MIST_LIFETIME;
+        this.size = Math.random() < 0.3 ? 3 : (Math.random() < 0.4 ? 1 : 2);
         this.alive = true;
     }
     update() {
@@ -315,7 +316,8 @@ export class WaterMistParticle {
         if (!this.alive) return;
         ctx.globalAlpha = Math.max(0.1, (this.lifetime / HOVER_WATER_MIST_LIFETIME) * 0.9);
         ctx.fillStyle = HOVER_WATER_MIST_COLOR;
-        ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
+        const half = Math.floor(this.size / 2);
+        ctx.fillRect(Math.round(this.x) - half, Math.round(this.y) - half, this.size, this.size);
         ctx.globalAlpha = 1.0;
     }
 }

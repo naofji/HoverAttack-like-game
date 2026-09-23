@@ -162,15 +162,17 @@ export const SpawnEffects = {
     /**
      * ホバー中、水面の少し上空で水面に舞う水滴。spawnSnowMist の平地(onSlope=false)
      * ケースと同じ角度分布 ── 水面は雪と違って斜面が無いので、その場合分けだけ無い。
+     * closeness (0: 最遠〜1: 至近) に応じて初速（勢い）も連動する。
      */
-    spawnWaterMist(x, y, count) {
+    spawnWaterMist(x, y, count, closeness = 0.5) {
+        const speedScale = 0.8 + 0.4 * Math.max(0, Math.min(1, closeness));
         for (let i = 0; i < (count | 0); i++) {
             const dirSign = Math.random() < 0.5 ? 1 : -1; // 右 or 左
-            const tilt = Math.random() * (Math.PI / 4); // 水平から最大45度
+            const tilt = Math.random() * (Math.PI / 4); // 水平から最大45度（仕様通り）
             const theta = dirSign > 0 ? tilt : Math.PI - tilt;
-            const s = 0.4 + Math.random() * 0.8;
+            const s = (0.6 + Math.random() * 1.2) * speedScale; // スラスターの噴流を受け勢いよく跳ねる
             this.particles.push(new WaterMistParticle(
-                this, x + (Math.random() - 0.5) * 24, y,
+                this, x + (Math.random() - 0.5) * 32, y,
                 Math.cos(theta) * s, -Math.sin(theta) * s,
             ));
         }
