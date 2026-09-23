@@ -29,7 +29,8 @@ const isFalling = (ctx, r, c) => {
 function coveredByWaterAbove(ctx, r, c) {
     let rr = r - 1;
     while (rr >= 0 && ctx.isSolid(rr, c)) rr--;
-    return rr >= 0 && isWater(ctx, rr, c);
+    // 岩の上の水が半分以上なら沈んでいる（岩の上面を流れる薄い水では沈まない）
+    return rr >= 0 && ctx.water[rr * ctx.cols + c] >= MAX_WATER_MASS / 2;
 }
 
 /**

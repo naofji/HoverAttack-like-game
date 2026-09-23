@@ -8,10 +8,12 @@
 // しぶきが落ちた場所は波紋として一時的に振幅を足し、毎フレーム減衰する。
 
 import { isSubmergedFromAbove } from '../waterQuery.js';
+import { collectWaterfallRuns } from './waterfallRuns.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS, WATERFALL_HEAD_DROP,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS,
+    WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
 } from '../../utils/Constants.js';
 
 const RIPPLE_WIDTH = 64; // px。波紋が効く横の範囲
@@ -136,65 +138,6 @@ export function collectBorderBlocks(map, waterCells) {
     return Array.from(border.values());
 }
 
-/**
- * 滝（水流帯）の横位置と幅を決定する。
- * 左から水が供給される（または左が崖）なら左端寄り、右からなら右端寄り、それ以外は中央。
- */
-export function getWaterfallPlacement(map, r, c) {
-    const streamWidth = 8;
-    const checkWater = (row, col) => map.isWater(row, col);
-    // マップの外は「崖ではない」扱い（Map.isSolid は外を岩と答えるので、ここで分ける）
-    const checkSolid = (row, col) => {
-        if (row < 0 || row >= map.rows || col < 0 || col >= map.cols) return false;
-        return map.isSolid(row, col);
-    };
-
-    // 左側に崖（固体）がある、または左上/左から水が流出
-    const leftSource = (c > 0 && checkWater(r, c - 1)) ||
-                       (r > 0 && c > 0 && checkWater(r - 1, c - 1)) ||
-                       (c > 0 && checkSolid(r, c - 1) && !checkSolid(r, c + 1));
-
-    // 右側に崖（固体）がある、または右上/右から水が流出
-    const rightSource = (c + 1 < map.cols && checkWater(r, c + 1)) ||
-                        (r > 0 && c + 1 < map.cols && checkWater(r - 1, c + 1)) ||
-                        (c + 1 < map.cols && checkSolid(r, c + 1) && !checkSolid(r, c - 1));
-
-    let offsetX = Math.floor((TILE_SIZE - streamWidth) / 2); // デフォルト中央
-    let align = 'center';
-    if (leftSource && !rightSource) {
-        offsetX = 1; // 左端寄り（壁沿い）
-        align = 'left';
-    } else if (rightSource && !leftSource) {
-        offsetX = TILE_SIZE - streamWidth - 1; // 右端寄り（壁沿い）
-        align = 'right';
-    }
-
-    return {
-        x: c * TILE_SIZE + offsetX,
-        width: streamWidth,
-        align,
-    };
-}
-
-/**
- * 滝セルを描き始める Y 座標。
- *
- * 滝の列の一番上のセルを見つけ、そこから WATERFALL_HEAD_DROP だけ下げた位置を
- * 「この滝の始まり」とし、各セルは自分のタイルの中でそれを切り取る。岩の縁で
- * いきなり全高の帯が立ち上がると「滑り落ちる」感じにならず、縁から下が急に滝に
- * なったように見えるため（実機の指摘）。
- *
- * 先頭セルだけを下げるのではなく列の始まりから測るのは、WATERFALL_HEAD_DROP が
- * TILE_SIZE 以上でも破綻しないようにするため（16 だと先頭セルは1ドットも
- * 描かれず、次のセルの上辺から始まる）。
- */
-export function waterfallTopY(map, r, c) {
-    let headR = r;
-    while (headR - 1 >= 0 && map.isWaterfallCell(headR - 1, c)) headR--;
-    const startY = headR * TILE_SIZE + WATERFALL_HEAD_DROP;
-    return Math.max(r * TILE_SIZE, Math.min((r + 1) * TILE_SIZE, startY));
-}
-
 export function createWaterRenderer(env) {
     const map = env.game.map;
 
@@ -219,14 +162,10 @@ export function createWaterRenderer(env) {
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
             const bottomY = (r + 1) * TILE_SIZE;
-            if (map.isWaterfallCell(r, c)) {
-                // 滝（落下中の水流）: 16x16 のブロックで空間を埋めず、供給元に応じた左右配置の帯として描画。
-                // 先頭のセルだけ上辺を下げて、岩の縁から滑り落ちるように見せる
-                const placement = getWaterfallPlacement(map, r, c);
-                const topY = waterfallTopY(map, r, c);
-                cctx.fillRect(placement.x, topY, placement.width, bottomY - topY);
-                continue;
-            }
+            // 滝はここでは焼かない。1本の流れとして上端・下端・横位置が決まるので
+            // （waterfallRuns.js）、区間の遠くのセルが変わるだけで見た目が変わる。
+            // セル単位で塗り直すキャッシュには向かないので、drawOverWorld で毎フレーム描く
+            if (map.isWaterfallCell(r, c)) continue;
 
             // 液面（水塊にひとつ）が分かっているセルは、必ずその液面から下を塗る。
             // タイルの中で切り取るのは clamp だけ。こうしないと、ひとつの水塊
@@ -240,17 +179,8 @@ export function createWaterRenderer(env) {
                 if (bottomY - topY > 0) {
                     cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
                 }
-                // 上から滝が落ちてきているなら、タイルの上辺から液面までを細い帯で埋める。
-                // ここを描かないと、滝の帯はタイルの境目で終わるのに液面はもっと下に
-                // あるため、最大14px の隙間ができて**水柱が地面から浮いて見える**
-                // （実機の指摘）。横位置は落ちてくる帯に合わせる
-                if (r > 0 && map.isWaterfallCell(r - 1, c)) {
-                    const placement = getWaterfallPlacement(map, r - 1, c);
-                    const gap = topY - r * TILE_SIZE;
-                    if (gap > 0) {
-                        cctx.fillRect(placement.x, r * TILE_SIZE, placement.width, gap);
-                    }
-                }
+                // 滝が落ちてくる水たまりでは、タイルの上辺から液面までの隙間を滝の帯が
+                // 埋める（滝の下端を液面まで伸ばす。waterfallRuns.js の describeFoot）
                 continue;
             }
 
@@ -432,58 +362,75 @@ export function createWaterRenderer(env) {
             }
             ctx.stroke();
 
-            // 水源（湧水）の口の滴り・飛沫演出
-            ctx.fillStyle = WATER_SURFACE_COLOR;
-            for (const sp of map.waterSprings) {
-                const bx = sp.c * TILE_SIZE;
-                const by = sp.r * TILE_SIZE;
-                if (bx + TILE_SIZE < camX || bx > camX + CANVAS_WIDTH ||
-                    by + TILE_SIZE < camY || by > camY + CANVAS_HEIGHT) continue;
-                const dropOffset = (this.t * 1.5) % TILE_SIZE;
-                ctx.fillRect(bx + 6, by, 4, 2);
-                ctx.fillRect(bx + 7, by + dropOffset, 2, 3);
+            this._drawWaterfalls(ctx, startCol, endCol, startRow, endRow);
+        },
+        /**
+         * 滝と床を流れる水を描く。帯・床の水は前景の水と同じ色と濃さ（WATER_FILL）で、
+         * 筋としぶきは明るい色で上に重ねる。
+         */
+        _drawWaterfalls(ctx, startCol, endCol, startRow, endRow) {
+            const runs = collectWaterfallRuns(map, startCol, endCol, startRow, endRow);
+            const t = this.t;
+
+            ctx.fillStyle = WATER_FILL;
+            for (const run of runs) {
+                let top = run.topY;
+                // 岩の口から出る水は、口の真下で細く、WATERFALL_MOUTH_TAPER をかけて
+                // 帯の幅まで広がる。以前は口の下を1タイル空けて滴りの点を描いていた
+                if (run.source === 'mouth') {
+                    const cx = run.x + run.width / 2;
+                    const taper = Math.min(WATERFALL_MOUTH_TAPER, run.bottomY - top);
+                    for (let i = 0; i < taper; i++) {
+                        const w = WATERFALL_MOUTH_WIDTH + (run.width - WATERFALL_MOUTH_WIDTH) * (i + 1) / taper;
+                        ctx.fillRect(cx - w / 2, top + i, w, 1);
+                    }
+                    top += taper;
+                }
+                if (run.bottomY > top) ctx.fillRect(run.x, top, run.width, run.bottomY - top);
+                if (run.sheet) {
+                    ctx.fillRect(run.sheet.x0, run.sheet.y, run.sheet.x1 - run.sheet.x0, RUNNING_WATER_THICKNESS);
+                }
             }
 
-            // 滝（落下水流）の流下線状パーティクルおよび着水飛沫の描画
             ctx.fillStyle = 'rgba(220, 245, 255, 0.65)';
             const streakLen = 6;
-            for (let c = startCol; c <= endCol; c++) {
-                for (let r = startRow; r <= endRow; r++) {
-                    if (!map.isWaterfallCell(r, c)) continue;
-                    const placement = getWaterfallPlacement(map, r, c);
-                    const flowX = placement.x;
-                    const flowW = placement.width;
-
-                    // 1セルあたり2本の流下する短い筋。帯と同じ範囲に収める
-                    // （先頭のセルは上辺が下がっているので、そこから下だけ）
-                    const topY = waterfallTopY(map, r, c);
-                    const bandH = (r + 1) * TILE_SIZE - topY;
+            for (const run of runs) {
+                // 流下する短い筋。タイルごとに2本、区間の中だけ
+                for (let r = Math.max(run.headR, startRow); r <= Math.min(run.footR + 1, endRow); r++) {
                     for (let k = 0; k < 2; k++) {
-                        const px = flowX + 1.5 + k * (flowW - 4);
-                        const phase = (this.t * 1.0 + k * 8 + c * 5 + r * 3) % bandH;
-                        const py = topY + phase;
-                        ctx.fillRect(px, py, 1.5, streakLen);
-                    }
-
-                    // 着水地点（直下が水底またはPoolingWater水面）なら微小な白い飛沫を跳ねさせる。
-                    // 跳ねる高さは**実際の液面**に合わせる。タイルの下辺に固定していたため、
-                    // 水量が少ない水たまりへ落ちるときは最大16px 高いところで跳ねていた
-                    // （実機の指摘「終点が高い」）
-                    const isSplashCell = (r + 1 >= map.rows) ||
-                                         map.isSolid(r + 1, c) ||
-                                         (!map.isWaterfallCell(r + 1, c));
-                    if (isSplashCell) {
-                        const landLevel = (r + 1 < map.rows && map.isWater(r + 1, c))
-                            ? map.getSurfaceY(r + 1, c)
-                            : (r + 1) * TILE_SIZE;
-                        const splashY = Math.round(landLevel) - 2;
-                        for (let s = 0; s < 2; s++) {
-                            const sx = flowX + 1 + ((this.t * 2 + s * 4 + c * 3) % (flowW - 2));
-                            const sy = splashY - Math.abs(Math.sin(this.t * 0.35 + s * 2 + c) * 3);
-                            ctx.fillRect(sx, sy, 1.5, 1.5);
-                        }
+                        const py = r * TILE_SIZE + ((t + k * 8 + run.c * 5 + r * 3) % TILE_SIZE);
+                        if (py < run.topY || py + streakLen > run.bottomY) continue;
+                        ctx.fillRect(run.x + 1.5 + k * (run.width - 4), py, 1.5, streakLen);
                     }
                 }
+                // 床を流れる水の筋。流れる向きに動く
+                if (run.sheet) {
+                    const len = run.sheet.x1 - run.sheet.x0;
+                    for (let s = 0; s < len; s += 10) {
+                        const off = ((s + t * 1.5 * run.sheet.dir) % len + len) % len;
+                        const w = Math.min(4, len - off);
+                        if (w > 0) ctx.fillRect(run.sheet.x0 + off, run.sheet.y + 1, w, 1);
+                    }
+                }
+                // 着水のしぶき。床（を流れる水の上面）か水たまりの液面で跳ねる。
+                // 当たったところに帯より少し広い泡の線を引き、その上で粒を跳ねさせる
+                if (run.landing !== 'none') {
+                    ctx.fillStyle = 'rgba(220, 245, 255, 0.35)';
+                    ctx.fillRect(run.x - 2, Math.round(run.bottomY) - 1, run.width + 4, 1);
+                    ctx.fillStyle = 'rgba(220, 245, 255, 0.65)';
+                    const splashY = Math.round(run.bottomY) - 2;
+                    for (let s = 0; s < 3; s++) {
+                        const sx = run.x - 2 + ((t * 2 + s * 5 + run.c * 3) % (run.width + 4));
+                        const sy = splashY - Math.abs(Math.sin(t * 0.35 + s * 2 + run.c) * 3);
+                        ctx.fillRect(sx, sy, 1.5, 1.5);
+                    }
+                }
+            }
+            // 岩の口の縁の明るい線（水が岩から出てくるところ）
+            ctx.fillStyle = WATER_SURFACE_COLOR;
+            for (const run of runs) {
+                if (run.source !== 'mouth') continue;
+                ctx.fillRect(run.x + run.width / 2 - 2, run.topY, 4, 1);
             }
         },
         drawOverlay() {},

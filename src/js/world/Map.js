@@ -1394,15 +1394,21 @@ export class Map {
                         sp.timer = 0;
                         const key = sp.r * this.cols + sp.c;
                         const cur = this.water[key];
+                        // 足したセルは onWaterChanged で種別キャッシュと描画に伝える。
+                        // 以前は activeWaterCells に入れるだけで、そのフレームで水が
+                        // 流れない（落下は WATER_FALL_INTERVAL に1回）と「水量1なのに
+                        // 水なし」のまま残り、水源の口の滝が数フレームおきに消えていた
                         if (cur < MAX_WATER_MASS) {
                             this.water[key] = Math.min(MAX_WATER_MASS, cur + WATER_SPRING_MASS);
                             this.activeWaterCells.add(key);
+                            this.onWaterChanged([[sp.r, sp.c]]);
                         } else if (sp.r + 1 < this.rows && !this.isSolid(sp.r + 1, sp.c)) {
                             const downKey = (sp.r + 1) * this.cols + sp.c;
                             const downCur = this.water[downKey];
                             if (downCur < MAX_WATER_MASS) {
                                 this.water[downKey] = Math.min(MAX_WATER_MASS, downCur + WATER_SPRING_MASS);
                                 this.activeWaterCells.add(downKey);
+                                this.onWaterChanged([[sp.r + 1, sp.c]]);
                             }
                         }
                     }

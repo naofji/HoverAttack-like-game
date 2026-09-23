@@ -1184,13 +1184,21 @@ export const WATER_SPRING_MASS = 1;            // 1回あたりの湧出水量
 export const WATER_SPRING_COUNT = 2;           // 水源の数
 export const WATER_SPRING_MAX_ROW_RATIO = 0.5; // マップ上半分から水源を選ぶ
 // 滝（落下水流）の中の物理
-// 滝の描き始めを、一番上の落下セルのタイルの上辺からこれだけ下げる。
-// 0 にすると岩の縁のところでいきなり全高の帯が立ち上がり、「岩から滑り落ちる」
-// ではなく「縁から下が急に滝になる」ように見える（実機の指摘）。
-// 8 でもまだ高いという指摘を受けて 16（1タイル）にした。TILE_SIZE を超える値も
-// 使える（そのぶん下のセルまで描き始めがずれる）。
-// 見た目だけの値で、当たり判定（isWaterfallAtPixel）はタイル単位のまま
-export const WATERFALL_HEAD_DROP = 16;         // px
+// 滝・床を流れる水の見た目（environment/waterfallRuns.js）。どれも見た目だけの値で、
+// 当たり判定（isWaterfallAtPixel）はタイル単位のまま。
+//
+// 以前は「滝の描き始めを一番上の落下セルの上辺から WATERFALL_HEAD_DROP(16px) 下げる」で
+// 岩の縁から滑り落ちる感じを出していたが、水源の口の下が1タイル空いて点々だけに見えた
+// （実機の指摘）。今は滝を1本の区間として扱い、どこから出たかで描き始めを決める:
+// 岩の口からなら岩の下面から細く、床の縁からなら床を流れる水の上面から。
+export const WATERFALL_BAND_WIDTH = 8;         // px。滝の帯の幅
+// 岩の口から出る滝が、この高さ(px)をかけて WATERFALL_MOUTH_WIDTH から帯の幅まで広がる
+export const WATERFALL_MOUTH_TAPER = 8;
+export const WATERFALL_MOUTH_WIDTH = 2;        // px。口の真下での幅
+// 床を流れる水（着水点から次の落ち際まで）の厚み。シミュレーションでは床の上の水は
+// 同じフレームのうちに落ち口まで運ばれてしまい、セルとしてはほとんど見えないので、
+// 着水点と落ち口の位置から描く
+export const RUNNING_WATER_THICKNESS = 3;      // px
 
 // 下方向への押し下げ加速度。GRAVITY(0.30) に**足す**。滝が水中と同じ弱い重力
 // (0.09) だった頃の 0.18 は、空気と同じ重力(0.30)に直すと合計 0.48 になり、

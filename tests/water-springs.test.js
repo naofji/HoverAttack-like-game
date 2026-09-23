@@ -4,9 +4,10 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { generateWaterSprings } from '../src/js/world/waterPools.js';
 import { Map } from '../src/js/world/Map.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, WATERFALL_HEAD_DROP, PLAYER_MAX_FALLING_SPEED, GRAVITY } from '../src/js/utils/Constants.js';
+import { BLOCK_EMPTY, BLOCK_NORMAL, MAX_WATER_MASS, WATER_SPRING_INTERVAL, WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE, PLAYER_MAX_FALLING_SPEED, GRAVITY } from '../src/js/utils/Constants.js';
 import { StageEnvironment, motionFor, WATERFALL_MOTION, WATER_MOTION } from '../src/js/world/StageEnvironment.js';
 import { makeWaterMap } from './helpers/water-map.js';
+import { WATER_NONE } from '../src/js/world/waterQuery.js';
 
 /**
  * 実物の Map に water[] と grid を手で入れたあと、派生キャッシュを用意する。
@@ -389,62 +390,6 @@ test('Map.damageBlock & water.js: 水に隣接するブロックを破壊した�
     assert.equal(map.water[5 * cols + 3], 0, '破壊直後は水ブロックで空間が上書きされず 0 であるべき');
 });
 
-test('water.js: 落下中の滝セル（isWaterfallCell）は16x16のブロックではなく細い水流として描画される', async () => {
-    const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-    const map = new Map({ rng: { next: () => 0 } }, 1);
-    map.rows = rows;
-    map.cols = cols;
-    map.width = cols * 16;
-    map.height = rows * 16;
-    map.water = new Uint8Array(rows * cols);
-    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
-
-    // (3, 5) に水量4の水。直下 (4, 5) は空気なので落下中（滝）
-    map.water[3 * cols + 5] = 4;
-    map.waterCells = [[3, 5]];
-    primeWaterCache(map);
-
-    const fillCalls = [];
-    const origCreateElement = document.createElement;
-    document.createElement = (tag) => {
-        const el = origCreateElement.call(document, tag);
-        if (tag === 'canvas') {
-            const origGetContext = el.getContext;
-            el.getContext = (type) => {
-                const ctx = origGetContext.call(el, type);
-                if (type === '2d') {
-                    const origFillRect = ctx.fillRect;
-                    ctx.fillRect = function(x, y, w, h) {
-                        fillCalls.push({ x, y, w, h });
-                        return origFillRect.apply(this, arguments);
-                    };
-                }
-                return ctx;
-            };
-        }
-        return el;
-    };
-
-    try {
-        const env = { game: { map } };
-        createWaterRenderer(env);
-
-        // (3, 5) は列の一番上の滝セルなので、上辺が WATERFALL_HEAD_DROP ぶん
-        // 下がる（岩の縁から滑り落ちるように見せるため。実機の指摘）
-        const top = 3 * 16 + WATERFALL_HEAD_DROP;
-        const waterfallFill = fillCalls.find((c) => c.y === top);
-        assert.ok(waterfallFill, `滝セルの描画が y=${top} で行われるべき`);
-        assert.ok(waterfallFill.w < 16, `滝は16pxブロックではなく細水流として描画されるべき: got width ${waterfallFill.w}px`);
-        assert.equal(waterfallFill.h, 16 - WATERFALL_HEAD_DROP,
-            '先頭の滝セルはタイルの下辺までを描く');
-        assert.equal(fillCalls.filter((c) => c.y === 3 * 16 && c.h === 16).length, 0,
-            'タイルの上辺から全高で描いてはいけない');
-    } finally {
-        document.createElement = origCreateElement;
-    }
-});
-
 test('Map.isWaterSurface & water.js: 落下中の水（滝）は水面（液面）と判定されず、液面の線を描画しない', async () => {
     // (2,4)〜(4,4) に水量4の水柱。(5,4) から下が床。
     // 以前は Map.prototype のメソッドをプレーンなオブジェクトに bind して
@@ -473,55 +418,17 @@ test('Map.isWaterSurface & water.js: 落下中の水（滝）は水面（液面�
     assert.equal(map.isWaterSurface(4, 4), true, '(4, 4) は水面（液面）である');
 });
 
-test('getWaterfallPlacement: 左から水が供給される時は左端寄り、右から水が供給される時は右端寄り、空中は中央に配置される', async () => {
-    const { getWaterfallPlacement } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-
-    // ケース1: 左から水が供給される（(2, 3) が水、(2, 4) が滝）
-    const mapLeft = {
-        rows, cols,
-        isWater: (r, c) => (r === 2 && c === 3) || (r === 2 && c === 4),
-        isSolid: () => false,
-    };
-    const placementLeft = getWaterfallPlacement(mapLeft, 2, 4);
-    assert.equal(placementLeft.align, 'left', '左から供給される時は align=left');
-    assert.equal(placementLeft.x, 4 * 16 + 1, '左端寄りに配置されるべき (offset=1)');
-
-    // ケース2: 右から水が供給される（(2, 5) が水、(2, 4) が滝）
-    const mapRight = {
-        rows, cols,
-        isWater: (r, c) => (r === 2 && c === 5) || (r === 2 && c === 4),
-        isSolid: () => false,
-    };
-    const placementRight = getWaterfallPlacement(mapRight, 2, 4);
-    assert.equal(placementRight.align, 'right', '右から供給される時は align=right');
-    assert.equal(placementRight.x, 4 * 16 + (16 - 8 - 1), '右端寄りに配置されるべき');
-
-    // ケース3: 空中（左右とも空気）
-    const mapCenter = {
-        rows, cols,
-        isWater: (r, c) => (r === 2 && c === 4) || (r === 1 && c === 4),
-        isSolid: () => false,
-    };
-    const placementCenter = getWaterfallPlacement(mapCenter, 2, 4);
-    assert.equal(placementCenter.align, 'center', '空中からの落下は align=center');
-    assert.equal(placementCenter.x, 4 * 16 + 4, '中央に配置されるべき (offset=4)');
-});
-
 test('water.js: drawOverWorld で滝セルの中に流下する短い筋状パーティクルと飛沫が描画される', async () => {
     const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    // (3, 4) に滝セル（満ちていない水で、直下も満ちていない）
+    // (3, 4) に滝セル（満ちていない水で、直下も満ちていない）。その先は床に着く。
+    // 床の無い宙の1粒（落ちている水の先頭）は、着地先が無いのでしぶきを出さない
     const map = makeWaterMap(`
         ..........
         ..........
         ..........
         ....4.....
         ..........
-        ..........
-        ..........
-        ..........
-        ..........
-        ..........
+        ##########
     `);
     assert.ok(map.isWaterfallCell(3, 4), '前提: (3,4) は滝');
     const env = { game: { map } };
@@ -602,65 +509,34 @@ test('水源から落ちる水は隙間なく連なる（滝が点線に見え�
         `滝に隙間がある（点線に見える）。水が無かった行: ${gaps.join(',')}`);
 });
 
-test('滝が浅い水たまりへ落ちるとき、液面までの隙間が埋まる（水柱が浮かない）', async () => {
+test('滝が浅い水たまりへ落ちるとき、帯の下端が液面ちょうどまで届く（水柱が浮かない）', async () => {
     // 実機の指摘「着水の高さに関しては地面から水柱が浮いているような感じ」。
     // 滝の帯はタイルの境目で終わるのに、その下の水面セルは水量が少ないと
     // タイルの下のほうにしか描かれない。あいだの最大14px が誰にも塗られず、
-    // 水柱が地面から浮いて見えていた。
+    // 水柱が地面から浮いて見えていた。以前はキャッシュの側で隙間を埋めていたが、
+    // 今は滝を1本の区間として毎フレーム描き、下端を液面まで伸ばす
     const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
-    const rows = 10, cols = 10;
-    const map = new Map({ rng: { next: () => 0 } }, 1);
-    map.rows = rows;
-    map.cols = cols;
-    map.width = cols * 16;
-    map.height = rows * 16;
-    map.water = new Uint8Array(rows * cols);
-    map.grid = Array.from({ length: rows }, () => new Uint8Array(cols));
-    for (let c = 0; c < cols; c++) map.grid[5][c] = 1;   // r=5 が床
+    const { WATERFALL_BAND_WIDTH } = await import('../src/js/utils/Constants.js');
+    // (3,5) が一番下の滝セルで、(4,5) が床の上の浅い水たまり（水量2）
+    const map = makeWaterMap(`
+        ..........
+        ..........
+        ..........
+        .....2....
+        .....2....
+        ##########
+    `);
+    assert.ok(map.isWaterfallCell(3, 5) && !map.isWaterfallCell(4, 5), '前提');
+    const surfaceY = map.getSurfaceY(4, 5);
+    assert.ok(surfaceY > 4 * 16, '前提: 水量が少ないので液面はタイルの上辺より下');
 
-    // (3,5) と (4,5) が落下中。(4,5) の直下は床なので (4,5) が着水セル…
-    // ではなく、(4,5) は「直下が固体」なので滝ではなく水面になる。
-    // つまり (3,5) が一番下の滝セルで、(4,5) が浅い水たまり
-    map.water[3 * cols + 5] = 2;
-    map.water[4 * cols + 5] = 2;
-    map.waterCells = [[3, 5], [4, 5]];
-    primeWaterCache(map);
-
-    const fillCalls = [];
-    const origCreateElement = document.createElement;
-    document.createElement = (tag) => {
-        const el = origCreateElement.call(document, tag);
-        if (tag === 'canvas') {
-            const origGetContext = el.getContext;
-            el.getContext = (type) => {
-                const ctx = origGetContext.call(el, type);
-                if (type === '2d') {
-                    const origFillRect = ctx.fillRect;
-                    ctx.fillRect = function(x, y, w, h) {
-                        fillCalls.push({ x, y, w, h });
-                        return origFillRect.apply(this, arguments);
-                    };
-                }
-                return ctx;
-            };
-        }
-        return el;
-    };
-
-    try {
-        createWaterRenderer({ game: { map } });
-
-        const surfaceY = map.getSurfaceY(4, 5);
-        assert.ok(surfaceY > 4 * 16, '前提: 水量が少ないので液面はタイルの上辺より下');
-
-        // (4,5) のタイル上辺から液面までを埋める細い帯があること
-        const filler = fillCalls.find((f) => f.y === 4 * 16 && f.w < 16 && f.h > 0);
-        assert.ok(filler, '滝から液面までの隙間を埋める帯が描かれるべき');
-        assert.equal(filler.y + filler.h, Math.round(surfaceY),
-            `隙間を埋める帯は液面ちょうどまで届くべき: ${filler.y}+${filler.h} vs ${Math.round(surfaceY)}`);
-    } finally {
-        document.createElement = origCreateElement;
-    }
+    const renderer = createWaterRenderer({ game: { map } });
+    const ctx = makeFakeCtx();
+    renderer.drawOverWorld(ctx, 0, 0);
+    const bands = ctx.calls.filter((c) => c.name === 'fillRect' && c.args[2] === WATERFALL_BAND_WIDTH);
+    assert.ok(bands.length > 0, '滝の帯が描かれるべき');
+    const bottom = Math.max(...bands.map((c) => c.args[1] + c.args[3]));
+    assert.equal(bottom, Math.round(surfaceY), `帯の下端 ${bottom} が液面 ${surfaceY} に届いていない`);
 });
 
 test('滝の着水の波紋は、水源の列ではなく実際に滝が水面へ落ちている列で起こる', async () => {
@@ -710,4 +586,27 @@ test('天井に近い行の水源も湧く（以前は行6以下の水源が永�
     for (let i = 0; i < 40; i++) map.update();
     const total = map.water.reduce((a, b) => a + b, 0);
     assert.ok(total > 0, `水が湧いていない（総量 ${total}）`);
+});
+
+test('水源が足した水も、そのフレームのうちに種別キャッシュへ反映される', () => {
+    // 水源は water[] を直接書き換えるので、そのフレームで水が流れない（落下は
+    // WATER_FALL_INTERVAL に1回）と、種別キャッシュに伝わらず「水量1なのに水なし」の
+    // ままになった。滝の上端（水源の口）がフレームごとに消えて見えた原因
+    const map = makeWaterMap(`
+        ########
+        #......#
+        #......#
+        #......#
+        ########
+    `);
+    map.waterSprings = [{ r: 1, c: 3, timer: 0 }];
+    for (let f = 0; f < 40; f++) {
+        map.update();
+        map.isWaterfallCell(0, 0);   // 問い合わせでキャッシュを作り直させる
+        for (let k = 0; k < map.water.length; k++) {
+            if (map.water[k] === 0) continue;
+            assert.notEqual(map.waterKind[k], WATER_NONE,
+                `frame ${f}: (${Math.floor(k / map.cols)},${k % map.cols}) は水量 ${map.water[k]} なのに種別が水なし`);
+        }
+    }
 });

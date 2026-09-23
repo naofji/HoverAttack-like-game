@@ -62,7 +62,11 @@ export function isSubmergedFromAbove(water, isSolid, cols, r, c) {
     let rr = r - 1;
     while (rr >= 0 && isSolid(rr, c)) rr--;
     if (rr < 0) return false;           // 岩がマップの天井まで続いている＝上に水は乗れない
-    return water[rr * cols + c] >= MIN_WATER_MASS;
+    // 岩の上の水が半分以上あるときだけ沈んでいるとみなす。以前は1でもあれば沈んでいる
+    // としていたので、岩の上面を流れる薄い水（滝が床に着いて落ち口へ流れていく水、
+    // 水量1〜2）があるだけで、岩の真下のセルがタイル全体で塗られ、湖面より上に青い
+    // 四角が浮いた（tools/render-water-scene.mjs で書き出して見つけた）
+    return water[rr * cols + c] >= MAX_WATER_MASS / 2;
 }
 
 /**
