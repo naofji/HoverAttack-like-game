@@ -387,8 +387,9 @@ export function createWaterRenderer(env) {
                     top += taper;
                 }
                 if (run.bottomY > top) ctx.fillRect(run.x, top, run.width, run.bottomY - top);
-                if (run.sheet) {
-                    ctx.fillRect(run.sheet.x0, run.sheet.y, run.sheet.x1 - run.sheet.x0, RUNNING_WATER_THICKNESS);
+                for (const sheet of [run.sheet, run.feedSheet]) {
+                    if (!sheet) continue;
+                    for (const [a, b] of sheet.segments) ctx.fillRect(a, sheet.y, b - a, RUNNING_WATER_THICKNESS);
                 }
             }
 
@@ -404,12 +405,13 @@ export function createWaterRenderer(env) {
                     }
                 }
                 // 床を流れる水の筋。流れる向きに動く
-                if (run.sheet) {
-                    const len = run.sheet.x1 - run.sheet.x0;
+                for (const sheet of [run.sheet, run.feedSheet]) {
+                    if (!sheet) continue;
+                    const len = sheet.x1 - sheet.x0;
                     for (let s = 0; s < len; s += 10) {
-                        const off = ((s + t * 1.5 * run.sheet.dir) % len + len) % len;
+                        const off = ((s + t * 1.5 * sheet.dir) % len + len) % len;
                         const w = Math.min(4, len - off);
-                        if (w > 0) ctx.fillRect(run.sheet.x0 + off, run.sheet.y + 1, w, 1);
+                        if (w > 0) ctx.fillRect(sheet.x0 + off, sheet.y + 1, w, 1);
                     }
                 }
                 // 着水のしぶき。床（を流れる水の上面）か水たまりの液面で跳ねる。

@@ -162,3 +162,70 @@ test('岩の上面を流れる薄い水では、岩の真下は「沈んでい�
     assert.equal(isSubmergedFromAbove(water, isSolid, cols, 2, 0), expected, `岩の上の水量 ${above}`);
   }
 });
+
+test('2. 滝の下端のすぐ下が1セルだけ空いていても、その下の水面まで届く（湖面の上で止まらない）', () => {
+  // 細い流れは水量1の塊が並んだもので、下端の真下がその瞬間だけ空になる。
+  // 以前は「まだ空中」として湖面の1タイル上で止まった（実機の指摘）
+  const map = makeWaterMap(`
+    ##########
+    ....1.....
+    ....1.....
+    ..........
+    8888888888
+    ##########
+  `);
+  assert.ok(!map.isWater(3, 4) && map.isWater(4, 4), '前提: 下端の真下が空で、その下が水');
+  const run = runAt(collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1), 4);
+  assert.equal(run.landing, 'pool');
+  assert.equal(run.bottomY, map.getSurfaceY(4, 4));
+});
+
+test('2. 列の途中の1セルの空き（水量1の塊の継ぎ目）は越えて1本の滝にする', () => {
+  const map = makeWaterMap(`
+    ##########
+    ....1.....
+    ....1.....
+    ..........
+    ....1.....
+    ....1.....
+    ..........
+    ##########
+  `);
+  const runs = collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1).filter((r) => r.c === 4);
+  assert.equal(runs.length, 1, '1本の区間');
+  assert.equal(runs[0].source, 'mouth');
+  assert.equal(runs[0].landing, 'floor');
+});
+
+test('3. 水たまりからあふれる落ち際には、水たまりの縁から落ち際まで床の水が敷かれる', () => {
+  // 以前は床の水を「滝が床に着いた点」からしか引かなかったので、水たまりが低い段へ
+  // あふれる場面では、落ち際の短い帯が何も無いところから湧いた四角に見えた（実機の指摘）
+  const map = makeWaterMap(`
+    ..........
+    ..........
+    ..1..4444#
+    ..1##8888#
+    ..1#######
+    ..1.......
+    ##########
+  `);
+  const run = runAt(collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1), 2);
+  assert.equal(run.source, 'spill');
+  assert.equal(run.align, 'right');
+  assert.ok(run.feedSheet, '水たまりの縁から落ち際までの床の水があるべき');
+  assert.equal(run.feedSheet.x0, run.x + W, '落ち際の帯の縁から');
+  assert.equal(run.feedSheet.x1, 5 * T, '水たまりの縁まで');
+  assert.equal(run.feedSheet.dir, -1, '落ち際へ向かって流れる');
+  assert.equal(run.feedSheet.y, 3 * T - TH);
+});
+
+test('床の水は、キャッシュが既に水を塗っているタイルには重ねない（二重塗りでまだらにならない）', () => {
+  const map = makeWaterMap(LEFT_SPILL);
+  map.water[3 * map.cols + 4] = 1;   // 床の途中の (3,4) に、横へ流れている途中の水
+  map.refresh();
+  const fall = runAt(collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1), 2);
+  for (const [a, b] of fall.sheet.segments) {
+    assert.ok(b <= 4 * T || a >= 5 * T, `水のあるタイル (列4) に床の水 [${a}, ${b}] が重なっている`);
+  }
+  assert.ok(fall.sheet.segments.length >= 2, 'そのタイルの前後で分かれる');
+});

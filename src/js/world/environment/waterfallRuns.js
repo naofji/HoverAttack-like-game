@@ -59,6 +59,54 @@ export function drainColFor(map, r, c) {
 }
 
 /**
+ * 行 row の床の上を流れる水（厚み RUNNING_WATER_THICKNESS）を x0..x1 に敷く。
+ * キャッシュが既に水を塗っているタイル（水量がある、または液面がかかっている）は
+ * 避ける。重ねると半透明の二重塗りでまだらになる。
+ */
+function makeSheet(map, row, x0, x1, dir) {
+    const y = (row + 1) * TILE_SIZE - RUNNING_WATER_THICKNESS;
+    const segments = [];
+    let segStart = -1;
+    for (let c = Math.floor(x0 / TILE_SIZE); c * TILE_SIZE < x1; c++) {
+        const a = Math.max(x0, c * TILE_SIZE);
+        const b = Math.min(x1, (c + 1) * TILE_SIZE);
+        const k = row * map.cols + c;
+        const painted = map.water[k] > 0 || map.waterSurfaceY[k] >= 0;
+        if (painted) {
+            if (segStart >= 0) { segments.push([segStart, a]); segStart = -1; }
+        } else if (segStart < 0) {
+            segStart = a;
+        }
+        if (b >= x1 && segStart >= 0) segments.push([segStart, b]);
+    }
+    return { y, x0, x1, dir, segments };
+}
+
+/**
+ * 水たまりからあふれて落ち際 (headR, c) へ流れてくる床の水。
+ * 落ち際から水の来る側（side）へ、床の上の乾いたタイルを辿り、水たまり（直下が
+ * 床でない水）に行き着いたら、そこから落ち際までが床を流れる水。途中に滝の着水点が
+ * あれば、そちらの床の水（着水点から落ち口へ）が既に敷かれるので何もしない。
+ * 以前はこれが無く、あふれ出た水が何も無いところから短い四角として湧いて見えた
+ * （実機の指摘）
+ */
+function poolFeedSheet(map, headR, c, align, x) {
+    const side = align === 'left' ? -1 : 1;
+    for (let cc = c + side; cc >= 0 && cc < map.cols; cc += side) {
+        if (map.isSolid(headR, cc)) return null;
+        if (map.isWaterfallCell(headR - 1, cc) || map.isWaterfallCell(headR, cc)) return null;
+        if (map.isSolid(headR + 1, cc)) continue;
+        // 床が切れた先が水なら、水たまりの縁。そこまでを敷く
+        if (!map.isWater(headR, cc) && !map.isWater(headR + 1, cc)) return null;
+        const edge = side < 0 ? (cc + 1) * TILE_SIZE : cc * TILE_SIZE;
+        const spillEdge = side < 0 ? x : x + WATERFALL_BAND_WIDTH;
+        if (Math.abs(edge - spillEdge) < 1) return null;
+        return makeSheet(map, headR, Math.min(edge, spillEdge), Math.max(edge, spillEdge), -side);
+    }
+    return null;
+}
+
+/**
  * 区間の上端 (headR, c) がどこから出た水か。
  * @returns {{ source: 'mouth'|'spill'|'air', align: 'left'|'right'|'center', topY: number }}
  */
@@ -119,6 +167,15 @@ function describeFoot(map, footR, c) {
     if (level >= 0) {
         return { landing: 'pool', bottomY: Math.max(footR * TILE_SIZE, level), landR: r };
     }
+    // 真下が1セルだけ空いて、その下が水たまり。細い流れは水量1の塊が並んだもので、
+    // 下端の真下がその瞬間だけ空になる。そのまま「まだ空中」にすると湖面の1タイル
+    // 上で止まって見えた（実機の指摘）。空いた1セルを越えて液面まで伸ばす
+    if (r + 1 < map.rows && !map.isWater(r, c)) {
+        const below = map.getSurfaceY(r + 1, c);
+        if (below >= 0 && !map.isWaterfallCell(r + 1, c)) {
+            return { landing: 'pool', bottomY: below, landR: r + 1 };
+        }
+    }
     // まだ空中（落ちている水の先頭）
     return { landing: 'none', bottomY: r * TILE_SIZE, landR: r };
 }
@@ -131,8 +188,10 @@ function describeFoot(map, footR, c) {
  *   c: number, headR: number, footR: number, x: number, width: number,
  *   source: string, align: string, topY: number, bottomY: number,
  *   landing: string, landR: number,
- *   sheet: null | { y: number, x0: number, x1: number, dir: number },
+ *   sheet: null | Sheet,       // 着水点から落ち口までの床の水
+ *   feedSheet: null | Sheet,   // 水たまりの縁から、この落ち際までの床の水
  * }>}
+ * Sheet = { y, x0, x1, dir, segments: Array<[x0, x1]> }（segments はキャッシュが塗っていない部分）
  */
 export function collectWaterfallRuns(map, c0, c1, r0, r1) {
     const runs = [];
@@ -143,8 +202,14 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
             if (!map.isWaterfallCell(r, c)) { r++; continue; }
             let headR = r;
             while (headR - 1 >= 0 && map.isWaterfallCell(headR - 1, c)) headR--;
+            // 下へ辿る。途中の1セルだけの空き（水量1の塊の継ぎ目）は越えて1本にする
             let footR = r;
-            while (footR + 1 < map.rows && map.isWaterfallCell(footR + 1, c)) footR++;
+            for (;;) {
+                if (footR + 1 < map.rows && map.isWaterfallCell(footR + 1, c)) { footR++; continue; }
+                if (footR + 2 < map.rows && !map.isWater(footR + 1, c) && !map.isSolid(footR + 1, c)
+                    && map.isWaterfallCell(footR + 2, c)) { footR += 2; continue; }
+                break;
+            }
             r = footR + 1;
 
             // 細い流れは水量1の塊が並んだもので、落下が4フレームに1回なので、
@@ -167,6 +232,7 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
                 source: head.source, align: head.align, topY: head.topY,
                 bottomY: foot.bottomY, landing: foot.landing, landR: foot.landR,
                 sheet: null,
+                feedSheet: head.source === 'spill' ? poolFeedSheet(map, headR, c, head.align, x) : null,
             };
 
             // 床に着いたら、シミュレーションが運ぶ先の落ち口まで床を流れる水を敷く。
@@ -182,10 +248,7 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
                     const to = dir > 0
                         ? bandLeftX(d, 'left')
                         : bandLeftX(d, 'right') + WATERFALL_BAND_WIDTH;
-                    run.sheet = {
-                        y: (foot.landR + 1) * TILE_SIZE - RUNNING_WATER_THICKNESS,
-                        x0: Math.min(from, to), x1: Math.max(from, to), dir,
-                    };
+                    run.sheet = makeSheet(map, foot.landR, Math.min(from, to), Math.max(from, to), dir);
                 }
             }
             runs.push(run);
