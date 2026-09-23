@@ -229,3 +229,125 @@ test('床の水は、キャッシュが既に水を塗っているタイルに�
   }
   assert.ok(fall.sheet.segments.length >= 2, 'そのタイルの前後で分かれる');
 });
+
+test('湖面の上を横へ流れてすぐ落ちる水は、滝として描かない（着水点が湖面を横に動かない）', () => {
+  // 湖の一番上の段が埋まっていく途中、滝の真下が先に満水になり、落ちてきた水は
+  // その上を横へ流れて、段の中の満ちていないセルで落ちる。これが1セルの滝として
+  // 泡としぶき付きで描かれ、満ちていないセルの場所が変わるたびに着水点が湖面を
+  // 横に動いて見えた（実機の指摘）。湖の水面が均されているだけなので描かない
+  const map = makeWaterMap(`
+    ##########
+    ....1.....
+    ....1.....
+    ...11.....
+    #884888888
+    #888888888
+    ##########
+  `);
+  assert.ok(map.isWaterfallCell(3, 3), '前提: (3,3) は落ちている途中の水');
+  const runs = collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1);
+  assert.equal(runs.filter((r) => r.c === 3).length, 0, '湖面の上の1セルの落下は滝にしない');
+  assert.equal(runAt(runs, 4).source, 'mouth', '本流の滝はそのまま');
+});
+
+test('岩の縁から湖へ落ちる短い滝は描く（隣の下が岩なら、湖面の均しではない）', () => {
+  const map = makeWaterMap(`
+    ..........
+    ..........
+    ....11....
+    ####4.....
+    888888888#
+    ##########
+  `);
+  const run = runAt(collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1), 4);
+  assert.equal(run.source, 'spill');
+  assert.equal(run.landing, 'pool');
+});
+
+test('床の水が流れ込む落ち口は、その瞬間セルが空でも滝として描く（落ち際が点滅しない）', () => {
+  // 細い流れは水量1の塊が4フレームおきに運ばれてくるだけなので、落ち口のセルに
+  // 水があるのは半分のフレームだけ。そのたびに落ち際の滝が点いたり消えたりした
+  // （実物の4面で、1つの落ち際が 730 フレームのあいだに 368 回入れ替わっていた）
+  const emptyTop = makeWaterMap(`
+    ##########
+    ..1.......
+    ..1.......
+    ..........
+    ######....
+    ......1...
+    ......1...
+    ..........
+    ##########
+  `);
+  const runs = collectWaterfallRuns(emptyTop, 0, emptyTop.cols - 1, 0, emptyTop.rows - 1).filter((r) => r.c === 6);
+  assert.equal(runs.length, 1, '下の滝と1本につながる');
+  assert.equal(runs[0].headR, 3);
+  assert.equal(runs[0].source, 'spill');
+  assert.equal(runs[0].x, 6 * T + 1, '床の水が来る側（左）に寄る');
+  assert.equal(runs[0].topY, 4 * T - TH);
+
+  // 落ち口の下がまるごと空で、その先が水たまり
+  const allEmpty = makeWaterMap(`
+    ##########
+    ..1.......
+    ..1.......
+    ..........
+    ######....
+    ..........
+    8888888888
+    ##########
+  `);
+  const run = runAt(collectWaterfallRuns(allEmpty, 0, allEmpty.cols - 1, 0, allEmpty.rows - 1), 6);
+  assert.equal(run.headR, 3);
+  assert.equal(run.landing, 'pool');
+  assert.equal(run.bottomY, allEmpty.getSurfaceY(6, 6));
+});
+
+test('縁まで満ちた水たまりに落ちた水は、あふれて落ち口まで床を流れ、その落ち際も点滅しない', () => {
+  // 実物の4面: 滝が床の幅1の井戸（満水）に落ち、あふれた水が床を流れて湖へ落ちる。
+  // 着水先が「水たまり」だったので床の水が引かれず、落ち口の滝はセルの中身だけで
+  // 描かれて点滅していた（730 フレームで 368 回）
+  const map = makeWaterMap(`
+    ##########
+    .......1..
+    .......1..
+    ..........
+    #####.#8##
+    .....1....
+    ##########
+  `);
+  const runs = collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1);
+  const fall = runAt(runs, 7);
+  assert.equal(fall.landing, 'pool');
+  assert.ok(fall.sheet, 'あふれた水が床を流れる');
+  assert.equal(fall.sheet.drainC, 5);
+  assert.deepEqual(fall.sheet.segments, [[6 * T, 7 * T]], '床の水は岩の上だけ（井戸の上・落ち口の上には敷かない）');
+  const spill = runAt(runs, 5);
+  assert.equal(spill.headR, 3, '落ち口のセルが空でも落ち際を描く');
+  assert.equal(spill.align, 'right');
+});
+
+test('床の水の流れの筋は、帯を敷いたところにだけ描く（水面の上に破線が乗らない）', async () => {
+  const map = makeWaterMap(`
+    ##########
+    .......1..
+    .......1..
+    ..........
+    #####.#8##
+    .....1....
+    ##########
+  `);
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+  const renderer = createWaterRenderer({ game: { map } });
+  const sheetY = 4 * T - TH;
+  for (let t = 0; t < 20; t++) {
+    renderer.t = t;
+    const ctx = makeFakeCtx();
+    renderer.drawOverWorld(ctx, 0, 0);
+    const streaks = ctx.calls.filter((c) => c.name === 'fillRect' && c.args[1] === sheetY + 1 && c.args[3] === 1);
+    for (const c of streaks) {
+      assert.ok(c.args[0] >= 6 * T && c.args[0] + c.args[2] <= 7 * T,
+        `t=${t}: 筋 x=${c.args[0]} w=${c.args[2]} が岩の上（列6）の外にはみ出している`);
+    }
+  }
+});

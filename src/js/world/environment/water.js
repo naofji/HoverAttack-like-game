@@ -405,13 +405,18 @@ export function createWaterRenderer(env) {
                     }
                 }
                 // 床を流れる水の筋。流れる向きに動く
+                // 筋は帯を敷いたところ（segments）の中だけ。全長に描くと、水たまりや湖の
+                // 上を横切る区間で水面に破線が乗って見えた
                 for (const sheet of [run.sheet, run.feedSheet]) {
                     if (!sheet) continue;
                     const len = sheet.x1 - sheet.x0;
                     for (let s = 0; s < len; s += 10) {
                         const off = ((s + t * 1.5 * sheet.dir) % len + len) % len;
-                        const w = Math.min(4, len - off);
-                        if (w > 0) ctx.fillRect(sheet.x0 + off, sheet.y + 1, w, 1);
+                        const a = sheet.x0 + off;
+                        const seg = sheet.segments.find(([x0, x1]) => a >= x0 && a < x1);
+                        if (!seg) continue;
+                        const w = Math.min(4, seg[1] - a);
+                        if (w > 0) ctx.fillRect(a, sheet.y + 1, w, 1);
                     }
                 }
                 // 着水のしぶき。床（を流れる水の上面）か水たまりの液面で跳ねる。

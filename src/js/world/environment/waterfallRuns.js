@@ -71,7 +71,9 @@ function makeSheet(map, row, x0, x1, dir) {
         const a = Math.max(x0, c * TILE_SIZE);
         const b = Math.min(x1, (c + 1) * TILE_SIZE);
         const k = row * map.cols + c;
-        const painted = map.water[k] > 0 || map.waterSurfaceY[k] >= 0;
+        // 下が岩でないタイル（水たまりや湖の上、落ち口）には敷かない。水の上に敷くと
+        // 湖面の上にもう1枚帯が乗って見える
+        const painted = map.water[k] > 0 || map.waterSurfaceY[k] >= 0 || !map.isSolid(row + 1, c);
         if (painted) {
             if (segStart >= 0) { segments.push([segStart, a]); segStart = -1; }
         } else if (segStart < 0) {
@@ -161,7 +163,9 @@ function describeFoot(map, footR, c) {
     // 床を流れる水の上面まで
     if (map.isSolid(r + 1, c)) {
         const floorY = (r + 1) * TILE_SIZE - RUNNING_WATER_THICKNESS;
-        return { landing: 'floor', bottomY: level >= 0 ? Math.min(level, floorY) : floorY, landR: r };
+        // 床の上に、床の水より深い水たまりがあればそこへ落ちる
+        if (level >= 0 && level < floorY) return { landing: 'pool', bottomY: level, landR: r };
+        return { landing: 'floor', bottomY: floorY, landR: r };
     }
     // 水たまりへ落ちる
     if (level >= 0) {
@@ -178,6 +182,24 @@ function describeFoot(map, footR, c) {
     }
     // まだ空中（落ちている水の先頭）
     return { landing: 'none', bottomY: r * TILE_SIZE, landR: r };
+}
+
+/**
+ * 湖面の上を横へ流れてすぐ落ちる水か。湖の一番上の段が埋まっていく途中、滝の真下が
+ * 先に満水になると、落ちてきた水はその上を横へ流れ、段の中の満ちていないセルで
+ * 1セルだけ落ちる。これは湖の水面が均されているだけで滝ではないのに、泡としぶき付きの
+ * 短い滝として描かれ、満ちていないセルの場所が変わるたびに着水点が湖面を横に
+ * 動いて見えた（実機の指摘。液面がタイルの境目を越えた直後に起きる）。
+ * 岩の縁から湖へ落ちる本物の短い滝と分けるのは「両隣の下が湖の水か」。
+ */
+function isLakeSurfaceLeveling(map, headR, footR, c, head, foot) {
+    if (foot.landing !== 'pool' || head.source === 'mouth') return false;
+    // 1セルだけの区間で、すぐ下の段に着水する。落差をピクセルで測ると、上端を
+    // タイルの上辺から描く「空中」の区間が1タイルをわずかに超えて漏れた
+    if (headR !== footR || foot.landR !== footR + 1) return false;
+    // 両隣の下が湖の水（岩でも空気でもない）。岩なら縁から落ちる本物の短い滝、
+    // 空気なら床の上の水たまりへ落ちる1粒で、どちらも描く
+    return map.isWater(headR + 1, c - 1) && map.isWater(headR + 1, c + 1);
 }
 
 /**
@@ -226,6 +248,7 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
                 }
             }
             const foot = describeFoot(map, footR, c);
+            if (isLakeSurfaceLeveling(map, headR, footR, c, head, foot)) continue;
             const x = bandLeftX(c, head.align);
             const run = {
                 c, headR, footR, x, width: WATERFALL_BAND_WIDTH,
@@ -240,19 +263,70 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
             // 帯と重ねると半透明の二重塗りで角が明るく浮く（書き出して確認した）。
             // 落ち口の帯は縁の側に寄せて描き（describeHead の spill）、上端は床の水の
             // 上面と同じ高さなので、ちょうど L 字につながる
-            if (foot.landing === 'floor' && map.isSolid(foot.landR + 1, c)) {
-                const d = drainColFor(map, foot.landR, c);
+            // 縁まで満ちた水たまり（液面がそのタイルの上辺）に落ちた水は、その上を横へ
+            // あふれて落ち口まで流れる（シミュレーションもそう動く）。以前はここで何も
+            // 敷かなかったので、あふれた先の落ち際が手がかりを失って点滅した
+            let sheetRow = -1;
+            if (foot.landing === 'floor' && map.isSolid(foot.landR + 1, c)) sheetRow = foot.landR;
+            else if (foot.landing === 'pool' && foot.bottomY <= foot.landR * TILE_SIZE
+                && foot.landR - 1 >= 0 && !map.isSolid(foot.landR - 1, c)) sheetRow = foot.landR - 1;
+            if (sheetRow >= 0) {
+                const d = drainColFor(map, sheetRow, c);
                 if (d >= 0 && d !== c) {
                     const dir = d > c ? 1 : -1;
                     const from = dir > 0 ? x : x + WATERFALL_BAND_WIDTH;
                     const to = dir > 0
                         ? bandLeftX(d, 'left')
                         : bandLeftX(d, 'right') + WATERFALL_BAND_WIDTH;
-                    run.sheet = makeSheet(map, foot.landR, Math.min(from, to), Math.max(from, to), dir);
+                    run.sheet = makeSheet(map, sheetRow, Math.min(from, to), Math.max(from, to), dir);
+                    run.sheet.row = sheetRow;
+                    run.sheet.drainC = d;
                 }
             }
             runs.push(run);
         }
     }
+    addDrainSpills(map, runs);
     return runs;
+}
+
+/**
+ * 床の水が流れ込む落ち口には、その瞬間セルが空でも滝を描く。
+ *
+ * 細い流れは水量1の塊が4フレームおきに運ばれてくるだけなので、落ち口のセルに水が
+ * あるのは半分のフレームだけ。セルの中身だけで描くと、落ち際の滝が点いたり消えたり
+ * した（実物の4面で、1つの落ち際が 730 フレームのあいだに 368 回入れ替わっていた）。
+ * 床の水は上流の滝から導いていて点滅しないので、その行き先の落ち際も同じく導く。
+ * 下に既に滝の区間があれば、上へ伸ばして1本にする（横位置を揃えるため）。
+ */
+function addDrainSpills(map, runs) {
+    for (const run of runs.slice()) {
+        const sh = run.sheet;
+        if (!sh) continue;
+        const d = sh.drainC, row = sh.row;
+        const existing = runs.find((r) => r.c === d && r.headR <= row + 1 && r.footR >= row);
+        if (existing) {
+            // 同じ落ち口に「水たまりの縁からの床の水」もあると二重塗りになる。着水点から
+            // 導いたほうを優先する
+            existing.feedSheet = null;
+            continue;
+        }
+
+        const align = sh.dir > 0 ? 'left' : 'right';
+        const x = bandLeftX(d, align);
+        let k = row;
+        while (k + 1 < map.rows && !map.isSolid(k + 1, d) && !map.isWater(k + 1, d)) k++;
+        const below = runs.find((r) => r.c === d && r.headR === k + 1);
+        if (below) {
+            Object.assign(below, { headR: row, source: 'spill', align, topY: sh.y, x });
+            continue;
+        }
+        const foot = describeFoot(map, k, d);
+        runs.push({
+            c: d, headR: row, footR: k, x, width: WATERFALL_BAND_WIDTH,
+            source: 'spill', align, topY: sh.y,
+            bottomY: foot.bottomY, landing: foot.landing, landR: foot.landR,
+            sheet: null, feedSheet: null,
+        });
+    }
 }
