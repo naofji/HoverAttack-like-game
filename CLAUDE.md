@@ -35,13 +35,9 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 
 音は**すべて Web Audio の手続き合成**。オーディオファイル（wav/mp3）は1つも持っていないし、足さない（BGM の mp3 だけは別扱い）。
 
-- `WEAPON_SOUNDS` の部品は `hiss` / `tone` / `puffs` / `clicks` / `voice` の5つ。発射音だけでなく、リロードの「ガチャリ」も装填クリックも「レディ」の声もこの表にある。
 - **`src/js/audio/weaponSounds.js` の `renderWeaponSound()` と `tests/helpers/weapon-render.js` の `renderWeaponProfile()` は同じ音を出す対。** 前者は WebAudio、後者は node で測定するためのオフライン再現。**片方だけ変えない。** 時間設計など両方が要るロジックは純粋関数に切り出して共有する（例: `voiceBreakpoints()`）。
 - **音作りを変えたら A特性で音量を実測する。** `tests/helpers/dsp.js` の `transientLevel` / `aWeightedRms` を使い、既存の音との相対 dB をテストで縛る。これは実際に無音バグを出したことがあるためのルール（敵ホバー音を狭帯域バンドパスに替えて、帯域で捨てられるエネルギーを補正し忘れ、聞こえない音になった）。
-- 試聴用の書き出し: `node tools/render-weapon-sounds.mjs`（表の全項目）、`node tools/render-repair-hum.mjs`（ループ音）。出力は `audio-preview/`（git 管理外）。
-- **`AudioManager` は系統ごとに分かれている。** 本体（`audio/AudioManager.js`、約200行）に残っているのは AudioContext の生死と音量設定の入口だけで、音そのものは `audio/sounds/`（hover / enemySounds / loopSounds / playerSounds / stings）と `audio/engine/`（seBus / output）にある。`Object.assign(AudioManager.prototype, ...)` で混ぜているので `this` の意味は変わらない。**新しい音は系統のファイルへ足す。**
-- **音を「移動しただけ」のときは、鳴らして確かめるより WebAudio グラフを比べるほうが確実。** `tests/helpers/fake-audio-ctx.js` はノード種別・パラメータの予約イベント・接続・start/stop をすべて記録するので、各 `play*` を呼んでグラフを直列化し、変更の前後で diff を取れば「1サンプルも変わっていない」ことを示せる（分割のときに実際に使い、834ノードの一致を毎コミットで確認した）。
-- **効果音が出力へ直結していないかの見張り（`tests/se-bus.test.js`）は `audio/sounds/` と `audio/engine/` も読む。** BGM の2ファイルはわざと対象外（あちらはバスを通さず直結するのが正しい）。
+- 部品表の中身・試聴用の書き出し・`AudioManager` の系統分け・グラフ diff・se-bus の見張りは `src/js/audio/CLAUDE.md`（`audio/` 配下を触ると読み込まれる）。
 
 ---
 
