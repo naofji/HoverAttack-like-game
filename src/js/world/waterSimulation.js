@@ -18,9 +18,15 @@
 //      水位が上がるのは、その層が満ちて落ちられなくなった水がフェーズ1で
 //      上の行に積み上がる結果であって、この層の処理が押し上げるのではない。
 //
+// 3. 水圧（連通管）: waterPressure.js
+//    満水セルの中を通って、高い水面から低い水面へ運ぶ。フェーズ1・2は「落ちる」と
+//    「同じ行で横に広がる」しかしないので、低い池の水面より下でつながった池どうしは
+//    これが無いと水位が揃わない（2026-10-10 実測、1滴も動かなかった）。
+//
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
 import { MAX_WATER_MASS, MIN_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
+import { stepWaterPressure } from './waterPressure.js';
 
 /**
  * 1ステップの水流計算（行単位水槽レベリングモデル）。
@@ -31,7 +37,8 @@ import { MAX_WATER_MASS, MIN_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_F
  * @param {number} params.cols
  * @param {function(number, number): boolean} params.isSolid セルが固体（壁）か
  * @param {Set<number>|Array<number>} params.activeCells 現在水流がアクティブなセル (r * cols + c)
- * @returns {{ changedCells: Array<[number, number]>, nextActiveCells: Set<number> }}
+ * @returns {{ changedCells: Array<[number, number]>, nextActiveCells: Set<number>, pressureMoved: number }}
+ *   pressureMoved はフェーズ3（水圧）が運んだ水量の合計
  */
 export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, doFall = true }) {
     const nextActiveCells = new Set();
@@ -68,7 +75,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     };
 
     if (!activeCells || activeCells.size === 0) {
-        return { changedCells: [], nextActiveCells };
+        return { changedCells: [], nextActiveCells, pressureMoved: 0 };
     }
 
     // 処理対象セルを下層（rが大きい）から順にソート
@@ -239,6 +246,19 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
         }
     }
 
+    // ----------------------------------------------------
+    // フェーズ3: 水圧（連通管）
+    // ----------------------------------------------------
+    // 運ぶのは落下と同じフレームだけ。運ばないフレームは差が残っているかだけ確かめ、
+    // 残っていれば両側の水面をアクティブに残す（下の !doFall 節と同じく休眠を防ぐ）
+    const pressureMoved = stepWaterPressure({
+        water, rows, cols, isSolid,
+        seeds: cellsToProcess.map((x) => x.k),
+        doTransfer: doFall,
+        markChanged,
+        keepActive: (k) => nextActiveCells.add(k),
+    });
+
     if (!doFall) {
         // 落下処理をスキップしたフレームでは、まだ直下に落ちられる水セルをアクティブに保持し休眠を防ぐ
         for (const { r, c, k } of cellsToProcess) {
@@ -249,5 +269,5 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     }
 
     const changedCells = Array.from(changedSet).map((k) => [Math.floor(k / cols), k % cols]);
-    return { changedCells, nextActiveCells };
+    return { changedCells, nextActiveCells, pressureMoved };
 }

@@ -1170,6 +1170,16 @@ export const MIN_WATER_MASS = 1;
 export const WATER_MAX_FALL_FLOW = 2;   // 1垂直落下ステップあたりの最大流量（ゆっくり落下）
 export const WATER_FALL_INTERVAL = 4;   // 垂直落下の実行間隔（フレーム数。4フレームに1回実行でゆっくり落下）
 export const WATER_MAX_SPREAD_FLOW = 4; // 1ステップあたりの最大水平流出量（初期のスムーズな流出速度）
+// 水圧（連通管、world/waterPressure.js）。水面より下でつながった池どうしで、高い方から低い方へ
+// 1ステップ（WATER_FALL_INTERVAL に1回）あたり「接続部の太さ（セル数）× round(GAIN × √水位差)」を運ぶ。
+// 水位差は 1/8タイル単位。GAIN の初期値は、水位差4タイル（√32 ≈ 5.7）で 1経路あたり 2単位/4フレーム
+// ＝ 0.5単位/フレームになるように選んだ。水面より上の穴1段から滝で流れ落ちる速さ（実測 0.52単位/
+// フレーム、2026-10-10）とほぼ同じで、水面の上の穴と下の穴とで流れる速さの感覚が揃う。実機未確認
+export const WATER_PRESSURE_GAIN = 0.35;
+// これ未満の水位差では運ばない。1単位運ぶと差は2縮むので、2未満で運ぶと逆転して行き来する
+export const WATER_PRESSURE_MIN_DIFF = 2;
+// 1経路・1ステップあたりの上限（WATER_MAX_SPREAD_FLOW と同じ）。太い穴を開けた直後の勢いの頭打ち
+export const WATER_PRESSURE_MAX_FLOW = 4;
 // 水源（湧水）と滝の仕様
 // 湧き出る周期は WATER_FALL_INTERVAL と同じにする。落ちる水の塊は
 // WATER_FALL_INTERVAL フレームで1タイル進むので、周期がそれより長いと
