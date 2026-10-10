@@ -489,7 +489,10 @@ test('水源から落ちる水は、毎フレーム口から下まで滝とし�
         map.update();
         if (f < 60) continue;   // 先頭が下まで届くのを待つ
         const gaps = [];
-        for (let r = 2; r <= 10; r++) if (!map.isWaterfallCell(r, 5)) gaps.push(r);
+        // 口のマス（行1）から見る。口のマスだけは「ここから落ちた」の記録しか付かず（粒が落ちて来る
+        // ことは無い）、それも WATER_SPRING_INTERVAL に1回なので、保持が湧き水の周期より短いと
+        // ここだけ点滅する（保持3で種別の点滅 2,966→17,420。行2から見ていたときは見逃した）
+        for (let r = 1; r <= 10; r++) if (!map.isWaterfallCell(r, 5)) gaps.push(r);
         assert.deepEqual(gaps, [], `frame ${f}: 滝でない行 ${gaps.join(',')}（点線に見える）`);
     }
 });
