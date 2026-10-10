@@ -16,7 +16,7 @@ import {
     WATER_COLUMN_PARTICLE_COUNT, WATER_COLUMN_SPEED_MIN, WATER_COLUMN_SPEED_MAX, WATER_COLUMN_SPREAD,
     WATERFALL_SPLASH_SPRAY_MIN, WATERFALL_SPLASH_SPRAY_MAX, WATERFALL_SPLASH_SPRAY_SPEED_MIN,
     WATERFALL_SPLASH_SPRAY_SPEED_MAX, WATERFALL_SPLASH_SPRAY_SPREAD, WATERFALL_SPLASH_MIST_MIN,
-    WATERFALL_SPLASH_MIST_MAX, WATERFALL_BAND_WIDTH,
+    WATERFALL_SPLASH_MIST_MAX, WATERFALL_SPLASH_MIST_SPREAD, WATERFALL_BAND_WIDTH,
     TILE_SIZE,
 } from '../utils/Constants.js';
 import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
@@ -118,7 +118,7 @@ export const SpawnEffects = {
             this.particles.push(new SplashParticle(px, y, Math.cos(a) * s, Math.sin(a) * s));
         }
         const mist = Math.round(WATERFALL_SPLASH_MIST_MIN + (WATERFALL_SPLASH_MIST_MAX - WATERFALL_SPLASH_MIST_MIN) * k);
-        this.spawnWaterMist(x, y, mist, k);
+        this.spawnWaterMist(x, y, mist, k, WATERFALL_SPLASH_MIST_SPREAD);
     },
 
     /**
@@ -186,8 +186,12 @@ export const SpawnEffects = {
      * ホバー中、水面の少し上空で水面に舞う水滴。spawnSnowMist の平地(onSlope=false)
      * ケースと同じ角度分布 ── 水面は雪と違って斜面が無いので、その場合分けだけ無い。
      * closeness (0: 最遠〜1: 至近) に応じて初速（勢い）も連動する。
+     * spread は横の散らばりの倍率（横の初速と出る位置の横のばらつきに掛ける）。省略時 1 でホバーの
+     * 水滴のまま。滝の水煙は WATERFALL_SPLASH_MIST_SPREAD で狭める（床の上では水に落ちて消えないので、
+     * 倍率1だと寿命いっぱい横へ流れて ±100px 散らばった）。上向きの初速には掛けない。掛けると
+     * 水面の上の水煙がほとんど浮かず（高さ1px）、すぐ水に落ちて消えた
      */
-    spawnWaterMist(x, y, count, closeness = 0.5) {
+    spawnWaterMist(x, y, count, closeness = 0.5, spread = 1) {
         const speedScale = 0.8 + 0.4 * Math.max(0, Math.min(1, closeness));
         for (let i = 0; i < (count | 0); i++) {
             const dirSign = Math.random() < 0.5 ? 1 : -1; // 右 or 左
@@ -195,8 +199,8 @@ export const SpawnEffects = {
             const theta = dirSign > 0 ? tilt : Math.PI - tilt;
             const s = (0.6 + Math.random() * 1.2) * speedScale; // スラスターの噴流を受け勢いよく跳ねる
             this.particles.push(new WaterMistParticle(
-                this, x + (Math.random() - 0.5) * 32, y,
-                Math.cos(theta) * s, -Math.sin(theta) * s,
+                this, x + (Math.random() - 0.5) * 32 * spread, y,
+                Math.cos(theta) * s * spread, -Math.sin(theta) * s,
             ));
         }
     },

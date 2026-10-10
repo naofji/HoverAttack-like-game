@@ -113,3 +113,46 @@ test('水面に落ち込む滝の着水点の波紋は WATERFALL_SPLASH_RIPPLE �
   assert.ok(strengths.length > 0, '前提: 波紋が起きた');
   assert.ok(strengths.every((s) => s === WATERFALL_SPLASH_RIPPLE), `強さ ${strengths}`);
 });
+
+/** 落差が最大（強さ1）の着水点から出した粒を飛ばしきって、95% の粒が届いた横の距離と高さを返す */
+function reach(surface) {
+  const g = { particles: [], spawnWaterMist: SpawnEffects.spawnWaterMist,
+    map: { isWaterAtPixel: (x, y) => surface === 'pool' && y > 200 } };
+  for (let i = 0; i < 400; i++) SpawnEffects.spawnWaterfallSplash.call(g, 0, 200, 1);
+  const out = { spray: { dx: [], up: [] }, mist: { dx: [], up: [] } };
+  for (const p of g.particles) {
+    if (p instanceof WaterMistParticle) p.game = g;
+    const kind = p instanceof SplashParticle ? 'spray' : 'mist';
+    let dx = 0, up = 0;
+    for (let f = 0; f < 80 && p.alive; f++) {
+      p.update();
+      dx = Math.max(dx, Math.abs(p.x));
+      up = Math.max(up, 200 - p.y);
+    }
+    out[kind].dx.push(dx);
+    out[kind].up.push(up);
+  }
+  const p95 = (a) => a.sort((x, y) => x - y)[Math.floor(0.95 * (a.length - 1))];
+  return { sprayDx: p95(out.spray.dx), sprayUp: p95(out.spray.up), mistDx: p95(out.mist.dx), mistUp: p95(out.mist.up) };
+}
+
+test('しぶきと水煙は着水点のまわりに収まる（95% の粒が しぶき横±32px・高さ32px、水煙横±40px）', () => {
+  // 「派手すぎ。散らばる範囲を狭く」（2026-10-11 実機の指摘）。調整前は落差最大で しぶき横±64・高さ45、
+  // 水煙は床の上で横±102（水に落ちて消えないので寿命いっぱい流れた）
+  for (const surface of ['pool', 'floor']) {
+    const r = reach(surface);
+    assert.ok(r.sprayDx <= 32, `${surface}: しぶきの横 ${r.sprayDx.toFixed(0)}px`);
+    assert.ok(r.sprayUp <= 32, `${surface}: しぶきの高さ ${r.sprayUp.toFixed(0)}px`);
+    assert.ok(r.mistDx <= 40, `${surface}: 水煙の横 ${r.mistDx.toFixed(0)}px`);
+    // 狭めるのは横だけ。上向きの勢いまで絞ると、水面の上の水煙が1px しか浮かずにすぐ水へ落ちて消えた
+    assert.ok(r.mistUp >= 8, `${surface}: 水煙が浮かない（高さ ${r.mistUp.toFixed(0)}px）`);
+  }
+});
+
+test('ホバーの水滴（spawnWaterMist を倍率なしで呼ぶ）の散らばりは変えない', () => {
+  // 滝の水煙だけを狭める。spawnWaterMist の散らばりの倍率は省略時 1
+  const g = { particles: [] };
+  for (let i = 0; i < 400; i++) SpawnEffects.spawnWaterMist.call(g, 0, 0, 1, 1);
+  const maxSpeed = Math.max(...g.particles.map((p) => Math.hypot(p.vx, p.vy)));
+  assert.ok(maxSpeed > 1.9, `速さの上限 ${maxSpeed}（(0.6+1.2)×1.2=2.16 まで出るはず）`);
+});

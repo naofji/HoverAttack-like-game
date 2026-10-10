@@ -1282,10 +1282,14 @@ export const WATERFALL_SPLASH_FULL_DROP = TILE_SIZE * 6; // px。この落差で
 export const WATERFALL_SPLASH_SPRAY_MIN = 1;             // しぶきの粒（1回あたり、強さ0のとき）
 export const WATERFALL_SPLASH_SPRAY_MAX = 5;             //                 （強さ1のとき）
 export const WATERFALL_SPLASH_SPRAY_SPEED_MIN = 1.5;     // 強さ0のときの最大初速
-export const WATERFALL_SPLASH_SPRAY_SPEED_MAX = 4.5;     // 強さ1のときの最大初速
-export const WATERFALL_SPLASH_SPRAY_SPREAD = 1.4;        // rad。真上を中心にした扇の広さ
+// 散らばる範囲は「派手すぎ。狭く」（2026-10-11 実機の指摘）で絞った。落差最大で95%の粒が届く範囲:
+//   調整前 SPEED_MAX 4.5・SPREAD 1.4・水煙の倍率1 → しぶき横±64px・高さ45px、水煙は床の上で横±102px
+//   調整後 → tests/waterfall-splash.test.js が しぶき横±32・高さ32、水煙横±40 以内を縛る
+export const WATERFALL_SPLASH_SPRAY_SPEED_MAX = 3.2;     // 強さ1のときの最大初速（高さ v²/(2×0.18) ≈ 28px）
+export const WATERFALL_SPLASH_SPRAY_SPREAD = 0.7;        // rad。真上を中心にした扇の広さ
 export const WATERFALL_SPLASH_MIST_MIN = 1;              // 水煙の粒（1回あたり、強さ0のとき）
 export const WATERFALL_SPLASH_MIST_MAX = 4;              //               （強さ1のとき）
+export const WATERFALL_SPLASH_MIST_SPREAD = 0.3;         // 水煙の散らばりの倍率（ホバーの水滴を1として）
 // 水面に落ち込む滝の着水点の波紋（12フレームおき）。以前は 0.4 で、しぶきを派手にしても
 // 水面がほとんど揺れなかった。上限は WATER_RIPPLE_MAX
 export const WATERFALL_SPLASH_RIPPLE = 0.9;
