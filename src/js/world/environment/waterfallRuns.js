@@ -22,8 +22,9 @@
 // 3回続けて回帰を出した。memory: hoverattack-sticky-anchor-propagation-bug）。
 
 import {
-    TILE_SIZE, MAX_WATER_MASS, WATERFALL_BAND_WIDTH, RUNNING_WATER_THICKNESS,
+    TILE_SIZE, WATERFALL_BAND_WIDTH, RUNNING_WATER_THICKNESS,
 } from '../../utils/Constants.js';
+import { supportsWater } from '../waterRules.js';
 
 /** 帯の左端 x。left/right は壁から1px 離す（岩の面取りと重ならないように） */
 export function bandLeftX(c, align) {
@@ -32,9 +33,9 @@ export function bandLeftX(c, align) {
     return c * TILE_SIZE + Math.floor((TILE_SIZE - WATERFALL_BAND_WIDTH) / 2);
 }
 
-/** (r, c) の上に水が乗れるか（床か、満水の水）。落ち際・着水の判定に使う */
+/** (r, c) の上に水が乗れるか（床か、満水の水）。落ち際・着水の判定に使う。シミュレーションと同じ定義 */
 function supports(map, r, c) {
-    return map.isSolid(r, c) || map.water[r * map.cols + c] >= MAX_WATER_MASS;
+    return supportsWater(map.water, map.rows, map.cols, map._waterSolidFn(), r, c);
 }
 
 /**

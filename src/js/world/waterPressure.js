@@ -21,6 +21,7 @@
 import {
     MAX_WATER_MASS, WATER_PRESSURE_GAIN, WATER_PRESSURE_MIN_DIFF, WATER_PRESSURE_MAX_FLOW,
 } from '../utils/Constants.js';
+import { supportsWater } from './waterRules.js';
 
 const FULL = MAX_WATER_MASS;
 
@@ -70,7 +71,7 @@ export function stepWaterPressure({ water, rows, cols, isSolid, seeds, doTransfe
         if (water[k] !== FULL) return false;
         const r = Math.floor(k / cols), c = k % cols;
         if (isSolid(r, c)) return false;
-        return r + 1 >= rows || isSolid(r + 1, c) || water[k + cols] === FULL;
+        return supportsWater(water, rows, cols, isSolid, r + 1, c);
     };
 
     let moved = 0;
@@ -146,10 +147,8 @@ export function stepWaterPressure({ water, rows, cols, isSolid, seeds, doTransfe
             const key = r * cols + s0;
             if (drainOfSeg.has(key)) return drainOfSeg.get(key);
             let drain = false;
-            if (r + 1 < rows) {
-                for (let x = s0; x < cols && !isSolid(r, x); x++) {
-                    if (!isSolid(r + 1, x) && water[(r + 1) * cols + x] < FULL) { drain = true; break; }
-                }
+            for (let x = s0; x < cols && !isSolid(r, x); x++) {
+                if (!supportsWater(water, rows, cols, isSolid, r + 1, x)) { drain = true; break; }
             }
             drainOfSeg.set(key, drain);
             return drain;
@@ -158,7 +157,7 @@ export function stepWaterPressure({ water, rows, cols, isSolid, seeds, doTransfe
         const addSide = (k, r, cn) => {
             const n = r * cols + cn;
             if (water[n] >= FULL || isSolid(r, cn) || putCells.has(n)) return;
-            if (!(r + 1 >= rows || isSolid(r + 1, cn) || water[n + cols] === FULL)) return;
+            if (!supportsWater(water, rows, cols, isSolid, r + 1, cn)) return;
             if (r > 0 && !isSolid(r - 1, cn) && water[n - cols] > 0) return;
             if (segHasDrain(r, cn)) return;
             putCells.add(n);

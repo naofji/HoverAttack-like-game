@@ -15,6 +15,7 @@
 // 検証できるようにするため。
 
 import { MAX_WATER_MASS, MIN_WATER_MASS, TILE_SIZE } from '../utils/Constants.js';
+import { supportsWater } from './waterRules.js';
 
 export const WATER_NONE = 0;
 export const WATER_BODY = 1;     // 水中（タイル全体が水）
@@ -42,13 +43,18 @@ export const WATER_FALL = 3;     // 落下中（滝）
  *   A「直下が空気」                 11              取りこぼす      0
  *   B「直下が満水未満」             865（湖内に縞）    正しい          0
  *   C「自分も直下も満水未満」← これ    0              正しい          0
+ *
+ * 「直下が支えない」はシミュレーションと同じ supportsWater で読む。違うのは満水の
+ * セルを除くところだけで、これは上の表の B と C の差そのもの（意図した食い違い）。
+ * 代わりに、棚から棚へ階段状に流れ落ちる途中の満水のセル（真下は落ちた水がすぐ横へ
+ * 流れ去るのでほぼ空気）は、滝ではなく水面の四角に見える（2026-10-10 実機の指摘。
+ * 20週×撃ち抜き12回で延べ498セル・最長60フレーム、すべて水量8）。落下が横の流れより
+ * 8倍遅いことから来ていて、落下を速めると消えるが滝の点滅が16〜19倍になった
  */
-export function isFallingCell(water, cols, isSolid, r, c) {
-    const k = r * cols + c;
-    const mass = water[k];
+export function isFallingCell(water, rows, cols, isSolid, r, c) {
+    const mass = water[r * cols + c];
     if (mass < MIN_WATER_MASS || mass >= MAX_WATER_MASS) return false;
-    if (isSolid(r + 1, c)) return false;
-    return water[k + cols] < MAX_WATER_MASS;
+    return !supportsWater(water, rows, cols, isSolid, r + 1, c);
 }
 
 /**
@@ -133,7 +139,7 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
             continue;
         }
 
-        if (isFallingCell(water, cols, isSolid, r, c)) {
+        if (isFallingCell(water, rows, cols, isSolid, r, c)) {
             if (touch && (kind[k] !== WATER_FALL || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_FALL;
             surfaceY[k] = -1;

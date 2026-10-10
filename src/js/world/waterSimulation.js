@@ -25,8 +25,9 @@
 //
 // アクティブなセルのみを追跡するため、水が静止すれば計算量は自動的にゼロになる。
 
-import { MAX_WATER_MASS, MIN_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
+import { MAX_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
 import { stepWaterPressure } from './waterPressure.js';
+import { supportsWater } from './waterRules.js';
 
 /**
  * 1ステップの水流計算（行単位水槽レベリングモデル）。
@@ -92,17 +93,14 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
             let mass = water[k];
             if (mass === 0 || isSolid(r, c)) continue;
 
-            if (r + 1 < rows && !isSolid(r + 1, c)) {
+            if (!supportsWater(water, rows, cols, isSolid, r + 1, c)) {
                 const downKey = (r + 1) * cols + c;
-                const downMass = water[downKey];
-                if (downMass < MAX_WATER_MASS) {
-                    const flow = Math.min(mass, MAX_WATER_MASS - downMass, WATER_MAX_FALL_FLOW);
-                    if (flow > 0) {
-                        water[k] -= flow;
-                        water[downKey] += flow;
-                        markChanged(r, c);
-                        markChanged(r + 1, c);
-                    }
+                const flow = Math.min(mass, MAX_WATER_MASS - water[downKey], WATER_MAX_FALL_FLOW);
+                if (flow > 0) {
+                    water[k] -= flow;
+                    water[downKey] += flow;
+                    markChanged(r, c);
+                    markChanged(r + 1, c);
                 }
             }
         }
@@ -161,7 +159,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
             let hasDrain = false;
             let last = -1;
             for (let sc = segStart; sc <= segEnd; sc++) {
-                if (r + 1 < rows && !isSolid(r + 1, sc) && water[rowBase + cols + sc] < MAX_WATER_MASS) {
+                if (!supportsWater(water, rows, cols, isSolid, r + 1, sc)) {
                     last = sc;
                     hasDrain = true;
                 }
@@ -262,7 +260,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     if (!doFall) {
         // 落下処理をスキップしたフレームでは、まだ直下に落ちられる水セルをアクティブに保持し休眠を防ぐ
         for (const { r, c, k } of cellsToProcess) {
-            if (water[k] > 0 && r + 1 < rows && !isSolid(r + 1, c) && water[(r + 1) * cols + c] < MAX_WATER_MASS) {
+            if (water[k] > 0 && !supportsWater(water, rows, cols, isSolid, r + 1, c)) {
                 nextActiveCells.add(k);
             }
         }
