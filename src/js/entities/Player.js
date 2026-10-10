@@ -22,13 +22,12 @@ import {
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
-    WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { stairDirection, slopeDrawOffset, supportColumn, plateTipDirection, plateDrawOffset } from '../utils/slope.js';
 import { groundSlide, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
-import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
+import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
@@ -421,10 +420,7 @@ export class Player {
 
     /** Clamp vertical speed within allowed limits. */
     _updateSpeedCaps() {
-        const fallScale = this.motion.fallSpeedScale !== undefined
-            ? this.motion.fallSpeedScale
-            : (this.motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
-        const maxFall = PLAYER_MAX_FALLING_SPEED * fallScale;
+        const maxFall = PLAYER_MAX_FALLING_SPEED * fallSpeedScaleFor(this.motion);
         if (this.vy > maxFall) this.vy = maxFall;
         if (this.hovering && this.vy < PLAYER_MAX_HOVER_SPEED) this.vy = PLAYER_MAX_HOVER_SPEED;
     }

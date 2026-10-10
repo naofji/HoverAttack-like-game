@@ -107,7 +107,9 @@ export const AttackerMovement = {
 
         if (style === 'boost') this.boostFrames--;
         this.hovering = true;
-        this.vy -= this.config.climbThrust;
+        // 水中では自機（Player._updateBurstHover）と同じく推力も motion.speed 倍にする。
+        // 掛けないと、落下は遅いのに陸上と同じ力で昇る敵になる（2026-10-10）
+        this.vy -= this.config.climbThrust * this.motion.speed;
         this.hoverFuel -= HOVER_FUEL_CONSUMPTION;
         if (this.vy < cap) this.vy = cap;
         return true;

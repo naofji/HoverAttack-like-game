@@ -60,6 +60,18 @@ export function motionFor(game, x, y) {
     return game && game.env ? game.env.motionAt(x, y) : LAND_MOTION;
 }
 
+/**
+ * 落下速度の上限（空気中の MAX_FALLING_SPEED）に掛ける倍率。滝は自分の値を持ち、
+ * 水中（speed < 1）は WATER_FALL_SPEED_SCALE、陸上は 1。
+ * 自機・敵アタッカー・グレネード（と軌道予測）が同じ規則で沈むよう、ここ1つで決める。
+ * 以前は4か所に同じ式があり、敵アタッカーだけ書かれておらず水中で自機の約2.4倍の
+ * 速さで沈んでいた（実機の指摘、2026-10-10）。
+ */
+export function fallSpeedScaleFor(motion) {
+    if (motion.fallSpeedScale !== undefined) return motion.fallSpeedScale;
+    return motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1;
+}
+
 /** 索敵の横半径に掛ける倍率。game.env が無ければ 1。 */
 export function sightScaleFor(game) {
     return game && game.env ? game.env.sightScale : 1;

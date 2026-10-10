@@ -26,7 +26,7 @@ import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
 import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
-import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
+import { motionFor, LAND_MOTION, sightScaleFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
 import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
@@ -228,7 +228,9 @@ export class EnemyAttacker {
         // --- Physics ---
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
-        if (this.vy > PLAYER_MAX_FALLING_SPEED) this.vy = PLAYER_MAX_FALLING_SPEED;
+        // 落下の上限は自機と同じ規則（水中は WATER_FALL_SPEED_SCALE 倍）。fallSpeedScaleFor のコメント
+        const maxFall = PLAYER_MAX_FALLING_SPEED * fallSpeedScaleFor(this.motion);
+        if (this.vy > maxFall) this.vy = maxFall;
 
         if (!this.onGround && this.aiState === 'patrol') {
             this.vx *= AIR_FRICTION;

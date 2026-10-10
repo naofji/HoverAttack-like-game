@@ -8,12 +8,11 @@ import {
     GRENADE_BLOCK_DAMAGE, ENEMY_GRENADE_BLOCK_DAMAGE,
     GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
     GRENADE_LIFETIME,
-    WATER_FALL_SPEED_SCALE,
 } from '../utils/Constants.js';
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
-import { motionFor } from '../world/StageEnvironment.js';
+import { motionFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -36,10 +35,7 @@ export class Grenade {
 
         // Apply gravity & downforce
         this.vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
-        const fallScale = motion.fallSpeedScale !== undefined
-            ? motion.fallSpeedScale
-            : (motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1);
-        const maxFall = GRENADE_MAX_FALLING_SPEED * fallScale;
+        const maxFall = GRENADE_MAX_FALLING_SPEED * fallSpeedScaleFor(motion);
         if (this.vy > maxFall) this.vy = maxFall;
 
         // Calculate next position
