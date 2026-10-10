@@ -10,6 +10,7 @@ import { makeMap, makeGame, makeAttacker, flatWaterRows } from './helpers/enemy-
 import {
   TILE_SIZE, PLAYER_HEIGHT,
   HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL,
+  HOVER_WATER_MIST_BURST_FRAMES,
 } from '../src/js/utils/Constants.js';
 
 const WATER = { motionAt: () => ({ speed: 1, gravity: 1, slide: 0 }), sightScale: 1, kind: 'water' };
@@ -76,9 +77,37 @@ test('高すぎる（3ブロックより上）と出さない', () => {
   assert.deepEqual(mists, []);
 });
 
-test('低すぎる（0.5ブロック未満）と出さない', () => {
-  const { p, mists } = hoveringPlayer(WATER, HOVER_WATER_MIST_MIN_ALT - 4);
+test('水面のすぐ上（4px）でも水滴が舞う（足元から水面まで 0〜48px なら出す。2026-10-11 ユーザー指定）', () => {
+  // 以前は 0.5ブロック（8px）未満では出さなかった。雪の「歩いている／浮いている」の住み分けを
+  // 写した下限だったが、水の上は歩けないので住み分ける相手がいない
+  const { p, mists } = hoveringPlayer(WATER, 4);
   callMany(() => p._kickHoverWaterMist());
+  assert.ok(mists.length > 0, '出ていない');
+});
+
+/** W を押したまま地上から1フレーム。_updateBurstHover の本物を通してバーストジャンプさせる */
+function burstJump(p) {
+  p.onGround = true;
+  p.hoverFuel = 9999;
+  p._updateBurstHover({ isKeyDown: (k) => k === 'KeyW' });
+  assert.equal(p.onGround, false, '前提: バーストジャンプした');
+  assert.equal(p.hovering, false, '前提: バーストの直後はホバーではない');
+}
+
+test('バーストジャンプの直後は、ホバーしていなくても水滴が舞う', () => {
+  const { p, mists } = hoveringPlayer(WATER, (HOVER_WATER_MIST_MIN_ALT + HOVER_WATER_MIST_MAX_ALT) / 2);
+  burstJump(p);
+  callMany(() => p._kickHoverWaterMist());
+  assert.ok(mists.length > 0, '一度も撒かれていない');
+});
+
+test('バーストジャンプから HOVER_WATER_MIST_BURST_FRAMES を過ぎたら、ホバーしていなければ出さない', () => {
+  const { p, mists } = hoveringPlayer(WATER, (HOVER_WATER_MIST_MIN_ALT + HOVER_WATER_MIST_MAX_ALT) / 2);
+  burstJump(p);
+  callMany(() => p._kickHoverWaterMist(), HOVER_WATER_MIST_BURST_FRAMES);
+  assert.ok(mists.length > 0, '前提: バーストのあいだは出ていた');
+  mists.length = 0;
+  callMany(() => p._kickHoverWaterMist(), HOVER_WATER_MIST_INTERVAL * 2);
   assert.deepEqual(mists, []);
 });
 
@@ -124,6 +153,23 @@ test('敵アタッカーも水面の1〜2ブロック上空でホバーしてい
   const { e, mists } = hoveringAttacker((HOVER_WATER_MIST_MIN_ALT + HOVER_WATER_MIST_MAX_ALT) / 2);
   callMany(() => e._kickHoverWaterMist());
   assert.ok(mists.length > 0, '一度も撒かれていない');
+});
+
+test('敵アタッカーも水面のすぐ上（4px）で水滴が舞う', () => {
+  const { e, mists } = hoveringAttacker(4);
+  callMany(() => e._kickHoverWaterMist());
+  assert.ok(mists.length > 0, '出ていない');
+});
+
+test('敵アタッカーもジャンプの直後は、ホバーしていなくても水滴が舞い、BURST_FRAMES を過ぎたら止む', () => {
+  const { e, mists } = hoveringAttacker((HOVER_WATER_MIST_MIN_ALT + HOVER_WATER_MIST_MAX_ALT) / 2);
+  e.hovering = false;
+  e._jump();
+  callMany(() => e._kickHoverWaterMist(), HOVER_WATER_MIST_BURST_FRAMES);
+  assert.ok(mists.length > 0, 'ジャンプの直後に出ていない');
+  mists.length = 0;
+  callMany(() => e._kickHoverWaterMist(), HOVER_WATER_MIST_INTERVAL * 2);
+  assert.deepEqual(mists, []);
 });
 
 test('敵アタッカーもホバーしていなければ水滴は出さない', () => {

@@ -22,6 +22,7 @@ import {
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
+    HOVER_WATER_MIST_BURST_FRAMES,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -133,6 +134,7 @@ export class Player {
         this.walkTimer = 0;
         this.invincibleTimer = 0; // frames of invincibility after respawn
         this.hoverCooldown = 0;   // frames before hover can activate after jump
+        this._burstMistFrames = 0; // バーストの直後、水面に水滴を舞わせる残りフレーム（_kickHoverWaterMist）
         this.missileCooldown = 0; // frames before next missile can be fired
 
         // Machine Gun state
@@ -354,15 +356,19 @@ export class Player {
     }
 
     /**
-     * 水面の少し上空をホバーしているときだけ、水面で水滴が舞う（_kickHoverSnowMist
-     * の水面版）。雪は「床の slide」で面を判定したが、水面には onTerrain が
+     * 水面の少し上空をホバーしているとき（とバーストジャンプの直後）だけ、水面で水滴が舞う（_kickHoverSnowMist
+     * の水面版）。バーストの直後はホバーの待ち時間（HOVER_COOLDOWN_AFTER_BURST）で hovering が
+     * 立たないので、HOVER_WATER_MIST_BURST_FRAMES のあいだは別に数える（2026-10-11 実機の指摘）。雪は「床の slide」で面を判定したが、水面には onTerrain が
      * 立たない（水は衝突しない）ので、面の種類は env.kind、距離は
      * waterClearance で見る。すでに水に触れていれば null が返るので、
      * その場合はしぶき(spawnSplash)に任せて何もしない。
      */
     _kickHoverWaterMist() {
-        if (!this.hovering) return;
-        if (this.onGround || this.onTerrain) return;
+        // 早く抜ける条件より先に数える（水の面でなくてもバーストの時間は過ぎていく）
+        const bursting = this._burstMistFrames > 0;
+        if (bursting) this._burstMistFrames--;
+        if (!this.hovering && !bursting) return;
+        if (this.onGround || this.onTerrain) { this._burstMistFrames = 0; return; }
         if (!this.game.spawnWaterMist) return;
         if (!this.game.env || this.game.env.kind !== 'water') return;
         const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
@@ -389,6 +395,7 @@ export class Player {
                 this.onGround = false;
                 this.hoverFuel -= BURST_FUEL_CONSUMPTION;
                 this.hoverCooldown = HOVER_COOLDOWN_AFTER_BURST;
+                this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
                 audioManager.playBurst();
             } else if (this.hoverCooldown <= 0 && this.hoverFuel > 0) {
                 // Hover (dynamic thrust based on remaining fuel)
@@ -838,6 +845,7 @@ export class Player {
         this.crouching = false;
         this.stunTimer = 0;
         this.hoverCooldown = 0;
+        this._burstMistFrames = 0;
         this.missileCooldown = 0;
         this.walkFrame = 2;
         this.walkTimer = 0;

@@ -81,6 +81,7 @@ export class EnemyAttacker {
         this.fireTimer = Math.floor(spawnRng.next() * config.fireInterval);
         this.aiState = 'patrol'; // 'patrol', 'chase' or 'return'
         this.jumpCooldown = 0;
+        this._burstMistFrames = 0; // ジャンプの直後、水面に水滴を舞わせる残りフレーム（_kickHoverWaterMist）
 
         // Home position (spawn point) — the attacker returns here when displaced
         this.homeX = x;
@@ -301,13 +302,16 @@ export class EnemyAttacker {
     }
 
     /**
-     * 水面の少し上空をホバーしているときだけ、水面で水滴が舞う（_kickHoverSnowMist
-     * の水面版）。面の種類は env.kind、距離は waterClearance で見る。粒は自機と
+     * 水面の少し上空をホバーしているとき（とジャンプの直後 HOVER_WATER_MIST_BURST_FRAMES）だけ、
+     * 水面で水滴が舞う（_kickHoverSnowMist の水面版。自機と同じ規則）。面の種類は env.kind、距離は waterClearance で見る。粒は自機と
      * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
      */
     _kickHoverWaterMist() {
-        if (!this.hovering) return;
-        if (this.onGround || this.onTerrain) return;
+        // 早く抜ける条件（画面外など）より先に数える。画面外でもジャンプの時間は過ぎていく
+        const bursting = this._burstMistFrames > 0;
+        if (bursting) this._burstMistFrames--;
+        if (!this.hovering && !bursting) return;
+        if (this.onGround || this.onTerrain) { this._burstMistFrames = 0; return; }
         if (!this.game.spawnWaterMist) return;
         if (!this.game.env || this.game.env.kind !== 'water') return;
         if (this.game.camera && this.game.canvas

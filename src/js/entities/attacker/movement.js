@@ -21,7 +21,7 @@ import {
     RIVAL_DASH_FRAMES, RIVAL_DASH_MULT,
     ATTACKER_COVER_CHECK_INTERVAL, ATTACKER_COVER_SCAN_TILES, ATTACKER_COVER_MIN_DIST,
     EMERGENCY_DEFENSE_SPEED_MULT,
-    SMOKE_COOLDOWN,
+    SMOKE_COOLDOWN, HOVER_WATER_MIST_BURST_FRAMES,
 } from '../../utils/Constants.js';
 import { hasLineOfSight } from '../../utils/Physics.js';
 import { audioManager } from '../../audio/AudioManager.js';
@@ -496,6 +496,8 @@ export const AttackerMovement = {
         this.vy = this.jumpForce;
         this.onGround = false;
         this.jumpCooldown = 60; // ~1 second cooldown
+        // 自機のバーストジャンプと同じく、跳んだ直後は噴射で水面に水滴を舞わせる（_kickHoverWaterMist）
+        this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
         audioManager.playEnemyBurst(this.x + this.width / 2, this.y + this.height / 2);
     },
 

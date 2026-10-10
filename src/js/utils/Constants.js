@@ -1356,9 +1356,15 @@ export const HOVER_SNOW_MIST_COLOR = '#C7D2DF';
 // 「床の性質(slide)」で判定していた雪と違い、水は env.kind === 'water' と
 // waterClearance（水面までの距離）で判定する。範囲・間隔・個数は雪と同じ値を出発点にし、
 // 実機で見て調整する（このファイルの他の値と同じ流儀）
-export const HOVER_WATER_MIST_MIN_ALT = TILE_SIZE * 0.5;
+// 下限は 0（足元から水面まで 0〜48px なら出す。2026-10-11 ユーザー指定）。以前は雪の値を写した
+// 半タイルで、雪では「歩いている（SNOW_KICK）／浮いている」の住み分けに要ったが、水の上は歩けない
+export const HOVER_WATER_MIST_MIN_ALT = 0;
 export const HOVER_WATER_MIST_MAX_ALT = TILE_SIZE * 3;
 export const HOVER_WATER_MIST_INTERVAL = 2; // より連続して湧き出るように間隔を短縮
+// バーストジャンプ（敵アタッカーは _jump）の直後、ホバーしていなくても水滴を出すフレーム数。
+// バーストの噴射も水面を叩くはず、という実機の指摘（2026-10-11）。出発点はバースト後に
+// ホバーが効かない時間（HOVER_COOLDOWN_AFTER_BURST = 20）と同じ。実機で見て調整する
+export const HOVER_WATER_MIST_BURST_FRAMES = 20;
 export const HOVER_WATER_MIST_MIN_COUNT = 6;  // 水面から離れているとき（最遠付近）の最小粒数
 export const HOVER_WATER_MIST_MAX_COUNT = 24; // 水面に最も近いときの最大粒数
 export const HOVER_WATER_MIST_COUNT = 18;    // 互換・中間値（固定指定用）
