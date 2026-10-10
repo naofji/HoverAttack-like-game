@@ -1375,6 +1375,11 @@ export class Map {
      * 水面の「行」だけを返す waterSurfaceRow もあったが、液面はタイルの途中にある
      * ので、しぶきやドローンの停止位置が最大15px ずれ、滝の中では滝のてっぺんまで
      * 遡っていた。水面の定義をこれ1つにした。
+     *
+     * 液面を持たないセルは、水量ではなく種別で「水か」を決める（isWaterAtPixel と同じ）。
+     * 流れの記録（waterStream.js）で滝になった空のセルは水量0なので、水量で見ると
+     * isWaterAtPixel は水と答えるのに -1 を返し、爆発の水柱が黙って出なかった。
+     * 水量のあるセルの種別は必ず滝・水面・水中のどれかなので、それ以外の答えは変わらない
      */
     getSurfaceY(r, c) {
         if (!this.water) return -1;
@@ -1382,7 +1387,7 @@ export class Map {
         this._rebuildWaterCacheIfDirty();
         const level = this.waterSurfaceY[r * this.cols + c];
         if (level >= 0) return level;
-        return this.isWater(r, c) ? r * TILE_SIZE : -1;
+        return this.waterKind[r * this.cols + c] !== WATER_NONE ? r * TILE_SIZE : -1;
     }
 
     isWaterAtPixel(x, y) {

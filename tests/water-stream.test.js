@@ -222,3 +222,25 @@ test('塊が縦穴を落ちても、その上に滝の尾が残らない（記�
         assert.equal(tail, 0, `幅 ${W}: 塊の上に滝の尾 ${tail} セル×フレーム`);
     }
 });
+
+test('流れの記録だけで滝になった空のセルも、水と答えるなら液面（タイルの上辺）が取れる', async () => {
+    // isWaterAtPixel は種別が滝なら水と答える。getSurfaceY が水量だけを見ていると、記録で滝に
+    // なった空のセルでは -1 を返し、「水なのに液面が無い」になる（爆発の水柱 spawnWaterColumn が
+    // 黙って出なくなる。2026-10-10 最終レビューの指摘）。滝のセルはタイルの上辺を液面として返す
+    const { makeWaterMap } = await import('./helpers/water-map.js');
+    const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
+    const map = makeWaterMap(`
+        ###
+        #1#
+        #.#
+        #.#
+        ###
+    `);
+    map.waterStreamHold[2 * map.cols + 1] = WATER_STREAM_HOLD_FRAMES;
+    map.waterStreamLive.add(2 * map.cols + 1);
+    map.refresh();
+    assert.ok(map.isWaterfallCell(2, 1), '前提: 記録で滝');
+    assert.ok(map.isWaterAtPixel(1.5 * TILE_SIZE, 2.5 * TILE_SIZE), '前提: 水と答える');
+    assert.equal(map.getSurfaceY(2, 1), 2 * TILE_SIZE);
+    assert.equal(map.getSurfaceY(3, 1), -1, '記録の無い空のセルは -1 のまま');
+});
