@@ -47,13 +47,22 @@ export const WATER_FALL = 3;     // 落下中（滝）
  * 「直下が支えない」はシミュレーションと同じ supportsWater で読む。違うのは満水の
  * セルを除くところだけで、これは上の表の B と C の差そのもの（意図した食い違い）。
  * 代わりに、棚から棚へ階段状に流れ落ちる途中の満水のセル（真下は落ちた水がすぐ横へ
- * 流れ去るのでほぼ空気）は、滝ではなく水面の四角に見える（2026-10-10 実機の指摘。
+ * 流れ去るのでほぼ空気）は、滝ではなく水面の四角に見えた（2026-10-10 実機の指摘。
  * 20週×撃ち抜き12回で延べ498セル・最長60フレーム、すべて水量8）。落下が横の流れより
- * 8倍遅いことから来ていて、落下を速めると消えるが滝の点滅が16〜19倍になった
+ * 8倍遅かったことから来ていて、落下を毎フレームにして減らした（4面で浮いた満水の四角 682→206）。
+ *
+ * 落下が毎フレームになると、細い滝は水量1の粒が3マスおきに並んだものになる。そこで hold
+ * （waterStream.js の流れの記録）が残っているセルは、空でも滝とみなす。満水・真下が支える、の
+ * 条件は同じなので、湖の中や床の上の空のセルは記録があっても滝にならない。
+ * hold を省略すると中身だけで判定する（記録を持たないテスト・道具の呼び方）
  */
-export function isFallingCell(water, rows, cols, isSolid, r, c) {
-    const mass = water[r * cols + c];
-    if (mass < MIN_WATER_MASS || mass >= MAX_WATER_MASS) return false;
+export function isFallingCell(water, rows, cols, isSolid, r, c, hold = null) {
+    const k = r * cols + c;
+    const mass = water[k];
+    if (mass >= MAX_WATER_MASS) return false;
+    if (mass < MIN_WATER_MASS) {
+        if (!hold || hold[k] === 0 || isSolid(r, c)) return false;
+    }
     return !supportsWater(water, rows, cols, isSolid, r + 1, c);
 }
 
@@ -126,20 +135,21 @@ function rowSegmentHasExposedWater(water, isSolid, r, c, cols) {
  * 水面かどうかは直上のセルの種別を読むので、この向きでなければならない。
  * @returns {Array<number>} この列で見つかった水面セルの行
  */
-export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c }) {
+export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, hold = null }) {
     const surfaceRows = [];
     for (let r = 0; r < rows; r++) {
         const k = r * cols + c;
         const mass = water[k];
 
-        if (mass < MIN_WATER_MASS) {
-            kind[k] = WATER_NONE;
+        // 滝を先に見る。流れの記録があれば空のセルも滝になる（isFallingCell）
+        if (isFallingCell(water, rows, cols, isSolid, r, c, hold)) {
+            kind[k] = WATER_FALL;
             surfaceY[k] = -1;
             continue;
         }
 
-        if (isFallingCell(water, rows, cols, isSolid, r, c)) {
-            kind[k] = WATER_FALL;
+        if (mass < MIN_WATER_MASS) {
+            kind[k] = WATER_NONE;
             surfaceY[k] = -1;
             continue;
         }
@@ -328,10 +338,11 @@ function paintTopAt(water, kind, surfaceY, cols, isSolid, r, c) {
  *     列になるので外す
  *   - 真上が滝でない水の空気は、真上が必ず支えの無い満水のセル＝流れの途中なので、どれも数フレームで
  *     消える。泡かどうかの入れ替わりは28,800フレームで延べ360回
+ *   - 流れの記録で滝になった空のセル（waterStream.js）は泡にしない。滝の帯で描くので
  */
 function isFoamAt(water, kind, rows, cols, isSolid, r, c) {
     const k = r * cols + c;
-    if (r === 0 || water[k] >= MIN_WATER_MASS || isSolid(r, c)) return false;
+    if (r === 0 || water[k] >= MIN_WATER_MASS || isSolid(r, c) || kind[k] === WATER_FALL) return false;
     const a = k - cols;
     if (water[a] < MIN_WATER_MASS || kind[a] === WATER_FALL || isSolid(r - 1, c)) return false;
     return r + 1 >= rows || isSolid(r + 1, c) || water[k + cols] >= MIN_WATER_MASS;
@@ -373,8 +384,9 @@ function paintedTop(y, r) {
  * @param {Uint8Array|undefined} [p.foam] 泡のマス（1/0）。paintTopY を渡すときは必ず一緒に渡す
  * @param {Set<number>|undefined} [p.foamCells] 泡のマスの一覧 (r * cols + c)。foam と一緒に保つ
  * @param {Set<number>|undefined} [p.repaint] 塗り直しの要るセル (r * cols + c) を足す先
+ * @param {Uint8Array|null} [p.hold] 流れの記録（waterStream.js）。省略すると中身だけで滝を判定する
  */
-export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, foamCells, rows, cols, isSolid, dirtyCols, repaint }) {
+export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, foamCells, rows, cols, isSolid, dirtyCols, repaint, hold = null }) {
     // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
     // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
     // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
@@ -388,7 +400,7 @@ export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, foam
 
     // まず kind を決め直す
     for (const c of cols2) {
-        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c });
+        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, hold });
     }
 
     // 液面の平均を取り直す種を集める。dirty 列そのものに加えて**両隣**も見るのは、

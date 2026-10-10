@@ -13,12 +13,15 @@ const isWater = (ctx, r, c) => {
     return ctx.water[r * ctx.cols + c] >= MIN_WATER_MASS;
 };
 
+// 流れの記録（ctx.hold）が残っている空のセルも、真下が支えなければ滝（waterStream.js）
 const isFalling = (ctx, r, c) => {
-    if (!isWater(ctx, r, c)) return false;
-    const mass = ctx.water[r * ctx.cols + c];
+    const k = r * ctx.cols + c;
+    const held = !!ctx.hold && ctx.hold[k] > 0 && !ctx.isSolid(r, c);
+    if (!isWater(ctx, r, c) && !held) return false;
+    const mass = ctx.water[k];
     if (mass >= MAX_WATER_MASS) return false;
-    if (ctx.isSolid(r + 1, c)) return false;
     if (r + 1 >= ctx.rows) return false;
+    if (ctx.isSolid(r + 1, c)) return false;
     return ctx.water[(r + 1) * ctx.cols + c] < MAX_WATER_MASS;
 };
 
@@ -72,8 +75,8 @@ const isSurface = (ctx, r, c) => {
 };
 
 export function referenceKindAt(ctx, r, c) {
-    if (!isWater(ctx, r, c)) return WATER_NONE;
     if (isFalling(ctx, r, c)) return WATER_FALL;
+    if (!isWater(ctx, r, c)) return WATER_NONE;
     if (isSurface(ctx, r, c)) return WATER_SURFACE;
     return WATER_BODY;
 }
@@ -146,13 +149,14 @@ export function referenceSurfaceYAll(ctx) {
 
 /**
  * 泡のマス: 空気で、真上が「滝でない水」、真下が水か岩（マップの底より下も岩とみなす）。
- * 棚から棚へ階段状に流れ落ちる途中の満水のセルの真下の隙間で、泡の多い水として塗る
+ * 棚から棚へ階段状に流れ落ちる途中の満水のセルの真下の隙間で、泡の多い水として塗る。
+ * 流れの記録で滝になった空のセルは泡にしない
  */
 export function referenceFoamAll(ctx) {
     const out = new Uint8Array(ctx.rows * ctx.cols);
     for (let r = 1; r < ctx.rows; r++) {
         for (let c = 0; c < ctx.cols; c++) {
-            if (ctx.isSolid(r, c) || isWater(ctx, r, c)) continue;
+            if (ctx.isSolid(r, c) || isWater(ctx, r, c) || isFalling(ctx, r, c)) continue;
             if (ctx.isSolid(r - 1, c) || !isWater(ctx, r - 1, c) || isFalling(ctx, r - 1, c)) continue;
             if (r + 1 >= ctx.rows || ctx.isSolid(r + 1, c) || isWater(ctx, r + 1, c)) out[r * ctx.cols + c] = 1;
         }

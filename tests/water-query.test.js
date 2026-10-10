@@ -150,7 +150,7 @@ function makeRng(seed) {
     return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-function randomWorld(seed) {
+function randomWorld(seed, { withHold = false } = {}) {
     const rng = makeRng(seed);
     const rows = 20, cols = 24;
     const solid = new Uint8Array(rows * cols);
@@ -169,7 +169,14 @@ function randomWorld(seed) {
     }
     const isSolid = (r, c) =>
         (r < 0 || r >= rows || c < 0 || c >= cols) ? true : solid[r * cols + c] === 1;
-    return { rows, cols, water, isSolid };
+    // 流れの記録（waterStream.js）。空のセルにも水のあるセルにも、ばらばらに残りフレームを置く
+    const hold = withHold ? new Uint8Array(rows * cols) : null;
+    if (hold) {
+        for (let k = 0; k < rows * cols; k++) {
+            if (!solid[k] && rng() < 0.2) hold[k] = 1 + Math.floor(rng() * 4);
+        }
+    }
+    return { rows, cols, water, isSolid, hold };
 }
 
 function buildCache(ctx) {
@@ -207,6 +214,13 @@ test('ランダムな地形と水量 40通りで、キャッシュが参照実�
     for (let seed = 1; seed <= 40; seed++) {
         const ctx = randomWorld(seed);
         assertMatchesReference(ctx, buildCache(ctx), `seed ${seed}`);
+    }
+});
+
+test('流れの記録があっても、キャッシュが参照実装と全セル一致する', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+        const ctx = randomWorld(seed, { withHold: true });
+        assertMatchesReference(ctx, buildCache(ctx), `seed ${seed}（記録あり）`);
     }
 });
 
