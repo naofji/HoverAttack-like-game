@@ -180,7 +180,7 @@ test('2. 滝の下端のすぐ下が1セルだけ空いていても、その下�
   assert.equal(run.bottomY, map.getSurfaceY(4, 4));
 });
 
-test('2. 列の途中の1セルの空き（水量1の塊の継ぎ目）は越えて1本の滝にする', () => {
+test('2. 列の途中で一瞬空になったセルも、流れの記録があれば1本の滝になる', () => {
   const map = makeWaterMap(`
     ##########
     ....1.....
@@ -191,6 +191,10 @@ test('2. 列の途中の1セルの空き（水量1の塊の継ぎ目）は越え
     ..........
     ##########
   `);
+  // 落下が毎フレームになってからは、粒の継ぎ目の空のセルは流れの記録（waterStream.js）で滝になる。
+  // 描画の側で空きを越える処理は要らなくなった（外して runFlicker 4,407 のまま）
+  map.waterStreamHold[3 * map.cols + 4] = 4;
+  map.refresh();
   const runs = collectWaterfallRuns(map, 0, map.cols - 1, 0, map.rows - 1).filter((r) => r.c === 4);
   assert.equal(runs.length, 1, '1本の区間');
   assert.equal(runs[0].source, 'mouth');

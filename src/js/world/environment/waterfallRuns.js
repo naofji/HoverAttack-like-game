@@ -225,29 +225,21 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
             if (!map.isWaterfallCell(r, c)) { r++; continue; }
             let headR = r;
             while (headR - 1 >= 0 && map.isWaterfallCell(headR - 1, c)) headR--;
-            // 下へ辿る。途中の1セルだけの空き（水量1の塊の継ぎ目）は越えて1本にする
+            // 下へ辿る。以前は途中の1セルだけの空き（水量1の塊の継ぎ目）を越えて1本にしていたが、
+            // 落下を毎フレームにしてからは、粒の継ぎ目の空のセルも流れの記録（waterStream.js）で
+            // 滝になる。外しても描いた帯の点滅は 4,407 のまま変わらなかった（4面・6シード×2400f）
             let footR = r;
             for (;;) {
                 if (footR + 1 < map.rows && map.isWaterfallCell(footR + 1, c)) { footR++; continue; }
-                if (footR + 2 < map.rows && !map.isWater(footR + 1, c) && !map.isSolid(footR + 1, c)
-                    && map.isWaterfallCell(footR + 2, c)) { footR += 2; continue; }
                 break;
             }
             r = footR + 1;
 
-            // 細い流れは水量1の塊が並んだもので、湧き水が4フレームおきにしか出ないので、
-            // 上端のセル（水源の口・床の縁の落ち口）がその瞬間だけ空になることが
-            // ある。そのまま判定すると「空中から始まる滝」になり、口の形・左右の寄せが
-            // フレームごとに入れ替わって見えた（実物の4面で、区間の 13% のフレームで
-            // 上端が入れ替わっていた）。空いた1セルぶんだけ遡って判定し直す
-            let head = describeHead(map, headR, c);
-            if (head.source === 'air' && headR - 1 >= 0 && !map.isWater(headR - 1, c)) {
-                const above = describeHead(map, headR - 1, c);
-                if (above.source !== 'air') {
-                    headR -= 1;
-                    head = above;
-                }
-            }
+            // 以前は、上端のセル（水源の口・床の縁の落ち口）が一瞬空になって「空中から始まる滝」に
+            // 化けるのを防ぐため、空いた1セルぶん遡って判定し直していた（区間の 13% のフレームで
+            // 上端が入れ替わっていた）。流れの記録（waterStream.js）で空のセルも滝になってからは
+            // 要らず、外すと描いた帯の点滅は 4,407→4,162 とむしろ減った（4面・6シード×2400f）
+            const head = describeHead(map, headR, c);
             const foot = describeFoot(map, footR, c);
             if (isLakeSurfaceLeveling(map, headR, footR, c, head, foot)) continue;
             const x = bandLeftX(c, head.align);
@@ -294,9 +286,13 @@ export function collectWaterfallRuns(map, c0, c1, r0, r1) {
 /**
  * 床の水が流れ込む落ち口には、その瞬間セルが空でも滝を描く。
  *
- * 細い流れは水量1の塊が4フレームおきに運ばれてくるだけなので、落ち口のセルに水が
+ * 細い流れは水量1の塊がとびとびに運ばれてくるだけなので、落ち口のセルに水が
  * あるのは一部のフレームだけ（落下が4フレームに1回だったころの実測は半分）。セルの中身だけで描くと、落ち際の滝が点いたり消えたり
  * した（実物の4面で、1つの落ち際が 730 フレームのあいだに 368 回入れ替わっていた）。
+ * 流れの記録（waterStream.js）を入れた後も要る。床を横へ流れてくる水は量2以上で落ちることがあり
+ * （記録は量1だけ）、粒の間隔も湧き水の4フレームに揃わない。外すと、床の水の行き先に滝の無い
+ * フレームが延べ682（163回、中央値3・最長48フレーム）出た（4面・6シード×2400f、撃ち抜きあり）。
+ * 描いた帯の点滅の数（runFlicker）は外すと 4,162→2,390 に減るが、それは描かれなくなったぶん
  * 床の水は上流の滝から導いていて点滅しないので、その行き先の落ち際も同じく導く。
  * 下に既に滝の区間があれば、上へ伸ばして1本にする（横位置を揃えるため）。
  */
