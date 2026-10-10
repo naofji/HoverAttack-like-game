@@ -306,3 +306,20 @@ test('行き止まりのトンネルの先から上へ伸びる幅1の縦穴に�
     assert.ok(Math.abs(surfaceH(s, 1, 5) - surfaceH(s, 8, 8)) <= 2, `縦穴に水が上がっていない: 池 ${surfaceH(s, 1, 5)} 縦穴 ${surfaceH(s, 8, 8)}`);
     assert.equal(active.size, 0);
 });
+
+test('doPressure が偽のフレームは、落下があっても水圧では運ばない（間隔を落下から切り離す）', () => {
+    // 落下を毎フレームにしても、水圧の速さは実機で確認した WATER_PRESSURE_INTERVAL に1回のまま保つ
+    const s = basins({ leftTop: 2, rightTop: 7, holeRows: [10], prefill: true });
+    const before = sum(s, 1, s.w);
+    const res = stepWaterSimulation({
+        water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: s.active,
+        doFall: true, doPressure: false,
+    });
+    assert.equal(res.pressureMoved, 0);
+    assert.equal(sum(s, 1, s.w), before, '左の池から水が出ていった');
+    const res2 = stepWaterSimulation({
+        water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: res.nextActiveCells,
+        doFall: true, doPressure: true,
+    });
+    assert.ok(res2.pressureMoved > 0, '前提: doPressure なら運ぶ');
+});

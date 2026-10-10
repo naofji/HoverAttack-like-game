@@ -28,6 +28,7 @@
 import { MAX_WATER_MASS, WATER_MAX_FALL_FLOW, WATER_MAX_SPREAD_FLOW } from '../utils/Constants.js';
 import { stepWaterPressure } from './waterPressure.js';
 import { supportsWater } from './waterRules.js';
+import { recordFall } from './waterStream.js';
 
 /**
  * 1ステップの水流計算（行単位水槽レベリングモデル）。
@@ -38,10 +39,18 @@ import { supportsWater } from './waterRules.js';
  * @param {number} params.cols
  * @param {function(number, number): boolean} params.isSolid セルが固体（壁）か
  * @param {Set<number>|Array<number>} params.activeCells 現在水流がアクティブなセル (r * cols + c)
+ * @param {boolean} [params.doFall] 落下（フェーズ1）を行うフレームか
+ * @param {boolean} [params.doPressure] 水圧（フェーズ3）で運ぶフレームか。水圧は落下と別の間隔
+ *   （WATER_PRESSURE_INTERVAL）で回す。省略時は doFall と同じ（既存のテストの呼び方）
+ * @param {Uint8Array|null} [params.streamHold] 渡すと、細い流れの落下を記録する（waterStream.js）
+ * @param {Set<number>|null} [params.streamLive] streamHold が 0 でないセル。streamHold と一緒に渡す
  * @returns {{ changedCells: Array<[number, number]>, nextActiveCells: Set<number>, pressureMoved: number }}
  *   pressureMoved はフェーズ3（水圧）が運んだ水量の合計
  */
-export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, doFall = true }) {
+export function stepWaterSimulation({
+    water, rows, cols, isSolid, activeCells, doFall = true, doPressure = doFall,
+    streamHold = null, streamLive = null,
+}) {
     const nextActiveCells = new Set();
     const changedSet = new Set();
 
@@ -99,6 +108,7 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
                 if (flow > 0) {
                     water[k] -= flow;
                     water[downKey] += flow;
+                    if (streamHold) recordFall(streamHold, streamLive, k, downKey, flow);
                     markChanged(r, c);
                     markChanged(r + 1, c);
                 }
@@ -247,12 +257,12 @@ export function stepWaterSimulation({ water, rows, cols, isSolid, activeCells, d
     // ----------------------------------------------------
     // フェーズ3: 水圧（連通管）
     // ----------------------------------------------------
-    // 運ぶのは落下と同じフレームだけ。運ばないフレームは差が残っているかだけ確かめ、
+    // 運ぶのは doPressure のフレームだけ（WATER_PRESSURE_INTERVAL に1回）。運ばないフレームは差が残っているかだけ確かめ、
     // 残っていれば両側の水面をアクティブに残す（下の !doFall 節と同じく休眠を防ぐ）
     const pressureMoved = stepWaterPressure({
         water, rows, cols, isSolid,
         seeds: cellsToProcess.map((x) => x.k),
-        doTransfer: doFall,
+        doTransfer: doPressure,
         markChanged,
         keepActive: (k) => nextActiveCells.add(k),
     });
