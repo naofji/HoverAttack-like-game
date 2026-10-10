@@ -1968,9 +1968,23 @@ export const TOWN_FOUNDATION_SINK = 4;
 // 低いほうの床を地面にするので、高い段の上では土台がこの高さぶん岩に隠れる。
 // 2 にすると小屋（壁 12〜20px）の戸口まで隠れるので 1
 export const TOWN_FLOOR_STEP_MAX = 1;
-// 床の区間を左から歩くとき、そこに建てる確率。外れたら空き地にする。
-// 面全体にまんべんなく、ただし詰まりすぎて1枚の壁に見えないように
-export const TOWN_FLOOR_FILL = 0.75;
+// 村（villages.js）。床の区間を左から歩くとき、そこに建てる確率を近くの村で変える。
+// 最初は面全体で一律 0.75（TOWN_FLOOR_FILL）にしていたが、実機で「建物が想定より多い、
+// まばらな所と密集した所の村があっていい」と言われ、村の中心からの距離で決める形にした。
+// 面を TOWN_VILLAGE_GRID_COLS × _ROWS の升に分け、升ごとに村を1つ置くか決める
+// （面全体に散らばる。縦の列ごとに少なくとも1つは置く）
+export const TOWN_VILLAGE_GRID_COLS = 5;
+export const TOWN_VILLAGE_GRID_ROWS = 2;
+export const TOWN_VILLAGE_DENSE_CHANCE = 0.45;   // 升に密集した村を置く確率
+export const TOWN_VILLAGE_SPARSE_CHANCE = 0.35;  // まばらな集落を置く確率（残りは村なし）
+export const TOWN_VILLAGE_DENSE_FILL = 0.9;      // 密集した村の中心で建てる確率
+export const TOWN_VILLAGE_SPARSE_FILL = 0.3;     // まばらな集落の中心で建てる確率
+export const TOWN_VILLAGE_OUTSIDE_FILL = 0.05;   // どの村にも入らない所（ぽつんと1軒くらい）
+// 半径（タイル）の範囲。中心から半径の半分までは村の密度のまま、縁で村の外の密度まで下がる。
+// 棟数（8種の平均）で決めた: [12,22]/[16,28] は 96棟、[18,30]/[22,34] は 150棟、
+// この値で 195棟（一律 0.75 のときの 411棟の約半分）。広げると村どうしがつながって差が薄れる
+export const TOWN_VILLAGE_RADIUS_DENSE = [22, 36];
+export const TOWN_VILLAGE_RADIUS_SPARSE = [26, 40];
 // 日干し煉瓦（A）の割合は、天井までの空きで決める（広い所は A、狭い所は坑道の小屋 C）
 export const TOWN_ADOBE_HEADROOM_WIDE = 12;
 export const TOWN_ADOBE_SHARE_WIDE = 0.8;

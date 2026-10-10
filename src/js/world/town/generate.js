@@ -10,13 +10,14 @@
 
 import {
     TILE_SIZE as T, BLOCK_EMPTY,
-    TOWN_MIN_HEADROOM, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_FLOOR_FILL, TOWN_FLOOR_STEP_MAX,
+    TOWN_MIN_HEADROOM, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_FLOOR_STEP_MAX, TOWN_VILLAGE_DENSE_FILL,
     TOWN_ADOBE_HEADROOM_WIDE, TOWN_ADOBE_SHARE_WIDE, TOWN_ADOBE_HEADROOM_NARROW, TOWN_ADOBE_SHARE_NARROW,
     TOWN_TOWER_BRIDGE_CHANCE,
     TOWN_WALL_MIN_RUN, TOWN_WALL_MIN_REACH, TOWN_WALL_SPACING, TOWN_WALL_HOUSE_CHANCE,
     TOWN_CEIL_MIN_RUN, TOWN_CEIL_MIN_DROP, TOWN_CEIL_KEEP_BELOW,
 } from '../../utils/Constants.js';
 import { findSites, chainFloors } from './placement.js';
+import { placeVillages, villageFill } from './villages.js';
 import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge } from './adobe.js';
 import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack } from './mining.js';
 import { mirrorParts, rect, pick, step4 } from './shapes.js';
@@ -92,8 +93,14 @@ function standsWell(s, run, solid) {
     return true;
 }
 
-export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
+/**
+ * villages を渡さなければ rng で村を置く（Map はこちら）。テストは村を指定して効き方を見る
+ */
+export function generateTown({ grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols) }) {
     const sites = findSites(grid, rows, cols);
+    // 村の濃さ 0〜1（密集した村の中心で 1）。壁の家と吊るすものの数にも掛けて、村の外の
+    // 岩壁や天井にだけぽつぽつ家が付く、ということにならないようにする
+    const villageness = (c, r) => villageFill(villages, c, r) / TOWN_VILLAGE_DENSE_FILL;
     const specs = [];
     const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
         && !excludeRects.some((rc) => touchesRect(s, rc));
@@ -131,7 +138,7 @@ export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
             const ci = Math.floor(x / T) - run.c0;
             const headroom = Math.min(...colHead.slice(ci, ci + LOOKAHEAD_COLS));
             if (headroom < TOWN_MIN_HEADROOM) { x += T; continue; }
-            if (rng.next() > TOWN_FLOOR_FILL) { x += step4(rng, 8, 32); continue; }   // 空き地
+            if (rng.next() > villageFill(villages, x / T, run.r)) { x += step4(rng, 8, 32); continue; }   // 空き地
             // 高さの上限は「天井から CLEARANCE タイル下」まで
             const maxH = (headroom - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
             // A と C の割合は、建てる位置の2列（32px）の空きで決める。5列の最小で決めると、
@@ -166,6 +173,7 @@ export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
         for (let k = 0; k < tries; k++) {
             if (rng.next() > TOWN_WALL_HOUSE_CHANCE) continue;
             const r = run.r0 + 1 + Math.floor(rng.next() * Math.max(1, len - 2));
+            if (rng.next() > villageness(run.c, r)) continue;
             const style = rng.next() < share ? 'A' : 'C';
             const b = style === 'A' ? buildAdobeWallHouse(rng, { maxReach }) : buildScaffoldShack(rng, { maxReach });
             if (!b) continue;
@@ -189,6 +197,7 @@ export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
         const y = (run.r + 1) * T - 4;   // 綱の上端 4px を天井の岩に埋める
         let c = run.c0 + 1;
         while (c < run.c1 - 1) {
+            if (rng.next() > villageness(c, run.r)) { c += 3 + Math.floor(rng.next() * 4); continue; }
             const style = rng.next() < share ? 'A' : 'C';
             const room = (run.c1 - 1 - c) * T;
             let b;

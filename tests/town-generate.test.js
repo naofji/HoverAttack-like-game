@@ -2,9 +2,8 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import {
-    TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_MIN_HEADROOM, TOWN_FOUNDATION_SINK,
+    TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_VILLAGE_DENSE_FILL,
 } from '../src/js/utils/Constants.js';
-import { findSites } from '../src/js/world/town/placement.js';
 
 before(() => {
     const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
@@ -25,6 +24,21 @@ async function stage3(seed) {
     });
     return { map, base, specs };
 }
+
+/** 村を指定して並べる（村の効き方だけを見るため） */
+async function stage3With(seed, villages) {
+    const { Map } = await import('../src/js/world/Map.js');
+    const { generateTown } = await import('../src/js/world/town/generate.js');
+    const map = new Map({ rng: new SeededRNG(seed) }, 2);
+    const specs = generateTown({
+        grid: map.grid, rows: map.rows, cols: map.cols,
+        excludeRects: [map._reservedRects()[1]], rng: new SeededRNG(seed * 7 + 1), villages,
+    });
+    return { map, specs };
+}
+
+/** 面全体を覆う密集した村（村の効き方を外して、ほかの性質だけを見るとき） */
+const WHOLE_MAP_VILLAGE = { c: 0, r: 0, radius: 1e5, peak: TOWN_VILLAGE_DENSE_FILL };
 
 const tileRange = (s) => ({
     r0: Math.floor(s.y / T), r1: Math.floor((s.y + s.h - 1) / T),
@@ -116,9 +130,11 @@ function measuredHeadroom(map, s) {
 test('天井までの空きで A と C の割合が変わる（広い所は A、狭い所は C）', async () => {
     // 生成側が付けた s.headroom ではなく、地形から測り直した空きで分ける
     // （区間全体の最小を付けていて、広い所が狭い扱いになっていたのを見逃した。レビュー指摘）
+    // 村で建物が半分に減ると5つの種では標本が足りず、広い所の A が 63%（30種で数えると 74%）と
+    // ぶれた。ここで見たいのは空きと様式の関係なので、面全体を1つの村にして数を確保する
     let wideA = 0, wideN = 0, narrowA = 0, narrowN = 0;
     for (const seed of SEEDS) {
-        const { map, specs } = await stage3(seed);
+        const { map, specs } = await stage3With(seed, [WHOLE_MAP_VILLAGE]);
         for (const s of specs.filter((v) => v.site === 'floor')) {
             const h = measuredHeadroom(map, s);
             if (h >= 12) { wideN++; if (s.style === 'A') wideA++; }
@@ -159,23 +175,48 @@ test('床の建物の上端が見えている列では、その上 2 タイル�
     }
 });
 
-test('面全体にまんべんなく: 建てられる床の半分以上に建物がある', async () => {
+test('村の外はまばら: 村が無いと、面全体が密集した村のときの 2割未満しか建たない', async () => {
     for (const seed of SEEDS) {
-        const { map, base, specs } = await stage3(seed);
-        const covered = new Set();
-        for (const s of specs.filter((v) => v.site === 'floor')) {
-            const c0 = Math.floor((s.x + s.footX) / T);
-            const c1 = Math.floor((s.x + s.footX + s.footW - 1) / T);
-            const r = Math.floor((s.y + s.h - 1) / T);
-            for (let c = c0; c <= c1; c++) covered.add(`${r},${c}`);
+        const { specs: noneSpecs } = await stage3With(seed, []);
+        const none = noneSpecs.length;
+        const full = (await stage3With(seed, [WHOLE_MAP_VILLAGE])).specs.length;
+        assert.ok(none < full * 0.2, `seed ${seed}: 村なし ${none} / 全面が村 ${full}`);
+    }
+});
+
+test('壁の家と吊るすものも村に従う: 村が無いと、面全体が村のときの 2割未満', async () => {
+    // 床の建物の数に埋もれないよう、壁と天井だけを数える
+    let none = 0, full = 0;
+    for (const seed of SEEDS) {
+        const count = (specs) => specs.filter((s) => s.site !== 'floor').length;
+        none += count((await stage3With(seed, [])).specs);
+        full += count((await stage3With(seed, [WHOLE_MAP_VILLAGE])).specs);
+    }
+    assert.ok(full >= 30, `標本が少ない（${full}）`);
+    assert.ok(none < full * 0.2, `村なし ${none} / 全面が村 ${full}`);
+});
+
+test('建物は村の周りに集まる: 左半分だけ村にすると、床の建物の 8割以上が左半分に建つ', async () => {
+    for (const seed of SEEDS) {
+        const { map } = await stage3With(seed, []);
+        const half = map.cols / 2;
+        // 左半分の中心に、右端が真ん中を少し越える大きさの村を1つ。縦は面の全体に届く
+        const left = [{ c: half / 2, r: map.rows / 2, radius: half * 0.55, peak: TOWN_VILLAGE_DENSE_FILL }];
+        const { specs } = await stage3With(seed, left);
+        const floors = specs.filter((s) => s.site === 'floor');
+        const inLeft = floors.filter((s) => (s.x + s.footX) / T < half).length;
+        assert.ok(inLeft >= floors.length * 0.8, `seed ${seed}: 左 ${inLeft} / 全 ${floors.length}`);
+    }
+});
+
+test('面全体に村がある: 左・中・右の3分割のどこにも床の建物が建つ', async () => {
+    for (const seed of SEEDS) {
+        const { map, specs } = await stage3(seed);
+        const third = map.cols / 3;
+        for (let k = 0; k < 3; k++) {
+            const n = specs.filter((s) => s.site === 'floor' && Math.floor((s.x + s.footX) / T / third) === k).length;
+            assert.ok(n >= 5, `seed ${seed}: 3分割の ${k} 番目に ${n} 棟しかない`);
         }
-        let total = 0, hit = 0;
-        for (const f of findSites(map.grid, map.rows, map.cols).floors) {
-            if (f.headroom < TOWN_MIN_HEADROOM || f.c1 - f.c0 < 2) continue;
-            if (f.r >= base.r0 && f.r <= base.r1 && f.c1 > base.c0) continue;   // 基地の部屋の床は数えない
-            for (let c = f.c0; c < f.c1; c++) { total++; if (covered.has(`${f.r},${c}`)) hit++; }
-        }
-        assert.ok(hit / total >= 0.5, `seed ${seed}: ${hit}/${total}`);
     }
 });
 
