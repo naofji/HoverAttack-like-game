@@ -9,7 +9,7 @@
 // 壁と天井のものは、先に置いたものと重なるなら置かない（塔の上に吊るしものが刺さる）。
 
 import {
-    TILE_SIZE as T,
+    TILE_SIZE as T, BLOCK_EMPTY,
     TOWN_MIN_HEADROOM, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_FLOOR_FILL, TOWN_FLOOR_STEP_MAX,
     TOWN_ADOBE_HEADROOM_WIDE, TOWN_ADOBE_SHARE_WIDE, TOWN_ADOBE_HEADROOM_NARROW, TOWN_ADOBE_SHARE_NARROW,
     TOWN_TOWER_BRIDGE_CHANCE,
@@ -66,6 +66,32 @@ function bridgeTowers(runSpecs, rng) {
     }
 }
 
+// 床の建物の空きを測る列の数。一番広い塔の足元 56px は、4の倍数の位置から始めると最大 5 列に掛かる
+const LOOKAHEAD_COLS = 5;
+
+/**
+ * 建てた床の建物が、地形とちぐはぐにならないか。3つとも満たすときだけ置く。
+ * 1. 足元のどの列でも、最下段が岩の中にある（浮いた足場の列で根元が空洞にはみ出さない。
+ *    下の床と1段高い浮いた板が段差1でつながると起きた。レビュー指摘、1マップ約11棟）
+ * 2. 1段高い列でも、平らな床と同じだけ（16px まで）岩の上に見える（段の岩に埋もれない）
+ * 3. 上端が見えている列では、その上 TOWN_CEILING_CLEARANCE タイルが空いている
+ *    （軒・張り出し・バルコニーまで含めて外接矩形の全列で見る）
+ */
+function standsWell(s, run, solid) {
+    const fc0 = Math.floor((s.x + s.footX) / T);
+    const fc1 = Math.floor((s.x + s.footX + s.footW - 1) / T);
+    for (let c = fc0; c <= fc1; c++) if (!solid(run.r, c)) return false;
+    const highest = Math.min(...run.floorRows.slice(fc0 - run.c0, fc1 - run.c0 + 1));
+    const visible = s.h - TOWN_FOUNDATION_SINK - (run.r - highest) * T;
+    if (visible < Math.min(16, s.h - TOWN_FOUNDATION_SINK)) return false;
+    const rTop = Math.floor(s.y / T);
+    for (let c = Math.floor(s.x / T); c <= Math.floor((s.x + s.w - 1) / T); c++) {
+        if (solid(rTop, c)) continue;   // 上端が岩の奥に隠れている列は見えない
+        for (let r = rTop - TOWN_CEILING_CLEARANCE; r < rTop; r++) if (solid(r, c)) return false;
+    }
+    return true;
+}
+
 export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
     const sites = findSites(grid, rows, cols);
     const specs = [];
@@ -79,37 +105,50 @@ export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
     };
 
     // --- 床 ---
-    // 1タイルの段差でつながる床は1本にまとめる（chainFloors のコメント）。地面は一番低い床、
-    // 天井までの空きは一番低い天井から測る
+    // 1タイルの段差でつながる床は1本にまとめる（chainFloors のコメント）。地面は一番低い床。
+    // 天井までの空きは区間全体の最小ではなく、**建てる位置の列ごとに地形から測る**。
+    // 区間全体の最小で測っていたときは、端の1列で天井が下がるだけで部屋全体が狭い扱いになり、
+    // 広い所の A が実測 35〜37% しかなかった（レビュー指摘。spec は 8割）
+    const solid = (r, c) => r < 0 || r >= rows || c < 0 || c >= cols || grid[r][c] !== BLOCK_EMPTY;
+    // 地面の行 ground から測った、列 c の天井までの空き（タイル）。段の上面まで上がってから数える
+    const headroomAt = (ground, c) => {
+        let r = ground;
+        while (r > 0 && solid(r - 1, c)) r--;
+        let n = 0;
+        while (!solid(r - 1 - n, c)) n++;
+        return ground - r + n;
+    };
     for (const run of chainFloors(sites.floors, TOWN_FLOOR_STEP_MAX)) {
-        const headroom = run.r - run.ceil;
-        if (headroom < TOWN_MIN_HEADROOM) continue;
-        // 土台は床の岩に埋める。高さの上限は「天井から CLEARANCE タイル下」まで
+        // 土台は床の岩に埋める
         const groundY = run.r * T + TOWN_FOUNDATION_SINK;
-        const maxH = (headroom - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
-        const share = adobeShare(headroom);
+        const colHead = [];
+        for (let c = run.c0; c < run.c1; c++) colHead.push(headroomAt(run.r, c));
         const runSpecs = [];
         const xEnd = run.c1 * T;
         let x = run.c0 * T;
         while (xEnd - x >= 16) {
+            // 足元になりうる列（一番広い塔 56px が掛かる 5 列）で一番狭い空き
+            const ci = Math.floor(x / T) - run.c0;
+            const headroom = Math.min(...colHead.slice(ci, ci + LOOKAHEAD_COLS));
+            if (headroom < TOWN_MIN_HEADROOM) { x += T; continue; }
             if (rng.next() > TOWN_FLOOR_FILL) { x += step4(rng, 8, 32); continue; }   // 空き地
-            const style = rng.next() < share ? 'A' : 'C';
+            // 高さの上限は「天井から CLEARANCE タイル下」まで
+            const maxH = (headroom - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
+            // A と C の割合は、建てる位置の2列（32px）の空きで決める。5列の最小で決めると、
+            // 塔の幅ぶん先の低い天井に引っぱられて広い所が狭い扱いになる（広い所の A 64%）。
+            // 高さの上限は5列の最小のまま（standsWell が最後に確かめる）
+            const here = Math.min(...colHead.slice(ci, ci + 2));
+            const style = rng.next() < adobeShare(here) ? 'A' : 'C';
             const b = style === 'A'
                 ? buildAdobeTower(rng, { maxW: xEnd - x, maxH })
                 : buildMiningShack(rng, { maxW: xEnd - x, maxH });
             if (!b) { x += 8; continue; }
-            // 足元に1段高い列があると、その列では土台が段の岩にさらに 16px 隠れる。
-            // 背の低い小屋がそこで埋もれないよう、平らな床と同じだけ（16px まで）見えない建物は置かない
-            const fc0 = Math.floor(x / T) - run.c0;
-            const fc1 = Math.floor((x + b.footW - 1) / T) - run.c0;
-            const highest = Math.min(...run.floorRows.slice(fc0, fc1 + 1));
-            const visible = b.h - TOWN_FOUNDATION_SINK - (run.r - highest) * T;
-            if (visible < Math.min(16, b.h - TOWN_FOUNDATION_SINK)) { x += 8; continue; }
             const spec = {
                 site: 'floor', style, kind: b.kind,
                 x: x - b.footX, y: groundY - b.h, w: b.w, h: b.h, parts: b.parts,
                 footX: b.footX, footW: b.footW, headroom,
             };
+            if (!standsWell(spec, run, solid)) { x += 8; continue; }
             if (b.insets) spec.insets = b.insets;
             if (add(spec)) runSpecs.push(spec);
             x += b.footW + step4(rng, 0, 8);

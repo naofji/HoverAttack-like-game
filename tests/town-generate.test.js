@@ -97,18 +97,66 @@ test('床の建物は、足元のどの列でも床の岩から 16px 以上見�
     }
 });
 
+/** 地形から測り直した、建物の足元の列で一番狭い「地面から天井までの空き」（タイル） */
+function measuredHeadroom(map, s) {
+    const ground = Math.floor((s.y + s.h - 1) / T);
+    const c0 = Math.floor((s.x + s.footX) / T);
+    const c1 = Math.floor((s.x + s.footX + s.footW - 1) / T);
+    let min = Infinity;
+    for (let c = c0; c <= c1; c++) {
+        let r = ground;
+        while (r > 0 && map.isSolid(r - 1, c)) r--;          // 段の上面まで上がる
+        let n = 0;
+        while (!map.isSolid(r - 1 - n, c)) n++;              // そこから天井まで
+        min = Math.min(min, ground - (r - 1 - n));
+    }
+    return min - 1;
+}
+
 test('天井までの空きで A と C の割合が変わる（広い所は A、狭い所は C）', async () => {
+    // 生成側が付けた s.headroom ではなく、地形から測り直した空きで分ける
+    // （区間全体の最小を付けていて、広い所が狭い扱いになっていたのを見逃した。レビュー指摘）
     let wideA = 0, wideN = 0, narrowA = 0, narrowN = 0;
     for (const seed of SEEDS) {
-        const { specs } = await stage3(seed);
+        const { map, specs } = await stage3(seed);
         for (const s of specs.filter((v) => v.site === 'floor')) {
-            if (s.headroom >= 12) { wideN++; if (s.style === 'A') wideA++; }
-            if (s.headroom <= 5) { narrowN++; if (s.style === 'A') narrowA++; }
+            const h = measuredHeadroom(map, s);
+            if (h >= 12) { wideN++; if (s.style === 'A') wideA++; }
+            if (h <= 5) { narrowN++; if (s.style === 'A') narrowA++; }
         }
     }
     assert.ok(wideN >= 30 && narrowN >= 30, `標本が少ない（広い ${wideN} / 狭い ${narrowN}）`);
     assert.ok(wideA / wideN >= 0.65, `広い所の A ${wideA}/${wideN}`);
     assert.ok(narrowA / narrowN <= 0.25, `狭い所の A ${narrowA}/${narrowN}`);
+});
+
+test('床の建物の最下段は、足元のどの列でも岩の中にある（浮いた足場の下に根元がはみ出さない）', async () => {
+    for (const seed of SEEDS) {
+        const { map, specs } = await stage3(seed);
+        for (const s of specs.filter((v) => v.site === 'floor')) {
+            const ground = Math.floor((s.y + s.h - 1) / T);
+            const c0 = Math.floor((s.x + s.footX) / T);
+            const c1 = Math.floor((s.x + s.footX + s.footW - 1) / T);
+            for (let c = c0; c <= c1; c++) {
+                assert.ok(map.isSolid(ground, c), `seed ${seed}: ${s.kind} の根元 r${ground} c${c} が空洞`);
+            }
+        }
+    }
+});
+
+test('床の建物の上端が見えている列では、その上 2 タイルが空いている（軒や張り出しも含む）', async () => {
+    for (const seed of SEEDS) {
+        const { map, specs } = await stage3(seed);
+        for (const s of specs.filter((v) => v.site === 'floor')) {
+            const rTop = Math.floor(s.y / T);
+            for (let c = Math.floor(s.x / T); c <= Math.floor((s.x + s.w - 1) / T); c++) {
+                if (map.isSolid(rTop, c)) continue;   // 上端が岩の奥に隠れている列は見えない
+                for (let r = rTop - TOWN_CEILING_CLEARANCE; r < rTop; r++) {
+                    assert.ok(!map.isSolid(r, c), `seed ${seed}: ${s.kind} (top ${s.y}) の上 r${r} c${c} が岩`);
+                }
+            }
+        }
+    }
 });
 
 test('面全体にまんべんなく: 建てられる床の半分以上に建物がある', async () => {
