@@ -14,6 +14,9 @@ import {
     CASING_EJECT_SPREAD, CASING_EJECT_SPEED_MIN, CASING_EJECT_SPEED_MAX, CASING_EJECT_ANGLE_FROM_UP,
     EXPLOSION_RIPPLE_STRENGTH,
     WATER_COLUMN_PARTICLE_COUNT, WATER_COLUMN_SPEED_MIN, WATER_COLUMN_SPEED_MAX, WATER_COLUMN_SPREAD,
+    WATERFALL_SPLASH_SPRAY_MIN, WATERFALL_SPLASH_SPRAY_MAX, WATERFALL_SPLASH_SPRAY_SPEED_MIN,
+    WATERFALL_SPLASH_SPRAY_SPEED_MAX, WATERFALL_SPLASH_SPRAY_SPREAD, WATERFALL_SPLASH_MIST_MIN,
+    WATERFALL_SPLASH_MIST_MAX, WATERFALL_BAND_WIDTH,
     TILE_SIZE,
 } from '../utils/Constants.js';
 import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
@@ -96,6 +99,26 @@ export const SpawnEffects = {
         }
         const r = this.env && this.env.renderer;
         if (r && r.addRipple) r.addRipple(x, Math.min(WATER_RIPPLE_MAX, Math.abs(vy)));
+    },
+
+    /**
+     * 滝の着水点のしぶきと水煙。水の描画が、画面内の滝の着水点ごとに WATERFALL_SPLASH_INTERVAL
+     * おきに呼ぶ。しぶきは真上を中心にした扇へ跳ね上げ、水煙はホバーの水滴と同じ粒を横へ低く広げる。
+     * strength（0〜1）は落差に比例し、粒の数と勢いを決める（低い滝は控えめに）。
+     * (x, y) は着水点（帯の中央、液面か床を流れる水の上面）
+     */
+    spawnWaterfallSplash(x, y, strength) {
+        const k = Math.max(0, Math.min(1, strength));
+        const spray = Math.round(WATERFALL_SPLASH_SPRAY_MIN + (WATERFALL_SPLASH_SPRAY_MAX - WATERFALL_SPLASH_SPRAY_MIN) * k);
+        const maxSpeed = WATERFALL_SPLASH_SPRAY_SPEED_MIN + (WATERFALL_SPLASH_SPRAY_SPEED_MAX - WATERFALL_SPLASH_SPRAY_SPEED_MIN) * k;
+        for (let i = 0; i < spray; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * WATERFALL_SPLASH_SPRAY_SPREAD;
+            const s = maxSpeed * (0.4 + 0.6 * Math.random());
+            const px = x + (Math.random() - 0.5) * WATERFALL_BAND_WIDTH;
+            this.particles.push(new SplashParticle(px, y, Math.cos(a) * s, Math.sin(a) * s));
+        }
+        const mist = Math.round(WATERFALL_SPLASH_MIST_MIN + (WATERFALL_SPLASH_MIST_MAX - WATERFALL_SPLASH_MIST_MIN) * k);
+        this.spawnWaterMist(x, y, mist, k);
     },
 
     /**

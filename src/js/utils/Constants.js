@@ -1273,6 +1273,22 @@ export const WATER_COLUMN_SPREAD = 0.5; // rad。SPLASH(1.2)よりだいぶ狭�
 export const SPLASH_PARTICLES_PER_VY = 3;
 export const SPLASH_MAX_PARTICLES = 24;
 export const SPLASH_LIFETIME = 28;
+// 滝の着水点のしぶき（SplashParticle）と水煙（WaterMistParticle）。以前は帯より少し広い泡の線と
+// 3px しか跳ねない点3つだけで地味だった（2026-10-11 実機の指摘「もっと派手に」）。水面に落ち込む滝も
+// 床に落ちる滝も同じ。強さ（0〜1）は落差に比例し、WATERFALL_SPLASH_FULL_DROP で頭打ち。
+// 出すのは描画が組み立てた画面内の滝だけ（画面外で particles を食い潰さない）。数は実機で見て調整する
+export const WATERFALL_SPLASH_INTERVAL = 3;              // フレーム。この間隔で1回ぶん出す
+export const WATERFALL_SPLASH_FULL_DROP = TILE_SIZE * 6; // px。この落差で強さ1
+export const WATERFALL_SPLASH_SPRAY_MIN = 1;             // しぶきの粒（1回あたり、強さ0のとき）
+export const WATERFALL_SPLASH_SPRAY_MAX = 5;             //                 （強さ1のとき）
+export const WATERFALL_SPLASH_SPRAY_SPEED_MIN = 1.5;     // 強さ0のときの最大初速
+export const WATERFALL_SPLASH_SPRAY_SPEED_MAX = 4.5;     // 強さ1のときの最大初速
+export const WATERFALL_SPLASH_SPRAY_SPREAD = 1.4;        // rad。真上を中心にした扇の広さ
+export const WATERFALL_SPLASH_MIST_MIN = 1;              // 水煙の粒（1回あたり、強さ0のとき）
+export const WATERFALL_SPLASH_MIST_MAX = 4;              //               （強さ1のとき）
+// 水面に落ち込む滝の着水点の波紋（12フレームおき）。以前は 0.4 で、しぶきを派手にしても
+// 水面がほとんど揺れなかった。上限は WATER_RIPPLE_MAX
+export const WATERFALL_SPLASH_RIPPLE = 0.9;
 
 // マシンガンの薬莢。当たり判定を持たない純粋な演出で、DebrisPart と同じく
 // 地形は無視して落下するが、水中かどうかだけは motionFor で見てゆっくり沈める

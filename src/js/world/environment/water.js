@@ -15,6 +15,7 @@ import {
     WATER_BUBBLE_COLOR, WATER_BUBBLE_RISE_MIN, WATER_BUBBLE_RISE_MAX, WATER_BUBBLE_EMIT_CHANCE,
     WATER_BUBBLE_LIFETIME, WATER_BUBBLE_MAX,
     WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
+    WATERFALL_SPLASH_INTERVAL, WATERFALL_SPLASH_FULL_DROP, WATERFALL_SPLASH_RIPPLE,
 } from '../../utils/Constants.js';
 
 const RIPPLE_WIDTH = 64; // px。波紋が効く横の範囲
@@ -113,7 +114,8 @@ export function collectBorderBlocks(map, cells) {
 }
 
 export function createWaterRenderer(env) {
-    const map = env.game.map;
+    const game = env.game;
+    const map = game.map;
 
     // 前景水用キャッシュ（水セルのみ。エンティティの上に重ねる）
     const cache = document.createElement('canvas');
@@ -224,6 +226,10 @@ export function createWaterRenderer(env) {
         // 判定（waterClearance）が読む。床を流れる水はセルとしては空なので、描いた帯そのものを
         // 答えにしないと「見えている水の上なのに水滴が出ない」になる（2026-10-11 実機の指摘）
         runningSheets: [],
+        // 前のフレームに描いた滝の着水点 { x, y, strength }（_drawWaterfalls が組み立てる）。
+        // update が WATERFALL_SPLASH_INTERVAL おきにここからしぶきと水煙を上げる。粒を出すのは
+        // 更新の側（描画のフレームレートで数が変わらないように）、場所は描いた滝そのもの
+        splashSources: [],
         /**
          * (x, y) に床を流れる水の帯が描かれているか。読むのは前のフレームに描いた帯で、
          * 画面の外は組み立てていないので答えない（画面外の水滴は見えないので構わない）
@@ -237,6 +243,9 @@ export function createWaterRenderer(env) {
         },
         update() {
             this.t++;
+            if (game.spawnWaterfallSplash && this.t % WATERFALL_SPLASH_INTERVAL === 0) {
+                for (const s of this.splashSources) game.spawnWaterfallSplash(s.x, s.y, s.strength);
+            }
             for (const rp of this.ripples) rp.strength *= WATER_RIPPLE_DECAY;
             this.ripples = this.ripples.filter((rp) => rp.strength >= WATER_RIPPLE_MIN);
             this._updateBubbles();
@@ -246,7 +255,7 @@ export function createWaterRenderer(env) {
             // 水で起こしていたが、水は棚を伝って横へずれながら落ちるので、着水して
             // いない列で波が立っていた
             if (this.t % 12 === 0) {
-                for (const c of map.waterfallLandingCols()) this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
+                for (const c of map.waterfallLandingCols()) this.addRipple((c + 0.5) * TILE_SIZE, WATERFALL_SPLASH_RIPPLE);
             }
         },
         /**
@@ -369,9 +378,18 @@ export function createWaterRenderer(env) {
             const runs = collectWaterfallRuns(map, startCol, endCol, startRow, endRow);
             const t = this.t;
             this.runningSheets = [];
+            this.splashSources = [];
             for (const run of runs) {
                 if (run.sheet) this.runningSheets.push(run.sheet);
                 if (run.feedSheet) this.runningSheets.push(run.feedSheet);
+                // 着水点（水面でも床でも）。強さは落差に比例し、WATERFALL_SPLASH_FULL_DROP で頭打ち
+                if (run.landing !== 'none') {
+                    this.splashSources.push({
+                        x: run.x + run.width / 2,
+                        y: run.bottomY,
+                        strength: Math.min(1, Math.max(0, (run.bottomY - run.topY) / WATERFALL_SPLASH_FULL_DROP)),
+                    });
+                }
             }
 
             ctx.fillStyle = WATER_FILL;
@@ -422,15 +440,20 @@ export function createWaterRenderer(env) {
                     }
                 }
                 // 着水のしぶき。床（を流れる水の上面）か水たまりの液面で跳ねる。
-                // 当たったところに帯より少し広い泡の線を引き、その上で粒を跳ねさせる
+                // 当たったところに白く泡立つ帯を2段（外側は薄く広く、内側は明るく）引き、その上で
+                // 粒を跳ねさせる。本物のしぶきと水煙は update が粒（spawnWaterfallSplash）で上げる。
+                // 以前は帯より少し広い線1本と、3px しか跳ねない点3つで地味だった（2026-10-11 実機の指摘）
                 if (run.landing !== 'none') {
+                    const by = Math.round(run.bottomY);
                     ctx.fillStyle = 'rgba(220, 245, 255, 0.35)';
-                    ctx.fillRect(run.x - 2, Math.round(run.bottomY) - 1, run.width + 4, 1);
+                    ctx.fillRect(run.x - 4, by - 1, run.width + 8, 1);
+                    ctx.fillStyle = 'rgba(235, 250, 255, 0.55)';
+                    ctx.fillRect(run.x - 2, by - 3, run.width + 4, 2);
                     ctx.fillStyle = 'rgba(220, 245, 255, 0.65)';
-                    const splashY = Math.round(run.bottomY) - 2;
-                    for (let s = 0; s < 3; s++) {
-                        const sx = run.x - 2 + ((t * 2 + s * 5 + run.c * 3) % (run.width + 4));
-                        const sy = splashY - Math.abs(Math.sin(t * 0.35 + s * 2 + run.c) * 3);
+                    const splashY = by - 4;
+                    for (let s = 0; s < 5; s++) {
+                        const sx = run.x - 4 + ((t * 2 + s * 5 + run.c * 3) % (run.width + 8));
+                        const sy = splashY - Math.abs(Math.sin(t * 0.35 + s * 2 + run.c) * 5);
                         ctx.fillRect(sx, sy, 1.5, 1.5);
                     }
                 }
