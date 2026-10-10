@@ -37,6 +37,7 @@ export function makeWaterMap(art) {
         waterSurfaceY: new Int16Array(rows * cols).fill(-1),
         waterPaintTopY: new Int16Array(rows * cols).fill(-1),
         waterFoam: new Uint8Array(rows * cols),
+        waterFoamCells: new Set(),
         dirtyWaterCols: new Set(),
         waterRepaintCells: new Set(),
         activeWaterCells: new Set(),

@@ -1221,10 +1221,15 @@ export const WATERFALL_FALL_SPEED_SCALE = 1.0;
 // 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
 export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）
-// 泡のマス（棚から棚へ流れ落ちる満水のセルの真下の隙間）に、水の塗りの上から散らす粒。
-// 色は滝の筋・しぶきと同じ系統（rgba(220,245,255,·)）で、筋の 0.65 より少し淡くする
-export const WATER_FOAM_COLOR = 'rgba(220, 245, 255, 0.55)';
-export const WATER_FOAM_BUBBLES = 6;           // 1マスあたりの粒の数（2px と 1px を交互）
+// 泡の粒。泡のマス（棚から棚へ流れ落ちる満水のセルの真下の隙間）から生まれ、水の中を昇って水の外で消える。
+// 泡のマスは1か所に3フレームも続かない（落下の4フレーム周期で出たり消えたりする）ので、マスに粒を描くと
+// 点滅するだけだった。粒はマスが消えても寿命まで昇り続ける（2026-10-10 ユーザー要望「白い泡が上に上がる」）
+export const WATER_BUBBLE_COLOR = 'rgba(240, 250, 255, 0.85)';
+export const WATER_BUBBLE_RISE_MIN = 0.4;      // px/フレーム。1タイル（16px）を 20〜40 フレームで昇る
+export const WATER_BUBBLE_RISE_MAX = 0.8;
+export const WATER_BUBBLE_EMIT_CHANCE = 0.35;  // 泡のマス1つが1フレームに粒を生む確率
+export const WATER_BUBBLE_LIFETIME = 40;       // フレーム。最後の8フレームで薄れる
+export const WATER_BUBBLE_MAX = 150;           // 粒の数の上限（実マップの泡のマスは同時に多くて7つ）
 export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
 export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
 export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない

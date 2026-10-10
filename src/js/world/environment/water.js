@@ -11,7 +11,9 @@ import { collectWaterfallRuns } from './waterfallRuns.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, WATER_FOAM_COLOR, WATER_FOAM_BUBBLES,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
+    WATER_BUBBLE_COLOR, WATER_BUBBLE_RISE_MIN, WATER_BUBBLE_RISE_MAX, WATER_BUBBLE_EMIT_CHANCE,
+    WATER_BUBBLE_LIFETIME, WATER_BUBBLE_MAX,
     WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
 } from '../../utils/Constants.js';
 
@@ -44,19 +46,16 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
 }
 
 /**
- * 泡のマス (r, c) の粒を ctx に描く（水の塗りの上から）。粒の位置はマスごとに決まった配置にして、
- * 塗り直しても同じ絵になるようにする（毎回変えるとキャッシュの塗り直しのたびに粒が跳ねる）
+ * 2つの整数から決まる疑似乱数（32bit）。泡の粒の出方を決める。Math.random は使わない
+ * （tools/trace-water.mjs の画面の指紋が実行ごとに変わる）。game.rng は週ごとの決定性を壊すので論外
  */
-function drawFoamBubbles(ctx, r, c) {
-    ctx.fillStyle = WATER_FOAM_COLOR;
-    let h = ((r * 73856093) ^ (c * 19349663)) >>> 0;
-    for (let i = 0; i < WATER_FOAM_BUBBLES; i++) {
-        h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
-        const size = i % 2 === 0 ? 2 : 1;
-        const x = c * TILE_SIZE + 1 + (h % (TILE_SIZE - 2 - size));
-        const y = r * TILE_SIZE + 1 + ((h >>> 8) % (TILE_SIZE - 2 - size));
-        ctx.fillRect(x, y, size, size);
-    }
+function hash2(a, b) {
+    let h = (Math.imul(a, 0x9e3779b1) ^ Math.imul(b + 0x7f4a7c15, 0x85ebca77)) >>> 0;
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2c1b3c6d) >>> 0;
+    h ^= h >>> 12;
+    h = Math.imul(h, 0x297a2d39) >>> 0;
+    return (h ^ (h >>> 15)) >>> 0;
 }
 
 /**
@@ -147,11 +146,7 @@ export function createWaterRenderer(env) {
             const bottomY = (r + 1) * TILE_SIZE;
             const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, level));
             if (bottomY - topY > 0) cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
-            // 泡のマス（流れ落ちる満水の真下の隙間）は、タイル全体の水の上に粒を散らす
-            if (map.isWaterFoam(r, c)) {
-                drawFoamBubbles(cctx, r, c);
-                cctx.fillStyle = WATER_FILL;
-            }
+            // 泡のマスもここではただの水（塗りの上端がタイルの上辺）。泡の粒は毎フレーム描く（_updateBubbles）
         }
     };
 
@@ -224,10 +219,12 @@ export function createWaterRenderer(env) {
     const renderer = {
         t: 0,
         ripples: [],
+        bubbles: [],
         update() {
             this.t++;
             for (const rp of this.ripples) rp.strength *= WATER_RIPPLE_DECAY;
             this.ripples = this.ripples.filter((rp) => rp.strength >= WATER_RIPPLE_MIN);
+            this._updateBubbles();
 
             // 滝の着水波紋（12フレームごとに小さな波紋を励起）。
             // 着水点＝滝のセルの真下が滝でない水。以前は水源の列を下へ辿って最初の
@@ -236,6 +233,39 @@ export function createWaterRenderer(env) {
             if (this.t % 12 === 0) {
                 for (const c of map.waterfallLandingCols()) this.addRipple((c + 0.5) * TILE_SIZE, 0.4);
             }
+        },
+        /**
+         * 泡の粒: 泡のマスから生まれ、水の中を昇り、水の外へ出るか寿命で消える。泡のマスは1か所に
+         * 3フレームも続かない（362回のうち343回）ので、マスが消えても粒は昇り続ける。生む場所は
+         * map の泡のマスの一覧（同時に多くて7つ）だけを見る
+         */
+        _updateBubbles() {
+            const cols = map.cols;
+            for (const k of map.getWaterFoamCells()) {
+                if (this.bubbles.length >= WATER_BUBBLE_MAX) break;
+                const h = hash2(this.t, k);
+                if ((h % 1000) / 1000 >= WATER_BUBBLE_EMIT_CHANCE) continue;
+                const g = hash2(h, k);
+                const r = Math.floor(k / cols), c = k % cols;
+                const x = c * TILE_SIZE + 2 + (g % (TILE_SIZE - 4));
+                this.bubbles.push({
+                    x, x0: x,
+                    y: (r + 1) * TILE_SIZE - 2 - ((g >>> 8) % 4),
+                    vy: WATER_BUBBLE_RISE_MIN + ((g >>> 12) % 1000) / 1000 * (WATER_BUBBLE_RISE_MAX - WATER_BUBBLE_RISE_MIN),
+                    size: (g >>> 22) & 1 ? 2 : 1,
+                    phase: ((g >>> 23) % 628) / 100,
+                    age: 0,
+                });
+            }
+            // 水の中にいるか: 水（液面より下）か、泡のマス（種別は空気なので isWaterAtPixel では拾えない）
+            const inWater = (b) => map.isWaterAtPixel(b.x, b.y)
+                || map.isWaterFoam(Math.floor(b.y / TILE_SIZE), Math.floor(b.x / TILE_SIZE));
+            this.bubbles = this.bubbles.filter((b) => {
+                b.age++;
+                b.y -= b.vy;
+                b.x = b.x0 + Math.sin(b.age * 0.25 + b.phase) * 0.6;   // 昇りながら左右に少し揺れる
+                return b.age < WATER_BUBBLE_LIFETIME && inWater(b);
+            });
         },
         addRipple(x, strength) {
             this.ripples.push({ x, strength });
@@ -302,6 +332,19 @@ export function createWaterRenderer(env) {
             ctx.stroke();
 
             this._drawWaterfalls(ctx, startCol, endCol, startRow, endRow);
+            this._drawBubbles(ctx, camX, camY);
+        },
+        /** 泡の粒を描く。寿命の最後の8フレームで薄れる */
+        _drawBubbles(ctx, camX, camY) {
+            if (this.bubbles.length === 0) return;
+            ctx.fillStyle = WATER_BUBBLE_COLOR;
+            for (const b of this.bubbles) {
+                if (b.x < camX - 4 || b.x > camX + CANVAS_WIDTH + 4 || b.y < camY - 4 || b.y > camY + CANVAS_HEIGHT + 4) continue;
+                const fade = Math.min(1, (WATER_BUBBLE_LIFETIME - b.age) / 8);
+                if (fade < 1) ctx.globalAlpha = fade;
+                ctx.fillRect(Math.round(b.x - b.size / 2), Math.round(b.y - b.size / 2), b.size, b.size);
+                if (fade < 1) ctx.globalAlpha = 1;
+            }
         },
         /**
          * 滝と床を流れる水を描く。帯・床の水は前景の水と同じ色と濃さ（WATER_FILL）で、

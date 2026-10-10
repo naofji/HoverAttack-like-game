@@ -177,8 +177,9 @@ function buildCache(ctx) {
     const surfaceY = new Int16Array(ctx.rows * ctx.cols).fill(-1);
     const paintTopY = new Int16Array(ctx.rows * ctx.cols).fill(-1);
     const foam = new Uint8Array(ctx.rows * ctx.cols);
-    rebuildWaterCache({ ...ctx, kind, surfaceY, paintTopY, foam, dirtyCols: [...Array(ctx.cols).keys()] });
-    return { kind, surfaceY, paintTopY, foam };
+    const foamCells = new Set();
+    rebuildWaterCache({ ...ctx, kind, surfaceY, paintTopY, foam, foamCells, dirtyCols: [...Array(ctx.cols).keys()] });
+    return { kind, surfaceY, paintTopY, foam, foamCells };
 }
 
 function assertMatchesReference(ctx, cache, label) {
@@ -196,6 +197,8 @@ function assertMatchesReference(ctx, cache, label) {
                 `${label}: paintTopY が (${r},${c}) で食い違う`);
             assert.equal(cache.foam[k], refFoam[k],
                 `${label}: foam が (${r},${c}) で食い違う`);
+            assert.equal(cache.foamCells.has(k), refFoam[k] === 1,
+                `${label}: 泡のマスの一覧が (${r},${c}) で食い違う`);
         }
     }
 }
@@ -223,7 +226,7 @@ test('水を動かしたあとも、変化した列だけ作り直せば参照�
             active = res.nextActiveCells;
             const dirty = new Set(res.changedCells.map(([, c]) => c));
             rebuildWaterCache({
-                ...ctx, kind: cache.kind, surfaceY: cache.surfaceY, paintTopY: cache.paintTopY, foam: cache.foam, dirtyCols: dirty,
+                ...ctx, kind: cache.kind, surfaceY: cache.surfaceY, paintTopY: cache.paintTopY, foam: cache.foam, foamCells: cache.foamCells, dirtyCols: dirty,
             });
             assertMatchesReference(ctx, cache, `seed ${seed} step ${step}`);
         }

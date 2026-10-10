@@ -564,21 +564,96 @@ test('下の満水が抜けて泡のマスができたら、差分の塗り直�
   assert.equal(fore.get('2,1'), 2 * TILE_SIZE);
 });
 
-test('塗りの上端が変わらず泡かどうかだけが変わったセルも塗り直す（粒を描き足す）', async () => {
-  // (2,1) は満水の水面で、塗りの上端はタイルの上辺。上から満水が落ちてきて (2,1) が抜けると、
-  // 泡のマスになるが塗りの上端はタイルの上辺のまま。上端だけを比べると塗り直されず、粒が描かれない
-  const map = makeWaterMap(`
-    ...
-    ...
-    .8.
-    ###
+// ---- 泡の粒 ----
+// 泡のマスは1か所に続かない（362回のうち343回が3フレーム以下で、1〜3フレームでまた出る。落下が
+// 4フレームに1回なので「2〜3フレーム泡、1フレーム水」をくり返す）。マスに粒を描くと白い粒が
+// 15Hz で点滅するだけなので、泡のマスからは粒を生むだけにして、粒はマスが消えても昇り続けさせる
+
+/** 階段の段: (1,1) が満水、(2,1) が泡のマス、行3が床 */
+function stepWithFoam(width = 4) {
+  return makeWaterMap(`
+    ${'.'.repeat(width)}
+    .8${'.'.repeat(width - 2)}
+    ${'.'.repeat(width)}
+    ${'#'.repeat(width)}
   `);
-  const { renderer, fore, behind } = await rendererWithTops(map);
-  map.game = { env: { renderer } };
-  const before = map.getWaterPaintTopY(2, 1);
-  map.water[1 * map.cols + 1] = 8;
-  map.water[2 * map.cols + 1] = 0;
-  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[1, 1], [2, 1]]);
-  assert.equal(map.isWaterFoam(2, 1), true);
-  assert.equal(map.getWaterPaintTopY(2, 1), before, '前提: 塗りの上端は変わっていない');
+}
+
+test('泡のマスから白い泡の粒が生まれ、上へ昇る', async () => {
+  const map = stepWithFoam();
+  const { renderer } = await rendererWithTops(map);
+  assert.ok(map.isWaterFoam(2, 1), '前提: (2,1) は泡のマス');
+  const seen = new Map();   // 粒 → 最初に見た y
+  let rose = 0;
+  for (let i = 0; i < 60; i++) {
+    renderer.update();
+    for (const b of renderer.bubbles) {
+      assert.ok(b.x >= TILE_SIZE - 1 && b.x <= 2 * TILE_SIZE + 1, `粒は泡のマスの列の中 (x=${b.x})`);
+      if (!seen.has(b)) seen.set(b, b.y);
+      else if (b.y < seen.get(b) - 2) rose++;
+    }
+  }
+  assert.ok(seen.size > 5, `粒が生まれる (${seen.size})`);
+  assert.ok(rose > 0, '粒は上へ昇る');
+});
+
+test('泡の粒は水の外へ出たら消える（満水のセルの液面より上へは行かない）', async () => {
+  const map = stepWithFoam();
+  const { renderer } = await rendererWithTops(map);
+  for (let i = 0; i < 200; i++) {
+    renderer.update();
+    for (const b of renderer.bubbles) assert.ok(b.y >= TILE_SIZE, `粒が水の外 (y=${b.y})`);
+  }
+});
+
+test('泡のマスが水に戻っても、生まれた粒はすぐには消えない（点滅しない）', async () => {
+  const map = stepWithFoam();
+  const { renderer } = await rendererWithTops(map);
+  for (let i = 0; i < 20; i++) renderer.update();
+  const before = renderer.bubbles.length;
+  assert.ok(before > 0, '前提: 粒がある');
+  map.water[2 * map.cols + 1] = 8;   // 隙間に水が落ちてきた
+  map.onWaterChanged([[2, 1]]);
+  assert.equal(map.isWaterFoam(2, 1), false, '前提: 泡のマスは消えた');
+  renderer.update();
+  assert.ok(renderer.bubbles.length > 0, '粒は昇り続ける');
+});
+
+test('泡のマスが無ければ粒は生まれない', async () => {
+  const map = mapWithPool();
+  const { renderer } = await rendererWithTops(map);
+  for (let i = 0; i < 60; i++) renderer.update();
+  assert.equal(renderer.bubbles.length, 0);
+});
+
+test('泡の粒の数には上限がある', async () => {
+  const { WATER_BUBBLE_MAX } = await import('../src/js/utils/Constants.js');
+  // 幅60の段に満水を並べ、泡のマスを58個作る（実マップでは同時に多くて7個）
+  const width = 60;
+  const map = makeWaterMap(`
+    ${'.'.repeat(width)}
+    .${'8'.repeat(width - 2)}.
+    ${'.'.repeat(width)}
+    ${'#'.repeat(width)}
+  `);
+  const { renderer } = await rendererWithTops(map);
+  let peak = 0;
+  for (let i = 0; i < 120; i++) { renderer.update(); peak = Math.max(peak, renderer.bubbles.length); }
+  assert.ok(peak > WATER_BUBBLE_MAX / 2, `前提: 上限に届くだけ生まれる (${peak})`);
+  assert.ok(peak <= WATER_BUBBLE_MAX, `上限 ${WATER_BUBBLE_MAX} を超えない (${peak})`);
+});
+
+test('泡の粒は画面に描かれる', async () => {
+  const { WATER_BUBBLE_COLOR } = await import('../src/js/utils/Constants.js');
+  const map = stepWithFoam();
+  const { renderer } = await rendererWithTops(map);
+  for (let i = 0; i < 30; i++) renderer.update();
+  const ctx = makeFakeCtx();
+  renderer.drawOverWorld(ctx, 0, 0);
+  let color = '', n = 0;
+  for (const c of ctx.calls) {
+    if (c.name === 'set:fillStyle') color = c.args[0];
+    if (c.name === 'fillRect' && color === WATER_BUBBLE_COLOR) n++;
+  }
+  assert.equal(n, renderer.bubbles.length, '粒の数だけ泡の色で描く');
 });

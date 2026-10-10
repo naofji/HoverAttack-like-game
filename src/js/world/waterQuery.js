@@ -364,15 +364,17 @@ function paintedTop(y, r) {
  * 比べるので拾える。以前は拾えず、水圧で池の水が一気に移った後に水面の上へ平らな水の
  * 四角が残った（実機の指摘。4面 seed 30 で掘り抜くと24マス）
  *
- * foam は泡のマス（isFoamAt）。泡のマスの塗りの上端はタイルの上辺。泡かどうかも塗りに効くので、
- * 塗りの上端と同じく前後を比べる。泡は同じ列の上下しか読まないので、作り直した列だけで足りる
- * （はみ出した先は液面しか変わらない）
+ * foam は泡のマス（isFoamAt）、foamCells はその一覧。泡のマスの塗りの上端はタイルの上辺で、
+ * キャッシュの絵はそれ以外で泡に左右されない（粒は描画が毎フレーム描く）ので、塗り直しの判定には
+ * 入れない。一覧は描画が泡の粒を生む場所を、マップ全体を走査せずに知るため（同時に多くて7マス）。
+ * 泡は同じ列の上下しか読まないので、作り直した列だけで足りる（はみ出した先は液面しか変わらない）
  *
  * @param {Int16Array|undefined} [p.paintTopY] 塗りの上端。描画しないテストでは省略できる
  * @param {Uint8Array|undefined} [p.foam] 泡のマス（1/0）。paintTopY を渡すときは必ず一緒に渡す
+ * @param {Set<number>|undefined} [p.foamCells] 泡のマスの一覧 (r * cols + c)。foam と一緒に保つ
  * @param {Set<number>|undefined} [p.repaint] 塗り直しの要るセル (r * cols + c) を足す先
  */
-export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, rows, cols, isSolid, dirtyCols, repaint }) {
+export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, foamCells, rows, cols, isSolid, dirtyCols, repaint }) {
     // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
     // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
     // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
@@ -426,8 +428,11 @@ export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, rows
         // 泡になれるのは空気のマスだけ。池の水のマスまで関数を呼ぶと作り直しが +13% になった
         const f = water[k] === 0 && isFoamAt(water, kind, rows, cols, isSolid, r, c) ? 1 : 0;
         const top = f ? r * TILE_SIZE : paintTopAt(water, kind, surfaceY, cols, isSolid, r, c);
-        if (repaint && (f !== foam[k] || paintedTop(top, r) !== paintedTop(paintTopY[k], r))) repaint.add(k);
+        if (repaint && paintedTop(top, r) !== paintedTop(paintTopY[k], r)) repaint.add(k);
         paintTopY[k] = top;
+        if (f !== foam[k] && foamCells) {
+            if (f) foamCells.add(k); else foamCells.delete(k);
+        }
         foam[k] = f;
     };
     // 空気のまま（水も液面も無く、前も塗っていない）で、真上が水でも滝でもないセルは、塗りの上端も -1、
