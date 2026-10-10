@@ -46,6 +46,8 @@ import {
 } from './waterQuery.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
+import { generateTown } from './town/generate.js';
+import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 
 
@@ -310,6 +312,14 @@ export class Map {
             // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
             STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].backdrop,
         );
+
+        // Step 13: 3面の町並み（設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md）。
+        // 遠景と同じく派生ストリームで、game.rng は消費しない（このあと SpawnManager が使う）。
+        // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
+        this.town = null;
+        if (STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].props === 'town') {
+            this._generateTown();
+        }
     }
 
     // 開始の部屋・基地の部屋を避けるための矩形。水（_generateWater）と雪の階段
@@ -322,6 +332,24 @@ export class Map {
             { r0: b.r - 12, r1: b.floorR + 2, c0: b.c - 10, c1: this.cols - 1 },
         ];
     }
+    /**
+     * 町の設計図。tools/render-town-scene.mjs も同じものを呼ぶ（乱数の作り方を
+     * 2か所に書くと、道具の絵と実機の町が食い違うため）。町は生成の最後に作るので、
+     * 生成後に呼んでも game.rng.state は生成中と同じ値で、同じ町になる。
+     */
+    _buildTownSpecs() {
+        return generateTown({
+            grid: this.grid, rows: this.rows, cols: this.cols,
+            // 基地の部屋だけ避ける。開始の部屋には置く（面に入った瞬間に町だと分かるように）
+            excludeRects: [this._reservedRects()[1]],
+            rng: new SeededRNG((this.game.rng.state ^ 0x70E4E5) >>> 0),
+        });
+    }
+
+    _generateTown() {
+        this.town = new Town(this._buildTownSpecs(), { isSolidTile: (r, c) => this.isSolid(r, c) });
+    }
+
     _generateFortress() {
         const result = carveFortressZones({
             grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols,

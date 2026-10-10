@@ -101,3 +101,46 @@ test('same seed on the snow stage produces identical stairs (reproducibility)', 
   assert.deepEqual(a.stairs, b.stairs);
   assert.deepEqual(a.enemyTankSpawns, b.enemyTankSpawns);
 });
+
+// 3面の町（docs/superpowers/specs/2026-10-11-stage3-town-design.md）。
+// 町は敵の湧き位置を決めたあとに作るので、「敵配置が変わらない」を比べても恒真になる。
+// 見るべきは**このあと SpawnManager が使う game.rng の状態**。町を無効化したビルドと
+// 状態が一致するのは、町が派生ストリームしか使っていないときだけ。
+test('stage 3 builds a town; stage 1 has none; mission 10 (= stage 3 mod 7) has one too', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  assert.ok(buildMap(Map, 42, 2).town.buildings.length > 0);
+  assert.equal(buildMap(Map, 42, 0).town, null);
+  assert.ok(buildMap(Map, 42, 9).town.buildings.length > 0, 'debugStartMission で面数を超えても剰余で3面');
+});
+
+test('same seed produces the same town', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const summary = (m) => m.town.buildings.map((b) => [b.kind, b.x, b.y, b.width, b.height, Array.from(b.cells).join('')]);
+  assert.deepEqual(summary(buildMap(Map, 42, 2)), summary(buildMap(Map, 42, 2)));
+});
+
+test('building the town does not consume game.rng (SpawnManager runs on it next)', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const withTown = { rng: new SeededRNG(42) };
+  new Map(withTown, 2);
+
+  const original = Map.prototype._generateTown;
+  Map.prototype._generateTown = function () { /* no-op: 町を作らない */ };
+  const withoutTown = { rng: new SeededRNG(42) };
+  try {
+    new Map(withoutTown, 2);
+  } finally {
+    Map.prototype._generateTown = original;
+  }
+  assert.equal(withTown.rng.state, withoutTown.rng.state);
+});
+
+test('every building in the town is held by rock (floor, wall or ceiling)', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  for (const seed of [1, 2, 3]) {
+    const m = buildMap(Map, seed, 2);
+    for (const b of m.town.buildings) {
+      assert.ok(b.anchors.length > 0, `seed ${seed}: ${b.site} の ${b.kind} (${b.x},${b.y}) が浮いている`);
+    }
+  }
+});
