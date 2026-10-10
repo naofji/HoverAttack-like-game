@@ -13,7 +13,13 @@
 //   rebuildUs     … 種別キャッシュの作り直し（_rebuildWaterCacheIfDirty）の同上
 //   active        … アクティブなセル数の中央値・最大
 //   flicker       … 1フレームで「滝 ⇄ 滝以外」が入れ替わったセルの延べ数
-//   floatingHeads … 真上が岩でも水でもない滝セル（宙に浮いた滝の始まり）の延べ数
+//   floatingHeads … 真上が岩でも水でも滝でもない滝セル（宙に浮いた滝の始まり）の延べ数。
+//                   以前は「真上の水量が0」で数えていたが、流れの記録で空のセルも滝になる
+//                   （waterStream.js）と、細い滝の途中が全部数えられて意味を失う
+//   runFlicker    … 実際に描く滝の帯（collectWaterfallRuns）が覆うセルと寄せ（左/中央/右）の、
+//                   1フレームでの入れ替わりの延べ数。種別の点滅（flicker）は描画の継ぎはぎで
+//                   隠れるので、見える点滅はこちらで測る
+//   floatingFull  … 満水で、真下が岩でなく水量0のセル（宙に浮いた満水の四角）の延べ数
 //   mirrorDiff    … 左右反転したマップで同じだけ回し、結果を反転して比べたときに
 //                   水量が食い違うセルの数（左右対称なら 0）
 
@@ -25,6 +31,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { Map: GameMap } = await import('../src/js/world/Map.js');
 const { WATER_FALL } = await import('../src/js/world/waterQuery.js');
+const { collectWaterfallRuns } = await import('../src/js/world/environment/waterfallRuns.js');
 
 const SEEDS = [1, 2, 3, 4, 5, 6];
 const FRAMES = 2400;
@@ -82,7 +89,8 @@ function run(seed, { mirrored = false, measure = true, blast = true } = {}) {
     const maxGain = map.waterSprings.length * WATER_SPRING_MASS;
     let massViolations = 0;
     const stepUs = [], rebuildUs = [], active = [];
-    let flicker = 0, floatingHeads = 0;
+    let flicker = 0, floatingHeads = 0, runFlicker = 0, floatingFull = 0;
+    let prevBand = new Uint8Array(rows * cols);
 
     let prevFall = new Uint8Array(rows * cols);
     for (let f = 1; f <= FRAMES; f++) {
@@ -112,10 +120,26 @@ function run(seed, { mirrored = false, measure = true, blast = true } = {}) {
             if (map.waterKind[k] !== WATER_FALL) continue;
             fall[k] = 1;
             const r = Math.floor(k / cols), c = k % cols;
-            if (r > 0 && !map.isSolid(r - 1, c) && map.water[k - cols] === 0) floatingHeads++;
+            if (r > 0 && !map.isSolid(r - 1, c) && map.water[k - cols] === 0
+                && map.waterKind[k - cols] !== WATER_FALL) floatingHeads++;
         }
         for (let k = 0; k < rows * cols; k++) if (fall[k] !== prevFall[k]) flicker++;
         prevFall = fall;
+
+        if (measure) {
+            for (let k = 0; k < (rows - 1) * cols; k++) {
+                if (map.water[k] < 8) continue;
+                const r = Math.floor(k / cols), c = k % cols;
+                if (!map.isSolid(r + 1, c) && map.water[k + cols] === 0) floatingFull++;
+            }
+            const band = new Uint8Array(rows * cols);
+            for (const run of collectWaterfallRuns(map, 0, cols - 1, 0, rows - 1)) {
+                const v = run.align === 'left' ? 2 : run.align === 'right' ? 3 : 1;
+                for (let r = run.headR; r <= run.footR; r++) band[r * cols + run.c] = v;
+            }
+            for (let k = 0; k < rows * cols; k++) if (band[k] !== prevBand[k]) runFlicker++;
+            prevBand = band;
+        }
     }
     return {
         map,
@@ -126,6 +150,8 @@ function run(seed, { mirrored = false, measure = true, blast = true } = {}) {
             active: { p50: q(active, 0.5), max: q(active, 1) },
             flicker,
             floatingHeads,
+            runFlicker,
+            floatingFull,
         },
     };
 }
@@ -149,6 +175,8 @@ for (const seed of SEEDS) {
 }
 
 out.total = { massViolations: violations, flicker: flick, floatingHeads: heads, mirrorDiff };
+out.total.runFlicker = Object.values(out.perSeed).reduce((a, s) => a + s.runFlicker, 0);
+out.total.floatingFull = Object.values(out.perSeed).reduce((a, s) => a + s.floatingFull, 0);
 const seeds = Object.values(out.perSeed);
 out.total.stepUsP95Max = Math.max(...seeds.map((s) => s.stepUs.p95));
 out.total.stepUsMaxMax = Math.max(...seeds.map((s) => s.stepUs.max));
