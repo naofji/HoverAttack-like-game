@@ -23,6 +23,11 @@ import { lerpColor } from '../utils/color.js';
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
+// 水中の噴射の泡を撒く位置の、ノズルの下端からの下がり幅 px。いちばん短い炎の先（根元の隙間＋最短の長さ）。
+// 炎の長さは残燃料（敵は上昇の推力）で変わるが、泡の湧く位置はそれで動かさず短い炎の先に固定する。
+// 自機と敵アタッカーの _emitJetBubbles が使う
+export const JET_BUBBLE_DROP = THRUSTER_FLAME_GAP + THRUSTER_FLAME_LEN_MIN;
+
 /**
  * 幅 topW から 1 へ絞りながら、1px 高の段を length 段ぶん積む。
  * @param {CanvasRenderingContext2D} ctx

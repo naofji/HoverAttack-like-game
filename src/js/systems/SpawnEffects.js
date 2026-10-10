@@ -17,6 +17,7 @@ import {
     WATERFALL_SPLASH_SPRAY_MIN, WATERFALL_SPLASH_SPRAY_MAX, WATERFALL_SPLASH_SPRAY_SPEED_MIN,
     WATERFALL_SPLASH_SPRAY_SPEED_MAX, WATERFALL_SPLASH_SPRAY_SPREAD, WATERFALL_SPLASH_MIST_MIN,
     WATERFALL_SPLASH_MIST_MAX, WATERFALL_SPLASH_MIST_SPREAD, WATERFALL_BAND_WIDTH,
+    BUBBLE_BURSTS, BLAST_BUBBLES_PER_PARTICLE, BLAST_BUBBLES_MAX,
     TILE_SIZE,
 } from '../utils/Constants.js';
 import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
@@ -31,13 +32,14 @@ export const SpawnEffects = {
         audioManager.playExplosion(size > 10, x);
 
         // 水中での爆発（グレネード・ミサイル・敵機の破壊。全部ここを通る）は水面を揺らし、
-        // 水柱を上げる。spawnSplash と違って「面をまたいだ」タイミングを検出する必要はなく、
-        // 爆発の中心が水中にあれば毎回でよい
+        // 水柱を上げ、爆発の中心から泡を舞い上げる。spawnSplash と違って「面をまたいだ」
+        // タイミングを検出する必要はなく、爆発の中心が水中にあれば毎回でよい
         const map = this.map;
         if (map && map.isWaterAtPixel && map.isWaterAtPixel(x, y)) {
             const r = this.env && this.env.renderer;
             if (r && r.addRipple) r.addRipple(x, EXPLOSION_RIPPLE_STRENGTH);
             this.spawnWaterColumn(x, y);
+            this.spawnBubbles(x, y, 'blast', Math.min(BLAST_BUBBLES_MAX, Math.round(size * BLAST_BUBBLES_PER_PARTICLE)));
         }
 
         for (const mine of this.landmines) {
@@ -138,6 +140,39 @@ export const SpawnEffects = {
             const a = -Math.PI / 2 + (Math.random() - 0.5) * WATER_COLUMN_SPREAD;
             const s = WATER_COLUMN_SPEED_MIN + Math.random() * (WATER_COLUMN_SPEED_MAX - WATER_COLUMN_SPEED_MIN);
             this.particles.push(new SplashParticle(x, surfaceY, Math.cos(a) * s, Math.sin(a) * s));
+        }
+    },
+
+    /**
+     * 水中の泡を撒く（BUBBLE_BURSTS の1行ぶん）。粒は水の描画の泡の粒（renderer.addBubble）に足すので、
+     * 見た目と昇り方は泡のマスの粒と同じ。水の中かどうかは粒ごとに見て、水の外に出る粒は撒かない
+     * （ノズルが水面のすぐ上でも、噴流の先が水に入っていればそこだけ泡になる）。
+     * 水の無い面（renderer に addBubble が無い）では何もしない。
+     * @param {number} x
+     * @param {number} y 撒く中心
+     * @param {string} kind BUBBLE_BURSTS のキー（jet / burst / blast）
+     * @param {number} [count] 粒の数。省略時は行の count
+     */
+    spawnBubbles(x, y, kind, count) {
+        const row = BUBBLE_BURSTS[kind];
+        const r = this.env && this.env.renderer;
+        const map = this.map;
+        if (!row || !r || !r.addBubble || !map || !map.isWaterAtPixel) return;
+        const n = count ?? row.count;
+        for (let i = 0; i < n; i++) {
+            const bx = x + (Math.random() - 0.5) * row.jitter;
+            const by = y + (Math.random() - 0.5) * row.jitter;
+            if (!map.isWaterAtPixel(bx, by)) continue;
+            const a = row.angle + (Math.random() - 0.5) * row.spread;
+            const s = row.speedMin + Math.random() * (row.speedMax - row.speedMin);
+            r.addBubble({
+                x: bx, y: by,
+                vx: Math.cos(a) * s,
+                up: -Math.sin(a) * s,   // 画面座標の下向き +sin を、泡の「上が +」へ
+                rise: row.riseMin + Math.random() * (row.riseMax - row.riseMin),
+                size: row.sizes[Math.floor(Math.random() * row.sizes.length)],
+                life: row.life,
+            });
         }
     },
 

@@ -657,3 +657,58 @@ test('泡の粒は画面に描かれる', async () => {
   }
   assert.equal(n, renderer.bubbles.length, '粒の数だけ泡の色で描く');
 });
+
+// --- 外から撒く泡（噴射・水中の爆発。SpawnEffects.spawnBubbles → renderer.addBubble）---------
+// どこで何粒撒くかは underwater-bubbles.test.js。ここは撒かれた粒の昇り方と上限
+
+test('撒いた泡は噴流で下へ押されてから昇りに転じ、水面で消える', async () => {
+  // 列3..6 の深い水たまり。液面は行1の上辺 (y=16)
+  const map = makeWaterMap(`
+    ..........
+    ..#8888#..
+    ..#8888#..
+    ..#8888#..
+    ..#8888#..
+    ..#8888#..
+    ##########
+  `);
+  const { renderer } = await rendererWithTops(map);
+  const y0 = 5 * TILE_SIZE + 4;
+  renderer.addBubble({ x: 4 * TILE_SIZE + 8, y: y0, vx: 0, up: -2, rise: 1.2, size: 2, life: 500 });
+  const b = renderer.bubbles[0];
+  let maxY = b.y, minY = b.y, frames = 0;
+  while (renderer.bubbles.includes(b) && frames < 500) {
+    renderer.update();
+    frames++;
+    if (renderer.bubbles.includes(b)) { maxY = Math.max(maxY, b.y); minY = Math.min(minY, b.y); }
+  }
+  assert.ok(maxY > y0 + 4, `噴流で下へ押されていない (最も下 ${maxY}, 出た高さ ${y0})`);
+  assert.ok(frames < 500, '寿命まで残った（水面で消えていない）');
+  assert.ok(minY >= TILE_SIZE, `水の外へ出た (y=${minY})`);
+  assert.ok(minY < TILE_SIZE + 4, `水面まで昇っていない (最も上 ${minY})`);
+});
+
+test('撒いた泡には別の上限があり、泡のマスの粒を締め出さない', async () => {
+  const { WATER_BUBBLE_SPAWNED_MAX } = await import('../src/js/utils/Constants.js');
+  // 左に泡のマス (2,1)、右に水たまり（列5..8、行1..2）
+  const map = makeWaterMap(`
+    ..........
+    .8..#8888#
+    ....#8888#
+    ##########
+  `);
+  const { renderer } = await rendererWithTops(map);
+  assert.ok(map.isWaterFoam(2, 1), '前提: (2,1) は泡のマス');
+  // 昇らない粒（rise 0）で水たまりを埋め、上限を超えて撒く
+  for (let i = 0; i < WATER_BUBBLE_SPAWNED_MAX + 50; i++) {
+    renderer.addBubble({ x: 6 * TILE_SIZE + 8, y: 40, vx: 0, up: 0, rise: 0, size: 1, life: 1000 });
+  }
+  assert.equal(renderer.bubbles.length, WATER_BUBBLE_SPAWNED_MAX, '撒いた泡が上限を超えた');
+  let foam = 0;
+  for (let i = 0; i < 60; i++) {
+    renderer.update();
+    foam = Math.max(foam, renderer.bubbles.filter((b) => !b.spawned).length);
+  }
+  assert.equal(renderer.bubbles.filter((b) => b.spawned).length, WATER_BUBBLE_SPAWNED_MAX, '前提: 撒いた泡は残っている');
+  assert.ok(foam > 0, '撒いた泡で泡のマスの粒が締め出された');
+});

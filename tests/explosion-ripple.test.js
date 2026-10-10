@@ -24,6 +24,7 @@ function makeGame(map) {
       map,
       env: { renderer: { addRipple: (x, s) => ripples.push([x, s]) } },
       spawnWaterColumn: SpawnEffects.spawnWaterColumn,
+      spawnBubbles: SpawnEffects.spawnBubbles,
     },
     ripples,
   };

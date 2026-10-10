@@ -13,7 +13,7 @@ import {
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
     WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
     WATER_BUBBLE_COLOR, WATER_BUBBLE_RISE_MIN, WATER_BUBBLE_RISE_MAX, WATER_BUBBLE_EMIT_CHANCE,
-    WATER_BUBBLE_LIFETIME, WATER_BUBBLE_MAX,
+    WATER_BUBBLE_LIFETIME, WATER_BUBBLE_MAX, WATER_BUBBLE_DRAG, WATER_BUBBLE_BUOYANCY, WATER_BUBBLE_SPAWNED_MAX,
     WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
     WATERFALL_SPLASH_INTERVAL, WATERFALL_SPLASH_FULL_DROP, WATERFALL_SPLASH_RIPPLE,
 } from '../../utils/Constants.js';
@@ -222,6 +222,7 @@ export function createWaterRenderer(env) {
         t: 0,
         ripples: [],
         bubbles: [],
+        spawnedBubbles: 0,   // bubbles のうち addBubble で撒かれた粒の数（泡のマスの粒と上限を分けて数える）
         // 前のフレームに描いた床を流れる水の帯（_drawWaterfalls が組み立てる）。ホバーの水滴の
         // 判定（waterClearance）が読む。床を流れる水はセルとしては空なので、描いた帯そのものを
         // 答えにしないと「見えている水の上なのに水滴が出ない」になる（2026-10-11 実機の指摘）
@@ -261,35 +262,64 @@ export function createWaterRenderer(env) {
         /**
          * 泡の粒: 泡のマスから生まれ、水の中を昇り、水の外へ出るか寿命で消える。泡のマスは1か所に
          * 3フレームも続かない（362回のうち343回）ので、マスが消えても粒は昇り続ける。生む場所は
-         * map の泡のマスの一覧（同時に多くて7つ）だけを見る
+         * map の泡のマスの一覧（同時に多くて7つ）だけを見る。
+         * addBubble で撒かれた粒（噴射・水中の爆発）も同じ配列で昇る。泡のマスの粒は横の初速が 0 で
+         * 昇る速さ up が最初から rise なので、抵抗と浮力の式を通っても値は変わらない
          */
         _updateBubbles() {
             const cols = map.cols;
+            const foamBubbles = this.bubbles.length - this.spawnedBubbles;
+            let emitted = 0;
             for (const k of map.getWaterFoamCells()) {
-                if (this.bubbles.length >= WATER_BUBBLE_MAX) break;
+                if (foamBubbles + emitted >= WATER_BUBBLE_MAX) break;
                 const h = hash2(this.t, k);
                 if ((h % 1000) / 1000 >= WATER_BUBBLE_EMIT_CHANCE) continue;
                 const g = hash2(h, k);
                 const r = Math.floor(k / cols), c = k % cols;
                 const x = c * TILE_SIZE + 2 + (g % (TILE_SIZE - 4));
+                const rise = WATER_BUBBLE_RISE_MIN + ((g >>> 12) % 1000) / 1000 * (WATER_BUBBLE_RISE_MAX - WATER_BUBBLE_RISE_MIN);
                 this.bubbles.push({
                     x, x0: x,
                     y: (r + 1) * TILE_SIZE - 2 - ((g >>> 8) % 4),
-                    vy: WATER_BUBBLE_RISE_MIN + ((g >>> 12) % 1000) / 1000 * (WATER_BUBBLE_RISE_MAX - WATER_BUBBLE_RISE_MIN),
+                    vx: 0, up: rise, rise,
                     size: (g >>> 22) & 1 ? 2 : 1,
                     phase: ((g >>> 23) % 628) / 100,
-                    age: 0,
+                    age: 0, life: WATER_BUBBLE_LIFETIME,
                 });
+                emitted++;
             }
             // 水の中にいるか: 水（液面より下）か、泡のマス（種別は空気なので isWaterAtPixel では拾えない）
             const inWater = (b) => map.isWaterAtPixel(b.x, b.y)
                 || map.isWaterFoam(Math.floor(b.y / TILE_SIZE), Math.floor(b.x / TILE_SIZE));
+            let spawned = 0;
             this.bubbles = this.bubbles.filter((b) => {
                 b.age++;
-                b.y -= b.vy;
+                b.vx *= WATER_BUBBLE_DRAG;
+                b.up += (b.rise - b.up) * WATER_BUBBLE_BUOYANCY;
+                b.x0 += b.vx;
+                b.y -= b.up;
                 b.x = b.x0 + Math.sin(b.age * 0.25 + b.phase) * 0.6;   // 昇りながら左右に少し揺れる
-                return b.age < WATER_BUBBLE_LIFETIME && inWater(b);
+                const alive = b.age < b.life && inWater(b);
+                if (alive && b.spawned) spawned++;
+                return alive;
             });
+            this.spawnedBubbles = spawned;
+        },
+        /**
+         * 泡の粒を外から1つ足す（噴射・水中の爆発。SpawnEffects.spawnBubbles が呼ぶ）。
+         * 水の中かどうかは呼ぶ側が見る。水の外に置いても次の更新で消えるだけ。
+         * @param {{x:number, y:number, vx:number, up:number, rise:number, size:number, life:number}} b
+         *   vx 横の初速（右が +）、up 縦の初速（上が +。噴流に押されて下へ向かうなら負）、
+         *   rise 浮力で落ち着く昇る速さ
+         */
+        addBubble({ x, y, vx, up, rise, size, life }) {
+            if (this.spawnedBubbles >= WATER_BUBBLE_SPAWNED_MAX) return;
+            this.bubbles.push({
+                x, x0: x, y, vx, up, rise, size,
+                phase: Math.random() * Math.PI * 2,
+                age: 0, life, spawned: true,
+            });
+            this.spawnedBubbles++;
         },
         addRipple(x, strength) {
             this.ripples.push({ x, strength });
@@ -364,7 +394,7 @@ export function createWaterRenderer(env) {
             ctx.fillStyle = WATER_BUBBLE_COLOR;
             for (const b of this.bubbles) {
                 if (b.x < camX - 4 || b.x > camX + CANVAS_WIDTH + 4 || b.y < camY - 4 || b.y > camY + CANVAS_HEIGHT + 4) continue;
-                const fade = Math.min(1, (WATER_BUBBLE_LIFETIME - b.age) / 8);
+                const fade = Math.min(1, (b.life - b.age) / 8);
                 if (fade < 1) ctx.globalAlpha = fade;
                 ctx.fillRect(Math.round(b.x - b.size / 2), Math.round(b.y - b.size / 2), b.size, b.size);
                 if (fade < 1) ctx.globalAlpha = 1;

@@ -498,6 +498,7 @@ export const AttackerMovement = {
         this.jumpCooldown = 60; // ~1 second cooldown
         // 自機のバーストジャンプと同じく、跳んだ直後は噴射で水面に水滴を舞わせる（_kickHoverWaterMist）
         this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
+        this._emitJetBubbles('burst');
         audioManager.playEnemyBurst(this.x + this.width / 2, this.y + this.height / 2);
     },
 

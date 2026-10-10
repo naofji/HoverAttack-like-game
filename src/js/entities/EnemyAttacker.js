@@ -11,7 +11,9 @@ import {
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
+    HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
+import { JET_BUBBLE_DROP } from './thrusterFlame.js';
 import { RepairKit } from './RepairKit.js';
 import { AutoAimUnit } from './AutoAimUnit.js';
 import { MissileKit } from './MissileKit.js';
@@ -261,6 +263,7 @@ export class EnemyAttacker {
         this._kickSnow();
         this._kickHoverSnowMist();
         this._kickHoverWaterMist();
+        this._emitJetBubbles();
         // 移動が終わったあとの位置と速さを残像の種として残す（rival のみ）
         this._recordAfterimage();
     }
@@ -323,6 +326,39 @@ export class EnemyAttacker {
         const count = hoverWaterMistCount(clearance);
         const closeness = hoverWaterMistCloseness(clearance);
         this.game.spawnWaterMist(this.x + this.width / 2, this.y + this.height + clearance, count, closeness);
+    }
+
+    /**
+     * 水中でホバーしているあいだ、炎の先から泡が舞う（自機の _emitJetBubbles と同じ規則）。
+     * kind が 'burst' ならジャンプ（movement.js の _jump）の一吹きで、ホバーも間引きも見ずに1回撒く。
+     * 粒は自機と同じく画面内の敵だけ（泡は描画側の上限 WATER_BUBBLE_SPAWNED_MAX を自機と分け合う）
+     * @param {'jet'|'burst'} [kind]
+     */
+    _emitJetBubbles(kind = 'jet') {
+        if (!this.game.spawnBubbles) return;
+        if (kind === 'jet') {
+            if (!this.hovering) return;
+            this._jetBubbleTimer = (this._jetBubbleTimer || 0) + 1;
+            if (this._jetBubbleTimer % HOVER_JET_BUBBLE_INTERVAL !== 0) return;
+        }
+        if (this.game.camera && this.game.canvas
+            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
+        const n = this._hoverNozzle();
+        this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, kind);
+    }
+
+    /**
+     * ホバーのノズルの位置（ワールド座標）。x はノズルの中心、y はノズルの下端。
+     * 描画（attacker/draw.js）は cfg.flameX/flameY を、向きで反転し（左向きは translate(x+width) +
+     * scale(-1, 1)）、しゃがみ（crouching かバースト中）で 4px 下げた座標系に置くので、それをワールドへ写す
+     */
+    _hoverNozzle() {
+        const cfg = this.config;
+        const crouchOffset = (this.crouching || this.burstCount > 0) ? 4 : 0;
+        return {
+            x: this.facingRight ? (this.x + cfg.flameX) : (this.x + this.width - cfg.flameX),
+            y: this.y + crouchOffset + cfg.flameY,
+        };
     }
 
     /**

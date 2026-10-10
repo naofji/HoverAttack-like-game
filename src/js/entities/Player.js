@@ -22,7 +22,7 @@ import {
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
-    HOVER_WATER_MIST_BURST_FRAMES,
+    HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithMap } from '../utils/Physics.js';
@@ -32,7 +32,7 @@ import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnviron
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
-import { drawThrusterFlame } from './thrusterFlame.js';
+import { drawThrusterFlame, JET_BUBBLE_DROP } from './thrusterFlame.js';
 
 /**
  * 歩行4フレーム → 手前脚/奥脚のポーズ番号（_legPose の walkPose に渡す）。
@@ -192,6 +192,7 @@ export class Player {
         }
         if (this.motion.slide > 0) { this._kickSnow(landed); this._kickHoverSnowMist(); }
         this._kickHoverWaterMist();
+        this._emitJetBubbles();
         this.airborneFrames = this.onGround ? 0 : this.airborneFrames + 1;
         this.wasOnGround = this.onGround;
         // くの字の先端には描いた坂が無いので、階段(slopeDir)を優先しつつ、
@@ -382,6 +383,38 @@ export class Player {
         this.game.spawnWaterMist(fx, fy, count, closeness);
     }
 
+    /**
+     * 水中でホバーしているあいだ、炎の先から泡が舞う（2026-10-11 ユーザー要望）。水の中かどうかは
+     * spawnBubbles が粒ごとに見るので、ここではホバーしているかと間引きだけ。泡は噴流に押されて
+     * いったん下へ向かい、浮力で昇りに転じる（BUBBLE_BURSTS.jet）
+     */
+    _emitJetBubbles() {
+        if (!this.hovering || !this.game.spawnBubbles) return;
+        this._jetBubbleTimer = (this._jetBubbleTimer || 0) + 1;
+        if (this._jetBubbleTimer % HOVER_JET_BUBBLE_INTERVAL !== 0) return;
+        const n = this._hoverNozzle();
+        this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, 'jet');
+    }
+
+    /**
+     * ホバーのノズルの位置（ワールド座標）。x はノズルの中心、y はノズルの下端。
+     * 炎（_drawHoverExhaust）と噴射の泡（_emitJetBubbles）が同じ点から出るよう1か所で決める。
+     *
+     * _drawBody() が描く橙のノズル矩形 fillRect(2, 12, 4, 2)（ローカル座標、しゃがみ中は
+     * ホバーしない）から直接出す。_drawBody() は右向き translate(x, y)、左向き
+     * translate(x+width, y) + scale(-1, 1) なので、ワールド座標での中心 x はノズル矩形の
+     * 中心 (2+4/2=4) を向きに応じて場合分けする必要がある（右向き: x+4、左向き: x+width-4）。
+     * y はノズル矩形の下端 (12+2=14)（描画専用の値なので、敵側の cfg.flameX/flameY と違い
+     * コードに直接書く）。旧実装は向きで x のずれ幅が違い（-4px と +2px）、振り向くたびに
+     * 炎が横へ飛んでいた。
+     */
+    _hoverNozzle() {
+        return {
+            x: this.facingRight ? (this.x + 4) : (this.x + this.width - 4),
+            y: this.y + 14,
+        };
+    }
+
     /** Handle burst jump and hovering. */
     _updateBurstHover(input) {
         this.hovering = false;
@@ -396,6 +429,11 @@ export class Player {
                 this.hoverFuel -= BURST_FUEL_CONSUMPTION;
                 this.hoverCooldown = HOVER_COOLDOWN_AFTER_BURST;
                 this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
+                // 水中なら一吹きぶんの泡（水の外では spawnBubbles が粒ごとに捨てる）
+                if (this.game.spawnBubbles) {
+                    const n = this._hoverNozzle();
+                    this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, 'burst');
+                }
                 audioManager.playBurst();
             } else if (this.hoverCooldown <= 0 && this.hoverFuel > 0) {
                 // Hover (dynamic thrust based on remaining fuel)
@@ -1327,20 +1365,12 @@ export class Player {
     _drawHoverExhaust(ctx) {
         if (!this.hovering) return;
 
-        // ノズルの位置は _drawBody() が描く橙のノズル矩形
-        // fillRect(2, 12, 4, 2)（ローカル座標、しゃがみ中はここを呼ばない）から直接出す。
-        // _drawBody() は右向き translate(x, y)、左向き translate(x+width, y) + scale(-1, 1)
-        // なので、ワールド座標での中心 x はノズル矩形の中心 (2+4/2=4) を向きに応じて
-        // 場合分けする必要がある（右向き: x+4、左向き: x+width-4）。上端 y はノズル
-        // 矩形の下端 (12+2=14) で揃える（描画専用の値なので、敵側の
-        // drawThrusterFlame(ctx, 4, 14 - crouchOffset, ...) と同じくコードに直接書く）。
-        // 旧実装は向きで x のずれ幅が違い（-4px と +2px）、振り向くたびに炎が横へ飛んでいた。
-        const nozzleX = this.facingRight ? (this.x + 4) : (this.x + this.width - 4);
+        const nozzle = this._hoverNozzle();
         // 残燃料で実際の推力が変わる（HOVER_THRUST → HOVER_THRUST_MIN）ので、
         // 炎の長さも同じ比に合わせる。ホバー音も playHover(fuelRatio) で同じ値を
         // 受けているため、炎・音・推力が1つの値を指すことになる
         const fuelRatio = this.hoverFuel / HOVER_MAX_FUEL;
-        drawThrusterFlame(ctx, nozzleX, this.y + 14, {
+        drawThrusterFlame(ctx, nozzle.x, nozzle.y, {
             color: COLOR_HOVER_EXHAUST,
             power: fuelRatio,
         });

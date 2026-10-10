@@ -1250,6 +1250,38 @@ export const WATER_BUBBLE_RISE_MAX = 0.8;
 export const WATER_BUBBLE_EMIT_CHANCE = 0.35;  // 泡のマス1つが1フレームに粒を生む確率
 export const WATER_BUBBLE_LIFETIME = 40;       // フレーム。最後の8フレームで薄れる
 export const WATER_BUBBLE_MAX = 150;           // 粒の数の上限（実マップの泡のマスは同時に多くて7つ）
+// ジェットの噴射と水中の爆発が撒く泡の粒（2026-10-11 ユーザー要望「水中でジェット噴射したら水泡が舞う」
+// 「水中でグレネードが爆発したら水泡が舞い上がっていく」）。見た目は上の泡の粒そのもの（同じ色・同じ描き方で、
+// 水の描画の bubbles に相乗りする。粒子(particles)にすると水の塗りの下に描かれて泡だけ色がくすむ）。
+// 泡のマスの粒との違いは、初めに勢い（噴流に押される・爆発で飛び散る）を持ち、浮力で昇る速さへ
+// 寄っていくことと、水面まで昇り切れるよう速く長生きなこと（泡のマスの粒は 40 フレームで 16〜32px しか昇らない）。
+//   count         1回に撒く数（blast だけは爆発の大きさから BLAST_BUBBLES_* で決める）
+//   speedMin/Max  初速 px/フレーム。angle の向きを中心に spread の扇
+//   angle         初速の向き（ラジアン、画面座標。π/2 が真下）
+//   jitter        出る位置の散らばり px（中心から ±jitter/2）
+//   riseMin/Max   浮力で落ち着く昇る速さ px/フレーム
+//   sizes         粒の大きさ px。ここから一様に選ぶ（1 を重ねると小さい粒が多くなる）
+//   life          寿命フレーム。ほとんどはその前に水面へ出て消える
+export const BUBBLE_BURSTS = {
+    // ホバーの噴射。HOVER_JET_BUBBLE_INTERVAL おきに、炎の先あたりから噴流に押されて下へ。
+    // 初速 -2 前後・浮力 0.08 だと 10px ほど下がってから昇りに転じる（噴流が水を押す感じ）
+    jet:   { count: 2, speedMin: 1.0, speedMax: 2.5, angle: Math.PI / 2, spread: 0.9, jitter: 4,
+             riseMin: 0.8, riseMax: 1.6, sizes: [1, 1, 2], life: 120 },
+    // バーストジャンプ（敵はジャンプ）の一吹き。噴射と同じ向きで、多く・強く・横にも広く
+    burst: { count: 10, speedMin: 1.5, speedMax: 3.5, angle: Math.PI / 2, spread: 1.6, jitter: 8,
+             riseMin: 0.8, riseMax: 1.6, sizes: [1, 2, 2], life: 120 },
+    // 水中の爆発。全方向へ飛び散り、大きい粒ほど目立つよう 3px も混ぜる
+    blast: { count: 0, speedMin: 1.5, speedMax: 4.0, angle: 0, spread: Math.PI * 2, jitter: 10,
+             riseMin: 1.0, riseMax: 2.2, sizes: [1, 2, 2, 3], life: 150 },
+};
+export const WATER_BUBBLE_DRAG = 0.9;          // 横の初速が毎フレーム残る割合（水の抵抗）
+export const WATER_BUBBLE_BUOYANCY = 0.08;     // 昇る速さが毎フレーム rise へ寄る割合
+export const WATER_BUBBLE_SPAWNED_MAX = 300;   // 撒いた泡の数の上限（泡のマスの粒とは別に数える。噴射が泡のマスの粒を締め出さない）
+export const HOVER_JET_BUBBLE_INTERVAL = 3;    // フレーム。噴射の泡を撒く間隔（BUBBLE_BURSTS.jet.count 粒ずつ）
+// 水中の爆発の泡の数 = 爆発の粒の数 × PER（上限 MAX）。グレネード(150粒)で 38、敵機の破壊(20〜36粒)で 5〜9、
+// マシンガンの着弾(4粒)で 1。爆発の大きさが泡の量でも分かるように比例させる
+export const BLAST_BUBBLES_PER_PARTICLE = 0.25;
+export const BLAST_BUBBLES_MAX = 40;
 export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
 export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
 export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない
