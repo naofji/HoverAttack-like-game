@@ -3,7 +3,7 @@
 // ============================================
 //
 // 試験マップは「左の池・右の池・間に1枚の壁」。壁の一部を壊した直後の状態から、実物の
-// stepWaterSimulation を Map.update と同じ間隔（WATER_FALL_INTERVAL に1回の落下）で回す。
+// stepWaterSimulation を Map.update と同じ間隔（落下は WATER_FALL_INTERVAL、水圧は WATER_PRESSURE_INTERVAL に1回）で回す。
 // フェーズ3を単体で回すテストにしないのは、運ばないフレームでアクティブを保つ仕組みが
 // フェーズ2との組み合わせでしか確かめられないため。
 //
@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
-import { MAX_WATER_MASS, WATER_FALL_INTERVAL } from '../src/js/utils/Constants.js';
+import { MAX_WATER_MASS, WATER_FALL_INTERVAL, WATER_PRESSURE_INTERVAL } from '../src/js/utils/Constants.js';
 
 /**
  * 左右の池。leftTop / rightTop はそれぞれの水面の行（その行から床の上までが満水）。
@@ -40,13 +40,16 @@ function basins({ leftTop, rightTop, holeRows, rows = 12, w = 5, prefill = false
 /** Map.update と同じ回し方で frames フレーム。onStep(frame, pressureMoved) を毎フレーム呼ぶ */
 function run(s, frames, onStep) {
     let active = s.active;
-    let timer = 0;
+    let fallTimer = 0, pressureTimer = 0;
     for (let f = 0; f < frames; f++) {
         if (active.size === 0) { if (onStep) onStep(f, 0); continue; }
-        timer++;
-        const doFall = timer >= WATER_FALL_INTERVAL;
-        if (doFall) timer = 0;
-        const res = stepWaterSimulation({ water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: active, doFall });
+        fallTimer++;
+        const doFall = fallTimer >= WATER_FALL_INTERVAL;
+        if (doFall) fallTimer = 0;
+        pressureTimer++;
+        const doPressure = pressureTimer >= WATER_PRESSURE_INTERVAL;
+        if (doPressure) pressureTimer = 0;
+        const res = stepWaterSimulation({ water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: active, doFall, doPressure });
         active = res.nextActiveCells;
         if (onStep) onStep(f, res.pressureMoved);
     }
@@ -210,7 +213,7 @@ test('片側に水が注ぎ続けても、行き来せずにもう片側へ分�
         '#############',
     ]);
     let active = s.active;
-    let timer = 0;
+    let fallTimer = 0, pressureTimer = 0;
     const vol = (c0, c1) => {
         let t = 0;
         for (let r = 0; r < s.rows; r++) for (let c = c0; c <= c1; c++) t += s.water[r * s.cols + c];
@@ -218,15 +221,18 @@ test('片側に水が注ぎ続けても、行き来せずにもう片側へ分�
     };
     let maxGap = 0;
     for (let f = 0; f < 2000; f++) {
-        if (f < 1200 && f % WATER_FALL_INTERVAL === 0) {
+        if (f < 1200 && f % 4 === 0) {   // 湧き水と同じ4フレームおき（WATER_SPRING_INTERVAL）
             const k = 1 * s.cols + 9;   // 右の池の上空
             if (s.water[k] < MAX_WATER_MASS) { s.water[k]++; active.add(k); }
         }
         if (active.size > 0) {
-            timer++;
-            const doFall = timer >= WATER_FALL_INTERVAL;
-            if (doFall) timer = 0;
-            active = stepWaterSimulation({ water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: active, doFall }).nextActiveCells;
+            fallTimer++;
+            const doFall = fallTimer >= WATER_FALL_INTERVAL;
+            if (doFall) fallTimer = 0;
+            pressureTimer++;
+            const doPressure = pressureTimer >= WATER_PRESSURE_INTERVAL;
+            if (doPressure) pressureTimer = 0;
+            active = stepWaterSimulation({ water: s.water, rows: s.rows, cols: s.cols, isSolid: s.isSolid, activeCells: active, doFall, doPressure }).nextActiveCells;
         }
         if (f > 100) maxGap = Math.max(maxGap, Math.abs(vol(1, 5) - vol(7, 11)));
     }

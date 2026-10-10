@@ -11,6 +11,8 @@
 // 条件そのものを縛る:
 //   - 落ちたセル・受けたセルは markChanged で周囲3×3ごとアクティブになる
 //   - 落下しないフレーム（doFall=false）は、落ちられる水を明示的に持ち越す
+//     （本番は落下が毎フレームだが、間隔は調整のつまみとして残っているので、落下しないフレームの
+//      経路をここで回し続ける。WATER_FALL_INTERVAL に合わせると 1 で一度も通らなくなる）
 //   - ブロックが壊れたら、Map.damageBlock が周囲3×3をアクティブにする
 //
 // 不変条件: 水があり、直下が岩でも満水でもないセルは、必ず次のアクティブに入っている。
@@ -19,7 +21,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { MAX_WATER_MASS, WATER_FALL_INTERVAL } from '../src/js/utils/Constants.js';
+import { MAX_WATER_MASS } from '../src/js/utils/Constants.js';
 
 function randomWorld(rng, rows, cols) {
   const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) =>
@@ -59,7 +61,7 @@ test('落ちられる水は、落下のないフレームも爆破のあとも�
 
     for (let step = 1; step <= 240; step++) {
       const res = stepWaterSimulation({
-        water, rows, cols, isSolid, activeCells: active, doFall: step % WATER_FALL_INTERVAL === 0,
+        water, rows, cols, isSolid, activeCells: active, doFall: step % 4 === 0,
       });
       active = res.nextActiveCells;
 
@@ -100,14 +102,14 @@ test('両脇が壁の縦穴の上に落ち着いた水たまりがあっても�
 
   let active = new Set([...Array(5)].map((_, i) => 1 * cols + 1 + i));
   for (let step = 1; step <= 40; step++) {
-    active = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active, doFall: step % WATER_FALL_INTERVAL === 0 }).nextActiveCells;
+    active = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active, doFall: step % 4 === 0 }).nextActiveCells;
   }
   assert.equal(active.size, 0, '前提: 水たまりは落ち着いて休眠している');
 
   grid[2][3] = 0;
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) active.add((2 + dr) * cols + 3 + dc);
   for (let step = 1; step <= 400; step++) {
-    active = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active, doFall: step % WATER_FALL_INTERVAL === 0 }).nextActiveCells;
+    active = stepWaterSimulation({ water, rows, cols, isSolid, activeCells: active, doFall: step % 4 === 0 }).nextActiveCells;
   }
   assert.equal(water[5 * cols + 3], MAX_WATER_MASS, '縦穴の底まで満ちる');
   assert.equal(water[4 * cols + 3], MAX_WATER_MASS);

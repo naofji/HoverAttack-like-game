@@ -55,7 +55,7 @@ function ensureScratch(n) {
  * @param {number} p.cols
  * @param {function(number, number): boolean} p.isSolid
  * @param {Iterable<number>} p.seeds このフレームのアクティブなセル (r * cols + c)
- * @param {boolean} p.doTransfer 運ぶフレームか（落下と同じ WATER_FALL_INTERVAL に1回）
+ * @param {boolean} p.doTransfer 運ぶフレームか（WATER_PRESSURE_INTERVAL に1回。落下とは別の間隔）
  * @param {function(number, number): void} p.markChanged 水量を変えたセルを知らせる
  * @param {function(number): void} p.keepActive 差が残っている水面を次のフレームもアクティブに残す
  * @returns {number} 運んだ水量の合計（テストが発生源で数えるため）

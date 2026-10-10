@@ -21,6 +21,8 @@ function primeWaterCache(map) {
     map.waterPaintTopY = new Int16Array(n).fill(-1);
     map.waterFoam = new Uint8Array(n);
     map.waterFoamCells = new Set();
+    map.waterStreamHold = new Uint8Array(n);
+    map.waterStreamLive = new Set();
     map._waterIsSolid = null;
     map.dirtyWaterCols = new Set([...Array(map.cols).keys()]);
     map._rebuildWaterCacheIfDirty();
@@ -459,56 +461,53 @@ test('water.js: drawOverWorld で滝セルの中に流下する短い筋状パ�
 });
 
 
-test('水源から落ちる水は隙間なく連なる（滝が点線に見えない）', async () => {
-    // 実機の指摘「FallingWater が途切れ途切れ」。落ちる水の塊は
-    // WATER_FALL_INTERVAL フレームで1タイル進むので、湧き出る周期がそれより
-    // 長いと塊が「周期 ÷ 落下間隔」タイルおきに離れて並ぶ。
-    // 実測: 周期15 だと 3.75 タイルおきで、落下区間の連続性は 27% だった。
-    //
-    // 定数の値そのものではなく**落ちた水が途切れないこと**を縛る。値を書き
-    // 写すだけだと、なぜその値なのかが残らないうえ、落下側の定数を動かした
-    // ときに壊れたことに気づけない。
-    const { WATER_FALL_INTERVAL, WATER_SPRING_MASS: SPRING_MASS } =
-        await import('../src/js/utils/Constants.js');
-    const { stepWaterSimulation } = await import('../src/js/world/waterSimulation.js');
-
-    // 天井の水源から高さ14の縦穴へ落ちる滝。底に受け皿がある
-    const rows = 20, cols = 11;
-    const grid = Array.from({ length: rows }, () => new Array(cols).fill(1));
-    for (let r = 2; r <= 17; r++) grid[r][5] = 0;
-    for (let c = 1; c <= 9; c++) for (let r = 15; r <= 17; r++) grid[r][c] = 0;
-    const water = new Uint8Array(rows * cols);
-    const isSolid = (r, c) =>
-        (r < 0 || r >= rows || c < 0 || c >= cols) ? true : grid[r][c] !== 0;
-
-    const sp = { r: 2, c: 5, timer: 0 };
-    let active = new Set();
-    let fallTimer = 0;
+test('水源から落ちる水は、毎フレーム口から下まで滝として1本につながる（点線にならない）', () => {
+    // 実機の指摘「FallingWater が途切れ途切れ」。湧き水は WATER_SPRING_INTERVAL に1回・水量1で、
+    // 落下が毎フレームだと粒は1マス/フレームで落ち、粒のあいだが空く。中身だけで判定すると
+    // 滝が点線になる。流れの記録（waterStream.js）で、空のセルも滝としてつなぐ。
+    // 本物の Map.update（湧き水→記録の減衰→シミュレーション→キャッシュ）を通して確かめる
+    const map = makeWaterMap(`
+        ###########
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #####.#####
+        #.........#
+        #.........#
+        #.........#
+        ###########
+    `);
+    map.waterSprings = [{ r: 1, c: 5, timer: 0 }];
     for (let f = 1; f <= 300; f++) {
-        sp.timer++;
-        if (sp.timer >= WATER_SPRING_INTERVAL) {
-            sp.timer = 0;
-            const k = sp.r * cols + sp.c;
-            if (water[k] < MAX_WATER_MASS) {
-                water[k] = Math.min(MAX_WATER_MASS, water[k] + SPRING_MASS);
-                active.add(k);
-            }
-        }
-        if (active.size) {
-            fallTimer++;
-            const doFall = fallTimer >= WATER_FALL_INTERVAL;
-            if (doFall) fallTimer = 0;
-            active = stepWaterSimulation({
-                water, rows, cols, isSolid, activeCells: active, doFall,
-            }).nextActiveCells;
-        }
+        map.update();
+        if (f < 60) continue;   // 先頭が下まで届くのを待つ
+        const gaps = [];
+        for (let r = 2; r <= 10; r++) if (!map.isWaterfallCell(r, 5)) gaps.push(r);
+        assert.deepEqual(gaps, [], `frame ${f}: 滝でない行 ${gaps.join(',')}（点線に見える）`);
     }
+});
 
-    // 落下区間（行3..13）に隙間が無いこと
-    const gaps = [];
-    for (let r = 3; r <= 13; r++) if (water[r * cols + 5] === 0) gaps.push(r);
-    assert.deepEqual(gaps, [],
-        `滝に隙間がある（点線に見える）。水が無かった行: ${gaps.join(',')}`);
+test('落下は毎フレーム起きる（水の塊が階段や棚で浮いたまま居座らない）', async () => {
+    // 落下が横の流れ（毎フレーム最大4）より遅いと、水が落ちきる前に横へ広がって宙に浮いた四角に
+    // なる（2026-10-10 実機の指摘）。4面の実測で浮いた満水の四角 682→206
+    const { WATER_MAX_FALL_FLOW } = await import('../src/js/utils/Constants.js');
+    const map = makeWaterMap(`
+        ###
+        #8#
+        #.#
+        #.#
+        ###
+    `);
+    map.activeWaterCells.add(1 * map.cols + 1);
+    map.update();
+    assert.equal(map.water[2 * map.cols + 1], WATER_MAX_FALL_FLOW, '1フレーム目で落ちていない');
 });
 
 test('滝が浅い水たまりへ落ちるとき、帯の下端が液面ちょうどまで届く（水柱が浮かない）', async () => {
@@ -591,8 +590,8 @@ test('天井に近い行の水源も湧く（以前は行6以下の水源が永�
 });
 
 test('水源が足した水も、そのフレームのうちに種別キャッシュへ反映される', () => {
-    // 水源は water[] を直接書き換えるので、そのフレームで水が流れない（落下は
-    // WATER_FALL_INTERVAL に1回）と、種別キャッシュに伝わらず「水量1なのに水なし」の
+    // 水源は water[] を直接書き換えるので、そのフレームで水が流れない（以前は落下が
+    // 4フレームに1回だった）と、種別キャッシュに伝わらず「水量1なのに水なし」の
     // ままになった。滝の上端（水源の口）がフレームごとに消えて見えた原因
     const map = makeWaterMap(`
         ########
@@ -610,5 +609,78 @@ test('水源が足した水も、そのフレームのうちに種別キャッ�
             assert.notEqual(map.waterKind[k], WATER_NONE,
                 `frame ${f}: (${Math.floor(k / map.cols)},${k % map.cols}) は水量 ${map.water[k]} なのに種別が水なし`);
         }
+    }
+});
+
+test('流れの記録が切れて種別が変わったフレームも、種別キャッシュは全列作り直しと一致する', async () => {
+    // 記録が切れても水量は変わらないので、Map が onWaterChanged で知らせないと、その列は
+    // dirty にならず「滝」のまま残る。水量1の粒を1つだけ落とし、着いた後に記録が切れる場面
+    const { rebuildWaterCache } = await import('../src/js/world/waterQuery.js');
+    const map = makeWaterMap(`
+        #####
+        ##1##
+        ##.##
+        ##.##
+        ##.##
+        ##.##
+        ##.##
+        #...#
+        #####
+    `);
+    map.activeWaterCells.add(1 * map.cols + 2);
+    const n = map.rows * map.cols;
+    let sawExpiry = false;
+    for (let f = 1; f <= 30; f++) {
+        const liveBefore = map.waterStreamLive.size;
+        map.update();
+        map.isWaterfallCell(0, 0);   // 問い合わせでキャッシュを作り直させる
+        if (liveBefore > 0 && map.waterStreamLive.size < liveBefore) sawExpiry = true;
+        const kind = new Uint8Array(n);
+        const surfaceY = new Int16Array(n).fill(-1);
+        rebuildWaterCache({
+            water: map.water, kind, surfaceY, rows: map.rows, cols: map.cols,
+            isSolid: map._waterSolidFn(), dirtyCols: [...Array(map.cols).keys()], hold: map.waterStreamHold,
+        });
+        for (let k = 0; k < n; k++) {
+            assert.equal(map.waterKind[k], kind[k],
+                `frame ${f}: (${Math.floor(k / map.cols)},${k % map.cols}) の種別が古い`);
+        }
+    }
+    assert.ok(sawExpiry, '前提: 記録が切れるフレームがあった');
+});
+
+test('水圧は WATER_PRESSURE_INTERVAL に1回しか運ばない（落下を速めても連通管の速さは同じ）', async () => {
+    // 水面より下でだけつながった左右の池。左の池の水量は水圧でしか変わらない（穴は満水、
+    // 左の各行は満水か、区間の中で均されるだけ）。変わったフレームどうしの間隔を数える
+    const { WATER_PRESSURE_INTERVAL } = await import('../src/js/utils/Constants.js');
+    // 左の池の上に空気の行を置く。水圧は液面（空気に面した水）どうしで比べるので、天井まで
+    // 満ちた池は運ぶ元にならない
+    const map = makeWaterMap(`
+        #############
+        #.....#.....#
+        #88888#.....#
+        #88888#.....#
+        #88888#88888#
+        #88888888888#
+        #############
+    `);
+    for (let k = 0; k < map.water.length; k++) if (map.water[k] > 0) map.activeWaterCells.add(k);
+    const left = () => {
+        let t = 0;
+        for (let r = 0; r < map.rows; r++) for (let c = 1; c <= 5; c++) t += map.water[r * map.cols + c];
+        return t;
+    };
+    const changed = [];
+    let prev = left();
+    for (let f = 1; f <= 40; f++) {
+        map.update();
+        const now = left();
+        if (now !== prev) changed.push(f);
+        prev = now;
+    }
+    assert.ok(changed.length >= 2, `前提: 水圧で運ばれていない（${changed.join(',')}）`);
+    for (let i = 1; i < changed.length; i++) {
+        assert.ok(changed[i] - changed[i - 1] >= WATER_PRESSURE_INTERVAL,
+            `水圧が ${changed[i - 1]} と ${changed[i]} フレーム目に続けて運んだ`);
     }
 });

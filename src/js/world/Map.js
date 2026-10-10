@@ -33,12 +33,14 @@ import {
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS, WATER_SPRING_COUNT,
     WATER_SPRING_MAX_ROW_RATIO,
     WATER_FALL_INTERVAL,
+    WATER_PRESSURE_INTERVAL,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { lerpColor, luminance, withLuminance } from '../utils/color.js';
 import { generateWaterPools, generateWaterSprings } from './waterPools.js';
 import { stepWaterSimulation } from './waterSimulation.js';
+import { decayStream } from './waterStream.js';
 import {
     rebuildWaterCache, WATER_NONE, WATER_SURFACE, WATER_FALL,
 } from './waterQuery.js';
@@ -139,6 +141,8 @@ export class Map {
         this.waterPaintTopY = null; // Int16Array。塗りの上端 Y(px)。塗らないセルは -1（waterQuery の paintTopAt）
         this.waterFoam = null;      // Uint8Array。泡のマス（流れ落ちる満水の真下の隙間）なら 1（waterQuery の isFoamAt）
         this.waterFoamCells = null; // Set。泡のマスの一覧 (r * cols + c)。描画が泡の粒を生む場所
+        this.waterStreamHold = null; // Uint8Array。細い流れが落ちてからの残りフレーム数（waterStream.js）
+        this.waterStreamLive = null; // Set。waterStreamHold が 0 でないセル (r * cols + c)
         this.dirtyWaterCols = new Set(); // 作り直しが要る列。問い合わせの手前でまとめて処理する
         this.waterRepaintCells = null;   // Set。作り直しで塗りが変わったセル。描画キャッシュが描く前に引き取る
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
@@ -399,6 +403,8 @@ export class Map {
         this.waterPaintTopY = new Int16Array(this.rows * this.cols).fill(-1);
         this.waterFoam = new Uint8Array(this.rows * this.cols);
         this.waterFoamCells = new Set();
+        this.waterStreamHold = new Uint8Array(this.rows * this.cols);
+        this.waterStreamLive = new Set();
         this.dirtyWaterCols = new Set();
         this.waterRepaintCells = new Set();
         this.activeWaterCells = new Set();
@@ -1146,6 +1152,7 @@ export class Map {
             isSolid: this._waterSolidFn(),
             dirtyCols: this.dirtyWaterCols,
             repaint: this.waterRepaintCells,
+            hold: this.waterStreamHold,
         });
         this.dirtyWaterCols.clear();
     }
@@ -1455,8 +1462,8 @@ export class Map {
                         const key = sp.r * this.cols + sp.c;
                         const cur = this.water[key];
                         // 足したセルは onWaterChanged で種別キャッシュと描画に伝える。
-                        // 以前は activeWaterCells に入れるだけで、そのフレームで水が
-                        // 流れない（落下は WATER_FALL_INTERVAL に1回）と「水量1なのに
+                        // 以前は activeWaterCells に入れるだけで、落下が4フレームに1回だったころ、
+                        // そのフレームで水が流れないと「水量1なのに
                         // 水なし」のまま残り、水源の口の滝が数フレームおきに消えていた
                         if (cur < MAX_WATER_MASS) {
                             this.water[key] = Math.min(MAX_WATER_MASS, cur + WATER_SPRING_MASS);
@@ -1479,11 +1486,27 @@ export class Map {
             // 拾い直していたが、実測で一度も何も拾っておらず、漏れはアクティブ管理で
             // 構造的に塞がっていたので撤去した（tests/water-active-invariant.test.js）
 
+            // 流れの記録を1フレーム進める。切れたセルは水量が変わらなくても種別が変わる
+            // （空の滝 → 水なし）ので、onWaterChanged で種別キャッシュに知らせる。
+            // 知らせないと、その列は dirty にならず滝のまま残る
+            if (this.waterStreamLive.size > 0) {
+                const expired = decayStream(this.waterStreamHold, this.waterStreamLive);
+                if (expired.length > 0) {
+                    this.onWaterChanged(expired.map((k) => [Math.floor(k / this.cols), k % this.cols]));
+                }
+            }
+
             if (this.activeWaterCells.size > 0) {
                 this.waterFallTimer = (this.waterFallTimer || 0) + 1;
                 const doFall = (this.waterFallTimer >= WATER_FALL_INTERVAL);
                 if (doFall) {
                     this.waterFallTimer = 0;
+                }
+                // 水圧は落下と別の間隔で運ぶ（WATER_PRESSURE_INTERVAL のコメント）
+                this.waterPressureTimer = (this.waterPressureTimer || 0) + 1;
+                const doPressure = (this.waterPressureTimer >= WATER_PRESSURE_INTERVAL);
+                if (doPressure) {
+                    this.waterPressureTimer = 0;
                 }
                 const res = stepWaterSimulation({
                     water: this.water,
@@ -1492,6 +1515,9 @@ export class Map {
                     isSolid: this._waterSolidFn(),
                     activeCells: this.activeWaterCells,
                     doFall,
+                    doPressure,
+                    streamHold: this.waterStreamHold,
+                    streamLive: this.waterStreamLive,
                 });
                 this.activeWaterCells = res.nextActiveCells;
                 if (res.changedCells.length > 0) {
