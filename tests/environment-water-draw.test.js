@@ -377,3 +377,122 @@ test('沈んだ浅いセルの隣の岩は、前景の塗りと同じ高さ（�
   // (3,1) の岩にとって、水に接しているのは (3,2) だけ
   assert.equal(waterBackdropTopY(map, 3, 1), 3 * TILE_SIZE);
 });
+
+// タイルごとに「いま塗られている上端 Y」だけを覚える canvas。clearRect で消え、fillRect で
+// いちばん上の Y を残す。差分で塗り直したキャッシュと、同じ状態を最初から塗ったキャッシュを
+// 突き合わせるのに使う（fillRect の呼び出し列は塗り直しの経路で変わるので比べられない）
+function tileTopCanvas() {
+  const tops = new Map();
+  const ctx = makeFakeCtx();
+  ctx.clearRect = (x, y, w, h) => {
+    for (let ty = Math.floor(y / TILE_SIZE); ty < Math.ceil((y + h) / TILE_SIZE); ty++) {
+      for (let tx = Math.floor(x / TILE_SIZE); tx < Math.ceil((x + w) / TILE_SIZE); tx++) tops.delete(`${ty},${tx}`);
+    }
+  };
+  ctx.fillRect = (x, y, w, h) => {
+    if (w <= 0 || h <= 0) return;
+    const key = `${Math.floor(y / TILE_SIZE)},${Math.floor(x / TILE_SIZE)}`;
+    tops.set(key, Math.min(tops.get(key) ?? Infinity, y));
+  };
+  return { width: 0, height: 0, getContext: () => ctx, tops };
+}
+
+/** 前景・背後のキャッシュを覗ける描画を作る（createWaterRenderer は前景→背後の順に canvas を作る） */
+async function rendererWithTops(map) {
+  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+  const made = [];
+  const origCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = () => { const cv = tileTopCanvas(); made.push(cv); return cv; };
+  try {
+    const renderer = createWaterRenderer({ game: { map } });
+    return { renderer, fore: made[0].tops, behind: made[1].tops };
+  } finally {
+    globalThis.document.createElement = origCreateElement;
+  }
+}
+
+/**
+ * 水量を変えたセルだけを本番と同じく onWaterChanged で知らせ、描画を1回通したあとの
+ * キャッシュが、同じ水の状態を最初から塗ったものと一致することを確かめる
+ */
+async function assertRepaintMatchesFresh(map, renderer, fore, behind, changedCells) {
+  map.onWaterChanged(changedCells);
+  renderer.drawBehindTerrain(makeFakeCtx(), 0, 0);
+  renderer.drawOverWorld(makeFakeCtx(), 0, 0);
+  const fresh = await rendererWithTops(map);
+  const diff = (a, b) => [...new Set([...a.keys(), ...b.keys()])]
+    .filter((k) => a.get(k) !== b.get(k)).map((k) => `${k}: ${a.get(k)} / ${b.get(k)}`);
+  assert.deepEqual(diff(fore, fresh.fore), [], '前景の塗りが古いまま残っている（差分 / 塗り直し）');
+  assert.deepEqual(diff(behind, fresh.behind), [], '岩の背後の塗りが古いまま残っている（差分 / 塗り直し）');
+}
+
+/** 行2の左4セルが水量4、行3が満水の池。右の行3の真上の空セルは液面の高さで薄く塗られる
+ * （水量4なのは、幅の広い池でも液面の平均が行3の上辺より上に来るように） */
+function poolWithShallowLeft(width) {
+  const inner = width - 2;
+  return makeWaterMap(`
+    ${'#'.repeat(width)}
+    #${'.'.repeat(inner)}#
+    #4444${'.'.repeat(inner - 4)}#
+    #${'8'.repeat(inner)}#
+    ${'#'.repeat(width)}
+  `);
+}
+
+test('水が抜けて液面が下がったら、水量0のまま液面だけで塗っていたセルの塗りも消える', async () => {
+  // 実機の指摘（水圧で池の水が一気に移った後、水面の上に平らな水の四角が残る）。
+  // 行2の左は水量4の水面、右は行3の満水の上の空セル。左右は斜めにつながった1つの水面で
+  // 液面（平均）が行3の上辺より上に来るので、右の空セルも液面の高さで薄く塗られる。
+  // 左の水が抜けると液面は行3の上辺へ下がり、右の空セルの液面は消える。
+  // 水量が変わったのは左の4セルだけなので、それだけを塗り直すと右の空セルの塗りが残った
+  // （4面 seed 30 で掘り抜くと、高い方の池の水面の行に24マス残った）
+  const map = poolWithShallowLeft(14);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  assert.ok(map.waterSurfaceY[2 * map.cols + 8] >= 0, '前提: 右の空セル (2,8) は液面の高さで塗られている');
+  assert.ok(fore.has('2,8'), '前提: (2,8) に塗りがある');
+
+  for (let c = 1; c <= 4; c++) map.water[2 * map.cols + c] = 0;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[2, 1], [2, 2], [2, 3], [2, 4]]);
+});
+
+test('作り直した列から遠く離れた列の空セルの塗りも消える（液面の区間がはみ出した先）', async () => {
+  // 作り直すのは水量が変わった列の左右 SEGMENT_LOOKUP_RANGE 列までだが、液面の区間は
+  // その外まで続き、外の列の液面も書き換わる。外の列は書き換える直前の値と比べて拾う
+  // （この経路を外すと、20週×撃ち抜き12回の総当たりで 56 回の点検に古い塗りが残った）
+  const { SEGMENT_LOOKUP_RANGE } = await import('../src/js/world/waterQuery.js');
+  const width = SEGMENT_LOOKUP_RANGE * 2 + 12;
+  const map = poolWithShallowLeft(width);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  const far = width - 3;
+  assert.ok(far > 4 + SEGMENT_LOOKUP_RANGE, '前提: 列 far は作り直す列の範囲の外');
+  assert.ok(fore.has(`2,${far}`), `前提: (2,${far}) に塗りがある`);
+
+  for (let c = 1; c <= 4; c++) map.water[2 * map.cols + c] = 0;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[2, 1], [2, 2], [2, 3], [2, 4]]);
+});
+
+test('1つ下の行の水の液面が岩の行まで上がっているとき、その液面が動いたら岩の背後も塗り直す', async () => {
+  // (3,1) は滝 (2,1) の受け口の水面で、右の行2の水面と1つの区間。液面（平均）は行2の
+  // タイルの中にあるので、(3,1) 自身の塗りはタイルの上辺で頭打ち＝液面が動いても変わらない。
+  // ところが左上の岩 (2,0) の背後は (3,1) の液面の高さから敷くので、液面が動くと変わる。
+  // 「自分の塗りが変わるか」だけで塗り直しを絞ると、岩の背後が 2px 古いまま残った
+  // （20週×撃ち抜き12回の総当たりで2件）
+  const map = makeWaterMap(`
+    .......
+    .......
+    #4888..
+    #7888..
+    #######
+  `);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  assert.ok(map.isWaterfallCell(2, 1), '前提: (2,1) は滝');
+  const before = map.waterSurfaceY[3 * map.cols + 1];
+  assert.ok(before >= 2 * TILE_SIZE && before < 3 * TILE_SIZE, `前提: (3,1) の液面は行2のタイルの中 (${before})`);
+
+  map.water[2 * map.cols + 4] = 4;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[2, 4]]);
+  assert.notEqual(map.waterSurfaceY[3 * map.cols + 1], before, '前提: 液面が動いた');
+});

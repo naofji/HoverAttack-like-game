@@ -221,9 +221,56 @@ export function createWaterRenderer(env) {
         return out;
     };
 
+    // 生成直後の作り直しで溜まった分は、この直後に全部塗るので捨てる
+    map.takeWaterRepaintCells();
     paint(withCellsAbove(map.waterCells));
     const initialBorder = collectBorderBlocks(map, map.waterCells);
     paintBehind(initialBorder);
+
+    // 塗り直す: 前景の水と、そのまわりの岩の背後の水
+    const repaint = (repaintList) => {
+        paint(repaintList);
+
+        // 下層水キャッシュ（behindCache）の更新:
+        // 1. repaintList 自体（水・空間セル）をクリア
+        for (const [r, c] of repaintList) {
+            bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        // 2. repaintList の周囲8マスにある岩ブロック（境界候補）を収集
+        const borderCandidateKeys = new Set();
+        for (const [r, c] of repaintList) {
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const nr = r + dr;
+                    const nc = c + dc;
+                    if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
+                    if (map.isWater(nr, nc)) continue;
+                    if (map.isSolid(nr, nc)) {
+                        borderCandidateKeys.add(nr * map.cols + nc);
+                    }
+                }
+            }
+        }
+
+        // 3. 影響範囲の岩ブロックを塗り直す。paintBehind が自分でクリアしてから
+        //    液面より下だけを敷くので、ここは候補をそのまま渡せばよい
+        //    （敷く必要が無いものは waterBackdropTopY が -1 を返してクリアだけで終わる）
+        const borderToRepaint = [];
+        for (const key of borderCandidateKeys) {
+            borderToRepaint.push([Math.floor(key / map.cols), key % map.cols]);
+        }
+        paintBehind(borderToRepaint);
+    };
+
+    // 水量が変わっていないのに塗りが変わったセル（液面の平均が動いた・付いた・消えた）を
+    // map から引き取って塗り直す。invalidate は水量が変わったセルのまわりしか塗らないので、
+    // 区間の平均で塗っている遠くの空セルが古いまま残った（rebuildWaterCache の repaint の説明）
+    const syncWithMap = () => {
+        const cells = map.takeWaterRepaintCells();
+        if (cells.length > 0) repaint(cells);
+    };
 
     const renderer = {
         t: 0,
@@ -277,41 +324,10 @@ export function createWaterRenderer(env) {
             for (const key of toRepaint) {
                 repaintList.push([Math.floor(key / map.cols), key % map.cols]);
             }
-            paint(repaintList);
-
-            // 下層水キャッシュ（behindCache）の更新:
-            // 1. repaintList 自体（水・空間セル）をクリア
-            for (const [r, c] of repaintList) {
-                bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            }
-
-            // 2. repaintList の周囲8マスにある岩ブロック（境界候補）を収集
-            const borderCandidateKeys = new Set();
-            for (const [r, c] of repaintList) {
-                for (let dr = -1; dr <= 1; dr++) {
-                    for (let dc = -1; dc <= 1; dc++) {
-                        if (dr === 0 && dc === 0) continue;
-                        const nr = r + dr;
-                        const nc = c + dc;
-                        if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
-                        if (map.isWater(nr, nc)) continue;
-                        if (map.isSolid(nr, nc)) {
-                            borderCandidateKeys.add(nr * map.cols + nc);
-                        }
-                    }
-                }
-            }
-
-            // 3. 影響範囲の岩ブロックを塗り直す。paintBehind が自分でクリアしてから
-            //    液面より下だけを敷くので、ここは候補をそのまま渡せばよい
-            //    （敷く必要が無いものは waterBackdropTopY が -1 を返してクリアだけで終わる）
-            const borderToRepaint = [];
-            for (const key of borderCandidateKeys) {
-                borderToRepaint.push([Math.floor(key / map.cols), key % map.cols]);
-            }
-            paintBehind(borderToRepaint);
+            repaint(repaintList);
         },
         drawBehindTerrain(ctx, camX, camY) {
+            syncWithMap();
             const sx = Math.max(0, Math.floor(camX));
             const sy = Math.max(0, Math.floor(camY));
             const sw = Math.min(CANVAS_WIDTH, map.width - sx);
@@ -319,6 +335,7 @@ export function createWaterRenderer(env) {
             if (sw > 0 && sh > 0) ctx.drawImage(behindCache, sx, sy, sw, sh, sx, sy, sw, sh);
         },
         drawOverWorld(ctx, camX, camY) {
+            syncWithMap();
             const sx = Math.max(0, Math.floor(camX));
             const sy = Math.max(0, Math.floor(camY));
             const sw = Math.min(CANVAS_WIDTH, map.width - sx);

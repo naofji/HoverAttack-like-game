@@ -137,6 +137,7 @@ export class Map {
         this.waterKind = null;      // Uint8Array。0=水なし 1=水中 2=水面 3=滝。water[] から導く要約
         this.waterSurfaceY = null;  // Int16Array。水面セルの液面 Y(px)。それ以外 -1
         this.dirtyWaterCols = new Set(); // 作り直しが要る列。問い合わせの手前でまとめて処理する
+        this.waterRepaintCells = null;   // Set。作り直しで塗りが変わったセル。描画キャッシュが描く前に引き取る
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
         this.activeWaterCells = new Set(); // 現在水流シミュレーションがアクティブなセル
         this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
@@ -393,6 +394,7 @@ export class Map {
         this.waterKind = new Uint8Array(this.rows * this.cols);
         this.waterSurfaceY = new Int16Array(this.rows * this.cols).fill(-1);
         this.dirtyWaterCols = new Set();
+        this.waterRepaintCells = new Set();
         this.activeWaterCells = new Set();
         for (const pool of pools) {
             for (const [r, c] of pool.cells) {
@@ -1130,8 +1132,23 @@ export class Map {
             cols: this.cols,
             isSolid: this._waterSolidFn(),
             dirtyCols: this.dirtyWaterCols,
+            repaint: this.waterRepaintCells,
         });
         this.dirtyWaterCols.clear();
+    }
+
+    /**
+     * 作り直しで塗りが変わったセルを [行, 列] で渡し、空にする。描画キャッシュが描く直前に呼ぶ。
+     * 作り直しは問い合わせのたびに遅れて走る（衝突処理の中のブロック破壊でも）ので、
+     * onWaterChanged の時点では拾い切れない。描く直前に引き取れば、どこで作り直されても漏れない
+     */
+    takeWaterRepaintCells() {
+        this._rebuildWaterCacheIfDirty();
+        if (!this.waterRepaintCells || this.waterRepaintCells.size === 0) return [];
+        const out = [];
+        for (const k of this.waterRepaintCells) out.push([Math.floor(k / this.cols), k % this.cols]);
+        this.waterRepaintCells.clear();
+        return out;
     }
 
     /** 水の純関数群に渡す isSolid。毎フレーム作り直さないよう1本を使い回す */

@@ -120,19 +120,21 @@ function rowSegmentHasExposedWater(water, isSolid, r, c, cols) {
  * 水面かどうかは直上のセルの種別を読むので、この向きでなければならない。
  * @returns {Array<number>} この列で見つかった水面セルの行
  */
-export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c }) {
+export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, touch = null }) {
     const surfaceRows = [];
     for (let r = 0; r < rows; r++) {
         const k = r * cols + c;
         const mass = water[k];
 
         if (mass < MIN_WATER_MASS) {
+            if (touch && (kind[k] !== WATER_NONE || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_NONE;
             surfaceY[k] = -1;
             continue;
         }
 
         if (isFallingCell(water, cols, isSolid, r, c)) {
+            if (touch && (kind[k] !== WATER_FALL || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_FALL;
             surfaceY[k] = -1;
             continue;
@@ -167,9 +169,11 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
         }
 
         if (isSurface) {
+            if (touch && kind[k] !== WATER_SURFACE) touch(k);
             kind[k] = WATER_SURFACE;
             surfaceRows.push(r);
         } else {
+            if (touch && (kind[k] !== WATER_BODY || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_BODY;
             surfaceY[k] = -1;
         }
@@ -208,9 +212,11 @@ function sameBody(water, cols, r1, c1, r2, c2) {
  * 段差の分かれ道でどちらへ進むかが開始セルに依存し、種にした列によって液面が
  * 変わりうる。
  *
+ * @param {function(number): void|null} [p.touch] 渡されたら、surfaceY の値を変える直前に
+ *   そのセルで呼ぶ（rebuildWaterCache が塗り直しの要るセルを拾うため）
  * @returns {Array<[number, number]>} かたまりに含まれるセルの [行, 列]
  */
-export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c }) {
+export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c, touch = null }) {
     const cells = [];
     const seen = new Set([r * cols + c]);
     const queue = [[r, c]];
@@ -242,6 +248,7 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
     const avg = Math.round(total / cells.length);
 
     for (const [sr, sc] of cells) {
+        if (touch && surfaceY[sr * cols + sc] !== avg) touch(sr * cols + sc);
         surfaceY[sr * cols + sc] = avg;
 
         // 下へ: 同じ水塊の水中セルにも液面を持たせる。これが無いと、水面が
@@ -250,6 +257,7 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
         for (let rr = sr + 1; rr < rows; rr++) {
             const kk = rr * cols + sc;
             if (kind[kk] !== WATER_BODY) break;
+            if (touch && surfaceY[kk] !== avg) touch(kk);
             surfaceY[kk] = avg;
         }
 
@@ -258,7 +266,9 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
         if (sr - 1 >= 0) {
             const ka = (sr - 1) * cols + sc;
             if (kind[ka] === WATER_NONE) {
-                surfaceY[ka] = (avg < sr * TILE_SIZE && !isSolid(sr - 1, sc)) ? avg : -1;
+                const ya = (avg < sr * TILE_SIZE && !isSolid(sr - 1, sc)) ? avg : -1;
+                if (touch && surfaceY[ka] !== ya) touch(ka);
+                surfaceY[ka] = ya;
             }
         }
     }
@@ -267,11 +277,43 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
 }
 
 /**
+ * 行 r のセルの液面 y のうち、描画に効く部分。液面を読むのは自分の塗り（行 r のタイルで
+ * 切り取る）と、8近傍の岩の背後の塗り（行 r-1..r+1 の岩のタイルで切り取る）なので、
+ * 行 r-1 の上辺から行 r+1 の下辺までで頭打ちにする。深い水中セルの液面がはるか上で
+ * 動いても描画は変わらないので、塗り直しの対象から外すのに使う。
+ * 最初は自分のタイル（行 r）だけで切り取っていて、滝の受け口の水面の液面が1つ上の行の
+ * 中で動いたとき、斜め上の岩の背後が 2px 古いまま残った（20週×撃ち抜き12回で2件）
+ */
+function paintedTop(y, r) {
+    if (y < 0) return -1;
+    return Math.max((r - 1) * TILE_SIZE, Math.min((r + 2) * TILE_SIZE, y));
+}
+
+// 作り直しで値を変えたセルの、作り直す前の値。マップ全体ぶんを使い回し、「何回目の作り直しで
+// 書いたか」の印で消し直しを省く（waterPressure.js の compStamp と同じ作り）
+let trackSize = 0;
+let trackStamp = null;
+let trackOldKind = null;
+let trackOldY = null;
+let trackGen = 0;
+
+/**
  * dirty な列の kind と surfaceY を作り直す。
  * 液面のセグメントは dirty でない列へはみ出すことがあるが、そちらの kind は
  * 既に正しい（水量が変わっていない）ので、そのまま伸ばして構わない。
+ *
+ * repaint を渡すと、作り直しで**塗りが変わるセル**（種別が変わった・液面が描画に効く
+ * 高さで動いた）をそこへ足す。描画キャッシュは水量が変わったセルとその上下・
+ * 同じ行の水面しか塗り直さないが、液面は区間の平均なので、水量0のまま液面の高さだけで
+ * 塗っている空セル（満水の水面の真上）は、水量が変わらないまま液面が付いたり消えたり
+ * する。それを知らせる経路が無く、水圧で池の水が一気に移った後に水面の上へ平らな水の
+ * 四角が残った（実機の指摘。4面 seed 30 で掘り抜くと24マス。水圧なしで水面の行から
+ * 流れ出させても2マス、1px ぶん残っていた＝以前からの取りこぼし）。
+ * 液面を書く場所はここにしか無いので、ここで旧値と比べれば漏れない
+ *
+ * @param {Set<number>|undefined} [p.repaint] 塗り直しの要るセル (r * cols + c) を足す先
  */
-export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols }) {
+export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols, repaint }) {
     // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
     // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
     // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
@@ -283,9 +325,35 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         for (let cc = lo; cc <= hi; cc++) cols2.add(cc);
     }
 
+    // 作り直しの途中で値を変えるセルを、変える直前の値と一緒に覚える。空気のセルは
+    // 値が変わらないので数に入らず、覚えるのは池のセル（水中セルは一度 -1 に戻してから
+    // 液面を書き直すので、毎回ここを通る）ぐらいになる。
+    // 最初は作り直す列（dirty の左右16列）をまるごと写して最後に全セル比べていたが、
+    // 約40列×131行を2回読むので作り直しが倍（1フレームあたり 53→110µs）になった
+    let touched = null, touch = null;
+    if (repaint) {
+        const n = rows * cols;
+        if (trackSize !== n) {
+            trackSize = n;
+            trackStamp = new Int32Array(n);
+            trackOldKind = new Uint8Array(n);
+            trackOldY = new Int16Array(n);
+            trackGen = 0;
+        }
+        const gen = ++trackGen;
+        touched = [];
+        touch = (k) => {
+            if (trackStamp[k] === gen) return;   // 2回目以降は、最初に覚えた（作り直す前の）値のまま
+            trackStamp[k] = gen;
+            trackOldKind[k] = kind[k];
+            trackOldY[k] = surfaceY[k];
+            touched.push(k);
+        };
+    }
+
     // まず kind を決め直す
     for (const c of cols2) {
-        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c });
+        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, touch });
     }
 
     // 液面の平均を取り直す種を集める。dirty 列そのものに加えて**両隣**も見るのは、
@@ -307,8 +375,15 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         for (let r = 0; r < rows; r++) {
             const k = r * cols + c;
             if (kind[k] !== WATER_SURFACE || done.has(k)) continue;
-            const cells = levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c });
+            const cells = levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c, touch });
             for (const [sr, sc] of cells) done.add(sr * cols + sc);
         }
+    }
+
+    if (!repaint) return;
+    for (const k of touched) {
+        const r = (k / cols) | 0;
+        if (kind[k] !== trackOldKind[k]
+            || paintedTop(surfaceY[k], r) !== paintedTop(trackOldY[k], r)) repaint.add(k);
     }
 }
