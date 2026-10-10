@@ -1008,6 +1008,11 @@ export const Game = {
         // 環境の「岩の奥」の描画（雪）。遠景の上、地形の下＝空洞の向こうで降っている
         this.env.drawBehindTerrain(ctx, camX, camY);
 
+        // 3面の町並み。遠景より手前・地形より奥（土台は岩の縁に隠れ、機体は必ず手前に出る）
+        if (this.map.town) {
+            this.map.town.draw(ctx, { x: camX, y: camY, w: this.canvas.width, h: this.canvas.height });
+        }
+
         this.map.draw(ctx);
         if (this.carrier) this.carrier.draw(ctx);
         if (this.player) this.player.draw(ctx);
