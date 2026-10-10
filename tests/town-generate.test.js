@@ -2,7 +2,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import {
-    TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_VILLAGE_DENSE_FILL,
+    TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_VILLAGE_DENSE_FILL, TOWN_BASE_QUIET_INNER,
 } from '../src/js/utils/Constants.js';
 
 before(() => {
@@ -196,7 +196,7 @@ test('壁の家と吊るすものも村に従う: 村が無いと、面全体が
     assert.ok(none < full * 0.2, `村なし ${none} / 全面が村 ${full}`);
 });
 
-test('建物は村の周りに集まる: 左半分だけ村にすると、床の建物の 8割以上が左半分に建つ', async () => {
+test('建物は村の周りに集まる: 左半分だけ村にすると、床の建物の 7割以上が左半分に建つ', async () => {
     for (const seed of SEEDS) {
         const { map } = await stage3With(seed, []);
         const half = map.cols / 2;
@@ -205,7 +205,9 @@ test('建物は村の周りに集まる: 左半分だけ村にすると、床の
         const { specs } = await stage3With(seed, left);
         const floors = specs.filter((s) => s.site === 'floor');
         const inLeft = floors.filter((s) => (s.x + s.footX) / T < half).length;
-        assert.ok(inLeft >= floors.length * 0.8, `seed ${seed}: 左 ${inLeft} / 全 ${floors.length}`);
+        // 実機で比率を 密集 0.8・村の外 0.1 に調整（ユーザー）。村の中と外の差が 18倍 → 8倍になり、
+        // 左の割合は 8割強 → 最小 78%（seed 55）。村が無いと 5割前後なので、7割で十分に差を見られる
+        assert.ok(inLeft >= floors.length * 0.7, `seed ${seed}: 左 ${inLeft} / 全 ${floors.length}`);
     }
 });
 
@@ -252,4 +254,43 @@ test('同じ乱数なら同じ町（週の決定性）', async () => {
     const a = await stage3(11);
     const b = await stage3(11);
     assert.deepEqual(a.specs, b.specs);
+});
+
+test('最後の敵基地の周りには町が無い（基地の中心から TOWN_BASE_QUIET_INNER タイル以内に掛かる建物は無い）', async () => {
+    const { Map } = await import('../src/js/world/Map.js');
+    let near = 0;
+    for (const seed of SEEDS) {
+        const map = new Map({ rng: new SeededRNG(seed) }, 2);
+        const b = map.enemyBaseCenter;
+        for (const s of map._buildTownSpecs()) {
+            // 建物の外接矩形のうち、基地の中心に一番近い点で測る（大きな塔の端が入り込まないこと）
+            const nx = Math.max(s.x, Math.min((b.c + 0.5) * T, s.x + s.w));
+            const ny = Math.max(s.y, Math.min((b.r + 0.5) * T, s.y + s.h));
+            const d = Math.hypot(nx / T - (b.c + 0.5), ny / T - (b.r + 0.5));
+            assert.ok(d >= TOWN_BASE_QUIET_INNER, `seed ${seed}: ${s.site}/${s.kind} が基地から ${d.toFixed(1)} タイル`);
+            if (d < TOWN_BASE_QUIET_INNER + 15) near++;
+        }
+    }
+    // 区域のすぐ外にはまた建つ（面の右端がまるごと空にはならない）
+    assert.ok(near > 0, '区域のすぐ外にも1棟も無い');
+});
+
+test('静かな区域の縁がぼけていなくても、幅の広い塔が区域に入り込まない（外接矩形で判定）', async () => {
+    // 縁をなめらかにしていると、区域の手前では建てる確率がほぼ 0 で、この判定が無くても入り込まない。
+    // 縁を切り立たせて（outer ≒ inner）判定だけを見る
+    for (const seed of SEEDS) {
+        const { map } = await stage3With(seed, []);
+        const z = { c: map.cols / 2, r: map.rows / 2, inner: 30, outer: 30.001 };
+        const { generateTown } = await import('../src/js/world/town/generate.js');
+        const specs = generateTown({
+            grid: map.grid, rows: map.rows, cols: map.cols, rng: new SeededRNG(seed),
+            villages: [WHOLE_MAP_VILLAGE], quietZones: [z],
+        });
+        for (const s of specs) {
+            const nx = Math.max(s.x, Math.min((z.c + 0.5) * T, s.x + s.w));
+            const ny = Math.max(s.y, Math.min((z.r + 0.5) * T, s.y + s.h));
+            const d = Math.hypot(nx / T - (z.c + 0.5), ny / T - (z.r + 0.5));
+            assert.ok(d >= z.inner, `seed ${seed}: ${s.site}/${s.kind} が区域の中心から ${d.toFixed(1)}`);
+        }
+    }
 });

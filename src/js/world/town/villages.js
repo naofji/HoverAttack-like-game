@@ -63,3 +63,17 @@ export function villageFill(villages, c, r) {
     }
     return fill;
 }
+
+/**
+ * 町を建てない区域（最後の敵基地の周り）からの効き。zones は [{c, r, inner, outer}]（タイル）。
+ * inner 以内は 0、outer より外は 1、あいだは smoothstep。村の密度に掛けて使う
+ */
+export function quietFactor(zones, c, r) {
+    let f = 1;
+    for (const z of zones) {
+        const t = (Math.hypot(c - z.c, r - z.r) - z.inner) / (z.outer - z.inner);
+        if (t >= 1) continue;
+        f = Math.min(f, t <= 0 ? 0 : t * t * (3 - 2 * t));
+    }
+    return f;
+}

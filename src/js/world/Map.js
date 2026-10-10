@@ -34,6 +34,7 @@ import {
     WATER_SPRING_MAX_ROW_RATIO,
     WATER_FALL_INTERVAL,
     WATER_PRESSURE_INTERVAL,
+    TOWN_BASE_QUIET_INNER, TOWN_BASE_QUIET_OUTER,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -343,6 +344,11 @@ export class Map {
             // 基地の部屋だけ避ける。開始の部屋には置く（面に入った瞬間に町だと分かるように）
             excludeRects: [this._reservedRects()[1]],
             rng: new SeededRNG((this.game.rng.state ^ 0x70E4E5) >>> 0),
+            // 最後の敵基地の周りは岩肌だけにする（基地へ近づくほど町が途切れる）
+            quietZones: [{
+                c: this.enemyBaseCenter.c, r: this.enemyBaseCenter.r,
+                inner: TOWN_BASE_QUIET_INNER, outer: TOWN_BASE_QUIET_OUTER,
+            }],
         });
     }
 

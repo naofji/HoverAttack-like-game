@@ -1977,14 +1977,20 @@ export const TOWN_VILLAGE_GRID_COLS = 5;
 export const TOWN_VILLAGE_GRID_ROWS = 2;
 export const TOWN_VILLAGE_DENSE_CHANCE = 0.45;   // 升に密集した村を置く確率
 export const TOWN_VILLAGE_SPARSE_CHANCE = 0.35;  // まばらな集落を置く確率（残りは村なし）
-export const TOWN_VILLAGE_DENSE_FILL = 0.9;      // 密集した村の中心で建てる確率
-export const TOWN_VILLAGE_SPARSE_FILL = 0.3;     // まばらな集落の中心で建てる確率
-export const TOWN_VILLAGE_OUTSIDE_FILL = 0.05;   // どの村にも入らない所（ぽつんと1軒くらい）
+// 3つの確率は実機で 0.9 / 0.3 / 0.05 から今の値へ（ユーザー調整、2026-10-11。8種の平均 202 棟）
+export const TOWN_VILLAGE_DENSE_FILL = 0.8;      // 密集した村の中心で建てる確率
+export const TOWN_VILLAGE_SPARSE_FILL = 0.4;     // まばらな集落の中心で建てる確率
+export const TOWN_VILLAGE_OUTSIDE_FILL = 0.1;   // どの村にも入らない所（ぽつんと1軒くらい）
 // 半径（タイル）の範囲。中心から半径の半分までは村の密度のまま、縁で村の外の密度まで下がる。
 // 棟数（8種の平均）で決めた: [12,22]/[16,28] は 96棟、[18,30]/[22,34] は 150棟、
 // この値で 195棟（一律 0.75 のときの 411棟の約半分）。広げると村どうしがつながって差が薄れる
 export const TOWN_VILLAGE_RADIUS_DENSE = [22, 36];
 export const TOWN_VILLAGE_RADIUS_SPARSE = [26, 40];
+// 最後の敵基地の周り（タイル、基地の中心から）。INNER 以内には何も建てず、OUTER までで村の密度に戻る。
+// 実機で「敵基地の周辺には街がない方が自然」と言われた。基地の部屋だけ避けていたときは、
+// 部屋の壁のすぐ外まで家が並んでいた。基地は面の右端にあるので、右端の小部屋は岩肌だけになる
+export const TOWN_BASE_QUIET_INNER = 24;
+export const TOWN_BASE_QUIET_OUTER = 40;
 // 日干し煉瓦（A）の割合は、天井までの空きで決める（広い所は A、狭い所は坑道の小屋 C）
 export const TOWN_ADOBE_HEADROOM_WIDE = 12;
 export const TOWN_ADOBE_SHARE_WIDE = 0.8;

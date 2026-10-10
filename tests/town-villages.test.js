@@ -67,3 +67,18 @@ test('placeVillages: どの升も「村なし」を引いても、縦の列ご�
         assert.equal(here[0].peak, TOWN_VILLAGE_SPARSE_FILL);
     }
 });
+
+test('quietFactor: 静かな区域の内側は 0、外側は 1、あいだはなめらかに増える', async () => {
+    const { quietFactor } = await import('../src/js/world/town/villages.js');
+    const z = { c: 100, r: 50, inner: 20, outer: 40 };
+    assert.equal(quietFactor([], 100, 50), 1);
+    assert.equal(quietFactor([z], 100, 50), 0);
+    assert.equal(quietFactor([z], 119, 50), 0);
+    assert.equal(quietFactor([z], 141, 50), 1);
+    let prev = 0;
+    for (let d = 20; d <= 40; d++) {
+        const f = quietFactor([z], 100 + d, 50);
+        assert.ok(f >= prev && f - prev < 0.15, `d=${d}: ${prev} → ${f}`);
+        prev = f;
+    }
+});

@@ -17,7 +17,7 @@ import {
     TOWN_CEIL_MIN_RUN, TOWN_CEIL_MIN_DROP, TOWN_CEIL_KEEP_BELOW,
 } from '../../utils/Constants.js';
 import { findSites, chainFloors } from './placement.js';
-import { placeVillages, villageFill } from './villages.js';
+import { placeVillages, villageFill, quietFactor } from './villages.js';
 import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge } from './adobe.js';
 import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack } from './mining.js';
 import { mirrorParts, rect, pick, step4 } from './shapes.js';
@@ -94,16 +94,28 @@ function standsWell(s, run, solid) {
 }
 
 /**
- * villages を渡さなければ rng で村を置く（Map はこちら）。テストは村を指定して効き方を見る
+ * villages を渡さなければ rng で村を置く（Map はこちら）。テストは村を指定して効き方を見る。
+ * quietZones（[{c, r, inner, outer}]、タイル）は町を建てない区域。inner 以内に掛かる建物は置かず、
+ * outer までは建てる確率を下げて、区域の縁で町が急に途切れないようにする
  */
-export function generateTown({ grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols) }) {
+export function generateTown({
+    grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [],
+}) {
     const sites = findSites(grid, rows, cols);
+    const fillAt = (c, r) => villageFill(villages, c, r) * quietFactor(quietZones, c, r);
     // 村の濃さ 0〜1（密集した村の中心で 1）。壁の家と吊るすものの数にも掛けて、村の外の
     // 岩壁や天井にだけぽつぽつ家が付く、ということにならないようにする
-    const villageness = (c, r) => villageFill(villages, c, r) / TOWN_VILLAGE_DENSE_FILL;
+    const villageness = (c, r) => fillAt(c, r) / TOWN_VILLAGE_DENSE_FILL;
+    // 建物の外接矩形のうち区域の中心に一番近い点が inner より内なら置かない（確率は建てる位置の
+    // 左端で引くので、幅の広い塔は右側が区域に入り込みうる）
+    const inQuiet = (s) => quietZones.some((z) => {
+        const nx = Math.max(s.x, Math.min((z.c + 0.5) * T, s.x + s.w));
+        const ny = Math.max(s.y, Math.min((z.r + 0.5) * T, s.y + s.h));
+        return Math.hypot(nx / T - (z.c + 0.5), ny / T - (z.r + 0.5)) < z.inner;
+    });
     const specs = [];
     const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
-        && !excludeRects.some((rc) => touchesRect(s, rc));
+        && !excludeRects.some((rc) => touchesRect(s, rc)) && !inQuiet(s);
     const add = (s) => {
         if (!fits(s)) return false;
         if (s.site !== 'floor' && specs.some((o) => overlaps(o, s))) return false;
@@ -138,7 +150,7 @@ export function generateTown({ grid, rows, cols, excludeRects = [], rng, village
             const ci = Math.floor(x / T) - run.c0;
             const headroom = Math.min(...colHead.slice(ci, ci + LOOKAHEAD_COLS));
             if (headroom < TOWN_MIN_HEADROOM) { x += T; continue; }
-            if (rng.next() > villageFill(villages, x / T, run.r)) { x += step4(rng, 8, 32); continue; }   // 空き地
+            if (rng.next() > fillAt(x / T, run.r)) { x += step4(rng, 8, 32); continue; }   // 空き地
             // 高さの上限は「天井から CLEARANCE タイル下」まで
             const maxH = (headroom - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
             // A と C の割合は、建てる位置の2列（32px）の空きで決める。5列の最小で決めると、
