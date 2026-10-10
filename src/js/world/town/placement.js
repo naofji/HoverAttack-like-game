@@ -64,3 +64,53 @@ export function findSites(grid, rows, cols) {
     }
     return { floors, ceilings, walls };
 }
+
+/**
+ * 段差が maxStep タイル以内でつながる床の区間を、1本の「でこぼこの床」にまとめる。
+ *
+ * 洞窟の床は平滑化（Map._smoothStep）で細かい段になっていて、3面5週の実測では
+ * 天井まで 12 タイル以上ある床の区間 233 本のうち 193 本が幅1タイルだった。区間ごとに
+ * 建てると幅 20px 以上の塔が入らず、広い部屋まで小屋ばかりになる（A が 47%）。
+ * まとめた区間は**一番低い床を地面**にし、高い段の上では土台が岩の奥に隠れる
+ * （町は地形の奥に描くので、岩に重なった部分は見えない）。天井は一番低いものを取る。
+ *
+ * @param {Array<{r:number,c0:number,c1:number,headroom:number}>} floors findSites().floors
+ * @param {number} maxStep つなぐ段差の上限（タイル）
+ * @returns {Array<{r:number, c0:number, c1:number, ceil:number, floorRows:number[]}>}
+ *   r: 地面の行（一番低い床）、ceil: 一番低い天井の真下の空きの行（建物の上端はここより下）、
+ *   floorRows: 列 c0〜c1-1 それぞれの床の行
+ */
+export function chainFloors(floors, maxStep) {
+    const byStart = new Map();
+    for (const f of floors) {
+        if (!byStart.has(f.c0)) byStart.set(f.c0, []);
+        byStart.get(f.c0).push(f);
+    }
+    // 左から順に鎖をたどる。前の区間が先に処理されるので、途中の区間から鎖が始まらない
+    const sorted = [...floors].sort((a, b) => a.c0 - b.c0 || a.r - b.r);
+    const used = new Set();
+    const chains = [];
+    for (const f of sorted) {
+        if (used.has(f)) continue;
+        used.add(f);
+        let r = f.r;
+        let top = f.r;   // 一番高い床の行。隣どうしの段差だけ見ると、階段状に積み上がって
+                         // 全体で maxStep を超え、低い床の建物が高い段の岩に埋もれる
+        let ceil = f.r - f.headroom;
+        const floorRows = new Array(f.c1 - f.c0).fill(f.r);   // 列ごとの床の行（段差の上の建物の高さ判定に使う）
+        let cur = f;
+        for (;;) {
+            const next = (byStart.get(cur.c1) || []).find((g) => !used.has(g)
+                && Math.max(r, g.r) - Math.min(top, g.r) <= maxStep);
+            if (!next) break;
+            used.add(next);
+            r = Math.max(r, next.r);
+            top = Math.min(top, next.r);
+            for (let c = next.c0; c < next.c1; c++) floorRows.push(next.r);
+            ceil = Math.max(ceil, next.r - next.headroom);
+            cur = next;
+        }
+        chains.push({ r, c0: f.c0, c1: cur.c1, ceil, floorRows });
+    }
+    return chains;
+}

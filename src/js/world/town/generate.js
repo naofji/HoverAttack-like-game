@@ -1,0 +1,170 @@
+// ============================================
+// generate - 置き場所に町を並べる
+// ============================================
+//
+// 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（1章）
+// 床 → 壁 → 天井の順に並べる。乱数は呼び出し側が渡す派生ストリームだけを使う
+// （Map の game.rng を消費すると敵の構成が変わり、週の決定性が壊れる）。
+// 床の建物どうしは重なってよい（張り出したバルコニーや梁が隣に掛かるのは町らしい）。
+// 壁と天井のものは、先に置いたものと重なるなら置かない（塔の上に吊るしものが刺さる）。
+
+import {
+    TILE_SIZE as T,
+    TOWN_MIN_HEADROOM, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_FLOOR_FILL, TOWN_FLOOR_STEP_MAX,
+    TOWN_ADOBE_HEADROOM_WIDE, TOWN_ADOBE_SHARE_WIDE, TOWN_ADOBE_HEADROOM_NARROW, TOWN_ADOBE_SHARE_NARROW,
+    TOWN_TOWER_BRIDGE_CHANCE,
+    TOWN_WALL_MIN_RUN, TOWN_WALL_MIN_REACH, TOWN_WALL_SPACING, TOWN_WALL_HOUSE_CHANCE,
+    TOWN_CEIL_MIN_RUN, TOWN_CEIL_MIN_DROP, TOWN_CEIL_KEEP_BELOW,
+} from '../../utils/Constants.js';
+import { findSites, chainFloors } from './placement.js';
+import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge } from './adobe.js';
+import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack } from './mining.js';
+import { mirrorParts, rect, pick, step4 } from './shapes.js';
+import { MAT_WOOD } from './chunks.js';
+import { TOWN_BODY_COLORS, TOWN_DETAIL_COLORS } from './palette.js';
+
+/** 天井までの空き（タイル）から、日干し煉瓦（A）を選ぶ確率 */
+export function adobeShare(headroom) {
+    const span = TOWN_ADOBE_HEADROOM_WIDE - TOWN_ADOBE_HEADROOM_NARROW;
+    const t = Math.max(0, Math.min(1, (headroom - TOWN_ADOBE_HEADROOM_NARROW) / span));
+    return TOWN_ADOBE_SHARE_NARROW + (TOWN_ADOBE_SHARE_WIDE - TOWN_ADOBE_SHARE_NARROW) * t;
+}
+
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+function touchesRect(s, rc) {
+    const r0 = Math.floor(s.y / T), r1 = Math.floor((s.y + s.h - 1) / T);
+    const c0 = Math.floor(s.x / T), c1 = Math.floor((s.x + s.w - 1) / T);
+    return r0 <= rc.r1 && r1 >= rc.r0 && c0 <= rc.c1 && c1 >= rc.c0;
+}
+
+/**
+ * 同じ床の区間で隣り合う塔の上の階を、木の橋でつなぐ（シバーム）。
+ * 橋は左の塔の部品として足す。段2で左の塔が崩れれば橋も一緒に落ちる
+ * （右の塔には支えられない。支えは岩だけ、という規則を崩さないため）。
+ */
+function bridgeTowers(runSpecs, rng) {
+    const bodyTop = (s) => s.y + s.h - s.insets.length * 4;
+    const rowAt = (s, y) => Math.min(s.insets.length - 1, Math.max(0, Math.floor((s.y + s.h - y - 1) / 4)));
+    for (let i = 0; i + 1 < runSpecs.length; i++) {
+        const a = runSpecs[i];
+        const b = runSpecs[i + 1];
+        if (!a.insets || !b.insets) continue;
+        const gap = (b.x + b.footX) - (a.x + a.footX + a.footW);
+        // 16px 未満の隙間に架けると、橋ではなく塔がくっついて見える
+        if (gap < 16 || gap > 48) continue;
+        if (rng.next() >= TOWN_TOWER_BRIDGE_CHANCE) continue;
+        const by = Math.max(bodyTop(a), bodyTop(b)) + 12;   // 低いほうの塔の最上階の床
+        if (a.y + a.h - by < 24) continue;                   // 2階より下には架けない
+        const x0 = a.x + a.footX + a.footW - a.insets[rowAt(a, by)];
+        const x1 = b.x + b.footX + b.insets[rowAt(b, by)];
+        const lx = x0 - a.x;
+        const ly = by - a.y;
+        rect(a.parts, lx, ly, x1 - x0, 4, pick(rng, TOWN_BODY_COLORS.wood), MAT_WOOD, false);
+        rect(a.parts, lx, ly - 5, x1 - x0, 1, TOWN_DETAIL_COLORS.rope);
+        a.w = Math.max(a.w, lx + (x1 - x0));
+    }
+}
+
+export function generateTown({ grid, rows, cols, excludeRects = [], rng }) {
+    const sites = findSites(grid, rows, cols);
+    const specs = [];
+    const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
+        && !excludeRects.some((rc) => touchesRect(s, rc));
+    const add = (s) => {
+        if (!fits(s)) return false;
+        if (s.site !== 'floor' && specs.some((o) => overlaps(o, s))) return false;
+        specs.push(s);
+        return true;
+    };
+
+    // --- 床 ---
+    // 1タイルの段差でつながる床は1本にまとめる（chainFloors のコメント）。地面は一番低い床、
+    // 天井までの空きは一番低い天井から測る
+    for (const run of chainFloors(sites.floors, TOWN_FLOOR_STEP_MAX)) {
+        const headroom = run.r - run.ceil;
+        if (headroom < TOWN_MIN_HEADROOM) continue;
+        // 土台は床の岩に埋める。高さの上限は「天井から CLEARANCE タイル下」まで
+        const groundY = run.r * T + TOWN_FOUNDATION_SINK;
+        const maxH = (headroom - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
+        const share = adobeShare(headroom);
+        const runSpecs = [];
+        const xEnd = run.c1 * T;
+        let x = run.c0 * T;
+        while (xEnd - x >= 16) {
+            if (rng.next() > TOWN_FLOOR_FILL) { x += step4(rng, 8, 32); continue; }   // 空き地
+            const style = rng.next() < share ? 'A' : 'C';
+            const b = style === 'A'
+                ? buildAdobeTower(rng, { maxW: xEnd - x, maxH })
+                : buildMiningShack(rng, { maxW: xEnd - x, maxH });
+            if (!b) { x += 8; continue; }
+            // 足元に1段高い列があると、その列では土台が段の岩にさらに 16px 隠れる。
+            // 背の低い小屋がそこで埋もれないよう、平らな床と同じだけ（16px まで）見えない建物は置かない
+            const fc0 = Math.floor(x / T) - run.c0;
+            const fc1 = Math.floor((x + b.footW - 1) / T) - run.c0;
+            const highest = Math.min(...run.floorRows.slice(fc0, fc1 + 1));
+            const visible = b.h - TOWN_FOUNDATION_SINK - (run.r - highest) * T;
+            if (visible < Math.min(16, b.h - TOWN_FOUNDATION_SINK)) { x += 8; continue; }
+            const spec = {
+                site: 'floor', style, kind: b.kind,
+                x: x - b.footX, y: groundY - b.h, w: b.w, h: b.h, parts: b.parts,
+                footX: b.footX, footW: b.footW, headroom,
+            };
+            if (b.insets) spec.insets = b.insets;
+            if (add(spec)) runSpecs.push(spec);
+            x += b.footW + step4(rng, 0, 8);
+        }
+        bridgeTowers(runSpecs, rng);
+    }
+
+    // --- 壁 ---
+    for (const run of sites.walls) {
+        const len = run.r1 - run.r0;
+        if (len < TOWN_WALL_MIN_RUN || run.reach < TOWN_WALL_MIN_REACH) continue;
+        const share = adobeShare(run.reach);
+        const maxReach = Math.min(run.reach, 6) * T;
+        const tries = Math.max(1, Math.floor(len / TOWN_WALL_SPACING));
+        for (let k = 0; k < tries; k++) {
+            if (rng.next() > TOWN_WALL_HOUSE_CHANCE) continue;
+            const r = run.r0 + 1 + Math.floor(rng.next() * Math.max(1, len - 2));
+            const style = rng.next() < share ? 'A' : 'C';
+            const b = style === 'A' ? buildAdobeWallHouse(rng, { maxReach }) : buildScaffoldShack(rng, { maxReach });
+            if (!b) continue;
+            // 組み立ては「壁の右側に張り付く」向き。壁の左側（side: 'left'）なら反転する。
+            // どちらも壁側の 4px が壁のタイルに入る位置に置く（そこが支え）
+            const right = run.side === 'right';
+            add({
+                site: 'wall', style, kind: b.kind,
+                x: right ? (run.c + 1) * T - 4 : run.c * T + 4 - b.w,
+                y: r * T, w: b.w, h: b.h,
+                parts: right ? b.parts : mirrorParts(b.parts, b.w),
+            });
+        }
+    }
+
+    // --- 天井 ---
+    for (const run of sites.ceilings) {
+        if (run.c1 - run.c0 < TOWN_CEIL_MIN_RUN || run.drop < TOWN_CEIL_MIN_DROP) continue;
+        const maxHang = (run.drop - TOWN_CEIL_KEEP_BELOW) * T;
+        const share = adobeShare(run.drop);
+        const y = (run.r + 1) * T - 4;   // 綱の上端 4px を天井の岩に埋める
+        let c = run.c0 + 1;
+        while (c < run.c1 - 1) {
+            const style = rng.next() < share ? 'A' : 'C';
+            const room = (run.c1 - 1 - c) * T;
+            let b;
+            if (style === 'A' && room >= 64 && rng.next() < 0.5) {
+                b = buildHangingBridge(rng, { span: step4(rng, 64, Math.min(160, room)), maxHang });
+            } else if (style === 'C' && rng.next() < 0.4) {
+                b = buildHangingShack(rng, { maxHang });
+            } else {
+                b = buildLantern(rng, { maxHang });
+            }
+            if (b) {
+                add({ site: 'ceiling', style, kind: b.kind, x: c * T + step4(rng, 0, 8), y, w: b.w, h: b.h, parts: b.parts });
+            }
+            c += Math.max(3, Math.ceil((b ? b.w : 16) / T)) + Math.floor(rng.next() * 4);
+        }
+    }
+    return specs;
+}

@@ -50,3 +50,38 @@ test('盤面の外は空気として数えない（外周の岩の外側に床�
     assert.ok(!floors.some((f) => f.r === 0), '最上段は上が盤面の外');
     assert.ok(!walls.some((w) => w.c === 0 && w.side === 'left'));
 });
+
+// 洞窟の床は平滑化で細かい段になっている。3面5週の実測で、天井まで 12 タイル以上ある
+// 床の区間 233 本のうち 193 本が幅1タイルで、塔（幅 20px〜）が建たなかった。
+// 1タイルの段差でつながる区間は1本にまとめ、一番低い床を地面にする
+test('chainFloors: 1タイルの段差でつながる床を1本にまとめる。地面は一番低い床、天井は一番低い天井', async () => {
+    const { chainFloors } = await import('../src/js/world/town/placement.js');
+    const floors = [
+        { r: 10, c0: 0, c1: 2, headroom: 8 },   // 天井の下端は行 2
+        { r: 11, c0: 2, c1: 3, headroom: 6 },   // 1段下がる。天井の下端は行 5（一番低い）
+        { r: 10, c0: 3, c1: 5, headroom: 7 },   // 1段上がる
+        { r: 7, c0: 5, c1: 6, headroom: 4 },    // 3段上がる → つながらない
+        { r: 20, c0: 0, c1: 4, headroom: 5 },   // 別の階の床（列が重なっても行が離れている）
+    ];
+    const chains = chainFloors(floors, 1);
+    assert.deepEqual(chains, [
+        { r: 11, c0: 0, c1: 5, ceil: 5, floorRows: [10, 10, 11, 10, 10] },
+        { r: 20, c0: 0, c1: 4, ceil: 15, floorRows: [20, 20, 20, 20] },
+        { r: 7, c0: 5, c1: 6, ceil: 3, floorRows: [7] },
+    ]);
+});
+
+test('chainFloors: 1段ずつでも階段状に続くなら、区間全体の高低差が maxStep を超えたところで切る', async () => {
+    // 隣どうしは1段差でも、10→11→12 とつなぐと全体で2段になり、低い床に建てた
+    // 小屋が高い段の岩に埋もれる（3面 seed 11 の実マップで出た）
+    const { chainFloors } = await import('../src/js/world/town/placement.js');
+    const chains = chainFloors([
+        { r: 10, c0: 0, c1: 2, headroom: 8 },
+        { r: 11, c0: 2, c1: 4, headroom: 8 },
+        { r: 12, c0: 4, c1: 6, headroom: 8 },
+    ], 1);
+    assert.deepEqual(chains, [
+        { r: 11, c0: 0, c1: 4, ceil: 3, floorRows: [10, 10, 11, 11] },
+        { r: 12, c0: 4, c1: 6, ceil: 4, floorRows: [12, 12] },
+    ]);
+});
