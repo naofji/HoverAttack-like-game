@@ -151,10 +151,27 @@ export function waterClearance(entity, game, maxPx) {
     for (let d = 0; d <= maxPx; d += GROUND_CLEARANCE_STEP) {
         const py = feetY + d;
         // 地形（岩や床）に遮られたら、その先にある水面にはスラスターの風が届かない
-        if (map.isSolidAtPixel && map.isSolidAtPixel(cx, py)) return null;
-        if (map.isWaterAtPixel(cx, py)) return d;
+        if (map.isSolidAtPixel && map.isSolidAtPixel(cx, py)) {
+            // 床を流れる水は床の上面に貼り付いた厚さ RUNNING_WATER_THICKNESS(3px) の帯で、
+            // この刻み（4px）だと飛び越して床に当たることがある（キャリアの下で出なかった）。
+            // 床に当たったら、ひとつ前の刻みとのあいだを1pxずつ見る
+            for (let y = Math.max(feetY, py - GROUND_CLEARANCE_STEP + 1); y < py; y++) {
+                if (isRunningWaterAt(game, cx, y)) return y - feetY;
+            }
+            return null;
+        }
+        if (map.isWaterAtPixel(cx, py) || isRunningWaterAt(game, cx, py)) return d;
     }
     return null;
+}
+
+/**
+ * 床を流れる水（描画だけの帯。セルとしては空）が (x, y) に描かれているか。持っているのは水の面の
+ * 描画だけなので、雪・霧などの描画（isRunningWaterAt が無い）では常に偽
+ */
+function isRunningWaterAt(game, x, y) {
+    const renderer = game.env && game.env.renderer;
+    return !!(renderer && renderer.isRunningWaterAt && renderer.isRunningWaterAt(x, y));
 }
 
 /**

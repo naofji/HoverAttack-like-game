@@ -220,6 +220,21 @@ export function createWaterRenderer(env) {
         t: 0,
         ripples: [],
         bubbles: [],
+        // 前のフレームに描いた床を流れる水の帯（_drawWaterfalls が組み立てる）。ホバーの水滴の
+        // 判定（waterClearance）が読む。床を流れる水はセルとしては空なので、描いた帯そのものを
+        // 答えにしないと「見えている水の上なのに水滴が出ない」になる（2026-10-11 実機の指摘）
+        runningSheets: [],
+        /**
+         * (x, y) に床を流れる水の帯が描かれているか。読むのは前のフレームに描いた帯で、
+         * 画面の外は組み立てていないので答えない（画面外の水滴は見えないので構わない）
+         */
+        isRunningWaterAt(x, y) {
+            for (const sheet of this.runningSheets) {
+                if (y < sheet.y || y >= sheet.y + RUNNING_WATER_THICKNESS) continue;
+                for (const [a, b] of sheet.segments) if (x >= a && x < b) return true;
+            }
+            return false;
+        },
         update() {
             this.t++;
             for (const rp of this.ripples) rp.strength *= WATER_RIPPLE_DECAY;
@@ -353,6 +368,11 @@ export function createWaterRenderer(env) {
         _drawWaterfalls(ctx, startCol, endCol, startRow, endRow) {
             const runs = collectWaterfallRuns(map, startCol, endCol, startRow, endRow);
             const t = this.t;
+            this.runningSheets = [];
+            for (const run of runs) {
+                if (run.sheet) this.runningSheets.push(run.sheet);
+                if (run.feedSheet) this.runningSheets.push(run.feedSheet);
+            }
 
             ctx.fillStyle = WATER_FILL;
             for (const run of runs) {
