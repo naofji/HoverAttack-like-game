@@ -967,12 +967,14 @@ export const STAGE_PALETTES = [
 // 7面は動きは今のままで遠景だけ機械）、terrain = 地形の生成規則
 // （'fortress' は Map._generateFortress() が読む。設計:
 //  docs/superpowers/specs/2026-09-06-stage7-fortress-design.md）。
+// props = 地形の上に置く飾り（'town' は3面の壊せる町並み。設計:
+//  docs/superpowers/specs/2026-10-11-stage3-town-design.md）。無ければ置かない。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 1
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
-    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 3
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
     { kind: 'water', backdrop: 'wet',     terrain: 'cave' }, // 4: 地底湖
     { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
@@ -1947,3 +1949,37 @@ export const SAVE_COST = 10000;
 export const CONTINUE_COUNTDOWN_MS = 9000;
 // セーブが無いときの従来どおりの待ち時間（main.js に直書きされていた 4000）。
 export const GAMEOVER_WAIT_MS = 4000;
+
+// --- 3面の町並み（props: 'town'）---
+// 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md
+// 段1（置いて描く）の数値。初期値で、実機で見て詰める。
+// かけらの大きさは地形の一番細かい描き込み（4px）に揃える。
+export const TOWN_CHUNK = 4;
+// 床から天井までの空きがこれ未満の区間には建てない（タイル）。小屋の最小の高さ 24px に
+// 天井との空き TOWN_CEILING_CLEARANCE を足すと 3.5 タイル要る
+export const TOWN_MIN_HEADROOM = 4;
+// 建物の一番上と天井のあいだに必ず空けるタイル数。天井にくっついて見えないように
+export const TOWN_CEILING_CLEARANCE = 2;
+// 土台を床の岩に埋める深さ（px）。町は地形の奥に描くので、埋めた分は岩の縁に隠れて
+// 「建っている」に見える。浮いて見える隙間を作らないためのもの
+export const TOWN_FOUNDATION_SINK = 4;
+// 床の区間を左から歩くとき、そこに建てる確率。外れたら空き地にする。
+// 面全体にまんべんなく、ただし詰まりすぎて1枚の壁に見えないように
+export const TOWN_FLOOR_FILL = 0.75;
+// 日干し煉瓦（A）の割合は、天井までの空きで決める（広い所は A、狭い所は坑道の小屋 C）
+export const TOWN_ADOBE_HEADROOM_WIDE = 12;
+export const TOWN_ADOBE_SHARE_WIDE = 0.8;
+export const TOWN_ADOBE_HEADROOM_NARROW = 5;
+export const TOWN_ADOBE_SHARE_NARROW = 0.1;
+// 隣り合う塔の上の階を橋でつなぐ確率（シバームの塔は上の階どうしを橋や綱で結ぶ）
+export const TOWN_TOWER_BRIDGE_CHANCE = 0.4;
+// 壁に張り付く家。壁が縦にこれだけ続き、前にこれだけの空きがあるところに置く（タイル）
+export const TOWN_WALL_MIN_RUN = 4;
+export const TOWN_WALL_MIN_REACH = 4;
+export const TOWN_WALL_SPACING = 8;        // 壁の長さこれごとに1軒の候補
+export const TOWN_WALL_HOUSE_CHANCE = 0.5; // 候補ごとに建てる確率
+// 天井から吊るもの。天井がこれだけ続き、下にこれだけの空きがあるところに吊る（タイル）
+export const TOWN_CEIL_MIN_RUN = 6;
+export const TOWN_CEIL_MIN_DROP = 8;
+// 吊るしたものの下に残す空き（タイル）。自機（1.5タイル）が下をくぐれる高さ＋余裕
+export const TOWN_CEIL_KEEP_BELOW = 4;
