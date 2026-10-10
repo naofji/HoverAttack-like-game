@@ -325,18 +325,25 @@ test('沈んだ浅いセルの隣の岩は、前景の塗りと同じ高さ（�
 // タイルごとに「いま塗られている上端 Y」だけを覚える canvas。clearRect で消え、fillRect で
 // いちばん上の Y を残す。差分で塗り直したキャッシュと、同じ状態を最初から塗ったキャッシュを
 // 突き合わせるのに使う（fillRect の呼び出し列は塗り直しの経路で変わるので比べられない）
+// tops.counts にはタイルごとの fillRect の回数も覚える。泡のマスの粒は上端を変えないので、
+// 上端だけでは粒の描き漏れが見えない
 function tileTopCanvas() {
   const tops = new Map();
+  tops.counts = new Map();
   const ctx = makeFakeCtx();
   ctx.clearRect = (x, y, w, h) => {
     for (let ty = Math.floor(y / TILE_SIZE); ty < Math.ceil((y + h) / TILE_SIZE); ty++) {
-      for (let tx = Math.floor(x / TILE_SIZE); tx < Math.ceil((x + w) / TILE_SIZE); tx++) tops.delete(`${ty},${tx}`);
+      for (let tx = Math.floor(x / TILE_SIZE); tx < Math.ceil((x + w) / TILE_SIZE); tx++) {
+        tops.delete(`${ty},${tx}`);
+        tops.counts.delete(`${ty},${tx}`);
+      }
     }
   };
   ctx.fillRect = (x, y, w, h) => {
     if (w <= 0 || h <= 0) return;
     const key = `${Math.floor(y / TILE_SIZE)},${Math.floor(x / TILE_SIZE)}`;
     tops.set(key, Math.min(tops.get(key) ?? Infinity, y));
+    tops.counts.set(key, (tops.counts.get(key) ?? 0) + 1);
   };
   return { width: 0, height: 0, getContext: () => ctx, tops };
 }
@@ -379,6 +386,7 @@ async function assertRepaintMatchesFresh(map, renderer, fore, behind, changedCel
   const diff = (a, b) => [...new Set([...a.keys(), ...b.keys()])]
     .filter((k) => a.get(k) !== b.get(k)).map((k) => `${k}: ${a.get(k)} / ${b.get(k)}`);
   assert.deepEqual(diff(fore, fresh.fore), [], '前景の塗りが古いまま残っている（差分 / 塗り直し）');
+  assert.deepEqual(diff(fore.counts, fresh.fore.counts), [], '前景の塗りの回数が違う＝泡の粒が古い（差分 / 塗り直し）');
   assert.deepEqual(diff(behind, fresh.behind), [], '岩の背後の塗りが古いまま残っている（差分 / 塗り直し）');
 }
 
@@ -472,4 +480,105 @@ test('厚い岩の上の水が減って沈んでいなくなったら、岩の�
   map.water[0 * map.cols + 1] = 2;
   await assertRepaintMatchesFresh(map, renderer, fore, behind, [[0, 1]]);
   assert.equal(fore.get('3,1'), 4 * TILE_SIZE - 12, '水量6ぶんの高さに塗り直される');
+});
+
+// ---- 泡のマス ----
+// 落下（4フレームに1回・最大2）は横の流れ（毎フレーム最大4）の1/8しかないので、棚から棚へ流れ落ちる
+// 水は「満水のセルの真下がほとんどいつも空気」という階段になる。満水のセルは種別では水面なので、
+// 宙に浮いた水の四角が線つきで市松模様に並んで見えた（実機の指摘）。真上が滝でない水で、真下が水か岩の
+// 空気は、泡の多い水として塗る（20週×撃ち抜き12回で、浮いた四角 498 のうち 494 の真下がこれに当たる）
+
+/** 画面に引いた水面の線の、各折れ線の始点の y */
+function surfaceLineStarts(renderer) {
+  const ctx = makeFakeCtx();
+  renderer.drawOverWorld(ctx, 0, 0);
+  return ctx.calls.filter((c) => c.name === 'moveTo').map((c) => c.args[1]);
+}
+
+test('階段の段の上の満水のセルの真下の隙間（下が岩）は、タイル全体を泡の多い水で塗る', async () => {
+  const map = makeWaterMap(`
+    ....
+    .8..
+    ....
+    ####
+  `);
+  const { renderer, fore } = await rendererWithTops(map);
+  assert.equal(map.isWaterFoam(2, 1), true, '(2,1) は泡のマス');
+  assert.equal(fore.get('2,1'), 2 * TILE_SIZE, '泡のマスはタイル全体を塗る');
+  assert.equal(map.isWaterFoam(1, 0), false, '真上に水の無い空気は泡にしない');
+  assert.equal(fore.has('2,0'), false);
+  // 段の一番上の満水のセルの上は本物の水面なので、線は残す
+  assert.ok(surfaceLineStarts(renderer).some((y) => Math.abs(y - TILE_SIZE) <= 2), '一番上の段の線は残る');
+});
+
+test('縦に積まれた満水のセルのあいだの隙間は泡にし、その真下の水面の線は引かない', async () => {
+  const map = makeWaterMap(`
+    ...
+    .8.
+    ...
+    .8.
+    ...
+    ###
+  `);
+  const { renderer, fore } = await rendererWithTops(map);
+  assert.equal(map.isWaterFoam(2, 1), true, '(2,1) は上下を水に挟まれた泡のマス');
+  assert.equal(map.isWaterFoam(4, 1), true, '(4,1) は満水と岩に挟まれた泡のマス');
+  assert.equal(fore.get('2,1'), 2 * TILE_SIZE);
+  assert.ok(map.isWaterSurface(3, 1), '前提: 種別では (3,1) は水面のまま（当たり判定は変えない）');
+  const starts = surfaceLineStarts(renderer);
+  assert.ok(starts.some((y) => Math.abs(y - TILE_SIZE) <= 2), '一番上 (1,1) の線は残る');
+  assert.ok(!starts.some((y) => Math.abs(y - 3 * TILE_SIZE) <= 2), '泡の真下の (3,1) には線を引かない');
+});
+
+test('滝の水滴の切れ目の空気は泡にしない（細い滝が泡の四角の列にならない）', async () => {
+  // (0,1) は水量2で真下が空気＝滝。(1,1) は上下が水だが、真上が滝なので泡ではない
+  // （この形は総当たりで延べ12,480マスあった）
+  const map = makeWaterMap(`
+    .2.
+    ...
+    .8.
+    ###
+  `);
+  const { fore } = await rendererWithTops(map);
+  assert.ok(map.isWaterfallCell(0, 1), '前提: (0,1) は滝');
+  assert.equal(map.isWaterFoam(1, 1), false);
+  assert.equal(fore.has('1,1'), false);
+});
+
+test('下の満水が抜けて泡のマスができたら、差分の塗り直しでも泡で塗る', async () => {
+  // 塗り直しの対象は作り直しで塗りの上端か泡かが変わったセル。空気のまま変わらないセルを飛ばす
+  // 近道が、真上に水が来て泡になったセルまで飛ばさないことを確かめる
+  const map = makeWaterMap(`
+    ...
+    .8.
+    .8.
+    ###
+  `);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  assert.equal(map.isWaterFoam(2, 1), false, '前提: 最初は泡のマスは無い');
+
+  map.water[2 * map.cols + 1] = 0;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[2, 1]]);
+  assert.equal(map.isWaterFoam(2, 1), true);
+  assert.equal(fore.get('2,1'), 2 * TILE_SIZE);
+});
+
+test('塗りの上端が変わらず泡かどうかだけが変わったセルも塗り直す（粒を描き足す）', async () => {
+  // (2,1) は満水の水面で、塗りの上端はタイルの上辺。上から満水が落ちてきて (2,1) が抜けると、
+  // 泡のマスになるが塗りの上端はタイルの上辺のまま。上端だけを比べると塗り直されず、粒が描かれない
+  const map = makeWaterMap(`
+    ...
+    ...
+    .8.
+    ###
+  `);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  const before = map.getWaterPaintTopY(2, 1);
+  map.water[1 * map.cols + 1] = 8;
+  map.water[2 * map.cols + 1] = 0;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[1, 1], [2, 1]]);
+  assert.equal(map.isWaterFoam(2, 1), true);
+  assert.equal(map.getWaterPaintTopY(2, 1), before, '前提: 塗りの上端は変わっていない');
 });

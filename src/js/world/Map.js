@@ -137,6 +137,7 @@ export class Map {
         this.waterKind = null;      // Uint8Array。0=水なし 1=水中 2=水面 3=滝。water[] から導く要約
         this.waterSurfaceY = null;  // Int16Array。水面セルの液面 Y(px)。それ以外 -1
         this.waterPaintTopY = null; // Int16Array。塗りの上端 Y(px)。塗らないセルは -1（waterQuery の paintTopAt）
+        this.waterFoam = null;      // Uint8Array。泡のマス（流れ落ちる満水の真下の隙間）なら 1（waterQuery の isFoamAt）
         this.dirtyWaterCols = new Set(); // 作り直しが要る列。問い合わせの手前でまとめて処理する
         this.waterRepaintCells = null;   // Set。作り直しで塗りが変わったセル。描画キャッシュが描く前に引き取る
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
@@ -395,6 +396,7 @@ export class Map {
         this.waterKind = new Uint8Array(this.rows * this.cols);
         this.waterSurfaceY = new Int16Array(this.rows * this.cols).fill(-1);
         this.waterPaintTopY = new Int16Array(this.rows * this.cols).fill(-1);
+        this.waterFoam = new Uint8Array(this.rows * this.cols);
         this.dirtyWaterCols = new Set();
         this.waterRepaintCells = new Set();
         this.activeWaterCells = new Set();
@@ -1135,6 +1137,7 @@ export class Map {
             kind: this.waterKind,
             surfaceY: this.waterSurfaceY,
             paintTopY: this.waterPaintTopY,
+            foam: this.waterFoam,
             rows: this.rows,
             cols: this.cols,
             isSolid: this._waterSolidFn(),
@@ -1168,6 +1171,17 @@ export class Map {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return -1;
         this._rebuildWaterCacheIfDirty();
         return this.waterPaintTopY[r * this.cols + c];
+    }
+
+    /**
+     * セル (r, c) が泡のマスか（流れ落ちる満水のセルの真下の隙間。描画だけが泡の多い水として塗る）。
+     * 種別は空気のままで、当たり判定は水にしない
+     */
+    isWaterFoam(r, c) {
+        if (!this.water) return false;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        this._rebuildWaterCacheIfDirty();
+        return this.waterFoam[r * this.cols + c] === 1;
     }
 
     /** 水の純関数群に渡す isSolid。毎フレーム作り直さないよう1本を使い回す */

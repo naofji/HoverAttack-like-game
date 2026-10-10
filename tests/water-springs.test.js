@@ -19,6 +19,7 @@ function primeWaterCache(map) {
     map.waterKind = new Uint8Array(n);
     map.waterSurfaceY = new Int16Array(n).fill(-1);
     map.waterPaintTopY = new Int16Array(n).fill(-1);
+    map.waterFoam = new Uint8Array(n);
     map._waterIsSolid = null;
     map.dirtyWaterCols = new Set([...Array(map.cols).keys()]);
     map._rebuildWaterCacheIfDirty();

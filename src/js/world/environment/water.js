@@ -11,7 +11,7 @@ import { collectWaterfallRuns } from './waterfallRuns.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, WATER_FOAM_COLOR, WATER_FOAM_BUBBLES,
     WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
 } from '../../utils/Constants.js';
 
@@ -41,6 +41,22 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
         if (x === x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
+}
+
+/**
+ * 泡のマス (r, c) の粒を ctx に描く（水の塗りの上から）。粒の位置はマスごとに決まった配置にして、
+ * 塗り直しても同じ絵になるようにする（毎回変えるとキャッシュの塗り直しのたびに粒が跳ねる）
+ */
+function drawFoamBubbles(ctx, r, c) {
+    ctx.fillStyle = WATER_FOAM_COLOR;
+    let h = ((r * 73856093) ^ (c * 19349663)) >>> 0;
+    for (let i = 0; i < WATER_FOAM_BUBBLES; i++) {
+        h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
+        const size = i % 2 === 0 ? 2 : 1;
+        const x = c * TILE_SIZE + 1 + (h % (TILE_SIZE - 2 - size));
+        const y = r * TILE_SIZE + 1 + ((h >>> 8) % (TILE_SIZE - 2 - size));
+        ctx.fillRect(x, y, size, size);
+    }
 }
 
 /**
@@ -131,6 +147,11 @@ export function createWaterRenderer(env) {
             const bottomY = (r + 1) * TILE_SIZE;
             const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, level));
             if (bottomY - topY > 0) cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
+            // 泡のマス（流れ落ちる満水の真下の隙間）は、タイル全体の水の上に粒を散らす
+            if (map.isWaterFoam(r, c)) {
+                drawFoamBubbles(cctx, r, c);
+                cctx.fillStyle = WATER_FILL;
+            }
         }
     };
 
@@ -247,16 +268,19 @@ export function createWaterRenderer(env) {
             const startRow = Math.max(0, Math.floor((camY - 16) / TILE_SIZE));
             const endRow = Math.min(map.rows - 1, Math.ceil((camY + CANVAS_HEIGHT + 16) / TILE_SIZE));
 
+            // 泡のマスの真下の水面には線を引かない。泡は水として塗っているので、その下の水面は
+            // 流れ落ちる水の途中で、線を引くと泡の柱の途中に横線が入る（種別は水面のまま）
+            const lineAt = (r, c) => map.isWaterSurface(r, c) && !map.isWaterFoam(r - 1, c);
             const segments = [];
             const visited = new Set();
             for (let r = startRow; r <= endRow; r++) {
                 for (let c = startCol; c <= endCol; c++) {
                     if (visited.has(r * map.cols + c)) continue;
-                    if (!map.isWaterSurface(r, c)) continue;
+                    if (!lineAt(r, c)) continue;
                     let c0 = c;
-                    while (c0 - 1 >= 0 && map.isWaterSurface(r, c0 - 1)) c0--;
+                    while (c0 - 1 >= 0 && lineAt(r, c0 - 1)) c0--;
                     let c1 = c;
-                    while (c1 + 1 < map.cols && map.isWaterSurface(r, c1 + 1)) c1++;
+                    while (c1 + 1 < map.cols && lineAt(r, c1 + 1)) c1++;
                     for (let cc = c0; cc <= c1; cc++) visited.add(r * map.cols + cc);
                     segments.push({ r, c0, c1 });
                 }

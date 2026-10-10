@@ -145,16 +145,34 @@ export function referenceSurfaceYAll(ctx) {
 }
 
 /**
+ * 泡のマス: 空気で、真上が「滝でない水」、真下が水か岩（マップの底より下も岩とみなす）。
+ * 棚から棚へ階段状に流れ落ちる途中の満水のセルの真下の隙間で、泡の多い水として塗る
+ */
+export function referenceFoamAll(ctx) {
+    const out = new Uint8Array(ctx.rows * ctx.cols);
+    for (let r = 1; r < ctx.rows; r++) {
+        for (let c = 0; c < ctx.cols; c++) {
+            if (ctx.isSolid(r, c) || isWater(ctx, r, c)) continue;
+            if (ctx.isSolid(r - 1, c) || !isWater(ctx, r - 1, c) || isFalling(ctx, r - 1, c)) continue;
+            if (r + 1 >= ctx.rows || ctx.isSolid(r + 1, c) || isWater(ctx, r + 1, c)) out[r * ctx.cols + c] = 1;
+        }
+    }
+    return out;
+}
+
+/**
  * 塗りの上端（前景の水を塗り始める Y、岩の背後もこれを読む）。無ければ -1。
- * 岩と滝は -1（滝は毎フレーム帯で描くので塗らない）。液面がかかっていれば液面。
+ * 岩と滝は -1（滝は毎フレーム帯で描くので塗らない）。泡のマスはタイル全体。液面がかかっていれば液面。
  * 液面の無い水（天井付き）は、満水か沈んでいればタイルの上辺、そうでなければ水量ぶん
  */
 export function referencePaintTopAll(ctx) {
     const surf = referenceSurfaceYAll(ctx);
+    const foam = referenceFoamAll(ctx);
     const out = new Int16Array(ctx.rows * ctx.cols).fill(-1);
     for (let r = 0; r < ctx.rows; r++) {
         for (let c = 0; c < ctx.cols; c++) {
             const k = r * ctx.cols + c;
+            if (foam[k]) { out[k] = r * TILE_SIZE; continue; }
             if (ctx.isSolid(r, c) || referenceKindAt(ctx, r, c) === WATER_FALL) continue;
             if (surf[k] >= 0) { out[k] = surf[k]; continue; }
             if (!isWater(ctx, r, c)) continue;

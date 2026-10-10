@@ -1221,6 +1221,10 @@ export const WATERFALL_FALL_SPEED_SCALE = 1.0;
 // 地底湖の描画。塗りは半透明（水セルは前景1枚、境界ブロックの面取り隙間は下層水で完全に同色同濃度）。
 export const WATER_FILL = 'rgba(40, 120, 200, 0.45)';
 export const WATER_BEHIND_FILL = WATER_FILL; // 境界ブロックの隙間埋め用（前景水と同一濃度）
+// 泡のマス（棚から棚へ流れ落ちる満水のセルの真下の隙間）に、水の塗りの上から散らす粒。
+// 色は滝の筋・しぶきと同じ系統（rgba(220,245,255,·)）で、筋の 0.65 より少し淡くする
+export const WATER_FOAM_COLOR = 'rgba(220, 245, 255, 0.55)';
+export const WATER_FOAM_BUBBLES = 6;           // 1マスあたりの粒の数（2px と 1px を交互）
 export const WATER_SURFACE_COLOR = 'rgba(180, 220, 255, 0.45)'; // 実機: もっと淡く（0.9 → 0.45）
 export const WATER_SURFACE_LINE_WIDTH = 1;  // 実機: 細い線（2 → 1）
 export const WATER_WAVE_AMPLITUDE = 1.5;    // 実機: 波を細かく（2.5 → 1.5）。px。当たり判定は波打たない

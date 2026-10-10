@@ -312,6 +312,32 @@ function paintTopAt(water, kind, surfaceY, cols, isSolid, r, c) {
 }
 
 /**
+ * (r, c) が泡のマスか: 空気で、真上が「滝でない水」、真下が水か岩（マップの底も岩とみなす）。
+ * kind が決まったあとに呼ぶ。
+ *
+ * 落下（4フレームに1回・最大2）は横の流れ（毎フレーム最大4）の1/8しかないので、棚から棚へ
+ * 流れ落ちる水は、満水のセルの真下がほとんどいつも空気という階段になる（落ちた水がすぐ横へ流れ去る）。
+ * 満水のセルは種別では水面なので（isFallingCell の表のルール C）、宙に浮いた水の四角が水面の線つきで
+ * 市松模様に並んで見えた（2026-10-10 実機の指摘）。その隙間を泡の多い水として塗る。
+ * 種別は変えない — 当たり判定・水しぶきなど種別の読み手は今のまま（泡のマスは空気）。
+ *
+ * 20週×撃ち抜き12回（28,800フレーム）の実測:
+ *   - 宙に浮いた満水の四角 延べ498。真下の隙間の下が水のもの 201、岩のもの 293
+ *     （棚の床に落ちた水が横へ流れ去った跡）。真下を「水か岩」にして 494 を埋める
+ *   - 真上が滝の空気（落ちる水滴と水滴の切れ目）は延べ12,480。これを泡にすると細い滝が泡の四角の
+ *     列になるので外す
+ *   - 真上が滝でない水の空気は、真上が必ず支えの無い満水のセル＝流れの途中なので、どれも数フレームで
+ *     消える。泡かどうかの入れ替わりは28,800フレームで延べ360回
+ */
+function isFoamAt(water, kind, rows, cols, isSolid, r, c) {
+    const k = r * cols + c;
+    if (r === 0 || water[k] >= MIN_WATER_MASS || isSolid(r, c)) return false;
+    const a = k - cols;
+    if (water[a] < MIN_WATER_MASS || kind[a] === WATER_FALL || isSolid(r - 1, c)) return false;
+    return r + 1 >= rows || isSolid(r + 1, c) || water[k + cols] >= MIN_WATER_MASS;
+}
+
+/**
  * 行 r のセルの塗りの上端 y のうち、描画に効く部分。読むのは自分の塗り（行 r のタイルで
  * 切り取る）と、8近傍の岩の背後の塗り（行 r-1..r+1 の岩のタイルで切り取る）なので、
  * 行 r-1 の上辺から行 r+1 の下辺までで頭打ちにする。深い水中セルの液面がはるか上で
@@ -325,7 +351,7 @@ function paintedTop(y, r) {
 }
 
 /**
- * dirty な列の kind と surfaceY（と、渡されていれば paintTopY）を作り直す。
+ * dirty な列の kind と surfaceY（と、渡されていれば paintTopY・foam）を作り直す。
  * 液面のセグメントは dirty でない列へはみ出すことがあるが、そちらの kind は
  * 既に正しい（水量が変わっていない）ので、そのまま伸ばして構わない。
  *
@@ -338,10 +364,15 @@ function paintedTop(y, r) {
  * 比べるので拾える。以前は拾えず、水圧で池の水が一気に移った後に水面の上へ平らな水の
  * 四角が残った（実機の指摘。4面 seed 30 で掘り抜くと24マス）
  *
+ * foam は泡のマス（isFoamAt）。泡のマスの塗りの上端はタイルの上辺。泡かどうかも塗りに効くので、
+ * 塗りの上端と同じく前後を比べる。泡は同じ列の上下しか読まないので、作り直した列だけで足りる
+ * （はみ出した先は液面しか変わらない）
+ *
  * @param {Int16Array|undefined} [p.paintTopY] 塗りの上端。描画しないテストでは省略できる
+ * @param {Uint8Array|undefined} [p.foam] 泡のマス（1/0）。paintTopY を渡すときは必ず一緒に渡す
  * @param {Set<number>|undefined} [p.repaint] 塗り直しの要るセル (r * cols + c) を足す先
  */
-export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, rows, cols, isSolid, dirtyCols, repaint }) {
+export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, foam, rows, cols, isSolid, dirtyCols, repaint }) {
     // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
     // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
     // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
@@ -392,17 +423,24 @@ export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, rows, cols
     // 前の値は paintTopY 自身に残っているので、上書きする前に比べるだけでよい。
     // spilled に同じセルが2度入っても、2度目は前の値と同じなので何も足さない
     const update = (k, r, c) => {
-        const top = paintTopAt(water, kind, surfaceY, cols, isSolid, r, c);
-        if (repaint && paintedTop(top, r) !== paintedTop(paintTopY[k], r)) repaint.add(k);
+        // 泡になれるのは空気のマスだけ。池の水のマスまで関数を呼ぶと作り直しが +13% になった
+        const f = water[k] === 0 && isFoamAt(water, kind, rows, cols, isSolid, r, c) ? 1 : 0;
+        const top = f ? r * TILE_SIZE : paintTopAt(water, kind, surfaceY, cols, isSolid, r, c);
+        if (repaint && (f !== foam[k] || paintedTop(top, r) !== paintedTop(paintTopY[k], r))) repaint.add(k);
         paintTopY[k] = top;
+        foam[k] = f;
     };
-    // 空気のまま（水も液面も無く、前も塗っていない）のセルは塗りの上端も -1 のままなので
-    // 関数を呼ばずに飛ばす。作り直す列の大半はこれで、近道なしだと作り直しが +50%
-    // （6シード合計の中央値 970→1,470µs）だった
+    // 空気のまま（水も液面も無く、前も塗っていない）で、真上が水でも滝でもないセルは、塗りの上端も -1、
+    // 泡でもないままなので関数を呼ばずに飛ばす。作り直す列の大半はこれで、近道なしだと作り直しが +50%
+    // （6シード合計の中央値 970→1,470µs）だった。真上の水を見ないと、真上に水が来て泡になるセルを飛ばす。
+    // 真上の水量は1つ前の周回で読んだものを持ち越す（空気のマスごとに読み直すと作り直しが +7%）
     for (const c of cols2) {
+        let wAbove = 0;
         for (let r = 0, k = c; r < rows; r++, k += cols) {
-            if (paintTopY[k] === -1 && surfaceY[k] === -1 && water[k] === 0) continue;
+            const w = water[k];
+            if (w === 0 && wAbove === 0 && paintTopY[k] === -1 && surfaceY[k] === -1) { wAbove = w; continue; }
             update(k, r, c);
+            wAbove = w;
         }
     }
     for (const k of spilled) update(k, (k / cols) | 0, k % cols);
