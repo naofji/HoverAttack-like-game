@@ -129,6 +129,48 @@ export function stepWaterPressure({ water, rows, cols, isSolid, seeds, doTransfe
             bandTop = Math.min(bandTop, Math.floor(s.take / cols));
             bandBottom = Math.max(bandBottom, ra);
         }
+
+        // 満水セルの横隣の水面。行き止まりのトンネルの先から上へ伸びる幅1の縦穴のように、
+        // 塊の端のセルが満水にならず、その真上が受け口にならない形がある — フェーズ2は均しの
+        // 余りを区間の中央から配るので、トンネルの行の不足1単位は必ず端（縦穴の真下）に残り、
+        // 7 のまま塊に入らない。真上だけから集めていた版では縦穴に1滴も上がらなかった
+        // （レビューで、トンネルの長さ・水量を振った 40/40 で再現）。
+        // 条件: 満水でない・下が岩か満水で支えられている・真上に水が無い・**その行の区間に
+        // 落ち口が無い**。最後の条件が無いと、水面より上の穴から滝で流れ落ちている途中の
+        // セル（穴の中の満ちかけのセル）まで受け口になり、フェーズ2の流れに割り込んだ
+        const putCells = new Set(surfaces.map((x) => x.put));
+        const drainOfSeg = new Map();
+        const segHasDrain = (r, c) => {
+            let s0 = c;
+            while (s0 - 1 >= 0 && !isSolid(r, s0 - 1)) s0--;
+            const key = r * cols + s0;
+            if (drainOfSeg.has(key)) return drainOfSeg.get(key);
+            let drain = false;
+            if (r + 1 < rows) {
+                for (let x = s0; x < cols && !isSolid(r, x); x++) {
+                    if (!isSolid(r + 1, x) && water[(r + 1) * cols + x] < FULL) { drain = true; break; }
+                }
+            }
+            drainOfSeg.set(key, drain);
+            return drain;
+        };
+        // 塊のセルは毎フレーム全部見るので、ほとんどの隣（満水か岩）を最初の1回の比較で落とす
+        const addSide = (k, r, cn) => {
+            const n = r * cols + cn;
+            if (water[n] >= FULL || isSolid(r, cn) || putCells.has(n)) return;
+            if (!(r + 1 >= rows || isSolid(r + 1, cn) || water[n + cols] === FULL)) return;
+            if (r > 0 && !isSolid(r - 1, cn) && water[n - cols] > 0) return;
+            if (segHasDrain(r, cn)) return;
+            putCells.add(n);
+            surfaces.push({ node: k, take: n, put: n, H: (rows - 1 - r) * FULL + water[n] });
+            bandTop = Math.min(bandTop, r);
+            bandBottom = Math.max(bandBottom, r);
+        };
+        for (const k of nodes) {
+            const r = Math.floor(k / cols), c = k % cols;
+            if (c > 0) addSide(k, r, c - 1);
+            if (c + 1 < cols) addSide(k, r, c + 1);
+        }
         if (surfaces.length < 2) return 0;
 
         // ---- 水面を池に分ける ----
@@ -142,10 +184,9 @@ export function stepWaterPressure({ water, rows, cols, isSolid, seeds, doTransfe
         // 空気でつながって同じ池にされ、水面より下を掘り抜いても運ばれなかった。
         // 洞窟の上の方の空気まで含めると、別々の部屋の池が天井の上でつながるのも同じ理由。
         //
-        // 満水の水面（入れ先が範囲の上にはみ出す）は水のセルから辿り始める。満水どうしの
-        // 水面は互いにつながらず別々の池に見えるが、高さが同じなので運ばれない。1回運べば
-        // 満ちかけになって空気の塗り広げでまとまる（横に隣り合う水面をつなぐ処理も試したが、
-        // 効くのが最初の1回だけで結果を変えなかったので置いていない）
+        // 満水の水面（入れ先が範囲の上にはみ出す）は水のセルから辿り始める。満水のセルは
+        // 塗り広げで通れないが、辿っている途中で別の水面の出発点（隣の満水の水面のセル）に
+        // 行き当たったらその水面とつなぐので、横に並んだ満水の水面は1つの池にまとまる
         //
         // 試作では「水面の行の区間（壁で区切られた横の並び）」で池を分けたが、ちょうど満水の
         // 列と満ちかけの列、しぶきで乱れた水面などが別の池に見え、水面より上の穴から滝で
