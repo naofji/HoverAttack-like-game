@@ -18,6 +18,7 @@ function primeWaterCache(map) {
     const n = map.rows * map.cols;
     map.waterKind = new Uint8Array(n);
     map.waterSurfaceY = new Int16Array(n).fill(-1);
+    map.waterPaintTopY = new Int16Array(n).fill(-1);
     map._waterIsSolid = null;
     map.dirtyWaterCols = new Set([...Array(map.cols).keys()]);
     map._rebuildWaterCacheIfDirty();
@@ -377,7 +378,6 @@ test('Map.damageBlock & water.js: 水に隣接するブロックを破壊した�
         onBlockDestroyed(r, c) {
             if (r === 5 && c === 3) clearedBehind = true;
         },
-        invalidate() {},
     };
     game.env = { renderer };
 

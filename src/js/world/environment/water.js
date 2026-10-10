@@ -7,12 +7,11 @@
 // sin で上下させる。当たり判定は波打たない（水面の行は固定）。
 // しぶきが落ちた場所は波紋として一時的に振幅を足し、毎フレーム減衰する。
 
-import { isSubmergedFromAbove } from '../waterQuery.js';
 import { collectWaterfallRuns } from './waterfallRuns.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
-    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN, MAX_WATER_MASS,
+    WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
     WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
 } from '../../utils/Constants.js';
 
@@ -45,47 +44,6 @@ export function drawSurfaceLine(ctx, x0, x1, surfaceY, t, ripples) {
 }
 
 /**
- * 液面を持たない水セル（天井付き＝水中セル、または浮いた岩の真下）の塗りの上端 Y。
- * 水でなければ -1。前景の塗り（paint）と岩の背後（waterTopY）の両方がこれを読む。
- *
- * 満水ならタイル全体。満ちていないなら実際の水量ぶんだけ浅く塗る。常にタイル
- * 全体で塗ると、浅い湖に浮いた岩があるとき、その真下だけ水面より高く塗られて
- * 「水面が岩に吸い付いて」見える（実機の指摘）。
- * ただし**沈んでいる**セル（覆う岩の上にも水がある）はタイル全体が水の中。
- * 水量の量子化で 8 に1つ足りないだけのことが多く、水量ぶんだけ塗ると岩の真下に
- * 細い透明な帯が残る（黒く見える）。
- *
- * 以前はこの判定を paint() と waterTopY() に別々に書いていて、waterTopY のほうに
- * 沈み判定が無かった。沈んだ水量7のセルの隣の岩は、塗りより 2px 低い位置から
- * 背後の水が始まり、面取りの角が黒く抜けていた。
- *
- * 残っている穴: 岩に囲まれた1マスの横穴が湖の深さにあると、水量が 7 で止まった
- * まま「上はずっと岩＝沈んでいない」と判定され、タイルの上に 2px の透明な帯が
- * 残る（実測: 3000フレームで 8px ぶん1か所）。直すには液面を横方向にも塗り広げる
- * 必要があり、列単位の dirty 管理を作り替えることになるので見送った。
- */
-function ceiledWaterTopY(map, r, c) {
-    if (!map.isWater(r, c)) return -1;
-    const mass = map.water[r * map.cols + c];
-    const bottomY = (r + 1) * TILE_SIZE;
-    if (mass >= MAX_WATER_MASS || isSubmergedFromAbove(map.water, (rr, cc) => map.isSolid(rr, cc), map.cols, r, c)) {
-        return r * TILE_SIZE;
-    }
-    return bottomY - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
-}
-
-/** 水セル (r, c) の塗りの上端 Y（液面がタイルより上にあれば液面そのもの）。水でなければ -1。 */
-function waterTopY(map, r, c) {
-    if (r < 0 || r >= map.rows || c < 0 || c >= map.cols) return -1;
-    if (map.isSolid(r, c)) return -1;
-    // 滝は細い帯でしか塗らないので、岩の背後を埋める根拠にはしない
-    if (map.isWaterfallCell(r, c)) return -1;
-    const level = map.waterSurfaceY[r * map.cols + c];
-    if (level >= 0) return level;
-    return ceiledWaterTopY(map, r, c);
-}
-
-/**
  * 岩ブロック (r, c) の背後に水を敷き始める Y。敷く必要が無ければ -1。
  *
  * 岩は面取り（bevel）で角が削られるので、水に面した角は背景が透けて**黒く抜ける**。
@@ -98,13 +56,16 @@ function waterTopY(map, r, c) {
  *
  * 隣の水の**液面**を見て、そこから下だけ敷くようにする。水際の岩は液面から下だけが
  * 青くなり、液面より上の面取りは背景のまま＝水の外なので、これが正しい見え方になる。
+ * 隣の塗りの上端は前景の塗りと同じ値（map.getWaterPaintTopY）を読む。以前は前景と背後で
+ * 判定を別々に書いていて、背後の側に沈み判定が無く、面取りの角が 2px 黒く抜けた。
+ * 滝の帯は細いので、滝のセルは -1（埋める根拠にしない）
  */
 export function waterBackdropTopY(map, r, c) {
     let top = Infinity;
     for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
             if (dr === 0 && dc === 0) continue;
-            const y = waterTopY(map, r + dr, c + dc);
+            const y = map.getWaterPaintTopY(r + dr, c + dc);
             if (y >= 0 && y < top) top = y;
         }
     }
@@ -114,21 +75,19 @@ export function waterBackdropTopY(map, r, c) {
 }
 
 /**
- * 水セルに8近傍で隣接する岩ブロックセルを収集する。
+ * 塗りのあるセルに8近傍で隣接する岩ブロックセルを収集する。
  * 実際に敷くかどうか（と、どの高さから敷くか）は waterBackdropTopY が決めるので、
  * ここは候補を漏れなく集めるだけ。
  */
-export function collectBorderBlocks(map, waterCells) {
+export function collectBorderBlocks(map, cells) {
     const border = new Map();
-    for (const [r, c] of waterCells) {
-        if (!map.isWater(r, c)) continue;
+    for (const [r, c] of cells) {
         for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
                 if (dr === 0 && dc === 0) continue;
                 const nr = r + dr;
                 const nc = c + dc;
                 if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
-                if (map.isWater(nr, nc)) continue;
                 if (map.isSolid(nr, nc) && waterBackdropTopY(map, nr, nc) >= 0) {
                     border.set(nr * map.cols + nc, [nr, nc]);
                 }
@@ -153,42 +112,25 @@ export function createWaterRenderer(env) {
     behindCache.height = map.height;
     const bctx = behindCache.getContext('2d');
 
-    // invalidate は同じセルで何度も呼ばれ得る（クレーターの再通知）ので、
-    // 塗る前に矩形をクリアしてから塗り直す。そうしないと半透明の水が
-    // 重ね塗りで濃くなってしまう
+    // 同じセルを何度も塗り直すので、塗る前に矩形をクリアしてから塗る。
+    // そうしないと半透明の水が重ね塗りで濃くなってしまう
     const paint = (cells) => {
         cctx.fillStyle = WATER_FILL;
         for (const [r, c] of cells) {
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
+            // 塗りの上端は waterQuery が焼いた値（液面、または天井付きの水の高さ）。タイルの中で
+            // 切り取るだけにする。液面はタイルより上にあることがあり、そのまま使わないと、
+            // ひとつの水塊なのに列ごとに塗りの上端がタイルの上辺で頭打ちになって段々になる
+            // （実機の指摘。線 73px に対し塗り 80px だった）。水量が 0 のセルでも液面が
+            // かかっていれば塗る（量子化のせいで水量が届いていないだけで、水面はそこにある）。
+            // 滝は -1 なのでここでは焼かない。1本の流れとして上端・下端・横位置が決まる
+            // （waterfallRuns.js）ので、drawOverWorld で毎フレーム描く。滝が落ちてくる
+            // 水たまりでは、タイルの上辺から液面までの隙間を滝の帯が埋める（describeFoot）
+            const level = map.getWaterPaintTopY(r, c);
+            if (level < 0) continue;
             const bottomY = (r + 1) * TILE_SIZE;
-            // 滝はここでは焼かない。1本の流れとして上端・下端・横位置が決まるので
-            // （waterfallRuns.js）、区間の遠くのセルが変わるだけで見た目が変わる。
-            // セル単位で塗り直すキャッシュには向かないので、drawOverWorld で毎フレーム描く
-            if (map.isWaterfallCell(r, c)) continue;
-
-            // 液面（水塊にひとつ）が分かっているセルは、必ずその液面から下を塗る。
-            // タイルの中で切り取るのは clamp だけ。こうしないと、ひとつの水塊
-            // なのに列ごとに塗りの上端がタイルの上辺で頭打ちになり、線は平らなのに
-            // 塗りが段々になる（実機の指摘。線 73px に対し塗り 80px だった）。
-            // 水量が 0 のセルでも液面がかかっていれば塗る（量子化のせいで水量が
-            // 届いていないだけで、水面はそこにある）
-            const level = map.waterSurfaceY[r * map.cols + c];
-            if (level >= 0) {
-                const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, Math.round(level)));
-                if (bottomY - topY > 0) {
-                    cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
-                }
-                // 滝が落ちてくる水たまりでは、タイルの上辺から液面までの隙間を滝の帯が
-                // 埋める（滝の下端を液面まで伸ばす。waterfallRuns.js の describeFoot）
-                continue;
-            }
-
-            // 液面を持たない水＝天井付き（水中セル、または浮いた岩の真下）
-            const topY = ceiledWaterTopY(map, r, c);
-            if (topY >= 0 && bottomY - topY > 0) {
-                cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
-            }
+            const topY = Math.max(r * TILE_SIZE, Math.min(bottomY, level));
+            if (bottomY - topY > 0) cctx.fillRect(c * TILE_SIZE, topY, TILE_SIZE, bottomY - topY);
         }
     };
 
@@ -203,29 +145,16 @@ export function createWaterRenderer(env) {
         }
     };
 
-    // 水セルに加えて、その真上のセルも塗る対象にする。液面が水量の届いていない
-    // タイルまで上がっていることがあり（水塊の液面はひとつ）、そこを塗らないと
-    // 塗りの上端が線に届かない
-    const withCellsAbove = (cells) => {
-        const keys = new Set();
-        const out = [];
-        for (const [r, c] of cells) {
-            for (const nr of [r - 1, r]) {
-                if (nr < 0 || nr >= map.rows) continue;
-                const k = nr * map.cols + c;
-                if (keys.has(k)) continue;
-                keys.add(k);
-                out.push([nr, c]);
-            }
-        }
-        return out;
-    };
-
     // 生成直後の作り直しで溜まった分は、この直後に全部塗るので捨てる
     map.takeWaterRepaintCells();
-    paint(withCellsAbove(map.waterCells));
-    const initialBorder = collectBorderBlocks(map, map.waterCells);
-    paintBehind(initialBorder);
+    const initialCells = [];
+    for (let r = 0; r < map.rows; r++) {
+        for (let c = 0; c < map.cols; c++) {
+            if (map.getWaterPaintTopY(r, c) >= 0) initialCells.push([r, c]);
+        }
+    }
+    paint(initialCells);
+    paintBehind(collectBorderBlocks(map, initialCells));
 
     // 塗り直す: 前景の水と、そのまわりの岩の背後の水
     const repaint = (repaintList) => {
@@ -246,10 +175,7 @@ export function createWaterRenderer(env) {
                     const nr = r + dr;
                     const nc = c + dc;
                     if (nr < 0 || nr >= map.rows || nc < 0 || nc >= map.cols) continue;
-                    if (map.isWater(nr, nc)) continue;
-                    if (map.isSolid(nr, nc)) {
-                        borderCandidateKeys.add(nr * map.cols + nc);
-                    }
+                    if (map.isSolid(nr, nc)) borderCandidateKeys.add(nr * map.cols + nc);
                 }
             }
         }
@@ -264,9 +190,11 @@ export function createWaterRenderer(env) {
         paintBehind(borderToRepaint);
     };
 
-    // 水量が変わっていないのに塗りが変わったセル（液面の平均が動いた・付いた・消えた）を
-    // map から引き取って塗り直す。invalidate は水量が変わったセルのまわりしか塗らないので、
-    // 区間の平均で塗っている遠くの空セルが古いまま残った（rebuildWaterCache の repaint の説明）
+    // 塗りの上端が変わったセルを map から引き取って塗り直す。塗り直しの経路はこれ1本だけ。
+    // 以前は水量が変わったセルの上下と同じ行の水面を塗り直す invalidate があり、どのセルの
+    // 見た目が変わるかを描画側で推測していた。液面の平均が遠くまで動く形などを取りこぼし、
+    // 古い塗りの不具合が3回出たので、変わったかどうかは焼いた値の前後で map 側が決める
+    // （rebuildWaterCache の paintTopY の説明）
     const syncWithMap = () => {
         const cells = map.takeWaterRepaintCells();
         if (cells.length > 0) repaint(cells);
@@ -295,36 +223,6 @@ export function createWaterRenderer(env) {
             // ブロックが破壊されて空間になったので、下層水および前景水キャッシュを必ず消去する
             bctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             cctx.clearRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        },
-        invalidate(cells) {
-            // 対象セルおよびその上下セルを漏れなく再描画（境目の高さ変化に対応）
-            const toRepaint = new Set();
-            for (const [r, c] of cells) {
-                for (let dr = -1; dr <= 1; dr++) {
-                    const nr = r + dr;
-                    if (nr >= 0 && nr < map.rows) {
-                        toRepaint.add(nr * map.cols + c);
-                    }
-                }
-                // 水面セルなら、同じ行の水面が続く範囲も塗り直す。液面はセグメント
-                // 全体の平均なので、1セルの水量が変わると仲間全員の見た目が変わる
-                for (const nr of [r - 1, r, r + 1]) {
-                    if (nr < 0 || nr >= map.rows) continue;
-                    if (!map.isWaterSurface(nr, c)) continue;
-                    toRepaint.add(nr * map.cols + c);
-                    for (let cc = c - 1; cc >= 0 && map.isWaterSurface(nr, cc); cc--) {
-                        toRepaint.add(nr * map.cols + cc);
-                    }
-                    for (let cc = c + 1; cc < map.cols && map.isWaterSurface(nr, cc); cc++) {
-                        toRepaint.add(nr * map.cols + cc);
-                    }
-                }
-            }
-            const repaintList = [];
-            for (const key of toRepaint) {
-                repaintList.push([Math.floor(key / map.cols), key % map.cols]);
-            }
-            repaint(repaintList);
         },
         drawBehindTerrain(ctx, camX, camY) {
             syncWithMap();

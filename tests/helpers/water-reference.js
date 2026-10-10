@@ -143,3 +143,26 @@ function surfaceGroups(ctx) {
 export function referenceSurfaceYAll(ctx) {
     return surfaceGroups(ctx);
 }
+
+/**
+ * 塗りの上端（前景の水を塗り始める Y、岩の背後もこれを読む）。無ければ -1。
+ * 岩と滝は -1（滝は毎フレーム帯で描くので塗らない）。液面がかかっていれば液面。
+ * 液面の無い水（天井付き）は、満水か沈んでいればタイルの上辺、そうでなければ水量ぶん
+ */
+export function referencePaintTopAll(ctx) {
+    const surf = referenceSurfaceYAll(ctx);
+    const out = new Int16Array(ctx.rows * ctx.cols).fill(-1);
+    for (let r = 0; r < ctx.rows; r++) {
+        for (let c = 0; c < ctx.cols; c++) {
+            const k = r * ctx.cols + c;
+            if (ctx.isSolid(r, c) || referenceKindAt(ctx, r, c) === WATER_FALL) continue;
+            if (surf[k] >= 0) { out[k] = surf[k]; continue; }
+            if (!isWater(ctx, r, c)) continue;
+            const mass = ctx.water[k];
+            out[k] = (mass >= MAX_WATER_MASS || coveredByWaterAbove(ctx, r, c))
+                ? r * TILE_SIZE
+                : (r + 1) * TILE_SIZE - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+        }
+    }
+    return out;
+}

@@ -136,6 +136,7 @@ export class Map {
         this.water = null;          // Uint8Array(rows*cols)。0..MAX_WATER_MASS。水の無い面は null のまま
         this.waterKind = null;      // Uint8Array。0=水なし 1=水中 2=水面 3=滝。water[] から導く要約
         this.waterSurfaceY = null;  // Int16Array。水面セルの液面 Y(px)。それ以外 -1
+        this.waterPaintTopY = null; // Int16Array。塗りの上端 Y(px)。塗らないセルは -1（waterQuery の paintTopAt）
         this.dirtyWaterCols = new Set(); // 作り直しが要る列。問い合わせの手前でまとめて処理する
         this.waterRepaintCells = null;   // Set。作り直しで塗りが変わったセル。描画キャッシュが描く前に引き取る
         this.waterCells = [];       // 生成直後の一覧（決定性テストと描画キャッシュの初期化用）
@@ -393,6 +394,7 @@ export class Map {
         this.water = new Uint8Array(this.rows * this.cols);
         this.waterKind = new Uint8Array(this.rows * this.cols);
         this.waterSurfaceY = new Int16Array(this.rows * this.cols).fill(-1);
+        this.waterPaintTopY = new Int16Array(this.rows * this.cols).fill(-1);
         this.dirtyWaterCols = new Set();
         this.waterRepaintCells = new Set();
         this.activeWaterCells = new Set();
@@ -1102,11 +1104,15 @@ export class Map {
         return destroyed;
     }
 
-    /** 流入で水が増えたとき。派生キャッシュを dirty にし、描画キャッシュ（環境側）に伝える。 */
+    /**
+     * 水量が変わったとき。派生キャッシュを dirty にする。
+     * 描画キャッシュには直接知らせない — 描く直前に takeWaterRepaintCells で、作り直しで
+     * 塗りの上端が変わったセルを引き取る。以前はここで描画側の invalidate を呼び、
+     * 描画側が「水量が変わったセルの上下と同じ行の水面」を塗り直していたが、液面の平均が
+     * 遠くまで動く形や、厚い岩の上の水で沈み判定が変わる形を取りこぼした
+     */
     onWaterChanged(cells) {
         this._markWaterDirty(cells);
-        const env = this.game && this.game.env;
-        if (env && env.renderer && env.renderer.invalidate) env.renderer.invalidate(cells);
     }
 
     /** 変化したセルの「列」を覚えておく。作り直しは列単位で行う */
@@ -1128,6 +1134,7 @@ export class Map {
             water: this.water,
             kind: this.waterKind,
             surfaceY: this.waterSurfaceY,
+            paintTopY: this.waterPaintTopY,
             rows: this.rows,
             cols: this.cols,
             isSolid: this._waterSolidFn(),
@@ -1149,6 +1156,18 @@ export class Map {
         for (const k of this.waterRepaintCells) out.push([Math.floor(k / this.cols), k % this.cols]);
         this.waterRepaintCells.clear();
         return out;
+    }
+
+    /**
+     * セル (r, c) の塗りの上端 Y(px)。塗らないセル・範囲外は -1。描画キャッシュが読む。
+     * 水のある面で waterPaintTopY が無いときに -1 で黙らないのは、それで水が1枚も塗られない
+     * まま通ってしまうため（手で派生キャッシュを組むテストで実際に起きた）
+     */
+    getWaterPaintTopY(r, c) {
+        if (!this.water) return -1;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return -1;
+        this._rebuildWaterCacheIfDirty();
+        return this.waterPaintTopY[r * this.cols + c];
     }
 
     /** 水の純関数群に渡す isSolid。毎フレーム作り直さないよう1本を使い回す */

@@ -110,20 +110,14 @@ test('collectBorderBlocks は水に接する岩を集めるが、液面より上
 test('waterBackdropTopY は隣の水の液面から下だけを埋める（水際の岩が黒く抜けない）', async () => {
   const { waterBackdropTopY } = await import('../src/js/world/environment/water.js');
   const { TILE_SIZE } = await import('../src/js/utils/Constants.js');
-  // 4x4。列2が水で、液面は行1の途中 y=26（行1のタイルは 16..32）
-  const cols = 4;
-  const surfaceY = new Int16Array(16).fill(-1);
-  surfaceY[1 * cols + 2] = 26;
-  surfaceY[2 * cols + 2] = 26;
-  const water = new Uint8Array(16);
-  water[1 * cols + 2] = 3;
-  water[2 * cols + 2] = 8;
-  const map = {
-    rows: 4, cols, water, waterSurfaceY: surfaceY,
-    isWater(r, c) { return water[r * cols + c] > 0; },
-    isSolid(r, c) { return c !== 2; },
-    isWaterfallCell() { return false; },
-  };
+  // 4x4。列2が水で、液面は行1の途中 y=26（行1のタイルは 16..32。水量3 → 32 - 3/8×16）
+  const map = makeWaterMap(`
+    ##.#
+    ##3#
+    ##8#
+    ##.#
+  `);
+  assert.equal(map.waterSurfaceY[1 * map.cols + 2], 26, '前提: 液面は y=26');
   // 水際の岩 (1,1): 液面 26 から下だけ。以前はここが「隣が満水でない」として
   // 1ドットも塗られず、面取りの角が黒く抜けていた（実機の指摘）
   assert.equal(waterBackdropTopY(map, 1, 1), 26);
@@ -137,20 +131,16 @@ test('waterBackdropTopY は隣の水の液面から下だけを埋める（水�
 
 test('滝の帯は岩の背後を埋める根拠にしない（帯は細いので周りは水ではない）', async () => {
   const { waterBackdropTopY } = await import('../src/js/world/environment/water.js');
-  const cols = 3;
-  const water = new Uint8Array(9);
-  water[1 * cols + 1] = 2;
-  const map = {
-    rows: 3, cols, water, waterSurfaceY: new Int16Array(9).fill(-1),
-    isWater(r, c) { return water[r * cols + c] > 0; },
-    isSolid(r, c) { return c !== 1; },
-    isWaterfallCell(r, c) { return r === 1 && c === 1; },
-  };
+  const map = makeWaterMap(`
+    #.#
+    #2#
+    #.#
+  `);
+  assert.ok(map.isWaterfallCell(1, 1), '前提: (1,1) は滝');
   assert.equal(waterBackdropTopY(map, 1, 0), -1);
 });
 
-test('invalidate clears behindCache when adjacent water drops or disappears', async () => {
-  const { createWaterRenderer } = await import('../src/js/world/environment/water.js');
+test('隣の水が抜けたら、岩の背後の水も消える（本番と同じく onWaterChanged → 描画で塗り直す）', async () => {
   const { MAX_WATER_MASS } = await import('../src/js/utils/Constants.js');
   // 3x3 マップ: 中央 (1,1) だけが満水で、周りは全部岩
   const map = makeWaterMap(`
@@ -158,61 +148,15 @@ test('invalidate clears behindCache when adjacent water drops or disappears', as
     #${MAX_WATER_MASS}#
     ###
   `);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  assert.equal(behind.get('1,0'), TILE_SIZE, '前提: 岩 (1,0) の背後はタイル全体に敷いてある');
 
-  const fakeEnv = { game: { map } };
-  const clearRectCalls = [];
-  const fillRectCalls = [];
-  const origCreateElement = document.createElement;
-  document.createElement = function(tag) {
-    const el = origCreateElement.call(document, tag);
-    if (tag === 'canvas') {
-      const origGetContext = el.getContext;
-      el.getContext = function(type) {
-        const ctx = origGetContext.call(el, type);
-        const origClear = ctx.clearRect;
-        const origFill = ctx.fillRect;
-        ctx.clearRect = function(...args) {
-          clearRectCalls.push(args);
-          return origClear.apply(ctx, args);
-        };
-        ctx.fillRect = function(...args) {
-          fillRectCalls.push(args);
-          return origFill.apply(ctx, args);
-        };
-        return ctx;
-      };
-    }
-    return el;
-  };
-
-  let renderer;
-  try {
-    renderer = createWaterRenderer(fakeEnv);
-  } finally {
-    document.createElement = origCreateElement;
-  }
-
-  // 初期化時の呼び出しをリセット
-  clearRectCalls.length = 0;
-  fillRectCalls.length = 0;
-
-  // 今、(1,1) の水が抜けて水位が 0 になったとする（本番では onWaterChanged が
-  // キャッシュを dirty にしてから invalidate を呼ぶので、その順を再現する）
   map.water[1 * 3 + 1] = 0;
-  map.refresh();
-
-  // invalidate を呼び出す
-  renderer.invalidate([[1, 1]]);
-
-  // invalidate で、岩ブロック (1,0) (x=0, y=16) および (0,0), (0,1), etc. の背後が clearRect されること
-  const cleared10 = clearRectCalls.some(([x, y, w, h]) => x === 0 && y === 16 && w === 16 && h === 16);
-  assert.equal(cleared10, true, '岩ブロック (1,0) の背後が clearRect されること');
-
-  // 水位が 0 になり周囲に満水ブロックがないので、(1,0) に fillRect（下層水の再描画）は呼ばれないこと
-  const filled10 = fillRectCalls.some(([x, y, w, h]) => x === 0 && y === 16 && w === 16 && h === 16);
-  assert.equal(filled10, false, '岩ブロック (1,0) に下層水が再描画されないこと');
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[1, 1]]);
+  assert.equal(behind.has('1,0'), false, '岩 (1,0) の背後の水が消える');
+  assert.equal(fore.has('1,1'), false, '(1,1) の前景の水が消える');
 });
-
 
 test('水塊の塗りの上端は、どの列でも水面の線と一致する（塗りが段々にならない）', async () => {
   // 実機のスクリーンショットの指摘。液面をひとつに揃えても、塗りが各セルの
@@ -413,12 +357,24 @@ async function rendererWithTops(map) {
 
 /**
  * 水量を変えたセルだけを本番と同じく onWaterChanged で知らせ、描画を1回通したあとの
- * キャッシュが、同じ水の状態を最初から塗ったものと一致することを確かめる
+ * キャッシュが、同じ水の状態を最初から塗ったものと一致することを確かめる。
+ * 最初から塗る前に全列を作り直す。差分で作り直した塗りの上端（waterPaintTopY）が古いと、
+ * 最初から塗る描画も同じ古い値を読んで一致してしまい、取りこぼしが見えない
+ * （液面のはみ出した先を計算し直さない壊し方で、このテスト群が1本も落ちなかった）
  */
 async function assertRepaintMatchesFresh(map, renderer, fore, behind, changedCells) {
   map.onWaterChanged(changedCells);
   renderer.drawBehindTerrain(makeFakeCtx(), 0, 0);
   renderer.drawOverWorld(makeFakeCtx(), 0, 0);
+  const incremental = Int16Array.from(map.waterPaintTopY);
+  map.refresh();
+  const staleTops = [];
+  for (let k = 0; k < incremental.length; k++) {
+    if (incremental[k] !== map.waterPaintTopY[k]) {
+      staleTops.push(`${Math.floor(k / map.cols)},${k % map.cols}: ${incremental[k]} / ${map.waterPaintTopY[k]}`);
+    }
+  }
+  assert.deepEqual(staleTops, [], '塗りの上端が全列作り直しと食い違う（差分 / 全列）');
   const fresh = await rendererWithTops(map);
   const diff = (a, b) => [...new Set([...a.keys(), ...b.keys()])]
     .filter((k) => a.get(k) !== b.get(k)).map((k) => `${k}: ${a.get(k)} / ${b.get(k)}`);
@@ -495,4 +451,25 @@ test('1つ下の行の水の液面が岩の行まで上がっているとき、�
   map.water[2 * map.cols + 4] = 4;
   await assertRepaintMatchesFresh(map, renderer, fore, behind, [[2, 4]]);
   assert.notEqual(map.waterSurfaceY[3 * map.cols + 1], before, '前提: 液面が動いた');
+});
+
+test('厚い岩の上の水が減って沈んでいなくなったら、岩の下の天井付きの水も水量ぶんの高さに塗り直す', async () => {
+  // (3,1) は岩2段の下の水量6の横穴。岩の上 (0,1) が満水のあいだは「沈んでいる」のでタイル全体を
+  // 塗る（isSubmergedFromAbove）。上の水が2に減ると沈んでいなくなり、水量ぶん（下から12px）に
+  // 変わる。種別（水中）も液面（無し）も変わらないので、種別と液面の変化だけを見る塗り直しでは
+  // 拾えず、水量が変わったセルの上下1行だけを塗る invalidate も岩2段の下には届かなかった
+  const map = makeWaterMap(`
+    #8#
+    ###
+    ###
+    #6#
+    ###
+  `);
+  const { renderer, fore, behind } = await rendererWithTops(map);
+  map.game = { env: { renderer } };
+  assert.equal(fore.get('3,1'), 3 * TILE_SIZE, '前提: 沈んでいるあいだはタイル全体を塗る');
+
+  map.water[0 * map.cols + 1] = 2;
+  await assertRepaintMatchesFresh(map, renderer, fore, behind, [[0, 1]]);
+  assert.equal(fore.get('3,1'), 4 * TILE_SIZE - 12, '水量6ぶんの高さに塗り直される');
 });

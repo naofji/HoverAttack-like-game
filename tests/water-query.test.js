@@ -141,7 +141,7 @@ test('滝のセルと水なしのセルの surfaceY は -1', () => {
 // 導かないためにファイルを分けている。
 // ------------------------------------------------------------------
 
-import { referenceKindAt, referenceSurfaceYAll } from './helpers/water-reference.js';
+import { referenceKindAt, referenceSurfaceYAll, referencePaintTopAll } from './helpers/water-reference.js';
 import { stepWaterSimulation } from '../src/js/world/waterSimulation.js';
 
 /** 種を決めた線形合同法。node --test に乱数を持ち込まないため */
@@ -175,12 +175,14 @@ function randomWorld(seed) {
 function buildCache(ctx) {
     const kind = new Uint8Array(ctx.rows * ctx.cols);
     const surfaceY = new Int16Array(ctx.rows * ctx.cols).fill(-1);
-    rebuildWaterCache({ ...ctx, kind, surfaceY, dirtyCols: [...Array(ctx.cols).keys()] });
-    return { kind, surfaceY };
+    const paintTopY = new Int16Array(ctx.rows * ctx.cols).fill(-1);
+    rebuildWaterCache({ ...ctx, kind, surfaceY, paintTopY, dirtyCols: [...Array(ctx.cols).keys()] });
+    return { kind, surfaceY, paintTopY };
 }
 
 function assertMatchesReference(ctx, cache, label) {
     const refY = referenceSurfaceYAll(ctx);
+    const refTop = referencePaintTopAll(ctx);
     for (let r = 0; r < ctx.rows; r++) {
         for (let c = 0; c < ctx.cols; c++) {
             const k = r * ctx.cols + c;
@@ -188,6 +190,8 @@ function assertMatchesReference(ctx, cache, label) {
                 `${label}: kind が (${r},${c}) で食い違う`);
             assert.equal(cache.surfaceY[k], refY[k],
                 `${label}: surfaceY が (${r},${c}) で食い違う`);
+            assert.equal(cache.paintTopY[k], refTop[k],
+                `${label}: paintTopY が (${r},${c}) で食い違う`);
         }
     }
 }
@@ -215,7 +219,7 @@ test('水を動かしたあとも、変化した列だけ作り直せば参照�
             active = res.nextActiveCells;
             const dirty = new Set(res.changedCells.map(([, c]) => c));
             rebuildWaterCache({
-                ...ctx, kind: cache.kind, surfaceY: cache.surfaceY, dirtyCols: dirty,
+                ...ctx, kind: cache.kind, surfaceY: cache.surfaceY, paintTopY: cache.paintTopY, dirtyCols: dirty,
             });
             assertMatchesReference(ctx, cache, `seed ${seed} step ${step}`);
         }

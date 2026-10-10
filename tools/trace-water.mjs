@@ -8,8 +8,9 @@
 //
 // 実物の Map を生成し、実物の描画（createWaterRenderer）を game.env.renderer に
 // 配線したうえで、水源を流しながら一定間隔で水辺のブロックを爆破する。
-// 配線を再現しないと Map.onWaterChanged() が invalidate を呼ばず、描画の差を
+// 配線を再現しないとブロック破壊で onBlockDestroyed が呼ばれず、描画の差を
 // 取りこぼす（memory: hoverattack-waterfall-zigzag-gaps の「診断で踏んだ罠」）。
+// 水の canvas はチェックポイントの drawOverWorld で map から塗り直しを引き取る
 //
 // 記録するのは次の指紋（SHA-1）:
 //   state  … water[] / waterKind / waterSurfaceY / activeWaterCells

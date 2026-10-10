@@ -8,7 +8,7 @@
 //   node tools/render-water-scene.mjs --list                        # 水源の位置を出す
 //
 // 実物の Map を生成し、実物の描画（createWaterRenderer）を game.env.renderer に配線して
-// 回す（配線しないと invalidate が呼ばれず、水の canvas が古いまま）。水の canvas は
+// 回す（配線しないとブロック破壊の onBlockDestroyed が呼ばれず、水の canvas が古いまま）。水の canvas は
 // 本物と同じく1枚の大きな絵に部分的に塗り重ねるので、画素を持たせて再現する。
 // 地形はタイルを1色で塗るだけ（面取りは再現しない）。
 // 描けるのは fillRect / clearRect / drawImage / 折れ線の stroke だけ。

@@ -126,21 +126,19 @@ function rowSegmentHasExposedWater(water, isSolid, r, c, cols) {
  * 水面かどうかは直上のセルの種別を読むので、この向きでなければならない。
  * @returns {Array<number>} この列で見つかった水面セルの行
  */
-export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, touch = null }) {
+export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c }) {
     const surfaceRows = [];
     for (let r = 0; r < rows; r++) {
         const k = r * cols + c;
         const mass = water[k];
 
         if (mass < MIN_WATER_MASS) {
-            if (touch && (kind[k] !== WATER_NONE || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_NONE;
             surfaceY[k] = -1;
             continue;
         }
 
         if (isFallingCell(water, rows, cols, isSolid, r, c)) {
-            if (touch && (kind[k] !== WATER_FALL || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_FALL;
             surfaceY[k] = -1;
             continue;
@@ -175,11 +173,9 @@ export function classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid
         }
 
         if (isSurface) {
-            if (touch && kind[k] !== WATER_SURFACE) touch(k);
             kind[k] = WATER_SURFACE;
             surfaceRows.push(r);
         } else {
-            if (touch && (kind[k] !== WATER_BODY || surfaceY[k] !== -1)) touch(k);
             kind[k] = WATER_BODY;
             surfaceY[k] = -1;
         }
@@ -219,7 +215,7 @@ function sameBody(water, cols, r1, c1, r2, c2) {
  * 変わりうる。
  *
  * @param {function(number): void|null} [p.touch] 渡されたら、surfaceY の値を変える直前に
- *   そのセルで呼ぶ（rebuildWaterCache が塗り直しの要るセルを拾うため）
+ *   そのセルで呼ぶ（rebuildWaterCache が、作り直した列の外で液面が変わったセルを拾うため）
  * @returns {Array<[number, number]>} かたまりに含まれるセルの [行, 列]
  */
 export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid, r, c, touch = null }) {
@@ -283,7 +279,40 @@ export function levelSurfaceSegment({ water, kind, surfaceY, rows, cols, isSolid
 }
 
 /**
- * 行 r のセルの液面 y のうち、描画に効く部分。液面を読むのは自分の塗り（行 r のタイルで
+ * セル (r, c) の塗りの上端 Y（前景の水をここから下へ塗る。岩の背後もこれを読む）。無ければ -1。
+ * kind・surfaceY が決まったあとに呼ぶ。
+ *
+ * - 岩・滝: -1。滝は1本の流れとして毎フレーム帯で描く（waterfallRuns.js）ので塗らないし、
+ *   帯は細いので岩の背後を埋める根拠にもしない
+ * - 液面がかかっている: 液面そのもの（タイルより上でもそのまま。切り取りは描く側）
+ * - 液面を持たない水（天井付き＝水中セル、または浮いた岩の真下）: 満水ならタイル全体、
+ *   満ちていないなら実際の水量ぶんだけ浅く。常にタイル全体で塗ると、浅い湖に浮いた岩の
+ *   真下だけ水面より高く塗られて「水面が岩に吸い付いて」見えた（実機の指摘）。
+ *   ただし**沈んでいる**セル（覆う岩の上にも水がある）はタイル全体。水量の量子化で 8 に
+ *   1つ足りないだけのことが多く、水量ぶんだけ塗ると岩の真下に細い透明な帯が残る
+ *
+ * 以前はこれを描画側（environment/water.js の waterTopY / ceiledWaterTopY）が毎回計算して
+ * いて、どのセルの塗りが変わったかも描画側が推測していた（水量が変わったセルの上下1行と
+ * 同じ行の水面）。液面の平均が遠くまで動く・岩の上の水で沈み判定が変わる、といった形を
+ * 推測が取りこぼし、古い塗りの不具合が3回出た。値をここに焼いて前後を比べれば漏れない。
+ *
+ * 残っている穴: 岩に囲まれた1マスの横穴が湖の深さにあると、水量が 7 で止まったまま
+ * 「上はずっと岩＝沈んでいない」と判定され、タイルの上に 2px の透明な帯が残る
+ * （実測: 3000フレームで 8px ぶん1か所）。直すには液面を横方向にも塗り広げる必要がある
+ */
+function paintTopAt(water, kind, surfaceY, cols, isSolid, r, c) {
+    const k = r * cols + c;
+    const level = surfaceY[k];
+    const mass = water[k];
+    if (level < 0 && mass < MIN_WATER_MASS) return -1;   // 大半を占める空気のセルはここで終わる
+    if (kind[k] === WATER_FALL || isSolid(r, c)) return -1;
+    if (level >= 0) return level;
+    if (mass >= MAX_WATER_MASS || isSubmergedFromAbove(water, isSolid, cols, r, c)) return r * TILE_SIZE;
+    return (r + 1) * TILE_SIZE - Math.round((mass / MAX_WATER_MASS) * TILE_SIZE);
+}
+
+/**
+ * 行 r のセルの塗りの上端 y のうち、描画に効く部分。読むのは自分の塗り（行 r のタイルで
  * 切り取る）と、8近傍の岩の背後の塗り（行 r-1..r+1 の岩のタイルで切り取る）なので、
  * 行 r-1 の上辺から行 r+1 の下辺までで頭打ちにする。深い水中セルの液面がはるか上で
  * 動いても描画は変わらないので、塗り直しの対象から外すのに使う。
@@ -295,31 +324,24 @@ function paintedTop(y, r) {
     return Math.max((r - 1) * TILE_SIZE, Math.min((r + 2) * TILE_SIZE, y));
 }
 
-// 作り直しで値を変えたセルの、作り直す前の値。マップ全体ぶんを使い回し、「何回目の作り直しで
-// 書いたか」の印で消し直しを省く（waterPressure.js の compStamp と同じ作り）
-let trackSize = 0;
-let trackStamp = null;
-let trackOldKind = null;
-let trackOldY = null;
-let trackGen = 0;
-
 /**
- * dirty な列の kind と surfaceY を作り直す。
+ * dirty な列の kind と surfaceY（と、渡されていれば paintTopY）を作り直す。
  * 液面のセグメントは dirty でない列へはみ出すことがあるが、そちらの kind は
  * 既に正しい（水量が変わっていない）ので、そのまま伸ばして構わない。
  *
- * repaint を渡すと、作り直しで**塗りが変わるセル**（種別が変わった・液面が描画に効く
- * 高さで動いた）をそこへ足す。描画キャッシュは水量が変わったセルとその上下・
- * 同じ行の水面しか塗り直さないが、液面は区間の平均なので、水量0のまま液面の高さだけで
- * 塗っている空セル（満水の水面の真上）は、水量が変わらないまま液面が付いたり消えたり
- * する。それを知らせる経路が無く、水圧で池の水が一気に移った後に水面の上へ平らな水の
- * 四角が残った（実機の指摘。4面 seed 30 で掘り抜くと24マス。水圧なしで水面の行から
- * 流れ出させても2マス、1px ぶん残っていた＝以前からの取りこぼし）。
- * 液面を書く場所はここにしか無いので、ここで旧値と比べれば漏れない
+ * paintTopY は塗りの上端（paintTopAt）。repaint も渡すと、作り直しで**塗りが変わる
+ * セル**をそこへ足す。描画キャッシュはこの一覧だけを塗り直す。
+ * 計算し直すのは、作り直した列の全セルと、液面の区間がはみ出した先で液面が変わった
+ * セル。塗りの上端が変わりうるのはそこだけ — 水量・種別・液面は作り直した列の中でしか
+ * 変わらず（はみ出した先は液面だけ）、沈み判定は同じ列の上の水しか読まない。
+ * 水量0のまま液面の高さだけで塗っている空セル（満水の水面の真上）も、ここで前後を
+ * 比べるので拾える。以前は拾えず、水圧で池の水が一気に移った後に水面の上へ平らな水の
+ * 四角が残った（実機の指摘。4面 seed 30 で掘り抜くと24マス）
  *
+ * @param {Int16Array|undefined} [p.paintTopY] 塗りの上端。描画しないテストでは省略できる
  * @param {Set<number>|undefined} [p.repaint] 塗り直しの要るセル (r * cols + c) を足す先
  */
-export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, dirtyCols, repaint }) {
+export function rebuildWaterCache({ water, kind, surfaceY, paintTopY, rows, cols, isSolid, dirtyCols, repaint }) {
     // 岩の下のセルが水面かどうかは、同じ行の左右 SEGMENT_LOOKUP_RANGE 列までの
     // 水量にも依存する（rowSegmentHasExposedWater）。だから水量が変わった列だけ
     // 作り直すと、その範囲内の列が古いまま取り残される。作り直す列を左右へ
@@ -331,35 +353,9 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         for (let cc = lo; cc <= hi; cc++) cols2.add(cc);
     }
 
-    // 作り直しの途中で値を変えるセルを、変える直前の値と一緒に覚える。空気のセルは
-    // 値が変わらないので数に入らず、覚えるのは池のセル（水中セルは一度 -1 に戻してから
-    // 液面を書き直すので、毎回ここを通る）ぐらいになる。
-    // 最初は作り直す列（dirty の左右16列）をまるごと写して最後に全セル比べていたが、
-    // 約40列×131行を2回読むので作り直しが倍（1フレームあたり 53→110µs）になった
-    let touched = null, touch = null;
-    if (repaint) {
-        const n = rows * cols;
-        if (trackSize !== n) {
-            trackSize = n;
-            trackStamp = new Int32Array(n);
-            trackOldKind = new Uint8Array(n);
-            trackOldY = new Int16Array(n);
-            trackGen = 0;
-        }
-        const gen = ++trackGen;
-        touched = [];
-        touch = (k) => {
-            if (trackStamp[k] === gen) return;   // 2回目以降は、最初に覚えた（作り直す前の）値のまま
-            trackStamp[k] = gen;
-            trackOldKind[k] = kind[k];
-            trackOldY[k] = surfaceY[k];
-            touched.push(k);
-        };
-    }
-
     // まず kind を決め直す
     for (const c of cols2) {
-        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c, touch });
+        classifyWaterColumn({ water, kind, surfaceY, rows, cols, isSolid, c });
     }
 
     // 液面の平均を取り直す種を集める。dirty 列そのものに加えて**両隣**も見るのは、
@@ -375,6 +371,12 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         if (c + 1 < cols) seedCols.add(c + 1);
     }
 
+    // 作り直した列の外で液面を書き換えたセル（区間のはみ出した先）。塗りの上端を計算し直す
+    const spilled = [];
+    const touch = paintTopY
+        ? (k) => { if (!cols2.has(k % cols)) spilled.push(k); }
+        : null;
+
     // 同じセグメントを何度も平均し直さないよう、片付いたセルを覚えておく
     const done = new Set();
     for (const c of seedCols) {
@@ -386,10 +388,22 @@ export function rebuildWaterCache({ water, kind, surfaceY, rows, cols, isSolid, 
         }
     }
 
-    if (!repaint) return;
-    for (const k of touched) {
-        const r = (k / cols) | 0;
-        if (kind[k] !== trackOldKind[k]
-            || paintedTop(surfaceY[k], r) !== paintedTop(trackOldY[k], r)) repaint.add(k);
+    if (!paintTopY) return;
+    // 前の値は paintTopY 自身に残っているので、上書きする前に比べるだけでよい。
+    // spilled に同じセルが2度入っても、2度目は前の値と同じなので何も足さない
+    const update = (k, r, c) => {
+        const top = paintTopAt(water, kind, surfaceY, cols, isSolid, r, c);
+        if (repaint && paintedTop(top, r) !== paintedTop(paintTopY[k], r)) repaint.add(k);
+        paintTopY[k] = top;
+    };
+    // 空気のまま（水も液面も無く、前も塗っていない）のセルは塗りの上端も -1 のままなので
+    // 関数を呼ばずに飛ばす。作り直す列の大半はこれで、近道なしだと作り直しが +50%
+    // （6シード合計の中央値 970→1,470µs）だった
+    for (const c of cols2) {
+        for (let r = 0, k = c; r < rows; r++, k += cols) {
+            if (paintTopY[k] === -1 && surfaceY[k] === -1 && water[k] === 0) continue;
+            update(k, r, c);
+        }
     }
+    for (const k of spilled) update(k, (k / cols) | 0, k % cols);
 }
