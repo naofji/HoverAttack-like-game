@@ -16,6 +16,7 @@ const FLOOR_H = 12;
 // 梁が壁から突き出す長さ。外接矩形の左右にこの余白を取っておく
 const VIGA = 4;
 const BALCONY_W = 8;
+const ASPECT_MAX = 3.5;   // 壁の高さ / 足元の幅 の上限
 const ROOFS = ['crenel', 'crenel', 'flat', 'dome'];   // 胸壁を多めに（シバームの屋上）
 const ROOF_H = { crenel: 4, flat: 0, dome: 8 };
 
@@ -26,9 +27,12 @@ export function buildAdobeTower(rng, { maxW, maxH }) {
     if (wMax < wMin) return null;
     const roof = round ? 'dome' : pick(rng, ROOFS);
     const roofH = ROOF_H[roof];
-    const floorsMax = Math.min(9, Math.floor((maxH - roofH) / FLOOR_H));
-    if (floorsMax < 2) return null;
+    if (Math.floor((maxH - roofH) / FLOOR_H) < 2) return null;
     const footW = step4(rng, wMin, wMax);
+    // 壁の高さは足元の幅の ASPECT_MAX 倍まで。幅 16px で 9 階まで伸ばしたら、PNG で
+    // 建物ではなく棒に見えた（シバームの塔は幅の 3〜4 倍ほど）
+    const floorsMax = Math.max(2, Math.min(9, Math.floor((maxH - roofH) / FLOOR_H),
+        Math.floor(footW * ASPECT_MAX / FLOOR_H)));
     const nFloors = 2 + Math.floor(rng.next() * (floorsMax - 1));
     const bodyH = nFloors * FLOOR_H;
     const H = roofH + bodyH;

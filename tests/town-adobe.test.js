@@ -26,6 +26,18 @@ test('塔は幅と高さの上限を守り、部品は外接矩形の中に収�
     }
 });
 
+test('細い塔は低くする（壁の高さは足元の幅の 3.5 倍まで。棒に見えないように）', () => {
+    // 幅 16px で 9 階（108px）の塔が、PNG で見ると建物ではなく棒に見えた。
+    // シバームの塔は幅の 3〜4 倍ほどの高さ
+    const rng = new SeededRNG(13);
+    for (let i = 0; i < 400; i++) {
+        const b = buildAdobeTower(rng, { maxW: 16 + Math.floor(rng.next() * 50), maxH: 200 });
+        if (!b) continue;
+        const wall = b.insets.length * 4;
+        assert.ok(wall <= b.footW * 3.5, `${b.kind} 幅 ${b.footW} に壁の高さ ${wall}`);
+    }
+});
+
 test('狭すぎる・低すぎるところには建てない', () => {
     const rng = new SeededRNG(1);
     assert.equal(buildAdobeTower(rng, { maxW: 12, maxH: 200 }), null);
