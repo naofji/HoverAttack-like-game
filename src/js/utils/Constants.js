@@ -1388,6 +1388,10 @@ export const HOVER_WATER_MIST_BURST_FRAMES = 20;
 export const HOVER_WATER_MIST_MIN_COUNT = 6;  // 水面から離れているとき（最遠付近）の最小粒数
 export const HOVER_WATER_MIST_MAX_COUNT = 24; // 水面に最も近いときの最大粒数
 export const HOVER_WATER_MIST_COUNT = 18;    // 互換・中間値（固定指定用）
+// キャリアの水滴の粒の数に掛ける倍率。キャリアは浮力で水面にぴったり浮くので距離はほぼ0＝粒の数は
+// いつも最大（24）になり、左・中央・右の3か所で出るので1フレームあたり36粒・同時に約1,800粒浮いて
+// 派手すぎた（2026-10-11 実機の指摘「少し控えめに」）。半分から始めて実機で見て調整する
+export const CARRIER_WATER_MIST_SCALE = 0.5;
 // 水滴は雪の粉より重く早く落ちるので、SnowMist(75F)より短命にする
 export const HOVER_WATER_MIST_LIFETIME = 50;
 // SPLASH_PARTICLE と同じ水色（水しぶきと同系に見せる）

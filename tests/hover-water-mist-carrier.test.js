@@ -67,3 +67,16 @@ test('左・中・右の3カ所それぞれから水滴が出る（別々の x �
   const [left, mid, right] = xs;
   assert.ok(left < mid && mid < right, `左<中<右になっていない: ${xs}`);
 });
+
+test('キャリアの水滴は控えめ（1か所あたり、自機の最大の粒の数に CARRIER_WATER_MIST_SCALE を掛けた数まで）', async () => {
+  // キャリアは浮力で水面にぴったり浮くので距離はほぼ0＝粒の数はいつも最大（24）になり、
+  // 左・中央・右の3か所で出るので、1フレームあたり36粒・同時に約1,800粒浮いていた
+  // （2026-10-11 実機の指摘「キャリアの水しぶきも少し控えめに」）
+  const { CARRIER_WATER_MIST_SCALE, HOVER_WATER_MIST_MAX_COUNT } = await import('../src/js/utils/Constants.js');
+  const { c, mists } = hoveringCarrier(WATER, 0);
+  callMany(() => c._kickHoverWaterMist());
+  assert.ok(mists.length > 0, '前提: 出ている');
+  const cap = Math.round(HOVER_WATER_MIST_MAX_COUNT * CARRIER_WATER_MIST_SCALE);
+  for (const m of mists) assert.ok(m.n >= 1 && m.n <= cap, `1か所 ${m.n} 粒（上限 ${cap}）`);
+  assert.ok(CARRIER_WATER_MIST_SCALE < 1);
+});

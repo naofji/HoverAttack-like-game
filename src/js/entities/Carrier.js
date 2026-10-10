@@ -10,7 +10,7 @@ import {
     WATER_FALL_SPEED_SCALE,
     GRAVITY, FRICTION,
     HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
-    HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
+    HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT, CARRIER_WATER_MIST_SCALE,
 } from '../utils/Constants.js';
 import { collidesWithMap } from '../utils/Physics.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
@@ -157,7 +157,8 @@ export class Carrier {
         const timerKey = `_hoverWaterMistTimer${side}`;
         this[timerKey] = (this[timerKey] || 0) + 1;
         if (this[timerKey] % HOVER_WATER_MIST_INTERVAL !== 0) return;
-        const count = hoverWaterMistCount(clearance);
+        // 自機・敵アタッカーより控えめに（CARRIER_WATER_MIST_SCALE のコメント）
+        const count = Math.round(hoverWaterMistCount(clearance) * CARRIER_WATER_MIST_SCALE);
         const closeness = hoverWaterMistCloseness(clearance);
         this.game.spawnWaterMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, count, closeness);
     }
