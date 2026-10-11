@@ -87,3 +87,18 @@ export const PLANT_COLORS = {
 export const PLANT_CHAR_EDGE = 'rgba(10, 24, 6, 0.5)';
 // 砕けた葉の粒の色
 export const PLANT_LEAF_PARTICLE_COLORS = ['#4a6a24', '#44621f', '#3a5a1c'];
+
+// 5面の雪の木の色。針葉と幹は暗く、雪は岩より明るい青白（雪に見えるように）。
+// 4面の植物は「岩の 0.85 倍以下」だったが、5面の岩は鋼青（輝度 118）で、その下の輝度の雪は灰色に濁って
+// 雪に見えない。代わりに「地形の雪のふち（SNOW_CAP_COLOR、輝度 243）より暗い」を上限にした: 足場の雪面が
+// いちばん白く、木の雪は一段落ちて背景に見える（tests/snowtrees-palette.test.js）。針葉と幹の下限は遠景の rockLight。
+// 括弧の数字は輝度（遠景 rockLight 39.8、岩 117.8、雪のふち 243）
+export const SNOWTREE_COLORS = {
+    needle: ['#1f3a33', '#2a4a40'],                          // 49 / 63（下側の影の帯 / 針葉の本体）
+    trunk: ['#4a3a30', '#3d3027'],                           // 62 / 51
+    snow: ['#9fb0c4', '#c3d0de', '#d6e0ec', '#e2eaf3'],      // 173 / 206 / 222 / 233（雪の影 / 本体 / 明るい面 / 頂の光）
+};
+// 雪の木の穴の縁に重ねる暗い青灰色（町の茶色の焦げは、木が焼けたように見える）
+export const SNOWTREE_CHAR_EDGE = 'rgba(16, 30, 44, 0.5)';
+// 砕けた雪の木の粒の色。雪が多く、針葉が少し混じる
+export const SNOWTREE_PARTICLE_COLORS = ['#d6e0ec', '#c3d0de', '#d6e0ec', '#2a4a40'];

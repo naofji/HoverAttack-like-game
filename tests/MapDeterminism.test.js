@@ -153,8 +153,9 @@ test('stage 4 builds plants (soft buildings); stage 3 keeps its town; mission 11
   assert.ok(ferns.buildings.length > 0);
   assert.ok(ferns.buildings.every((b) => b.soft && b.style === 'P'));
   assert.ok(buildMap(Map, 42, 2).town.buildings.every((b) => !b.soft), '3面の町は soft でない');
-  assert.equal(buildMap(Map, 42, 4).town, null, '5面には何も置かない');
-  assert.ok(buildMap(Map, 42, 10).town.buildings.every((b) => b.soft), 'debugStartMission で面数を超えても剰余で4面');
+  assert.ok(buildMap(Map, 42, 4).town.buildings.every((b) => b.soft && b.flora === 'snow'), '5面は雪の木');
+  assert.equal(buildMap(Map, 42, 5).town, null, '6面には何も置かない');
+  assert.ok(buildMap(Map, 42, 10).town.buildings.every((b) => b.soft && b.flora === 'leaf'), 'debugStartMission で面数を超えても剰余で4面');
 });
 
 test('same seed produces the same plants', async () => {
@@ -177,4 +178,38 @@ test('building the plants does not consume game.rng (SpawnManager runs on it nex
     Map.prototype._generatePlants = original;
   }
   assert.equal(withPlants.rng.state, without.rng.state);
+});
+
+// 5面の雪の木。植物と同じく派生ストリームしか使わず、game.rng を動かさない
+test('same seed produces the same snow trees', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const summary = (m) => m.town.buildings.map((b) => [b.kind, b.x, b.y, b.width, b.height, Array.from(b.cells).join('')]);
+  assert.ok(buildMap(Map, 42, 4).town.buildings.length > 0);
+  assert.deepEqual(summary(buildMap(Map, 42, 4)), summary(buildMap(Map, 42, 4)));
+});
+
+test('building the snow trees does not consume game.rng (SpawnManager runs on it next)', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const withTrees = { rng: new SeededRNG(42) };
+  new Map(withTrees, 4);
+
+  const original = Map.prototype._generateSnowTrees;
+  Map.prototype._generateSnowTrees = function () { /* no-op: 木を作らない */ };
+  const without = { rng: new SeededRNG(42) };
+  try {
+    new Map(without, 4);
+  } finally {
+    Map.prototype._generateSnowTrees = original;
+  }
+  assert.equal(withTrees.rng.state, without.rng.state);
+});
+
+test('snow trees are never placed in the enemy base room', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = buildMap(Map, 42, 4);
+  const base = m._reservedRects()[1];
+  for (const b of m.town.buildings) {
+    const hit = b.x / 16 <= base.c1 && (b.x + b.width - 1) / 16 >= base.c0 && b.y / 16 <= base.r1 && (b.y + b.height - 1) / 16 >= base.r0;
+    assert.ok(!hit, `${b.kind} (${b.x},${b.y}) が基地の部屋に掛かる`);
+  }
 });

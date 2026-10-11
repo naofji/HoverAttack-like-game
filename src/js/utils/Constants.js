@@ -968,7 +968,8 @@ export const STAGE_PALETTES = [
 // （'fortress' は Map._generateFortress() が読む。設計:
 //  docs/superpowers/specs/2026-09-06-stage7-fortress-design.md）。
 // props = 地形の上に置く飾り（'town' は3面の壊せる町並み。設計:
-//  docs/superpowers/specs/2026-10-11-stage3-town-design.md）。無ければ置かない。
+//  docs/superpowers/specs/2026-10-11-stage3-town-design.md。'ferns' は4面の苔とシダ、'snowtrees' は5面の
+//  雪をかぶった木。設計: docs/superpowers/specs/2026-10-11-stage5-snowtrees-design.md）。無ければ置かない。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
@@ -976,7 +977,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
-    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snowtrees' }, // 5: 雪と氷（雪をかぶった木）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
 ];
@@ -2184,3 +2185,18 @@ export const PLANT_CEIL_CHANCE = 0.35;
 // 当たったとき・落ちた破片が砕けたときに出す葉の粒の数（画面の中だけ）
 export const PLANT_LEAF_PARTICLES_HIT = 4;
 export const PLANT_LEAF_PARTICLES_FALL = 8;
+
+// --- 5面の雪の木 ---
+// 4面の植物（上）と同じ Town の仕組み（燃えない・誘爆しない・壊せる・弾が止まる）に、雪をかぶった木を載せる。
+// 絵は world/town/snowTrees.js、置き場所は world/town/generateSnowTrees.js。STAGE_ENVIRONMENTS の props: 'snowtrees' の面だけ。
+// 高さは「見える高さ」（根元の 4px は地面に埋まる）。ユーザー指定（2026-10-11）: 機体（PLAYER_HEIGHT 24px）の
+// 8割（19.2px → 4px 刻みで 20）から 3倍（72px）まで。4面のシダ（見える高さ 24〜約 90px、半分以上は 24px 未満の
+// 苔と低いシダ）より背の高い木が中心になる。枯れ木は枝が横に張って背が伸びないので、上限を低く取る
+export const SNOWTREE_HEIGHT = { fir: [20, 72], bare: [20, 56] };
+// 床に立てるときに枯れ木になる割合。残りは針葉樹（雪の面らしい絵が針葉樹なので多めに）
+export const SNOWTREE_BARE_SHARE = 0.25;
+// 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる。隣と重なる所には置かない（placer.js）ので、
+// 詰めても重ならず、置ける足場が埋まるだけ。今週の5面で 262 本（4面は小さな苔を含めて 540 本）。初期値のまま
+export const SNOWTREE_FILL_SCALE = 1;
+// 隣の木との間隔（px、4px 刻みで引く）。木の幅に足す
+export const SNOWTREE_GAP = [4, 24];

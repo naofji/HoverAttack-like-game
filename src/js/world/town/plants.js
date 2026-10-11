@@ -21,11 +21,11 @@ import { PLANT_COLORS as COL } from './palette.js';
 import { PLANT_TALL_TRUNK } from '../../utils/Constants.js';
 
 const PI = Math.PI;
-const rand = (rng, lo, hi) => lo + rng.next() * (hi - lo);
-const GROUND = -CHUNK;   // 床の地面（根元の段の上端）
+export const rand = (rng, lo, hi) => lo + rng.next() * (hi - lo);
+export const GROUND = -CHUNK;   // 床の地面（根元の段の上端）
 
 /** 色ごとに輪を溜める。finish() で 1 色 1 部品にして、1回の fill で塗れるようにする */
-function newArt() {
+export function newArt() {
     const groups = new Map();
     return {
         groups,
@@ -52,7 +52,7 @@ function newArt() {
 }
 
 /** 絵の外接矩形を 4px の倍数に広げ、左上を (0, 0) に寄せて部品にする。footX は原点の x（px） */
-function finish(art, kind) {
+export function finish(art, kind) {
     const b = art.bounds();
     const x0 = Math.floor(b.x0 / CHUNK) * CHUNK, y0 = Math.floor(b.y0 / CHUNK) * CHUNK;
     const x1 = Math.ceil(b.x1 / CHUNK) * CHUNK, y1 = Math.ceil(b.y1 / CHUNK) * CHUNK;
