@@ -60,6 +60,7 @@ export class ToppleTree extends FallingPiece {
         this.py = this.height;
         this.theta = 0;       // 倒れた角度（0 = 立っている、π/2 = 横たわる）
         this.omega = 0;
+        this.age = 0;         // 倒れ始めてからの tick（Town が雪をこぼす間隔に使う）
         this.lieLeft = -1;    // 横たわってから消えるまでの残り tick。-1 はまだ倒れている途中
         // 回した絵が届く範囲（Town.draw の画面外の判定）。軸の周りを外接矩形の対角線ぶん回る
         this.reach = 2 * Math.hypot(this.width, this.height);
@@ -78,6 +79,7 @@ export class ToppleTree extends FallingPiece {
      * @returns {boolean} この tick で横たわった（粒を出す合図）
      */
     advance(supported) {
+        this.age++;
         if (this.lying) {
             this.lieLeft--;
             return false;

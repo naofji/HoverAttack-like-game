@@ -5,9 +5,14 @@ import { Town } from '../src/js/world/town/Town.js';
 import { buildFir, buildBareTree } from '../src/js/world/town/snowTrees.js';
 import { MAT_PLANT, SOLID } from '../src/js/world/town/chunks.js';
 import {
-    SNOWTREE_PARTICLE_COLORS, SNOWTREE_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS, PLANT_CHAR_EDGE,
+    SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS, SNOWTREE_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS, PLANT_CHAR_EDGE,
 } from '../src/js/world/town/palette.js';
 import { fakeCanvas } from './helpers/town-fixtures.js';
+import { SnowFlurryParticle } from '../src/js/entities/Particle.js';
+import { SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_LIFE } from '../src/js/utils/Constants.js';
+
+// 雪の木が出す粒の色（舞う雪と針葉の欠片）
+const SNOW_COLORS = new Set([...SNOWTREE_PARTICLE_COLORS, ...SNOWTREE_FLURRY_COLORS]);
 import { FallingPiece } from '../src/js/world/town/FallingPiece.js';
 import { TOWN_FALLING_MAX } from '../src/js/utils/Constants.js';
 
@@ -33,7 +38,7 @@ test('雪の木は欠けると雪の粒が出る（葉の色ではない）', ()
     town.update(game);
     assert.ok(game.particles.length > 0, '粒が出ない');
     for (const p of game.particles) {
-        assert.ok(SNOWTREE_PARTICLE_COLORS.includes(p.color), `${p.color} が雪の木の粒の色でない`);
+        assert.ok(SNOW_COLORS.has(p.color), `${p.color} が雪の木の粒の色でない`);
         assert.ok(!PLANT_LEAF_PARTICLE_COLORS.includes(p.color));
     }
 });
@@ -64,7 +69,7 @@ test('支えの岩が壊れると、雪の木は雪の破片になって落ち�
     assert.equal(town.falling.length, 0);
     assert.equal(town.rubble.length, 0);
     assert.ok(game.particles.length > 0);
-    for (const p of game.particles) assert.ok(SNOWTREE_PARTICLE_COLORS.includes(p.color), `${p.color}`);
+    for (const p of game.particles) assert.ok(SNOW_COLORS.has(p.color), `${p.color}`);
 });
 
 test('落ちる破片の数が上限を超えて古いものが消えるときも、粒は雪の色', () => {
@@ -112,4 +117,34 @@ test('4面の植物（flora の無い設計図）は今までどおり葉の粒�
     const game = fakeGame();
     town.update(game);
     for (const p of game.particles) assert.ok(PLANT_LEAF_PARTICLE_COLORS.includes(p.color));
+});
+
+test('雪の木が欠けると、舞う雪（SnowFlurryParticle）が SNOWTREE_FLURRY_HIT 粒出る（6 粒に 1 粒は針葉の欠片）。4面の植物は葉のまま', () => {
+    const town = makeTown();
+    const b = town.buildings[0];
+    const { x, y } = midOf(b);
+    town.chip(b, x, y, 6);
+    const game = fakeGame();
+    town.update(game);
+    assert.equal(game.particles.length, SNOWTREE_FLURRY_HIT);
+    const flurry = game.particles.filter((p) => p instanceof SnowFlurryParticle);
+    assert.equal(flurry.length, SNOWTREE_FLURRY_HIT - Math.floor(SNOWTREE_FLURRY_HIT / 6));
+    for (const p of flurry) assert.ok(SNOWTREE_FLURRY_COLORS.includes(p.color));
+    // 舞う雪は game を持つ（地面に触れたら消えるため）
+    assert.ok(flurry.every((p) => p.game === game));
+    // 寿命は 1〜1.5 秒（50〜90 tick）。大きさは 2 か 3
+    for (const p of flurry) {
+        assert.ok(p.maxLifetime >= SNOWTREE_FLURRY_LIFE[0] && p.maxLifetime <= SNOWTREE_FLURRY_LIFE[1], `寿命 ${p.maxLifetime}`);
+        assert.ok(p.size === 2 || p.size === 3);
+    }
+
+    const b0 = buildFir(new SeededRNG(3), { maxH: 400 });
+    const spec = { ...treeSpec(b0) };
+    delete spec.flora;
+    const leaf = makeTown([spec]);
+    const lb = leaf.buildings[0];
+    leaf.chip(lb, midOf(lb).x, midOf(lb).y, 6);
+    const g2 = fakeGame();
+    leaf.update(g2);
+    assert.ok(g2.particles.length > 0 && !g2.particles.some((p) => p instanceof SnowFlurryParticle), '4面の植物が舞う雪を出した');
 });

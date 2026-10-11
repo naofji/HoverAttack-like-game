@@ -2216,9 +2216,26 @@ export const SNOWTREE_TOPPLE_SEED = 0.2;
 // 倒れきった（床に横たわった）あと、薄れて消えるまでの tick。この間に雪の粒を PUFFS 回、木の長さに沿って出す
 export const SNOWTREE_TOPPLE_LIE_TICKS = 30;
 export const SNOWTREE_TOPPLE_PUFFS = 3;
-export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 4;
+export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 8;
 // これより小さい塊（かけらの数）は倒れず、ふつうの破片として落ちて砕ける（枝先の欠片が90°倒れるのは不自然）
 export const SNOWTREE_TOPPLE_MIN_CELLS = 8;
 // 倒れる向きは、撃たれた位置と塊の真ん中の x の差が DEADZONE（px）以上あれば撃たれた側と反対、未満なら（幹をまっすぐ撃った）
 // 位置から決めた向き
 export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
+// 雪の木が欠ける・倒れるときに舞う雪（SnowFlurryParticle。ユーザー指定: 「木が倒れたり削れたりするときに雪が舞う様に」）。
+// それまでは葉と同じ短命（20〜40 tick）の小さな粒がぱっと散るだけだった。舞う雪は、出た勢いで飛んだあと
+// 空気抵抗で止まり、ゆっくり左右に揺れながら落ちて、地面に触れたら消える（ホバーの粉雪 SnowMistParticle と同じ消え方）。
+// 数は「1 回の出来事で出す粒」: 弾・爆風が欠かした（HIT）、幹が切れて倒れ始めた（START。木が雪を振るい落とす）、
+// 倒れているあいだ TRICKLE_EVERY tick ごとに木に沿って（TRICKLE）、横たわった（PUFF_PARTICLES を PUFFS 回）。
+// 1 本が倒れきるまでに合わせて約 100 粒、寿命は 50〜90 tick なので同時に生きる粒は 1 本あたり約 60
+export const SNOWTREE_FLURRY_HIT = 10;
+export const SNOWTREE_FLURRY_START = 14;
+export const SNOWTREE_FLURRY_TRICKLE_EVERY = 3;
+export const SNOWTREE_FLURRY_TRICKLE = 3;
+export const SNOWTREE_FLURRY_LIFE = [50, 90];
+export const SNOWTREE_FLURRY_SPEED = [0.5, 2.2];     // 出る勢い（px/tick）。空気抵抗で 1/20 秒ほどで落ち着く
+export const SNOWTREE_FLURRY_DRAG = 0.95;            // 毎 tick 速度に掛ける。落ちる速さは GRAVITY / (1 - DRAG) = 0.4px/tick に収まる
+export const SNOWTREE_FLURRY_GRAVITY = 0.02;         // ホバーの粉雪（0.02）と同じ軽さ
+export const SNOWTREE_FLURRY_SWAY = 0.3;             // 左右に揺れる幅（px/tick）
+export const SNOWTREE_FLURRY_SWAY_FREQ = 0.14;       // 揺れの速さ（rad/tick。周期約 45 tick）
+export const SNOWTREE_FLURRY_NEEDLE_EVERY = 6;       // 6 粒に 1 粒は、雪ではなく針葉の欠片（暗い緑）

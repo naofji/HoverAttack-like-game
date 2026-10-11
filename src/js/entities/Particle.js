@@ -12,6 +12,7 @@ import {
     SPLASH_LIFETIME,
     SNOW_KICK_COLOR, SNOW_KICK_LIFETIME,
     HOVER_SNOW_MIST_COLOR, HOVER_SNOW_MIST_LIFETIME,
+    SNOWTREE_FLURRY_DRAG, SNOWTREE_FLURRY_GRAVITY, SNOWTREE_FLURRY_SWAY, SNOWTREE_FLURRY_SWAY_FREQ,
     HOVER_WATER_MIST_COLOR, HOVER_WATER_MIST_LIFETIME,
     CASING_COLOR, CASING_LENGTH, CASING_WIDTH, CASING_GRAVITY, CASING_MAX_FALL_SPEED,
     CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION,
@@ -278,6 +279,56 @@ export class SnowMistParticle {
         ctx.globalAlpha = Math.max(0.1, (this.lifetime / HOVER_SNOW_MIST_LIFETIME) * 0.9);
         ctx.fillStyle = HOVER_SNOW_MIST_COLOR;
         ctx.fillRect(Math.round(this.x) - 1, Math.round(this.y) - 1, 2, 2);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --------------------------------------------
+// Snow Flurry - 雪の木が欠ける・倒れるときに舞う雪
+// --------------------------------------------
+//
+// SnowMistParticle（ホバーの粉雪）との違いは 2 つ。出た勢いで飛んだあと空気抵抗で止まる（drag）ことと、
+// ゆっくり左右に揺れながら落ちる（sway）こと。「ぱっと散る」ではなく「舞う」にするための動き。
+// 揺れは粒ごとの位相でずらす（揃うと群れが一枚の布のように揺れる）。位相は見た目だけなので Math.random でよい。
+// 落ちる速さは重力と抵抗が釣り合う GRAVITY / (1 - DRAG) に収まる（0.02 / 0.05 = 0.4px/tick）。
+// 地面（game.map.isSolidAtPixel）に触れたら、跳ねずに吸収されて消える（SnowMistParticle と同じ）。
+// game.map が無い（テストの簡易呼び出し）ときは衝突を見ない。
+export class SnowFlurryParticle {
+    constructor(game, x, y, vx, vy, color, size, lifetime) {
+        this.game = game;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.color = color;
+        this.size = size;
+        this.maxLifetime = lifetime;
+        this.lifetime = lifetime;
+        this.age = 0;
+        this.phase = Math.random() * Math.PI * 2;
+        this.alive = true;
+    }
+    update() {
+        if (!this.alive) return;
+        this.age++;
+        this.vx *= SNOWTREE_FLURRY_DRAG;
+        this.vy = this.vy * SNOWTREE_FLURRY_DRAG + SNOWTREE_FLURRY_GRAVITY;
+        const sway = Math.sin(this.age * SNOWTREE_FLURRY_SWAY_FREQ + this.phase) * SNOWTREE_FLURRY_SWAY;
+        const nextX = this.x + this.vx + sway;
+        const nextY = this.y + this.vy;
+        const map = this.game && this.game.map;
+        if (map && map.isSolidAtPixel && map.isSolidAtPixel(nextX, nextY)) {
+            this.alive = false;
+            return;
+        }
+        this.x = nextX;
+        this.y = nextY;
+        if (--this.lifetime <= 0) this.alive = false;
+    }
+    draw(ctx) {
+        if (!this.alive) return;
+        // 寿命の最後の 4 割で薄れる（途中までははっきり見える）
+        ctx.globalAlpha = Math.min(1, this.lifetime / (this.maxLifetime * 0.4));
+        ctx.fillStyle = this.color;
+        const s = this.size;
+        ctx.fillRect(Math.round(this.x - s / 2), Math.round(this.y - s / 2), s, s);
         ctx.globalAlpha = 1.0;
     }
 }

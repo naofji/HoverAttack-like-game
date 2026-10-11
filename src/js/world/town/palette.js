@@ -102,3 +102,6 @@ export const SNOWTREE_COLORS = {
 export const SNOWTREE_CHAR_EDGE = 'rgba(16, 30, 44, 0.5)';
 // 砕けた雪の木の粒の色。雪が多く、針葉が少し混じる
 export const SNOWTREE_PARTICLE_COLORS = ['#d6e0ec', '#c3d0de', '#d6e0ec', '#2a4a40'];
+// 舞う雪の色（SnowFlurryParticle）。雪の 3 色のうち明るい側。舞う粒は手前に出るので、木の本体の雪より白くてよいが、
+// 足場の雪のふち（SNOW_CAP_COLOR）よりは暗く保つ（tests/snowtrees-palette.test.js）
+export const SNOWTREE_FLURRY_COLORS = ['#e2eaf3', '#d6e0ec', '#c3d0de'];

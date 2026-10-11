@@ -79,7 +79,17 @@ canvas の塗りの時間は node では測れない（実機で面の読み込�
 - 倒れる速さ: `ACCEL` 0.005・`SEED` 0.2（角加速度 = ACCEL × (sinθ + SEED)）。90° まで 41 tick（0.68 秒）。0.01・0.3 は 25 tick で、ぱたんと倒れて重みが出なかった
 - `tools/lib/pixel-canvas.mjs` の `rotate` を、2 引数の `drawImage` だけ見る形にした（連続写真で倒れる様子を確かめるため）
 
-調整用: `SNOWTREE_TOPPLE_ACCEL` / `_SEED`（倒れる速さ）、`_LIE_TICKS`（横たわって消えるまで）、`_PUFFS` / `_PUFF_PARTICLES`（粒）、`_MIN_CELLS`（倒れる塊の最小）。
+### 舞う雪（`SnowFlurryParticle`、`Town._spawnSnowFlurry`。ユーザー指定「木が倒れたり削れたりするときに雪が舞う様に」）
+
+- それまでは葉と同じ短命（20〜40 tick）の小さな粒がぱっと散るだけだった。**舞う雪**は、出た勢いで飛んだあと空気抵抗で止まり（`DRAG` 0.95）、ゆっくり左右に揺れながら（`SWAY`）
+  落ちて、地面に触れたら消える（ホバーの粉雪 `SnowMistParticle` と同じ消え方）。落ちる速さは `GRAVITY / (1 - DRAG)` = 0.4px/tick に収まる。寿命 50〜90 tick（1〜1.5 秒）、最後の 4 割で薄れる
+- 出すとき: 弾・爆風が欠かしたとき（`SNOWTREE_FLURRY_HIT` 10 粒）、幹が切れて倒れ始めたとき（`START` 14 粒。木が雪を振るい落とす、幅いっぱいに）、
+  倒れているあいだ 3 tick ごとに木に沿って（`TRICKLE` 3 粒。位置は経過 tick から決め、シミュレーションに乱数を使わない）、横たわったとき（`SNOWTREE_TOPPLE_PUFF_PARTICLES` 8 粒を 3 回）。
+  1 本が倒れきるまでに約 100 粒。6 粒に 1 粒は針葉の欠片（暗い緑）
+- 色は雪の 3 色のうち明るい側（`SNOWTREE_FLURRY_COLORS`）。手前に出る粒なので木の本体の雪より白くてよいが、地形の雪のふち（`SNOW_CAP_COLOR`）よりは暗く保つ
+- 4面の植物は今までどおり（葉の粒）
+
+調整用: `SNOWTREE_TOPPLE_ACCEL` / `_SEED`（倒れる速さ）、`_LIE_TICKS`（横たわって消えるまで）、`_PUFFS` / `_PUFF_PARTICLES`（粒）、`_MIN_CELLS`（倒れる塊の最小）。舞う雪は `SNOWTREE_FLURRY_*`（`_HIT` / `_START` / `_TRICKLE` / `_TRICKLE_EVERY` が数と間隔、`_SPEED` / `_DRAG` / `_GRAVITY` / `_SWAY` / `_SWAY_FREQ` が動き、`_LIFE` が寿命）。
 
 ## この次
 
