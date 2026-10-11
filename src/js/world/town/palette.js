@@ -36,3 +36,8 @@ const SHADE_K = 0.25;
 export function shade(hex) {
     return lerpColor(hex, '#000000', SHADE_K);
 }
+
+// 段2: 穴の縁に残ったかけらに重ねる焦げ（半透明。何度も当たると重なって濃くなる）
+export const TOWN_CHAR_EDGE = 'rgba(28, 18, 6, 0.55)';
+// 崩壊で残った土台に重ねる焦げ（焦げた骨組み）
+export const TOWN_RUIN_SHADE = 'rgba(20, 12, 4, 0.5)';
