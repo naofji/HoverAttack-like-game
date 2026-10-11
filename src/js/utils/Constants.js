@@ -2008,3 +2008,17 @@ export const TOWN_CEIL_MIN_RUN = 6;
 export const TOWN_CEIL_MIN_DROP = 8;
 // 吊るしたものの下に残す空き（タイル）。自機（1.5タイル）が下をくぐれる高さ＋余裕
 export const TOWN_CEIL_KEEP_BELOW = 4;
+
+// --- 3面の町並み 段2（壊れ方）---
+// 爆発で欠ける半径 = K × √(粒の数)。マシンガンの着弾 4粒 → 約7px、ミサイル 36粒 → 約20px、
+// グレネード 150粒 → 約40px（spec 2章）
+export const TOWN_BLAST_RADIUS_K = 3.3;
+// 穴の縁のぎざぎざの幅（px）。かけらごとに ±半分だけ半径を揺らす
+export const TOWN_CHIP_JAGGED = 3;
+// 残ったかけらがこの割合を下回ったら崩壊する
+export const TOWN_COLLAPSE_FRACTION = 0.4;
+// 崩壊で残す土台の深さ（支えのかけらから何かけら＝4px 何段ぶんまで）。3 で 12px ＝ A の1階ぶん。
+// spec の「下の1〜2段」を、床・壁・天井のどれにも同じ規則で効くよう「支えからの距離」で言い直した
+export const TOWN_RUIN_DEPTH = 3;
+// 崩壊の粒の数（createExplosion の count。ミサイルの爆発 36 より小さく、着弾 4 より大きい）
+export const TOWN_COLLAPSE_PARTICLES = 24;

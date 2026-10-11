@@ -27,10 +27,12 @@ test('後の部品が前の部品を上書きする', () => {
     assert.deepEqual(Array.from(cells), [MAT_ADOBE | SOLID, MAT_WOOD]);
 });
 
-test('材料の無い部品（描くだけ）はかけらにならない', () => {
+test('材料の無い部品（描くだけ）は、ほかに埋まっていなければ細い木のかけらになる', () => {
+    // 段1は「描くだけの部品はかけらにならない」だったが、それだと段2で欠けたときに画素が宙に残る
+    // （段1レビューの持ち越し）。厚い壁の印は付けない
     const parts = [{ x: 0, y: 0, w: 8, h: 8, color: '#000000', mat: 0, solid: false }];
     const { cells } = rasterizeParts(parts, 8, 8);
-    assert.deepEqual(Array.from(cells), [0, 0, 0, 0]);
+    assert.deepEqual(Array.from(cells), [MAT_WOOD, MAT_WOOD, MAT_WOOD, MAT_WOOD]);
 });
 
 test('中心(2px)を含む細い部品は埋まり、含まない部品は埋まらない', () => {

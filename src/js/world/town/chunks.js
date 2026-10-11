@@ -45,6 +45,21 @@ export function rasterizeParts(parts, w, h) {
             for (let i = i0; i < i1; i++) cells[j * cw + i] = v;
         }
     }
+    // 色のある部品が1画素でも掛かっているのに空のかけらは、その部品の材料の細い部品で埋める。
+    // 中心の規則だけだと梁・梯子・ランタン・軒・橋の手すりの画素の 3% がどのかけらにも入らず、
+    // かけらを抜いて clearRect しても宙に残った（段1のレビュー指摘）。厚い壁の印は付けない
+    // （弾を止めるのは中心の規則で埋まった面だけ）。描くだけの部品（mat 0）は木にする
+    for (const p of parts) {
+        if (!p.color) continue;
+        const v = p.mat || MAT_WOOD;
+        const i0 = Math.max(0, Math.floor(p.x / CHUNK));
+        const i1 = Math.min(cw, Math.ceil((p.x + p.w) / CHUNK));
+        const j0 = Math.max(0, Math.floor(p.y / CHUNK));
+        const j1 = Math.min(ch, Math.ceil((p.y + p.h) / CHUNK));
+        for (let j = j0; j < j1; j++) {
+            for (let i = i0; i < i1; i++) if (!cells[j * cw + i]) cells[j * cw + i] = v;
+        }
+    }
     return { cells, cw, ch };
 }
 
@@ -66,4 +81,17 @@ export function computeAnchors(cells, cw, ch, x, y, isSolidTile) {
         }
     }
     return anchors;
+}
+
+/**
+ * 建物の番号とかけらの位置から決まる 0〜1 の値。穴の縁のぎざぎざや、落ちる破片の向きに使う。
+ * Math.random にしないのは、遮蔽の形が遊びに関わるため（同じ所に撃てば同じ穴が開く）。
+ * game.rng も使わない（消費すると敵の構成が変わる）
+ */
+export function chunkHash(id, i, j) {
+    let h = Math.imul(id + 1, 0x9E3779B1) ^ Math.imul(i + 1, 0x85EBCA77) ^ Math.imul(j + 1, 0xC2B2AE3D);
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2C1B3C6D);
+    h ^= h >>> 12;
+    return (h >>> 0) / 4294967296;
 }
