@@ -8,6 +8,7 @@
 // x, y は左上。描画補間（utils/renderInterp.js）は x, y だけを動かすので、中心は毎回 x, y から求める。
 
 import { CHUNK, MAT_MASK } from './chunks.js';
+import { TOWN_FALL_GRAVITY, TOWN_FALL_MAX_SPEED } from '../../utils/Constants.js';
 
 export class FallingPiece {
     constructor({ canvas, cells, cw, ch, x, y, vx = 0, vy = 0, spin = 0, sourceId = -1 }) {
@@ -40,6 +41,14 @@ export class FallingPiece {
         let best = 0;
         for (let m = 1; m < n.length; m++) if (n[m] > n[best]) best = m;
         return best;
+    }
+
+    /** 1 tick 進める。回転は見た目だけ */
+    step() {
+        this.vy = Math.min(TOWN_FALL_MAX_SPEED, this.vy + TOWN_FALL_GRAVITY);
+        this.x += this.vx;
+        this.y += this.vy;
+        this.angle += this.spin;
     }
 
     draw(ctx) {

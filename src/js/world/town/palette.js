@@ -41,3 +41,12 @@ export function shade(hex) {
 export const TOWN_CHAR_EDGE = 'rgba(28, 18, 6, 0.55)';
 // 崩壊で残った土台に重ねる焦げ（焦げた骨組み）
 export const TOWN_RUIN_SHADE = 'rgba(20, 12, 4, 0.5)';
+
+// 段2: 瓦礫の山と破片の粒の色（材料の番号 → 色）。輝度は TOWN_BODY_COLORS と同じ範囲の色から選んだ
+export const TOWN_RUBBLE_COLORS = {
+    1: '#6f4f24',   // 土（adobe の暗いほう）
+    2: '#4f3519',   // 木
+    3: '#4f4a42',   // 金属
+    4: '#4f3519',   // 爆発物（段3b。木箱と同じ色）
+};
+export const TOWN_DUST_COLOR = '#8a7a5a';

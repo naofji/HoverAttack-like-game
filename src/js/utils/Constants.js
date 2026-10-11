@@ -2029,3 +2029,9 @@ export const TOWN_FALL_GRAVITY = 0.25;
 export const TOWN_FALL_MAX_SPEED = 7;     // 1 tick に 7px。描画補間の瞬間移動の閾値 64px より十分小さい
 export const TOWN_FALL_SPIN_MAX = 0.05;
 export const TOWN_FALL_DRIFT_MAX = 0.3;   // 横へ流れる初速（±px/tick）
+// 落ちる破片が下の建物を欠かせる半径（px）。1棟1回
+export const TOWN_FALL_CHIP_RADIUS = 6;
+// 砕けたときの粒（破片の色の欠片＋土煙）の数
+export const TOWN_SHATTER_PARTICLES = 10;
+// 瓦礫の山の高さの上限（px）。重なるたびに 1px ずつ高くなる
+export const TOWN_RUBBLE_MAX_H = 10;

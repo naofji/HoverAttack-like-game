@@ -14,12 +14,15 @@
 
 import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED } from './chunks.js';
 import { paintParts } from './shapes.js';
-import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE } from './palette.js';
+import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR } from './palette.js';
+import { createExplosion, Particle } from '../../entities/Particle.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import {
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
+    TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
+    TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -42,6 +45,7 @@ export class Town {
         this.isSolidTile = isSolidTile;
         this.createCanvas = createCanvas;
         this.falling = [];
+        this.rubble = [];
         // 粒・土煙の注文。update() でまとめて、画面の中の分だけ出す（spec 2章「画面の外」）。
         // 壊れ方そのもの（かけら・支え・落下）は注文と関係なく、その場で進める
         this.effects = [];
@@ -163,6 +167,89 @@ export class Town {
         }
     }
 
+    /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */
+    update(game) {
+        this._updateFalling();
+        this._flushEffects(game);
+    }
+
+    _solidAtPixel(x, y) {
+        return this.isSolidTile(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    }
+
+    _updateFalling() {
+        // 写しで回す: 欠けが新しい破片を足したり、上限で古い破片を消したりするため。
+        // 新しく増えた破片は次の tick から動く
+        for (const p of [...this.falling]) {
+            if (!p.alive) continue;
+            p.step();
+            const by = p.y + p.height;
+            for (const b of this.buildingsAt(p.cx, by)) {
+                const k = this.cellAt(b, p.cx, by);
+                if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
+                p.hitIds.add(b.id);
+                this.chip(b, p.cx, by, TOWN_FALL_CHIP_RADIUS);
+            }
+            // 下端の左・中・右のどれかが岩に入ったら砕ける。盤面の外は岩（Map.isSolid と同じ）なので
+            // 盤面の下へ抜けることはない
+            if ([p.x + 2, p.cx, p.x + p.width - 2].some((sx) => this._solidAtPixel(sx, by))) this._shatter(p, by);
+        }
+        this.falling = this.falling.filter((p) => p.alive);
+    }
+
+    _shatter(p, by) {
+        p.alive = false;
+        const groundY = Math.floor(by / TILE_SIZE) * TILE_SIZE;
+        const mat = p.mainMaterial();
+        this._addRubble(p.x, p.width, groundY, p.count, mat);
+        this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES });
+    }
+
+    /** 床に瓦礫の山を足す。同じ床で横に重なる山は1つにまとめる（数が増え続けないように） */
+    _addRubble(x, w, groundY, cellCount, mat) {
+        const h = Math.max(2, Math.min(TOWN_RUBBLE_MAX_H, Math.round(Math.sqrt(cellCount))));
+        for (const r of this.rubble) {
+            if (r.groundY !== groundY || x >= r.x + r.w || r.x >= x + w) continue;
+            const x0 = Math.min(r.x, x);
+            r.w = Math.max(r.x + r.w, x + w) - x0;
+            r.x = x0;
+            r.h = Math.min(TOWN_RUBBLE_MAX_H, Math.max(r.h, h) + 1);
+            return;
+        }
+        this.rubble.push({ x, w, groundY, h, color: TOWN_RUBBLE_COLORS[mat] || TOWN_RUBBLE_COLORS[1] });
+    }
+
+    /**
+     * 溜めた注文を出す。画面の中かそのすぐ外（VIEW_CULL_MARGIN）だけ。
+     * 崩壊は createExplosion を直接足す（spawnExplosion を通すと town.blast に戻って
+     * 崩壊が隣を崩す連鎖が止まらなくなる。spec 2章）。音は段4
+     */
+    _flushEffects(game) {
+        const cam = game.camera;
+        const cv = game.canvas;
+        const m = VIEW_CULL_MARGIN;
+        for (const e of this.effects) {
+            if (cam && cv && (e.x < cam.x - m || e.x > cam.x + cv.width + m
+                || e.y < cam.y - m || e.y > cam.y + cv.height + m)) continue;
+            if (e.type === 'collapse') {
+                game.particles.push(...createExplosion(e.x, e.y, TOWN_COLLAPSE_PARTICLES));
+            } else {
+                const color = TOWN_RUBBLE_COLORS[e.mat] || TOWN_RUBBLE_COLORS[1];
+                const n = e.count || TOWN_SHATTER_PARTICLES;
+                for (let i = 0; i < n; i++) {
+                    // 見た目だけの粒なので Math.random でよい（既存の createExplosion と同じ）
+                    const a = -Math.PI * Math.random();
+                    const sp = 0.5 + Math.random() * 2;
+                    const dust = e.type === 'dust' || i % 3 === 0;
+                    game.particles.push(new Particle(e.x, e.y, Math.cos(a) * sp, Math.sin(a) * sp,
+                        dust ? TOWN_DUST_COLOR : color, dust ? 2 + Math.random() * 3 : 1 + Math.random() * 2,
+                        20 + Math.floor(Math.random() * 20)));
+                }
+            }
+        }
+        this.effects.length = 0;
+    }
+
     _emit(type, x, y, extra = {}) {
         this.effects.push({ type, x, y, ...extra });
     }
@@ -255,6 +342,20 @@ export class Town {
         for (const b of this.buildings) {
             if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
             ctx.drawImage(b.canvas, b.x, b.y);
+        }
+        // 瓦礫の山: 下に広い段、上に狭い段の2つの四角（fillRect だけで描く決まり）
+        for (const r of this.rubble) {
+            if (r.x >= x1 || r.x + r.w <= view.x || r.groundY - r.h >= y1 || r.groundY <= view.y) continue;
+            ctx.fillStyle = r.color;
+            const low = Math.ceil(r.h / 2);
+            ctx.fillRect(r.x, r.groundY - low, r.w, low);
+            ctx.fillRect(r.x + r.w / 4, r.groundY - r.h, r.w / 2, r.h - low);
+        }
+        // 落ちる破片。回るので長辺の正方形で見る
+        for (const p of this.falling) {
+            const s = Math.max(p.width, p.height);
+            if (p.cx - s >= x1 || p.cx + s <= view.x || p.cy - s >= y1 || p.cy + s <= view.y) continue;
+            p.draw(ctx);
         }
     }
 }
