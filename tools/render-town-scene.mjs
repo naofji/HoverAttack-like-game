@@ -11,6 +11,9 @@
 //   node tools/render-town-scene.mjs --x 1380 --y 660 --fire "1502,810" --ticks 900 --out f.png
 //       # 燃やした後（段3）。--fire の点にミサイル1発ぶん（粒 36）の爆発を当てて火をつけ、--ticks 進める。
 //       # 炎は四角で出る。煙は描かない（PixelCanvas は煙のパフを焼けない）
+//   node tools/render-town-scene.mjs --list-explosives                    # 爆発物の位置（段3b）
+//   node tools/render-town-scene.mjs --x 1200 --y 300 --boom "1300,420" --ticks 120 --out c.png
+//       # 誘爆の後（段3b）。--boom の点に一番近い爆発物を欠かせて爆発させ、--ticks 進める
 //
 // 実物の Map を生成し、Map._buildTownSpecs() の設計図から画素を持つ canvas で町を作り直して描く。
 // 地形はタイルを2色（縁と中）で塗るだけ（面取りは再現しない）。描く順はゲームと同じ
@@ -33,6 +36,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 const { Map: GameMap } = await import('../src/js/world/Map.js');
 const { Town } = await import('../src/js/world/town/Town.js');
 const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
+const { SpawnEffects } = await import('../src/js/systems/SpawnEffects.js');
 
 const MISSION = 2;   // 3面
 const seed = args.seed ? Number(args.seed) : stageSeed(getCurrentWeek().seed, MISSION);
@@ -48,10 +52,14 @@ const noSmoke = () => null;
 const bench = new Town(specs, { isSolidTile: (r, c) => map.isSolid(r, c), createCanvas: noPixels, smokeSprites: noSmoke });
 const t2 = performance.now();
 
-// 粒は出さない（camera が無いので注文は画面の中扱いで particles に積まれるだけ）
-const fakeGame = () => ({ particles: [], projectiles: [], camera: null, canvas: null });
+// 粒は出さない（camera が無いので注文は画面の中扱いで particles に積まれるだけ）。
+// 町の爆発物（段3b）の爆発は spawnExplosion → town.blast を通るので、本物を混ぜる
+const fakeGame = (town) => Object.assign({
+    particles: [], projectiles: [], enemies: [], landmines: [], player: null, carrier: null,
+    camera: null, canvas: null, map: { town },
+}, SpawnEffects);
 function applyBlasts(town, list, ticks) {
-    const game = fakeGame();
+    const game = fakeGame(town);
     let maxFalling = 0;
     for (const [x, y, size] of list) {
         town.blast(x, y, size);
@@ -92,7 +100,7 @@ function fireStats() {
     const floors = town.buildings.filter((b) => b.site === 'floor');
     const step = Math.max(1, Math.floor(floors.length / 30));
     for (const b of floors.filter((_, i) => i % step === 0).slice(0, 30)) town.blast(b.x + b.width / 2, b.y + b.height / 2, 36);
-    const game = fakeGame();
+    const game = fakeGame(town);
     let maxFires = 0, maxFlames = 0, maxMs = 0, sum = 0;
     for (let f = 0; f < 1800; f++) {
         const t = performance.now();
@@ -109,6 +117,32 @@ function fireStats() {
     };
 }
 
+/**
+ * 段3b: 全部の爆発物に同じ tick で引き金を引いて 600 フレーム回す（一番重い側。上限で後ろへずれる）。
+ * 1フレームの town.update の平均と最大、爆発の数、60 フレームあたりの最大
+ */
+function chainStats() {
+    const town = new Town(specs, { isSolidTile: (r, c) => map.isSolid(r, c), createCanvas: noPixels, smokeSprites: noSmoke });
+    const game = fakeGame(town);
+    const xs = town.buildings.filter((b) => b.explosive);
+    for (const b of xs) town.explosives.trigger(b, 0);
+    const frames = [];
+    let maxMs = 0, sum = 0;
+    for (let f = 0; f < 600; f++) {
+        const before = xs.filter((b) => b.exploded).length;
+        const t = performance.now();
+        town.update(game);
+        const ms = performance.now() - t;
+        sum += ms; maxMs = Math.max(maxMs, ms);
+        for (let i = before; i < xs.filter((b) => b.exploded).length; i++) frames.push(f);
+    }
+    const perWindow = Math.max(0, ...frames.map((f) => frames.filter((g) => g > f - 60 && g <= f).length));
+    return {
+        explosives: xs.length, exploded: xs.filter((b) => b.exploded).length,
+        avgMs: +(sum / 600).toFixed(3), maxMs: +maxMs.toFixed(2), maxPer60Frames: perWindow,
+    };
+}
+
 if (args.stats) {
     const by = {};
     for (const s of specs) by[`${s.site}/${s.style}/${s.kind}`] = (by[`${s.site}/${s.style}/${s.kind}`] || 0) + 1;
@@ -118,7 +152,15 @@ if (args.stats) {
         spriteMB: +(area * 4 / 1e6).toFixed(2),
         specsMs: +(t1 - t0).toFixed(1), rasterizeMs: +(t2 - t1).toFixed(1),
         ...blastStats(),
+        chain: chainStats(),
     }, null, 2));
+    process.exit(0);
+}
+
+if (args['list-explosives']) {
+    const xs = specs.filter((s) => ['drum', 'crate', 'gas', 'oiljars'].includes(s.kind))
+        .map((s) => ({ kind: s.kind, x: s.x, y: s.y, w: s.w, h: s.h }));
+    console.log(JSON.stringify(xs));
     process.exit(0);
 }
 
@@ -127,6 +169,17 @@ const town = new Town(specs, {
     createCanvas: (w, h) => new PixelCanvas(w, h),
     smokeSprites: noSmoke,
 });
+
+if (args.boom) {
+    // その点に一番近い爆発物を弾1発ぶん欠かせる（爆発 → 誘爆）。--ticks で進める
+    for (const t of String(args.boom).split(';').filter(Boolean)) {
+        const [x, y] = t.split(',').map(Number);
+        const b = town.buildings.filter((o) => o.explosive)
+            .sort((p, q) => Math.hypot(p.x - x, p.y - y) - Math.hypot(q.x - x, q.y - y))[0];
+        if (b) town.chip(b, b.x + b.width / 2, b.y + b.height / 2, 4);
+    }
+    applyBlasts(town, [], Number(args.ticks ?? 0));
+}
 
 if (args.fire) {
     const list = String(args.fire).split(';').filter(Boolean).map((t) => [...t.split(',').map(Number), 36]);
