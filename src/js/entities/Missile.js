@@ -15,6 +15,8 @@ export class Missile {
         this.vx = Math.cos(angle) * MISSILE_SPEED;
         this.vy = Math.sin(angle) * MISSILE_SPEED;
         this.alive = true;
+        // 3面の町の当たり方（Constants の TOWN_PROJECTILE_IMPACT の行）
+        this.townKind = 'missile';
         this.exploded = false;
         this.isPlayerOwned = isPlayerOwned;
         this.isRival = isRival; // Rival attacker's missile: distinct color, double damage
@@ -62,6 +64,15 @@ export class Missile {
         if (this.x < 0 || this.x > map.width || this.y < 0 || this.y > map.height) {
             this.alive = false;
         }
+    }
+
+    /** 町の厚い壁に当たった。岩に当たったときと同じく爆発する（岩は壊さず、点も入れない） */
+    onTownWall(x, y) {
+        this.x = x;
+        this.y = y;
+        playBlast(this.game, x, y, 'missileTerrain');
+        this.exploded = true;
+        this.alive = false;
     }
 
     draw(ctx) {

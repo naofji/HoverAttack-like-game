@@ -32,6 +32,8 @@ export class EnemyCruiseMissile {
         this.maxSpeed = CRUISE_MISSILE_MAX_SPEED;
         this.acceleration = 0.05; // Slower acceleration than homing missile
         this.alive = true;
+        // 3面の町の当たり方（Constants の TOWN_PROJECTILE_IMPACT の行）
+        this.townKind = 'missile';
         this.exploded = false;
         this.lifetime = CRUISE_MISSILE_LIFETIME;
         this.frameCounter = 0;
@@ -226,6 +228,13 @@ export class EnemyCruiseMissile {
         this.driftAngle = driftAngle;
         // 終末誘導中と経路追従中は進路を変えない（経路から外れてしまう）
         if (!this.homingActive && !this.path) this.angle += turn;
+    }
+
+    /** 町の厚い壁に当たった。岩に当たったときと同じ _explode() */
+    onTownWall(x, y) {
+        this.x = x;
+        this.y = y;
+        this._explode();
     }
 
     _explode() {

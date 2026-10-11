@@ -2035,3 +2035,16 @@ export const TOWN_FALL_CHIP_RADIUS = 6;
 export const TOWN_SHATTER_PARTICLES = 10;
 // 瓦礫の山の高さの上限（px）。重なるたびに 1px ずつ高くなる
 export const TOWN_RUBBLE_MAX_H = 10;
+// 弾の種類ごとの、建物への当たり方（spec 2章の表）。弾のクラスが townKind でここの行を選ぶ。
+//   chip:   当たった所を欠かせる半径（px）。ミサイル・グレネードの欠けは、爆発（blast）の側で大きく開く
+//   thin:   細い部品（厚い壁の印の無いかけら）に当たったら 'chip'＝1棟1回欠かせて飛び続ける / 'pass'＝すり抜ける
+//   pierce: 厚い壁も貫通する（反射ビーム）
+// 厚い壁で止まったときの反応は、弾ごとの onTownWall(x, y)（岩に当たったときと同じ。岩は壊さない）
+export const TOWN_PROJECTILE_IMPACT = {
+    bullet: { chip: 4, thin: 'chip' },
+    missile: { chip: 4, thin: 'chip' },
+    grenade: { chip: 0, thin: 'pass' },
+    beam: { chip: 6, thin: 'chip', pierce: true },
+};
+// 弾の通り道を調べる刻み（px）。かけら 4px と同じにして、速い弾が薄い壁をすり抜けないように
+export const TOWN_SWEEP_STEP = 4;

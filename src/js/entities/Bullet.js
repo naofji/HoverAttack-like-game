@@ -36,6 +36,8 @@ export class Bullet {
         this.vy = Math.sin(angle) * spec.speed;
         this.radius = spec.radius;
         this.alive = true;
+        // 3面の町の当たり方（Constants の TOWN_PROJECTILE_IMPACT の行）
+        this.townKind = 'bullet';
         this.lifetime = spec.lifetime;
         this.frameCounter = 0;
 
@@ -78,6 +80,14 @@ export class Bullet {
         if (this.game.map.isSolidAtPixel(this.x, this.y)) {
             this.alive = false;
         }
+    }
+
+    /** 町の厚い壁に当たった（Town.sweepProjectile）。消えるだけだとバグに見えるので必ず火花を出す */
+    onTownWall(x, y) {
+        this.x = x;
+        this.y = y;
+        this.alive = false;
+        this.game.spawnSparks(x, y);
     }
 
     /**

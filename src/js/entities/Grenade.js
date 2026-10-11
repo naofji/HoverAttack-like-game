@@ -22,6 +22,8 @@ export class Grenade {
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
         this.alive = true;
+        // 3面の町の当たり方（Constants の TOWN_PROJECTILE_IMPACT の行）
+        this.townKind = 'grenade';
         this.lifetime = GRENADE_LIFETIME;
         this.rotation = 0;
         this.isPlayerOwned = true; // Default to player owned
@@ -79,6 +81,13 @@ export class Grenade {
         if (this.x < 0 || this.x > map.width || this.y < 0 || this.y > map.height) {
             this.alive = false;
         }
+    }
+
+    /** 町の厚い壁に当たった。跳ね返らず、その場で爆発する（spec 2章） */
+    onTownWall(x, y) {
+        this.x = x;
+        this.y = y;
+        this._explode();
     }
 
     _explode() {

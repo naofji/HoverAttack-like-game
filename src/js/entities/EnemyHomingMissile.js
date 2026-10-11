@@ -28,6 +28,8 @@ export class EnemyHomingMissile {
         this.homingDelay  = ENEMY_HOMING_MISSILE_DELAY;
         this.acceleration = 0.08; // Gradual startup
         this.alive = true;
+        // 3面の町の当たり方（Constants の TOWN_PROJECTILE_IMPACT の行）
+        this.townKind = 'missile';
         this.exploded = false;
         this.frameCounter = 0;
         this.isPlayerOwned = false; // Never player owned
@@ -156,6 +158,15 @@ export class EnemyHomingMissile {
         this.driftAngle = driftAngle;
         // 終末誘導に入ったら進路は目標が決める。傾けるだけにする
         if (!this.homingActive) this.angle += turn;
+    }
+
+    /** 町の厚い壁に当たった。岩に当たったときと同じく爆発する（岩は壊さず、点も入れない） */
+    onTownWall(x, y) {
+        this.x = x;
+        this.y = y;
+        playBlast(this.game, x, y, 'missileTerrain');
+        this.exploded = true;
+        this.alive = false;
     }
 
     draw(ctx) {

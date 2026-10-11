@@ -12,7 +12,7 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID } from './chunks.js';
 import { paintParts } from './shapes.js';
 import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR } from './palette.js';
 import { createExplosion, Particle } from '../../entities/Particle.js';
@@ -23,6 +23,7 @@ import {
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
+    TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -46,6 +47,8 @@ export class Town {
         this.createCanvas = createCanvas;
         this.falling = [];
         this.rubble = [];
+        // 弾ごとの覚え書き（発射位置で無視する建物・細い部品を欠かせた建物）。弾が消えれば一緒に消える
+        this._projState = new WeakMap();
         // 粒・土煙の注文。update() でまとめて、画面の中の分だけ出す（spec 2章「画面の外」）。
         // 壊れ方そのもの（かけら・支え・落下）は注文と関係なく、その場で進める
         this.effects = [];
@@ -192,8 +195,53 @@ export class Town {
         for (const b of set) this._settle(b);
     }
 
+    /**
+     * 弾と建物の当たり。前の位置（tick の頭に記録した _prevX）から今の位置まで TOWN_SWEEP_STEP 刻みで
+     * 調べる。厚い壁に当たったら当たった所を欠かせて p.onTownWall(x, y)。細い部品は 1棟1回欠かせて
+     * 飛び続ける（表の thin）。
+     * 撃った位置に重なる建物は、その弾では無視する。機体は建物の手前に重なって描かれるので、
+     * 建物の前で撃つと撃った瞬間に目の前の壁で消えてしまう（遮蔽になるのは撃った者と的のあいだの建物）
+     */
+    sweepProjectile(p) {
+        const spec = TOWN_PROJECTILE_IMPACT[p.townKind];
+        if (!spec || !p.alive || p.exploded) return;
+        if (spec.pierce) {
+            if (this._sweepBeam) this._sweepBeam(p, spec);
+            return;
+        }
+        // 発射したその tick は tick の頭の位置の記録が無い。1 tick 前の位置は x - vx で見積もる
+        const x0 = p._prevX !== undefined ? p._prevX : p.x - (p.vx || 0);
+        const y0 = p._prevY !== undefined ? p._prevY : p.y - (p.vy || 0);
+        let st = this._projState.get(p);
+        if (!st) {
+            st = { ignore: new Set(this.buildingsAt(x0, y0).map((b) => b.id)), thin: new Set() };
+            this._projState.set(p, st);
+        }
+        const n = Math.max(1, Math.ceil(Math.hypot(p.x - x0, p.y - y0) / TOWN_SWEEP_STEP));
+        for (let s = 1; s <= n; s++) {
+            const px = x0 + ((p.x - x0) * s) / n;
+            const py = y0 + ((p.y - y0) * s) / n;
+            for (const b of this.buildingsAt(px, py)) {
+                if (st.ignore.has(b.id)) continue;
+                const k = this.cellAt(b, px, py);
+                if (k < 0 || !b.cells[k]) continue;
+                if (b.cells[k] & SOLID) {
+                    if (spec.chip > 0) this.chip(b, px, py, spec.chip);
+                    p.onTownWall(px, py);
+                    return;
+                }
+                if (spec.thin === 'chip' && !st.thin.has(b.id)) {
+                    st.thin.add(b.id);
+                    this.chip(b, px, py, spec.chip);
+                }
+            }
+        }
+    }
+
     /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */
     update(game) {
+        // 自機側の弾（ミサイル・グレネード・マシンガン）。敵弾は CollisionManager が更新の直後に見る
+        for (const p of game.projectiles) this.sweepProjectile(p);
         this._updateFalling();
         this._flushEffects(game);
     }
