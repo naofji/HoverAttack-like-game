@@ -2216,7 +2216,7 @@ export const SNOWTREE_TOPPLE_SEED = 0.2;
 // 倒れきった（床に横たわった）あと、薄れて消えるまでの tick。この間に雪の粒を PUFFS 回、木の長さに沿って出す
 export const SNOWTREE_TOPPLE_LIE_TICKS = 30;
 export const SNOWTREE_TOPPLE_PUFFS = 3;
-export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 8;
+export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 10;
 // これより小さい塊（かけらの数）は倒れず、ふつうの破片として落ちて砕ける（枝先の欠片が90°倒れるのは不自然）
 export const SNOWTREE_TOPPLE_MIN_CELLS = 8;
 // 倒れる向きは、撃たれた位置と塊の真ん中の x の差が DEADZONE（px）以上あれば撃たれた側と反対、未満なら（幹をまっすぐ撃った）
@@ -2225,15 +2225,26 @@ export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
 // 雪の木が欠ける・倒れるときに舞う雪（SnowFlurryParticle。ユーザー指定: 「木が倒れたり削れたりするときに雪が舞う様に」）。
 // それまでは葉と同じ短命（20〜40 tick）の小さな粒がぱっと散るだけだった。舞う雪は、出た勢いで飛んだあと
 // 空気抵抗で止まり、ゆっくり左右に揺れながら落ちて、地面に触れたら消える（ホバーの粉雪 SnowMistParticle と同じ消え方）。
-// 数は「1 回の出来事で出す粒」: 弾・爆風が欠かした（HIT）、幹が切れて倒れ始めた（START。木が雪を振るい落とす）、
-// 倒れているあいだ TRICKLE_EVERY tick ごとに木に沿って（TRICKLE）、横たわった（PUFF_PARTICLES を PUFFS 回）。
-// 1 本が倒れきるまでに合わせて約 100 粒、寿命は 50〜90 tick なので同時に生きる粒は 1 本あたり約 60
-export const SNOWTREE_FLURRY_HIT = 10;
+// 最初は全部「上半分の向きへ 0.5〜2.2px/tick で飛ばす」で、実機で「やや舞い上がりすぎ。弾が当たって欠けるときはもう少し控えめに。
+// 木が倒れるときは雪が振り落とされて、倒れた後に雪が舞うのが理想」と言われた。出来事ごとに動きを分ける（MODES）:
+//   hit   弾・爆風が欠かした。少なく（HIT 5 粒）、勢いも弱い（飛ぶ高さは puff の約 1/3）
+//   shake 木が倒れ始めた（START 14 粒。木が雪を振るい落とす）・倒れているあいだ TRICKLE_EVERY tick ごとに木に沿って（TRICKLE 3 粒）。
+//         下へ向けて、ほとんど勢い無しに落ちる（地面に触れたら消える）
+//   puff  横たわったとき（PUFF_PARTICLES を PUFFS 回）と、そのあと消えるまで LIE_EVERY tick ごとに（LIE_PARTICLES）。倒れた木から
+//         舞い上がる主役。勢いは最初の版と同じ桁で、上半分の向き
+// 1 本が倒れきるまでに合わせて約 110 粒、寿命は 50〜90 tick。角度は画面座標の rad（真上 = -π/2、真下 = +π/2）
+export const SNOWTREE_FLURRY_HIT = 5;
 export const SNOWTREE_FLURRY_START = 14;
 export const SNOWTREE_FLURRY_TRICKLE_EVERY = 3;
 export const SNOWTREE_FLURRY_TRICKLE = 3;
+export const SNOWTREE_FLURRY_LIE_EVERY = 6;
+export const SNOWTREE_FLURRY_LIE_PARTICLES = 4;
 export const SNOWTREE_FLURRY_LIFE = [50, 90];
-export const SNOWTREE_FLURRY_SPEED = [0.5, 2.2];     // 出る勢い（px/tick）。空気抵抗で 1/20 秒ほどで落ち着く
+export const SNOWTREE_FLURRY_MODES = {
+    hit: { speed: [0.2, 0.7], angle: [-Math.PI * 0.8, -Math.PI * 0.2] },      // 上向きの扇。勢いは puff の約 1/3（空気抵抗で飛ぶのは最大でも約 14px）
+    shake: { speed: [0.05, 0.4], angle: [Math.PI * 0.1, Math.PI * 0.9] },     // 下向き。ほぼ勢い無し
+    puff: { speed: [0.6, 2.0], angle: [-Math.PI, 0] },                        // 上半分すべて
+};
 export const SNOWTREE_FLURRY_DRAG = 0.95;            // 毎 tick 速度に掛ける。落ちる速さは GRAVITY / (1 - DRAG) = 0.4px/tick に収まる
 export const SNOWTREE_FLURRY_GRAVITY = 0.02;         // ホバーの粉雪（0.02）と同じ軽さ
 export const SNOWTREE_FLURRY_SWAY = 0.3;             // 左右に揺れる幅（px/tick）

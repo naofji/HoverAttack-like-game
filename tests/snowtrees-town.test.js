@@ -9,7 +9,7 @@ import {
 } from '../src/js/world/town/palette.js';
 import { fakeCanvas } from './helpers/town-fixtures.js';
 import { SnowFlurryParticle } from '../src/js/entities/Particle.js';
-import { SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_LIFE } from '../src/js/utils/Constants.js';
+import { SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_DRAG } from '../src/js/utils/Constants.js';
 
 // 雪の木が出す粒の色（舞う雪と針葉の欠片）
 const SNOW_COLORS = new Set([...SNOWTREE_PARTICLE_COLORS, ...SNOWTREE_FLURRY_COLORS]);
@@ -175,4 +175,53 @@ test('シミュレーション（欠ける・切り離す・倒れる）は Math
         for (let t = 0; t < 120; t++) town._updateFalling();
         assert.ok(town.effects.length > 0, '粒の注文が出ていない（この検証が意味を失った）');
     } finally { Math.random = real; }
+});
+
+// 出来事ごとの動き（ユーザーの指摘「舞い上がりすぎ。欠けるときは控えめに。倒れるときは振り落とされて、倒れた後に舞う」）
+function spawnMode(mode, count = 600) {
+    const town = makeTown();
+    const game = fakeGame();
+    town._spawnSnowFlurry(game, { x: 100, y: 100, count, flora: 'snow', spread: 3, mode });
+    return game.particles;
+}
+const upSpeed = (p) => -p.vy;   // 画面座標: 上向きが負
+
+test('欠けたとき（hit）は控えめ: 上へ飛ぶ勢いが弱い（puff の約 1/3 以下）', () => {
+    const ps = spawnMode('hit');
+    const maxUp = Math.max(...ps.map(upSpeed));
+    assert.ok(maxUp <= SNOWTREE_FLURRY_MODES.hit.speed[1] + 1e-9, `上へ ${maxUp}px/tick`);
+    // 空気抵抗で止まるまでに飛ぶ高さ（初速 / (1 - DRAG)）。実機の「舞い上がりすぎ」の基準: 最大でも 15px 以下
+    assert.ok(maxUp / (1 - SNOWTREE_FLURRY_DRAG) <= 15, `${maxUp / (1 - SNOWTREE_FLURRY_DRAG)}px まで上がる`);
+    const puff = spawnMode('puff');
+    const mean = (a) => a.reduce((x, p) => x + Math.hypot(p.vx, p.vy), 0) / a.length;
+    assert.ok(mean(ps) < mean(puff) * 0.5, `hit の勢い ${mean(ps)} が puff ${mean(puff)} に近い`);
+});
+
+test('倒れる木が雪を振るい落とすとき（shake）は、下向きにほとんど勢い無しで落ちる', () => {
+    const ps = spawnMode('shake');
+    for (const p of ps) {
+        assert.ok(p.vy > 0, `上へ飛んだ（vy ${p.vy}）`);
+        assert.ok(Math.hypot(p.vx, p.vy) <= SNOWTREE_FLURRY_MODES.shake.speed[1] + 1e-9);
+    }
+});
+
+test('倒れたあと（puff）は上半分の向きへ舞い上がる。勢いは hit より強い', () => {
+    const ps = spawnMode('puff');
+    for (const p of ps) assert.ok(p.vy <= 1e-9, `下へ飛んだ（vy ${p.vy}）`);
+    assert.ok(Math.max(...ps.map(upSpeed)) > 1.5, '舞い上がる勢いが弱い');
+    assert.ok(Math.min(...ps.map((p) => p.x)) < 100 && Math.max(...ps.map((p) => p.x)) > 100);
+});
+
+test('欠けたときの雪は、倒れ始めに振るい落とす雪の半分以下（控えめ）。mode 無しの効果は hit と同じ動き', () => {
+    assert.ok(SNOWTREE_FLURRY_HIT * 2 <= SNOWTREE_FLURRY_START, `${SNOWTREE_FLURRY_HIT} と ${SNOWTREE_FLURRY_START}`);
+    const town = makeTown();
+    const b = town.buildings[0];
+    town.effects.length = 0;
+    town.chip(b, midOf(b).x, midOf(b).y, 6);
+    const e = town.effects.find((q) => q.type === 'leaf');
+    assert.equal(e.mode, 'hit');
+    assert.equal(e.count, SNOWTREE_FLURRY_HIT);
+    const game = fakeGame();
+    town._spawnSnowFlurry(game, { x: 0, y: 0, count: 200, flora: 'snow' });
+    assert.ok(Math.max(...game.particles.map(upSpeed)) <= SNOWTREE_FLURRY_MODES.hit.speed[1] + 1e-9);
 });

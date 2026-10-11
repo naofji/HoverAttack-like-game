@@ -33,9 +33,9 @@ import {
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
     TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
-    SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES, SNOWTREE_TOPPLE_LEAN_DEADZONE,
+    SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_LIE_TICKS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES, SNOWTREE_TOPPLE_LEAN_DEADZONE,
     SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_TRICKLE_EVERY, SNOWTREE_FLURRY_TRICKLE,
-    SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_SPEED, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_SPREAD,
+    SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES, SNOWTREE_FLURRY_SPREAD,
     SNOWTREE_FLURRY_START_HEIGHT, SNOWTREE_FLURRY_TRICKLE_STEP, SNOWTREE_FLURRY_BIG_SHARE,
 } from '../../utils/Constants.js';
 
@@ -191,7 +191,7 @@ export class Town {
         this._removeCells(b, removed);
         this._charEdges(b, removed);
         this._settle(b, x);
-        if (b.soft) this._emit('leaf', x, y, { count: b.flora === 'snow' ? SNOWTREE_FLURRY_HIT : PLANT_LEAF_PARTICLES_HIT, flora: b.flora, spread: SNOWTREE_FLURRY_SPREAD.hit });
+        if (b.soft) this._emit('leaf', x, y, { count: b.flora === 'snow' ? SNOWTREE_FLURRY_HIT : PLANT_LEAF_PARTICLES_HIT, flora: b.flora, spread: SNOWTREE_FLURRY_SPREAD.hit, mode: 'hit' });
         // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）、
         // 爆風なら 8〜15 フレーム遅れて（一斉に爆発させず連鎖を見せる）
         if (b.explosive) this.explosives.trigger(b, cause === 'blast' ? this.explosives.chainDelay() : 0);
@@ -409,13 +409,18 @@ export class Town {
         if (!p.lying && p.age % SNOWTREE_FLURRY_TRICKLE_EVERY === 0) {
             // 倒れているあいだ、木に沿って雪がこぼれる。位置は経過 tick から決める（木の上を行き来する。シミュレーションに乱数を使わない）
             const pt = p.pointAlong(p.height * ((p.age * SNOWTREE_FLURRY_TRICKLE_STEP) % 1));
-            this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_FLURRY_TRICKLE, flora: this._floraOf(p), spread: SNOWTREE_FLURRY_SPREAD.trickle });
+            this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_FLURRY_TRICKLE, flora: this._floraOf(p), spread: SNOWTREE_FLURRY_SPREAD.trickle, mode: 'shake' });
+        }
+        if (p.lying && !landed && (SNOWTREE_TOPPLE_LIE_TICKS - p.lieLeft) % SNOWTREE_FLURRY_LIE_EVERY === 0) {
+            // 横たわって薄れていくあいだも、倒れた木から雪が舞い上がる（位置は経過 tick から決める）
+            const pt = p.pointAlong(p.height * ((p.age * SNOWTREE_FLURRY_TRICKLE_STEP) % 1));
+            this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_FLURRY_LIE_PARTICLES, flora: this._floraOf(p), spread: SNOWTREE_FLURRY_SPREAD.puff, mode: 'puff' });
         }
         if (landed) {
             const length = p.height;   // 倒れた木の長さ（もとの高さ）
             for (let i = 1; i <= SNOWTREE_TOPPLE_PUFFS; i++) {
                 const pt = p.pointAlong((length * i) / (SNOWTREE_TOPPLE_PUFFS + 1));
-                this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_TOPPLE_PUFF_PARTICLES, flora: this._floraOf(p), spread: SNOWTREE_FLURRY_SPREAD.puff });
+                this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_TOPPLE_PUFF_PARTICLES, flora: this._floraOf(p), spread: SNOWTREE_FLURRY_SPREAD.puff, mode: 'puff' });
             }
         }
         if (p.done) p.alive = false;
@@ -578,13 +583,15 @@ export class Town {
 
     /**
      * 雪の木の粒（欠けた・倒れた）。舞う雪（SnowFlurryParticle）が大半で、6 粒に 1 粒は針葉の欠片。
-     * 上半分の向きへ、出た勢いで飛ばす（空気抵抗で止まって、揺れながら落ちる）。見た目だけなので Math.random でよい
+     * 動きは出来事の種類（e.mode: hit / shake / puff。Constants.js の SNOWTREE_FLURRY_MODES）で決める。
+     * 空気抵抗で止まって、揺れながら落ちる。見た目だけなので Math.random でよい
      */
     _spawnSnowFlurry(game, e) {
         const spread = e.spread ?? 3;
+        const mode = SNOWTREE_FLURRY_MODES[e.mode] || SNOWTREE_FLURRY_MODES.hit;
         for (let i = 0; i < e.count; i++) {
-            const a = -Math.PI * Math.random();
-            const sp = SNOWTREE_FLURRY_SPEED[0] + Math.random() * (SNOWTREE_FLURRY_SPEED[1] - SNOWTREE_FLURRY_SPEED[0]);
+            const a = mode.angle[0] + Math.random() * (mode.angle[1] - mode.angle[0]);
+            const sp = mode.speed[0] + Math.random() * (mode.speed[1] - mode.speed[0]);
             // 上へだけ散らす（床の線の点から下へ散ると、岩の中で生まれて最初の更新で消える）
             const x = e.x + (Math.random() - 0.5) * 2 * spread, y = e.y - Math.random() * spread;
             if (i % SNOWTREE_FLURRY_NEEDLE_EVERY === SNOWTREE_FLURRY_NEEDLE_EVERY - 1) {
@@ -689,7 +696,7 @@ export class Town {
             const tree = new ToppleTree({ ...piece, vx: 0, spin: 0, lean, footX });
             this.falling.push(tree);
             // 幹が切れた揺れで、木が雪を振るい落とす（塊の上半分あたり、幅いっぱいに）
-            this._emit('leaf', piece.x + pw / 2, piece.y + ph * SNOWTREE_FLURRY_START_HEIGHT, { count: SNOWTREE_FLURRY_START, flora: 'snow', spread: pw / 2 });
+            this._emit('leaf', piece.x + pw / 2, piece.y + ph * SNOWTREE_FLURRY_START_HEIGHT, { count: SNOWTREE_FLURRY_START, flora: 'snow', spread: pw / 2, mode: 'shake' });
         } else {
             this.falling.push(new FallingPiece(piece));
         }

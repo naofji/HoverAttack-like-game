@@ -12,6 +12,7 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
     SNOWTREE_TOPPLE_LIE_TICKS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES,
     SNOWTREE_TOPPLE_MIN_CELLS, PLANT_LEAF_PARTICLES_HIT, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_TRICKLE,
+    SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES,
 } from '../src/js/utils/Constants.js';
 
 const FLOOR_ROW = 20;
@@ -229,7 +230,7 @@ test('横たわったとき、雪の粒が木に沿って数回に分けて出�
     }
     assert.ok(seen, '横たわらなかった');
     assert.equal(seen.length, SNOWTREE_TOPPLE_PUFFS);
-    for (const e of seen) assert.equal(e.flora, 'snow');
+    for (const e of seen) { assert.equal(e.flora, 'snow'); assert.equal(e.mode, 'puff', '横たわったときの雪は舞い上がる動き'); }
     assert.equal(new Set(seen.map((e) => Math.round(e.x))).size, SNOWTREE_TOPPLE_PUFFS, '同じ x に重なっている');
     // 床の線の近く（木は床に横たわる）
     for (const e of seen) assert.ok(Math.abs(e.y - GROUND_Y) < 40, `y ${e.y} が床から遠い`);
@@ -243,6 +244,7 @@ test('倒れ始めに雪を振るい落とし、倒れているあいだ木に�
     // 切った瞬間: 欠けた粒（HIT）と、倒れ始めの雪（START）
     const start = town.effects.filter((e) => e.type === 'leaf' && e.count === SNOWTREE_FLURRY_START);
     assert.equal(start.length, 1, '倒れ始めの雪が出ない');
+    assert.equal(start[0].mode, 'shake', '倒れ始めの雪は振るい落とす動き');
     assert.ok(start[0].spread >= 8, '倒れ始めの雪が幅に広がっていない');
     const tree = town.falling.find((p) => p.topple);
     town.effects.length = 0;
@@ -255,7 +257,7 @@ test('倒れ始めに雪を振るい落とし、倒れているあいだ木に�
     // 倒れるのに約 40 tick。3 tick ごとに 1 回
     assert.ok(trickle.length >= 10 && trickle.length <= 20, `${trickle.length} 回`);
     assert.equal(new Set(trickle.map((e) => `${Math.round(e.x)},${Math.round(e.y)}`)).size > 5, true, '同じ所からばかり出る');
-    for (const e of trickle) assert.equal(e.flora, 'snow');
+    for (const e of trickle) { assert.equal(e.flora, 'snow'); assert.equal(e.mode, 'shake', '倒れているあいだにこぼれる雪は振るい落とす動き'); }
     // 横たわったあとはこぼれない
     for (let t = 0; t < 10; t++) { town._updateFalling(); assert.equal(town.effects.filter((e) => e.count === SNOWTREE_FLURRY_TRICKLE).length, 0); town.effects.length = 0; }
 });
@@ -438,4 +440,24 @@ test('落ちる軸は、下の建物のかけら（隣の木・切り株）の�
     assert.ok(p.pivotY >= -1 && p.pivotY <= 8, `軸 ${p.pivotY} が塊の上端（0）に乗っていない`);
     assert.equal(target.remaining, before, '乗っただけで欠けた');
     assert.ok(p.lying, '横たわらない');
+});
+
+test('横たわって薄れていくあいだも、LIE_EVERY tick ごとに倒れた木から雪が舞い上がる。消えたあとは出ない', () => {
+    const town = makeTown([treeSpec(fir())]);
+    const b = town.buildings[0];
+    cutTrunk(town, b);
+    const tree = town.falling.find((p) => p.topple);
+    let t = 0;
+    while (!tree.lying && t++ < 200) town._updateFalling();
+    assert.ok(tree.lying);
+    town.effects.length = 0;
+    const ticks = [];
+    for (let k = 1; tree.alive && k < 200; k++) {
+        town._updateFalling();
+        for (const e of town.effects) if (e.count === SNOWTREE_FLURRY_LIE_PARTICLES) { ticks.push(k); assert.equal(e.mode, 'puff'); assert.equal(e.flora, 'snow'); }
+        town.effects.length = 0;
+    }
+    assert.equal(tree.alive, false);
+    assert.deepEqual(ticks, [1, 2, 3, 4, 5].map((n) => n * SNOWTREE_FLURRY_LIE_EVERY), `間隔 ${ticks}`);
+    for (let k = 0; k < 20; k++) { town._updateFalling(); assert.equal(town.effects.length, 0, '消えたあとに雪の注文が出た'); }
 });
