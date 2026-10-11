@@ -24,6 +24,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 機体の破壊演出 | `src/js/entities/destruction.js` の `DESTRUCTION_PROFILES` に1行 | `playDestruction()` |
 | 破壊時の破片パーツ | `src/js/entities/debris/` に `xxxParts.js` ＋ `DEBRIS_SPECS` に1行 | `buildDebris()` |
 | 敵アタッカーの型 | `Constants.js` の `ENEMY_ATTACKER_TYPES` に1行 ＋ 脚を変えるなら `entities/attacker/legs.js` の `LEG_STYLES` | `EnemyAttacker.js` の `update()` |
+| 壊せる背景の植物の種類（4面） | `src/js/world/town/plants.js` に build 関数 ＋ `generatePlants.js` の置き方（燃えず誘爆しない。`soft: true` で崩壊の演出なし） | `Town.js`（町と同じ仕組み） |
 | 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |

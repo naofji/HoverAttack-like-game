@@ -975,7 +975,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 1
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
-    { kind: 'water', backdrop: 'wet',     terrain: 'cave' }, // 4: 地底湖
+    { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
     { kind: 'snow',  backdrop: 'snow',    terrain: 'cave' }, // 5: 雪と氷
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
@@ -2075,6 +2075,8 @@ export const TOWN_MATERIALS = {
     2: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
     3: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
     4: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
+    // 植物（苔・シダ。4面）。燃えない・火を中継しない（金属と同じ行）。ユーザーの指定: 誘爆も延焼もしない
+    5: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
 };
 // 火が隣へ進むとき、元の火元を残したまま新しい火元を増やす確率（それ以外は火元が移る）。
 // 増やしすぎると 1棟の上限 4 にすぐ届く
@@ -2153,3 +2155,32 @@ export const TOWN_FIRE_CRACKLE_SEED = 0x7F1E;
 // 炎のループの強さ = √(Σ 火元ごとの位置の音量 / FULL) を 1 で頭打ち。√ にしたのは火元1つでも聞こえるように
 // （1つで -10dB）。位置の音量は positionalVolume（画面の中 1、外は下がって1画面ぶんで 0）
 export const TOWN_FIRE_SOUND_FULL = 10;
+
+// --- 4面の植物（苔とシダ）---
+// 3面の町の仕組み（world/town/）に、燃えない・誘爆しない壊せる植物を載せる。絵は world/town/plants.js、
+// 置き場所は world/town/generatePlants.js。STAGE_ENVIRONMENTS の props: 'ferns' の面だけに置く。
+// 弾の止まり方・欠け方・落ち方は町と同じ（TOWN_PROJECTILE_IMPACT の表、TOWN_CHIP_JAGGED など）。
+// 植物は全部「厚い壁」にした: 弾がすり抜けるのに欠けるのでは、壊れることに筋が通らない（ユーザーの指摘）。
+// 床の植物の混ぜ方。tall 以外の残りが苔。自機・アタッカーの高さは 24px（PLAYER_HEIGHT）で、
+// 苔は 4〜8px、低いシダは 24px 未満、高いシダは 24px を超える（絵は地面に 4px 埋まるので、見える高さは 1段ぶん引く）
+export const PLANT_FLOOR_MIX = { tall: 0.15, low: 0.3 };
+// 高いシダの幹の段数（1段 = 4px）。冠の葉が上に 3 段ほど乗る
+export const PLANT_TALL_TRUNK = [8, 18];
+// 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる
+export const PLANT_FILL_SCALE = 1;
+// 壁の植物は、壁の長さこれごとに1つの候補を置く。候補ごとに置く確率
+export const PLANT_WALL_SPACING = 6;
+export const PLANT_WALL_CHANCE = 0.6;
+// 壁・天井に置ける最小の広さ（タイル）。町（TOWN_WALL_MIN_* / TOWN_CEIL_*）は大きな家を掛けるので
+// 壁 4 タイル・天井の空き 8 タイルを要るが、植物は小さいので緩める。町と同じ値では 4面の天井に
+// 2 本、壁に 2 つしか置けなかった（実測）。KEEP_BELOW は垂らした先と床のあいだに残す空き
+export const PLANT_WALL_MIN_RUN = 3;
+export const PLANT_WALL_MIN_REACH = 2;
+export const PLANT_CEIL_MIN_RUN = 3;
+export const PLANT_CEIL_MIN_DROP = 3;
+export const PLANT_CEIL_KEEP_BELOW = 1;
+// 天井の垂れ下がりの候補は、連続した天井の 1 タイルごとに、この確率 × 村の濃さ（密集の中心で 1）
+export const PLANT_CEIL_CHANCE = 0.35;
+// 当たったとき・落ちた破片が砕けたときに出す葉の粒の数（画面の中だけ）
+export const PLANT_LEAF_PARTICLES_HIT = 4;
+export const PLANT_LEAF_PARTICLES_FALL = 8;

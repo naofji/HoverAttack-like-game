@@ -4,6 +4,7 @@
 // 使い方:
 //   node tools/render-town-scene.mjs --out town.png                       # 今週の3面、左上（開始の部屋）
 //   node tools/render-town-scene.mjs --seed 3 --x 1200 --y 300 --w 1366 --h 768 --scale 1 --out a.png
+//   node tools/render-town-scene.mjs --stage 4 --out ferns.png            # 4面の苔とシダ（既定は3面の町）
 //   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間・壊す時間
 //   node tools/render-town-scene.mjs --x 1200 --y 300 --blast "1300,420,150;1340,400,36" --ticks 120 --out b.png
 //       # 壊した後（段2）。--blast は「x,y,粒の数」を ; 区切りで何発でも（グレネード 150・ミサイル 36）。
@@ -20,7 +21,7 @@
 // （遠景の空洞の色 → 町 → 地形）。
 
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { TILE_SIZE as T } from '../src/js/utils/Constants.js';
+import { TILE_SIZE as T, STAGE_ENVIRONMENTS } from '../src/js/utils/Constants.js';
 import { getCurrentWeek, stageSeed } from '../src/js/utils/WeekSeed.js';
 import { PixelCanvas, writePng } from './lib/pixel-canvas.mjs';
 
@@ -38,12 +39,13 @@ const { Town } = await import('../src/js/world/town/Town.js');
 const { backdropColors } = await import('../src/js/world/CaveBackdrop.js');
 const { SpawnEffects } = await import('../src/js/systems/SpawnEffects.js');
 
-const MISSION = 2;   // 3面
+const MISSION = args.stage ? Number(args.stage) - 1 : 2;   // 既定は3面。--stage 4 で苔とシダ
+const PROPS = STAGE_ENVIRONMENTS[MISSION % STAGE_ENVIRONMENTS.length].props;
 const seed = args.seed ? Number(args.seed) : stageSeed(getCurrentWeek().seed, MISSION);
 const map = new GameMap({ rng: new SeededRNG(seed) }, MISSION);
 
 const t0 = performance.now();
-const specs = map._buildTownSpecs();
+const specs = PROPS === 'ferns' ? map._buildPlantSpecs() : map._buildTownSpecs();
 const t1 = performance.now();
 // 画素を持たない canvas で作る時間 ＝ かけらの表と支えの計算（実機の canvas の確保・塗りは別）
 const noPixels = () => ({ getContext: () => noopCtx });
@@ -195,7 +197,7 @@ const scale = Number(args.scale ?? 1);
 const screen = new PixelCanvas(W, H);
 const ctx = screen.getContext();
 const style = map.blockStyles[1];
-ctx.fillStyle = backdropColors(style.fill, 'cave').voidColor;
+ctx.fillStyle = backdropColors(style.fill, STAGE_ENVIRONMENTS[MISSION % STAGE_ENVIRONMENTS.length].backdrop).voidColor;
 ctx.fillRect(0, 0, W, H);
 ctx.translate(-X, -Y);
 town.draw(ctx, { x: X, y: Y, w: W, h: H });

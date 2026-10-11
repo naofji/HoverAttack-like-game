@@ -31,9 +31,9 @@ export function adobeShare(headroom) {
     return TOWN_ADOBE_SHARE_NARROW + (TOWN_ADOBE_SHARE_WIDE - TOWN_ADOBE_SHARE_NARROW) * t;
 }
 
-const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+export const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-function touchesRect(s, rc) {
+export function touchesRect(s, rc) {
     const r0 = Math.floor(s.y / T), r1 = Math.floor((s.y + s.h - 1) / T);
     const c0 = Math.floor(s.x / T), c1 = Math.floor((s.x + s.w - 1) / T);
     return r0 <= rc.r1 && r1 >= rc.r0 && c0 <= rc.c1 && c1 >= rc.c0;

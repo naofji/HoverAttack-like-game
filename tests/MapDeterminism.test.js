@@ -144,3 +144,37 @@ test('every building in the town is held by rock (floor, wall or ceiling)', asyn
     }
   }
 });
+
+// 4面の植物（苔とシダ）。町と同じ Town の仕組みに、燃えない植物の設計図を載せる。
+// 4面の植物も派生ストリームしか使わず、game.rng を動かさない
+test('stage 4 builds plants (soft buildings); stage 3 keeps its town; mission 11 (= stage 4 mod 7) has plants too', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const ferns = buildMap(Map, 42, 3).town;
+  assert.ok(ferns.buildings.length > 0);
+  assert.ok(ferns.buildings.every((b) => b.soft && b.style === 'P'));
+  assert.ok(buildMap(Map, 42, 2).town.buildings.every((b) => !b.soft), '3面の町は soft でない');
+  assert.equal(buildMap(Map, 42, 4).town, null, '5面には何も置かない');
+  assert.ok(buildMap(Map, 42, 10).town.buildings.every((b) => b.soft), 'debugStartMission で面数を超えても剰余で4面');
+});
+
+test('same seed produces the same plants', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const summary = (m) => m.town.buildings.map((b) => [b.kind, b.x, b.y, b.width, b.height, Array.from(b.cells).join('')]);
+  assert.deepEqual(summary(buildMap(Map, 42, 3)), summary(buildMap(Map, 42, 3)));
+});
+
+test('building the plants does not consume game.rng (SpawnManager runs on it next)', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const withPlants = { rng: new SeededRNG(42) };
+  new Map(withPlants, 3);
+
+  const original = Map.prototype._generatePlants;
+  Map.prototype._generatePlants = function () { /* no-op: 植物を作らない */ };
+  const without = { rng: new SeededRNG(42) };
+  try {
+    new Map(without, 3);
+  } finally {
+    Map.prototype._generatePlants = original;
+  }
+  assert.equal(withPlants.rng.state, without.rng.state);
+});

@@ -12,9 +12,11 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT } from './chunks.js';
 import { paintParts } from './shapes.js';
-import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR } from './palette.js';
+import {
+    TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR, PLANT_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS,
+} from './palette.js';
 import { createExplosion, Particle } from '../../entities/Particle.js';
 import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
@@ -28,7 +30,7 @@ import {
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
-    TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP,
+    TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -73,6 +75,9 @@ export class Town {
             const total = cells.reduce((n, v) => n + (v ? 1 : 0), 0);
             return {
                 id, site: spec.site, style: spec.style, kind: spec.kind,
+                // 4面の植物。燃えない・誘爆しない・崩壊の演出（爆発・地鳴り・焦げた土台・瓦礫）を持たず、
+                // 欠けた分が葉の破片になって落ちるだけ
+                soft: spec.soft === true,
                 x: spec.x, y: spec.y, width: spec.w, height: spec.h,
                 cells, cw, ch,
                 anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile),
@@ -176,6 +181,7 @@ export class Town {
         this._removeCells(b, removed);
         this._charEdges(b, removed);
         this._settle(b);
+        if (b.soft) this._emit('leaf', x, y, { count: PLANT_LEAF_PARTICLES_HIT });
         // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）、
         // 爆風なら 8〜15 フレーム遅れて（一斉に爆発させず連鎖を見せる）
         if (b.explosive) this.explosives.trigger(b, cause === 'blast' ? this.explosives.chainDelay() : 0);
@@ -211,7 +217,7 @@ export class Town {
     /** 消えたかけらの上下左右に残ったかけらへ焦げを重ねる（1回の欠けで同じかけらは1度だけ） */
     _charEdges(b, removed) {
         const done = new Set();
-        b.ctx.fillStyle = TOWN_CHAR_EDGE;
+        b.ctx.fillStyle = b.soft ? PLANT_CHAR_EDGE : TOWN_CHAR_EDGE;
         for (const k of removed) {
             const i = k % b.cw;
             const nb = [];
@@ -386,6 +392,10 @@ export class Town {
             return;
         }
         const mat = p.mainMaterial();
+        if (mat === MAT_PLANT) {   // 葉は山にならない。粒になって散る（音も鳴らさない）
+            this._emit('leaf', p.cx, groundY, { count: PLANT_LEAF_PARTICLES_FALL });
+            return;
+        }
         this._addRubble(p.x, p.width, groundY, p.count, mat);
         this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES, size: p.count });
         if (p.fireFuel > 0) this.fire.addEmber(p.cx, groundY);
@@ -472,7 +482,16 @@ export class Town {
             if (cam && cv && (e.x < cam.x - m || e.x > cam.x + cv.width + m
                 || e.y < cam.y - m || e.y > cam.y + cv.height + m)) continue;
             if ((e.type === 'collapse' || e.type === 'shatter') && e.size > 0 && (!loud || e.size > loud.size)) loud = e;
-            if (e.type === 'collapse') {
+            if (e.type === 'leaf') {
+                for (let i = 0; i < e.count; i++) {
+                    // 見た目だけの粒なので Math.random でよい。土の粒より軽く、ゆっくり落ちる
+                    const a = -Math.PI * Math.random();
+                    const sp = 0.3 + Math.random() * 1.2;
+                    game.particles.push(new Particle(e.x, e.y, Math.cos(a) * sp, Math.sin(a) * sp,
+                        PLANT_LEAF_PARTICLE_COLORS[i % PLANT_LEAF_PARTICLE_COLORS.length], 1 + Math.random() * 2,
+                        20 + Math.floor(Math.random() * 20)));
+                }
+            } else if (e.type === 'collapse') {
                 game.particles.push(...createExplosion(e.x, e.y, TOWN_COLLAPSE_PARTICLES));
             } else {
                 const color = TOWN_RUBBLE_COLORS[e.mat] || TOWN_RUBBLE_COLORS[1];
@@ -510,7 +529,7 @@ export class Town {
         const anchors = this._liveAnchors(b);
         let mask = supportedMask(b.cells, b.cw, b.ch, anchors);
         const kept = mask.reduce((n, v) => n + v, 0);
-        if (!b.collapsed && kept < b.total * TOWN_COLLAPSE_FRACTION) {
+        if (!b.soft && !b.collapsed && kept < b.total * TOWN_COLLAPSE_FRACTION) {
             b.collapsed = true;
             mask = supportedMask(b.cells, b.cw, b.ch, anchors, TOWN_RUIN_DEPTH);
             this._charRuins(b, mask);
@@ -573,7 +592,9 @@ export class Town {
         while (this.falling.length > TOWN_FALLING_MAX) {
             const old = this.falling.shift();
             old.alive = false;
-            this._emit('dust', old.cx, old.cy, { mat: old.mainMaterial() });
+            const mat = old.mainMaterial();
+            if (mat === MAT_PLANT) this._emit('leaf', old.cx, old.cy, { count: PLANT_LEAF_PARTICLES_FALL });
+            else this._emit('dust', old.cx, old.cy, { mat });
         }
     }
 

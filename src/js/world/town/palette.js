@@ -73,3 +73,17 @@ export const TOWN_EXPLOSIVE_COLORS = {
     jar: '#5a3a20',             // 油壺
     jarSeal: '#e8241a',         // 油壺の赤い封
 };
+
+// 4面の植物の色。地形（SeaGreen #2E8B57、輝度 105）の青緑に対して、黄緑〜オリーブに寄せて色相で離す。
+// 輝度は「遠景の rockLight(31) 以上、岩の 0.85 倍(89.5) 以下」（町と同じ考え方。tests/plants-palette.test.js）。
+// 括弧の数字は輝度。葉は先へ行くほど明るく（ただし上限の 89.5 まで）、幹は茶色を混ぜて葉と見分ける
+export const PLANT_COLORS = {
+    moss: ['#365318', '#3f5c20', '#44621f', '#4a6a24'],      // 68 / 77 / 81 / 89
+    leaf: ['#2f4a17', '#3a5a1c', '#44641f', '#4a6a24'],      // 60 / 73 / 83 / 89（根元 → 先）
+    trunk: ['#4a3d1c', '#3f3418', '#54451f'],                // 61 / 52 / 69
+    vine: ['#3a5a1c', '#44621f', '#4a6a24'],                 // 73 / 81 / 89
+};
+// 植物の穴の縁に重ねる暗い緑（町の焦げ色は茶色で、植物が焼けたように見えるため）
+export const PLANT_CHAR_EDGE = 'rgba(10, 24, 6, 0.5)';
+// 砕けた葉の粒の色
+export const PLANT_LEAF_PARTICLE_COLORS = ['#4a6a24', '#44621f', '#3a5a1c'];
