@@ -2090,7 +2090,9 @@ export const TOWN_EMBER_SMOKE_EVERY = 40; // 残り火が細い煙を出す間�
 
 // --- 3面の町並み 段3b（爆発物と誘爆）---
 // 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（3b章）
-export const TOWN_EXPLOSIVE_EVERY = 8;   // 床の建物何棟に1つ、脇に爆発物を置くか（spec の初期値）
+// 床の建物何棟に1つ、脇に爆発物を置こうとするか。置けない所（盤面の端・段の岩・隣の建物の足元）が
+// 約4割あるので、8 だと実際は 13 棟に1つ（40週の実測 547 / 7234）。spec の「8 棟に1つくらい」に合わせて 5
+export const TOWN_EXPLOSIVE_EVERY = 5;
 // 機体へのダメージは地雷（LANDMINE_DAMAGE / LANDMINE_BLAST_RADIUS）と同じから始める。
 // グレネード（80）より弱い。別に持つのは、実機で町の爆発物だけを詰められるように（spec 3b章）
 export const TOWN_EXPLOSIVE_DAMAGE = 25;

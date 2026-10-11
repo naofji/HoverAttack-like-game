@@ -56,7 +56,10 @@ export class ExplosiveSystem {
 
     /**
      * 毎 tick（Town.update から）。期限の来たものを早い順に、60 フレームに TOWN_EXPLOSIONS_PER_SECOND 回まで
-     * 爆発させる。上限に掛かった分は順番待ちに残り、次の tick 以降に爆発する
+     * 爆発させる。上限に掛かった分は順番待ちに残り、次の tick 以降に爆発する。
+     * 落ちて砕けたもの（landed）だけは上限を見ない。破片はもう消えているので、待たせると
+     * 「ドラム缶が消えて、1秒後に何も無い所で爆発する」になる（最終レビュー指摘）。
+     * 着地は1つずつ起きるので、これで上限が大きく破れることはない
      */
     update(game, view) {
         this.frame++;
@@ -64,8 +67,8 @@ export class ExplosiveSystem {
         if (this.queue.size === 0) return;
         const ready = [...this.queue].filter(([, e]) => e.due <= this.frame).sort((p, q) => p[1].due - q[1].due);
         for (const [b, e] of ready) {
-            if (this.recent.length >= TOWN_EXPLOSIONS_PER_SECOND) break;
             if (b.exploded) continue;
+            if (!e.landed && this.recent.length >= TOWN_EXPLOSIONS_PER_SECOND) continue;
             this._explode(b, e, game, view);
         }
     }

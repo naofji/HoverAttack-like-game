@@ -110,6 +110,11 @@ function onBareFloor(e, solid) {
  * 支えは岩だけなので、床の岩の上にしか置かない（足場の上の爆発物は、面に入った瞬間に落ちる）
  */
 function placeExplosives(specs, rng, { solid, fits }) {
+    // 床の建物の足元（本体の幅 × 高さ）。爆発物はここに重ねない。重ねると壁に埋もれて見え、
+    // 弾は手前に描いた爆発物ではなく奥の壁で止まる（最終レビュー指摘: 6割近くが隣の建物に重なり、
+    // 4割は半分以上が隣の壁の上だった）。軒・バルコニーなど足元の外の張り出しには重なってよい
+    const feet = specs.filter((s) => s.site === 'floor')
+        .map((s) => ({ x: s.x + s.footX, y: s.y, w: s.footW, h: s.h }));
     const placed = [];
     for (const s of specs) {
         if (s.site !== 'floor' || rng.next() >= 1 / TOWN_EXPLOSIVE_EVERY) continue;
@@ -118,12 +123,17 @@ function placeExplosives(specs, rng, { solid, fits }) {
         const gap = step4(rng, 0, 4);
         const foot0 = s.x + s.footX;
         const foot1 = foot0 + s.footW;
-        const e = {
-            site: 'floor', style: s.style, kind: b.kind,
-            x: right ? foot1 + gap : foot0 - gap - b.w, y: s.y + s.h - b.h, w: b.w, h: b.h, parts: b.parts,
-        };
-        if (!fits(e) || placed.some((o) => overlaps(o, e)) || !onBareFloor(e, solid)) continue;
-        placed.push(e);
+        // 引いた側が隣の建物で塞がっていれば、反対側を試す（建物が詰まった村で数が減りすぎないように）
+        for (const side of [right, !right]) {
+            const e = {
+                site: 'floor', style: s.style, kind: b.kind,
+                x: side ? foot1 + gap : foot0 - gap - b.w, y: s.y + s.h - b.h, w: b.w, h: b.h, parts: b.parts,
+            };
+            if (!fits(e) || placed.some((o) => overlaps(o, e)) || feet.some((f) => overlaps(f, e))
+                || !onBareFloor(e, solid)) continue;
+            placed.push(e);
+            break;
+        }
     }
     return placed;
 }

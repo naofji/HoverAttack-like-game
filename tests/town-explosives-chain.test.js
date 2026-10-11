@@ -121,3 +121,25 @@ test('画面の外の爆発: ダメージ・町の欠け・誘爆は起き、粒
     assert.equal(w.booms.length, 0);
     assert.equal(w.game.particles.length, 0);
 });
+
+test('上限いっぱいでも、落ちて砕けた爆発物はその tick に爆発する（破片が消えてから1秒遅れて空中で鳴らない）', () => {
+    // 最終レビュー指摘: 6回爆発した直後に落ちた爆発物は、破片が消えたまま 60 フレーム待っていた
+    let rock = true;
+    const far = Array.from({ length: TOWN_EXPLOSIONS_PER_SECOND }, (_, i) => drum(400 + i * 120, 0));
+    const w = world([drum(0, 0, 16, 68), ...far], { isSolidTile: (r) => (r === 4 && rock) || r === 12 });
+    const [falling, ...rest] = w.town.buildings;
+    for (const b of rest) w.town.explosives.trigger(b, 0);
+    w.step(1);
+    assert.equal(w.booms.length, TOWN_EXPLOSIONS_PER_SECOND, '前提: 上限まで使った');
+    rock = false;
+    w.town.onBlockDestroyed(4, 0);
+    let landedAt = -1;
+    for (let i = 0; i < 59 && !falling.exploded; i++) {
+        const before = w.town.falling.length;
+        w.step(1);
+        if (before > 0 && w.town.falling.length === 0 && landedAt < 0) landedAt = w.town.explosives.frame;
+    }
+    assert.ok(landedAt > 0, '前提: 60 フレーム以内に着地する');
+    assert.equal(falling.exploded, true);
+    assert.equal(w.booms.at(-1).frame, landedAt);
+});

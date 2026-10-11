@@ -26,7 +26,7 @@ test('explosiveRng を渡しても、建物の設計図は渡さないときと�
     }
 });
 
-test('床の建物 TOWN_EXPLOSIVE_EVERY 棟に1つくらい（6週の合計で 1/14〜1/5）', () => {
+test('床の建物 8 棟に1つくらい（spec。6週の合計で 1/14〜1/5）', () => {
     let floors = 0, explosives = 0;
     for (const m of maps()) {
         const specs = m._buildTownSpecs();
@@ -65,4 +65,17 @@ test('Map の町には爆発物があり、建物として支えを持つ（作�
     const xs = m.town.buildings.filter((b) => b.explosive);
     assert.ok(xs.length > 0);
     for (const b of xs) assert.ok(b.anchors.length > 0, `${b.kind} に支えが無い`);
+});
+
+test('爆発物は別の床の建物の足元（本体）に重ならない（壁に埋もれると狙っても手前の壁で弾が止まる）', () => {
+    // 最終レビュー指摘: 6割近くが隣の建物に重なり、4割は半分以上が隣の壁の上だった
+    for (const m of maps()) {
+        const specs = m._buildTownSpecs();
+        const feet = specs.filter((s) => s.site === 'floor' && !EXPLOSIVE.has(s.kind))
+            .map((s) => ({ x: s.x + s.footX, y: s.y, w: s.footW, h: s.h, kind: s.kind }));
+        for (const e of specs.filter((s) => EXPLOSIVE.has(s.kind))) {
+            const hit = feet.find((f) => e.x < f.x + f.w && f.x < e.x + e.w && e.y < f.y + f.h && f.y < e.y + e.h);
+            assert.ok(!hit, `${e.kind} (${e.x},${e.y}) が ${hit && hit.kind} (${hit && hit.x}) の足元に重なる`);
+        }
+    }
 });
