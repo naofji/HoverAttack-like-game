@@ -61,14 +61,15 @@ export const TOWN_EMBER_COLOR = '#ff7a1a';
 // 建物の輝度の上限（地形の岩の 0.85 倍）からは外す。弾（明るい黄色の丸）とは色の距離で離し
 // （tests/town-palette.test.js）、形も四角にする
 export const TOWN_EXPLOSIVE_COLORS = {
-    drum: '#b0301e',            // 燃料のドラム缶
-    drumBand: '#5a1a10',        // ドラム缶のたが
-    drumRim: '#c84030',         // ドラム缶の縁（上の 1px）。#d0503a は弾の黄色まで 149 で近すぎた
-    crateMark: '#c8281a',       // ダイナマイトの木箱の赤い印
+    // 赤は実機で「もう少しハッキリ」と言われて明るくした（#b0301e → #e02a1a など。2026-10-11）
+    drum: '#e02a1a',            // 燃料のドラム缶
+    drumBand: '#701c10',        // ドラム缶のたが
+    drumRim: '#f03828',         // ドラム缶の縁（上の 1px）。これより明るい・黄に寄ると弾の黄色に近づく（距離 150 未満）
+    crateMark: '#e8241a',       // ダイナマイトの木箱の赤い印
     crateMarkInner: '#e8e0d0',  // 印の中の白
-    gas: '#a82a22',             // ガスボンベ
+    gas: '#d82a20',             // ガスボンベ
     gasBand: '#e0d8c8',         // ボンベの白い帯
     gasCap: '#4f4a42',          // ボンベの口金
     jar: '#5a3a20',             // 油壺
-    jarSeal: '#c8281a',         // 油壺の赤い封
+    jarSeal: '#e8241a',         // 油壺の赤い封
 };
