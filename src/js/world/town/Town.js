@@ -12,10 +12,15 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED } from './chunks.js';
 import { paintParts } from './shapes.js';
-import { TOWN_CHAR_EDGE } from './palette.js';
-import { TOWN_CHIP_JAGGED } from '../../utils/Constants.js';
+import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE } from './palette.js';
+import { supportedMask, detachedGroups } from './structure.js';
+import { FallingPiece } from './FallingPiece.js';
+import {
+    TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH,
+    TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
+} from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
 // 弾・爆発と建物の当たりを引くマス目の大きさ（px）。総当たりにしない（spec 5章）
@@ -36,6 +41,10 @@ export class Town {
     constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas } = {}) {
         this.isSolidTile = isSolidTile;
         this.createCanvas = createCanvas;
+        this.falling = [];
+        // 粒・土煙の注文。update() でまとめて、画面の中の分だけ出す（spec 2章「画面の外」）。
+        // 壊れ方そのもの（かけら・支え・落下）は注文と関係なく、その場で進める
+        this.effects = [];
         this.buildings = specs.map((spec, id) => {
             const { cells, cw, ch } = rasterizeParts(spec.parts, spec.w, spec.h);
             const canvas = createCanvas(spec.w, spec.h);
@@ -154,8 +163,85 @@ export class Town {
         }
     }
 
-    /** 支えを確かめ直す（Task 4） */
-    _settle(b) {}
+    _emit(type, x, y, extra = {}) {
+        this.effects.push({ type, x, y, ...extra });
+    }
+
+    /** 岩がまだある支えのかけら */
+    _liveAnchors(b) {
+        return b.anchors.filter((a) => b.cells[a.i] && this.isSolidTile(a.r, a.c)).map((a) => a.i);
+    }
+
+    /**
+     * 支えにつながっていないかけらを破片にして落とす。残りが元の TOWN_COLLAPSE_FRACTION を
+     * 下回るなら崩壊: 支えから TOWN_RUIN_DEPTH かけら以内の土台だけを残して焦がし、残りは全部落とす。
+     * 崩壊は1棟1回（焦げた土台がまた欠けても、ふつうに支えを確かめるだけ）
+     */
+    _settle(b) {
+        const anchors = this._liveAnchors(b);
+        let mask = supportedMask(b.cells, b.cw, b.ch, anchors);
+        const kept = mask.reduce((n, v) => n + v, 0);
+        if (!b.collapsed && kept < b.total * TOWN_COLLAPSE_FRACTION) {
+            b.collapsed = true;
+            mask = supportedMask(b.cells, b.cw, b.ch, anchors, TOWN_RUIN_DEPTH);
+            this._charRuins(b, mask);
+            this._emit('collapse', b.x + b.width / 2, b.y + b.height / 2, { size: b.remaining });
+        }
+        for (const group of detachedGroups(b.cells, b.cw, b.ch, mask)) this._detach(b, group);
+    }
+
+    /** 崩壊で残った土台を焦がす（焦げた骨組み）。段3の火はこの印を見て、燃え尽きた所として扱う */
+    _charRuins(b, mask) {
+        b.ctx.fillStyle = TOWN_RUIN_SHADE;
+        for (let k = 0; k < mask.length; k++) {
+            if (!mask[k]) continue;
+            b.cells[k] |= CHARRED;
+            const i = k % b.cw;
+            b.ctx.fillRect(i * CHUNK, ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
+        }
+    }
+
+    /** かけらの塊を建物から切り離して、自分の canvas を持つ破片にする */
+    _detach(b, group) {
+        let i0 = Infinity, i1 = -1, j0 = Infinity, j1 = -1;
+        for (const k of group) {
+            const i = k % b.cw, j = (k - i) / b.cw;
+            i0 = Math.min(i0, i); i1 = Math.max(i1, i);
+            j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+        }
+        const pcw = i1 - i0 + 1, pch = j1 - j0 + 1;
+        const pw = pcw * CHUNK, ph = pch * CHUNK;
+        const canvas = this.createCanvas(pw, ph);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(b.canvas, i0 * CHUNK, j0 * CHUNK, pw, ph, 0, 0, pw, ph);
+        const cells = new Uint8Array(pcw * pch);
+        for (const k of group) {
+            const i = k % b.cw, j = (k - i) / b.cw;
+            cells[(j - j0) * pcw + (i - i0)] = b.cells[k];
+        }
+        // 外接矩形のうち塊に入らないかけら（隣の残る部分の絵）を抜く
+        for (let q = 0; q < cells.length; q++) {
+            if (!cells[q]) ctx.clearRect((q % pcw) * CHUNK, Math.floor(q / pcw) * CHUNK, CHUNK, CHUNK);
+        }
+        this._removeCells(b, group);
+        this.falling.push(new FallingPiece({
+            canvas, cells, cw: pcw, ch: pch,
+            x: b.x + i0 * CHUNK, y: b.y + j0 * CHUNK,
+            vx: (chunkHash(b.id, i0 + 101, j0 + 211) - 0.5) * 2 * TOWN_FALL_DRIFT_MAX,
+            spin: (chunkHash(b.id, j0 + 307, i0 + 401) - 0.5) * 2 * TOWN_FALL_SPIN_MAX,
+            sourceId: b.id,
+        }));
+        this._trimFalling();
+    }
+
+    /** 上限を超えた分を古いものから消す（土煙の注文を出す） */
+    _trimFalling() {
+        while (this.falling.length > TOWN_FALLING_MAX) {
+            const old = this.falling.shift();
+            old.alive = false;
+            this._emit('dust', old.cx, old.cy, { mat: old.mainMaterial() });
+        }
+    }
 
     /**
      * 画面に掛かる建物だけを描く。ctx はワールド座標に translate 済み。

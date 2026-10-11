@@ -2022,3 +2022,10 @@ export const TOWN_COLLAPSE_FRACTION = 0.4;
 export const TOWN_RUIN_DEPTH = 3;
 // 崩壊の粒の数（createExplosion の count。ミサイルの爆発 36 より小さく、着弾 4 より大きい）
 export const TOWN_COLLAPSE_PARTICLES = 24;
+// 同時に落ちている破片の上限。超えたら古いものから土煙になって消える（spec 2章）
+export const TOWN_FALLING_MAX = 24;
+// 落ちる破片の動き。重力は Grenade（GRENADE_GRAVITY）と同じ桁。回りは 1 フレーム最大 0.05rad
+export const TOWN_FALL_GRAVITY = 0.25;
+export const TOWN_FALL_MAX_SPEED = 7;     // 1 tick に 7px。描画補間の瞬間移動の閾値 64px より十分小さい
+export const TOWN_FALL_SPIN_MAX = 0.05;
+export const TOWN_FALL_DRIFT_MAX = 0.3;   // 横へ流れる初速（±px/tick）
