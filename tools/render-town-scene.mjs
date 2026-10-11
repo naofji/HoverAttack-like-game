@@ -152,6 +152,8 @@ if (args.stats) {
     console.log(JSON.stringify({
         seed, map: `${map.cols}x${map.rows}`, buildings: specs.length, byKind: by,
         spriteMB: +(area * 4 / 1e6).toFixed(2),
+        // 4面の植物は多角形。実機の canvas の fill の回数（色ごとに1回）と輪の数（node では塗りの時間を測れない）
+        ...(PROPS === 'ferns' ? { fillCalls: specs.reduce((n, sp) => n + sp.parts.length, 0), rings: specs.reduce((n, sp) => n + sp.parts.reduce((m, p) => m + p.rings.length, 0), 0) } : {}),
         specsMs: +(t1 - t0).toFixed(1), rasterizeMs: +(t2 - t1).toFixed(1),
         ...blastStats(),
         chain: chainStats(),

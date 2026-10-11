@@ -17,6 +17,7 @@ import { findSites } from './placement.js';
 import { placeVillages, villageFill } from './villages.js';
 import { overlaps, touchesRect } from './generate.js';
 import { mirrorParts, step4 } from './shapes.js';
+import { rasterizeParts } from './chunks.js';
 import { buildMoss, buildLowFern, buildTallFern, buildWallPlant, buildHangingVine } from './plants.js';
 
 // 見える部分の半分以上が岩の中に入る植物は置かない（岩の奥に隠れて、絵も当たりも無いのと同じ）
@@ -32,20 +33,25 @@ export function generatePlants({
     const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
         && !excludeRects.some((rc) => touchesRect(s, rc));
 
-    // 根元の段より上のセルのうち、岩のタイルに入っている割合
-    const buriedShare = (s) => {
+    // 絵（多角形）が掛かるかけらのうち、岩のタイルに入っている割合。かけらは Town と同じ規則で求める。
+    // 根元の段（床は一番下、天井は一番上、壁は壁の列 wallCol）は岩に埋めるものなので数えない
+    const buriedShare = (s, wallCol = -1) => {
+        const { cells, cw, ch } = rasterizeParts(s.parts, s.w, s.h);
         let all = 0, buried = 0;
-        const bottom = s.y + s.h - CH;
-        for (const p of s.parts) {
-            if (!p.mat) continue;
-            all++;
-            if (p.y + s.y >= bottom && s.site === 'floor') continue;   // 根元の段は岩に埋めるもの
-            if (solid(Math.floor((s.y + p.y + CH / 2) / T), Math.floor((s.x + p.x + CH / 2) / T))) buried++;
+        for (let j = 0; j < ch; j++) {
+            if ((s.site === 'floor' && j === ch - 1) || (s.site === 'ceiling' && j === 0)) continue;
+            for (let i = 0; i < cw; i++) {
+                if (!cells[j * cw + i]) continue;
+                const tc = Math.floor((s.x + i * CH + CH / 2) / T);
+                if (tc === wallCol) continue;   // 壁の植物の根元の列は、壁に埋めるもの
+                all++;
+                if (solid(Math.floor((s.y + j * CH + CH / 2) / T), tc)) buried++;
+            }
         }
-        return all === 0 ? 1 : buried / all;
+        return all === 0 ? 0 : buried / all;
     };
-    const add = (s, overlapOk) => {
-        if (!fits(s) || buriedShare(s) > MAX_BURIED_SHARE) return false;
+    const add = (s, overlapOk, wallCol = -1) => {
+        if (!fits(s) || buriedShare(s, wallCol) > MAX_BURIED_SHARE) return false;
         if (!overlapOk && specs.some((o) => overlaps(o, s))) return false;
         specs.push(s);
         return true;
@@ -98,7 +104,7 @@ export function generatePlants({
                 x: right ? (run.c + 1) * T - CH - b.footX : run.c * T - (b.w - b.footX - CH),
                 y: r * T, w: b.w, h: b.h,
                 parts: right ? b.parts : mirrorParts(b.parts, b.w),
-            }, false);
+            }, false, run.c);
         }
     }
 

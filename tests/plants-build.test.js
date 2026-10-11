@@ -61,6 +61,24 @@ test('低いシダは機体（24px）より低く、高いシダは高い', () =
     });
 });
 
+test('低いシダは、乱数をたくさん変えても機体より低い（葉の長さの上限で守っている）', () => {
+    for (let i = 0; i < 1500; i++) {
+        const b = buildLowFern(new SeededRNG(i * 31 + 7), BIG);
+        assert.ok(b.h - CHUNK < PLAYER_HEIGHT, `seed ${i * 31 + 7}: 低いシダ ${b.h - CHUNK}`);
+    }
+});
+
+test('絵は外接矩形に収まる（頂点が 0〜w、0〜h の中）', () => {
+    each((rng) => {
+        for (const build of Object.values(builds)) {
+            const b = build(rng);
+            for (const p of b.parts) for (const r of p.rings) for (const [x, y] of r) {
+                assert.ok(x >= -1e-9 && x <= b.w + 1e-9 && y >= -1e-9 && y <= b.h + 1e-9, `${b.kind}: (${x}, ${y}) が ${b.w}x${b.h} の外`);
+            }
+        }
+    });
+});
+
 test('床の植物は根元の段（一番下の行）に根元のかけらがある', () => {
     each((rng) => {
         for (const build of [buildMoss, buildLowFern, buildTallFern]) {

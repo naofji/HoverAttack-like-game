@@ -2164,8 +2164,8 @@ export const TOWN_FIRE_SOUND_FULL = 10;
 // 床の植物の混ぜ方。tall 以外の残りが苔。自機・アタッカーの高さは 24px（PLAYER_HEIGHT）で、
 // 苔は 4〜8px、低いシダは 24px 未満、高いシダは 24px を超える（絵は地面に 4px 埋まるので、見える高さは 1段ぶん引く）
 export const PLANT_FLOOR_MIX = { tall: 0.15, low: 0.3 };
-// 高いシダの幹の段数（1段 = 4px）。冠の葉が上に 3 段ほど乗る
-export const PLANT_TALL_TRUNK = [8, 18];
+// 高いシダの幹の高さ（px、2px 刻み）。冠の葉が上に 20px ほど乗る。置ける高さが足りなければ幹を切り詰める
+export const PLANT_TALL_TRUNK = [32, 72];
 // 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる
 export const PLANT_FILL_SCALE = 1;
 // 壁の植物は、壁の長さこれごとに1つの候補を置く。候補ごとに置く確率

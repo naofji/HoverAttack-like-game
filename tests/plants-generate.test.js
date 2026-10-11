@@ -27,6 +27,13 @@ test('床・壁・天井に、苔・低いシダ・高いシダ・蔓が並ぶ',
     for (const site of ['floor', 'wall', 'ceiling']) assert.ok(specs.some((s) => s.site === site), `${site} が無い`);
 });
 
+test('壁には、シダだけでなく苔も張り付く（壁の根元の列は岩に埋めるものなので「埋まりすぎ」で捨てない）', () => {
+    // 根元の列を数えると、薄い苔は 3 列のうち 1 列が埋まって 35% の上限に掛かり、6 通りで 14 → 3 に減る（実測）
+    const count = { wallMoss: 0, wallFern: 0 };
+    for (const seed of [1, 2, 3, 4, 5, 6]) for (const s of gen(seed).filter((o) => o.site === 'wall')) count[s.kind]++;
+    assert.ok(count.wallMoss >= 8 && count.wallFern >= 1, JSON.stringify(count));
+});
+
 test('設計図の印: 全部 soft（燃えない・崩壊の演出なし）で、絵柄は P', () => {
     for (const s of gen(11)) {
         assert.equal(s.soft, true);

@@ -61,6 +61,41 @@ class PixelCtx {
             for (let px = x0; px < x0 + Math.ceil(w); px++) this.blend(px, py, col);
         }
     }
+    // 多角形（4面の植物）。本物の canvas と同じく nonzero の規則で、縁はなめらか（4x4 の副標本で半透明にする）
+    beginPath() { this.path = []; }
+    moveTo(x, y) { this.path.push([[x, y]]); }
+    lineTo(x, y) { this.path[this.path.length - 1].push([x, y]); }
+    closePath() {}
+    fill() {
+        const col = parseColor(this.fillStyle);
+        const rings = this.path;
+        const winding = (px, py) => {
+            let w = 0;
+            for (const r of rings) {
+                for (let i = 0; i < r.length; i++) {
+                    const [x0, y0] = r[i], [x1, y1] = r[(i + 1) % r.length];
+                    if ((y0 <= py) === (y1 <= py)) continue;
+                    const cross = (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0);
+                    if (y0 <= py ? cross > 0 : cross < 0) w += y1 > y0 ? 1 : -1;
+                }
+            }
+            return w;
+        };
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const r of rings) for (const [x, y] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        const N = 4;
+        for (let py = Math.floor(y0 + this.ty); py <= Math.floor(y1 + this.ty); py++) {
+            for (let px = Math.floor(x0 + this.tx); px <= Math.floor(x1 + this.tx); px++) {
+                let hit = 0;
+                for (let sy = 0; sy < N; sy++) {
+                    for (let sx = 0; sx < N; sx++) {
+                        if (winding(px - this.tx + (sx + 0.5) / N, py - this.ty + (sy + 0.5) / N) !== 0) hit++;
+                    }
+                }
+                if (hit > 0) this.blend(px, py, [col[0], col[1], col[2], col[3] * hit / (N * N)]);
+            }
+        }
+    }
     clearRect(x, y, w, h) {
         const { cv } = this;
         const x0 = Math.floor(x + this.tx), y0 = Math.floor(y + this.ty);

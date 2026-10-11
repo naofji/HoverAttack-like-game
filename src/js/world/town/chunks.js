@@ -8,6 +8,7 @@
 // 1バイトに「材料（下位3ビット）」「厚い壁＝弾を止める」「焦げ」を詰める。
 
 import { TOWN_CHUNK, TILE_SIZE } from '../../utils/Constants.js';
+import { ringBounds, ringTouchesRect } from './polygons.js';
 
 export const CHUNK = TOWN_CHUNK;
 const HALF = CHUNK / 2;
@@ -34,9 +35,24 @@ export function rasterizeParts(parts, w, h) {
     const cw = Math.ceil(w / CHUNK);
     const ch = Math.ceil(h / CHUNK);
     const cells = new Uint8Array(cw * ch);
+    // 多角形の部品（p.rings。4面の植物）は、輪ごとに「少しでも掛かるかけら」を埋める。
+    // 本物の canvas の縁の半透明の画素も、多角形が触れた画素だけなので、触れたかけらに必ず入る
+    // （tests/plants-polygons.test.js が描いた画素で確かめる）。
+    // 輪の外接矩形のかけらだけを見る（部品全体の矩形を総当たりにすると、葉が数十枚ある植物で重い）
+    const fillRing = (ring, v) => {
+        const b = ringBounds(ring);
+        const i0 = Math.max(0, Math.floor(b.x0 / CHUNK)), i1 = Math.min(cw - 1, Math.floor(b.x1 / CHUNK));
+        const j0 = Math.max(0, Math.floor(b.y0 / CHUNK)), j1 = Math.min(ch - 1, Math.floor(b.y1 / CHUNK));
+        for (let j = j0; j <= j1; j++) {
+            for (let i = i0; i <= i1; i++) {
+                if (ringTouchesRect(ring, i * CHUNK, j * CHUNK, (i + 1) * CHUNK, (j + 1) * CHUNK)) cells[j * cw + i] = v;
+            }
+        }
+    };
     for (const p of parts) {
         if (!p.mat) continue;
         const v = p.mat | (p.solid ? SOLID : 0);
+        if (p.rings) { for (const ring of p.rings) fillRing(ring, v); continue; }
         // 中心 i*4+2 が [p.x, p.x+p.w) に入る i の範囲
         const i0 = Math.max(0, Math.ceil((p.x - HALF) / CHUNK));
         const i1 = Math.min(cw, Math.ceil((p.x + p.w - HALF) / CHUNK));
@@ -51,7 +67,7 @@ export function rasterizeParts(parts, w, h) {
     // かけらを抜いて clearRect しても宙に残った（段1のレビュー指摘）。厚い壁の印は付けない
     // （弾を止めるのは中心の規則で埋まった面だけ）。描くだけの部品（mat 0）は木にする
     for (const p of parts) {
-        if (!p.color) continue;
+        if (!p.color || p.rings) continue;
         const v = p.mat || MAT_WOOD;
         const i0 = Math.max(0, Math.floor(p.x / CHUNK));
         const i1 = Math.min(cw, Math.ceil((p.x + p.w) / CHUNK));

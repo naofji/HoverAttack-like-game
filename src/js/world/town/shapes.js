@@ -6,6 +6,7 @@
 // 揃うこと、node で PNG に書き出せること（tools/render-town-scene.mjs）が理由。
 
 import { MAT_NONE } from './chunks.js';
+import { orient, signedArea } from './polygons.js';
 
 export const pick = (rng, arr) => arr[Math.floor(rng.next() * arr.length)];
 
@@ -20,9 +21,21 @@ export function rect(parts, x, y, w, h, color, mat = MAT_NONE, solid = false) {
     if (w > 0 && h > 0) parts.push({ x, y, w, h, color, mat, solid });
 }
 
+/**
+ * 多角形の部品（4面の植物）を積む。rings は頂点列 [[x, y], ...] の配列で、同じ色の輪を1回の fill にまとめる
+ * （1枚ずつ塗ると、葉が数十枚ある植物 500 本で面の読み込みが重くなる）。
+ * 面積のほぼ無い輪は捨てる。向きは時計回りに揃える（polygons.js の orient）
+ */
+export function ringPart(parts, rings, color, mat = MAT_NONE, solid = false) {
+    const kept = rings.filter((r) => r.length >= 3 && Math.abs(signedArea(r)) > 1e-6).map(orient);
+    if (kept.length > 0) parts.push({ rings: kept, color, mat, solid });
+}
+
 /** 左右反転。壁の右側に張り付く形で組んだ家を、左側の壁に付けるときに使う */
 export function mirrorParts(parts, w) {
-    return parts.map((p) => ({ ...p, x: w - p.x - p.w }));
+    return parts.map((p) => (p.rings
+        ? { ...p, rings: p.rings.map((r) => orient(r.map(([x, y]) => [w - x, y]))) }
+        : { ...p, x: w - p.x - p.w }));
 }
 
 /**
@@ -44,6 +57,15 @@ export function paintParts(ctx, parts) {
     for (const p of parts) {
         if (!p.color) continue;
         ctx.fillStyle = p.color;
+        if (p.rings) {   // 多角形: 同じ色の輪を1つの経路にして1回で塗る
+            ctx.beginPath();
+            for (const ring of p.rings) {
+                ring.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+                ctx.closePath();
+            }
+            ctx.fill();
+            continue;
+        }
         ctx.fillRect(p.x, p.y, p.w, p.h);
     }
 }
