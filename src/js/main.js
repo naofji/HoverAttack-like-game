@@ -543,6 +543,8 @@ export const Game = {
         this._updateOverdrive();
         this.env.update();
         this.map.update();
+        // 3面の町（弾の当たり・落ちる破片・粒）。地形の更新のあと、敵の更新の前
+        if (this.map.town) this.map.town.update(this);
         this._updateAndPrune(this.enemies);
         this._updateEnemyHoverSound();
         this._checkMissionClear();
@@ -562,6 +564,8 @@ export const Game = {
         for (const k of this.repairKits) fn(k);
         for (const u of this.autoAimUnits) fn(u);
         for (const k of this.missileKits) fn(k);
+        // 3面の町の落ちる破片。補間しないと、カメラに対してかくついて落ちる
+        if (this.map && this.map.town) for (const p of this.map.town.falling) fn(p);
     },
 
     /** Record pre-tick positions so draw() can interpolate towards the new ones. */

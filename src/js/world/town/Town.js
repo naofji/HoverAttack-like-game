@@ -19,7 +19,7 @@ import { createExplosion, Particle } from '../../entities/Particle.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import {
-    TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH,
+    TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
@@ -69,6 +69,15 @@ export class Town {
             for (const key of this._gridKeys(b.x, b.y, b.x + b.width, b.y + b.height)) {
                 if (!this._grid.has(key)) this._grid.set(key, []);
                 this._grid.get(key).push(b);
+            }
+        }
+        // 岩のタイル → それに支えられている建物（岩が壊れたときに引く）
+        this._anchorIndex = new Map();
+        for (const b of this.buildings) {
+            for (const a of b.anchors) {
+                const key = `${a.r},${a.c}`;
+                if (!this._anchorIndex.has(key)) this._anchorIndex.set(key, new Set());
+                this._anchorIndex.get(key).add(b);
             }
         }
     }
@@ -165,6 +174,22 @@ export class Town {
                 b.ctx.fillRect(ni * CHUNK, ((n - ni) / b.cw) * CHUNK, CHUNK, CHUNK);
             }
         }
+    }
+
+    /**
+     * 爆発（spawnExplosion がすべての爆発で呼ぶ）。半径は粒の数から決める: K × √size
+     * （マシンガンの着弾 4粒 → 約7px、ミサイル 36粒 → 約20px、グレネード 150粒 → 約40px）
+     */
+    blast(x, y, size) {
+        const radius = TOWN_BLAST_RADIUS_K * Math.sqrt(size);
+        for (const b of this.buildingsInCircle(x, y, radius)) this.chip(b, x, y, radius);
+    }
+
+    /** 岩のタイルが壊れた（Map.damageBlock の「壊れた」分岐から）。支えていた建物を確かめ直す */
+    onBlockDestroyed(r, c) {
+        const set = this._anchorIndex.get(`${r},${c}`);
+        if (!set) return;
+        for (const b of set) this._settle(b);
     }
 
     /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */

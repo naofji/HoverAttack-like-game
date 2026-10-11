@@ -48,6 +48,11 @@ export const SpawnEffects = {
             const dy = (mine.y + mine.height / 2) - y;
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
         }
+
+        // 3面の町（map.town）。ミサイル・グレネード・機体の破壊・地雷・基地の爆発が全部ここを通る。
+        // 町自身の崩壊の粒はここを通さない（通すと崩壊が隣を崩す連鎖が止まらなくなる）
+        const town = this.map && this.map.town;
+        if (town) town.blast(x, y, size);
     },
 
     /**

@@ -1094,6 +1094,8 @@ export class Map {
             if (env && env.renderer && env.renderer.onBlockDestroyed) {
                 env.renderer.onBlockDestroyed(r, c);
             }
+            // 3面の町。支えの岩が壊れた建物は、支えを失った部分が落ちる
+            if (this.town) this.town.onBlockDestroyed(r, c);
             return true;
         }
         // 非致命ダメージ: ブロック自身のひび割れ表現が変わるため中心タイルを再描画する。

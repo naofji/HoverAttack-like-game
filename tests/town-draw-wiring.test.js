@@ -39,3 +39,32 @@ test('町の無い面では何もしない', () => {
     Game._drawWorld.call(makeWorld(order, null), makeFakeCtx());
     assert.deepEqual(order, ['backdrop', 'behind', 'map']);
 });
+
+test('町は map.update() の直後に、Game を渡して更新する', () => {
+    const order = [];
+    const noop = () => {};
+    const g = Object.create(Game);
+    Object.assign(g, {
+        _snapshotPrevPositions: noop, _updateCarrier: noop, _updatePlayer: noop, _updateDeathHold: noop,
+        _updateCamera: noop, _updateAndPrune: (list) => { if (list === g.enemies) order.push('enemies'); },
+        _updateLandmines: noop, barriers: [], _updateBarrierSound: noop, _updateAutoAim: noop,
+        _updateOverdrive: noop, env: { update: noop }, _updateEnemyHoverSound: noop,
+        _checkMissionClear: noop, collisionManager: { update: noop }, _updateProximityAlert: noop,
+        projectiles: [], particles: [], smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
+        map: { update: () => order.push('map'), town: { update: (game) => order.push(game === g ? 'town' : 'town(違う game)') } },
+    });
+    Game._simulationTick.call(g);
+    assert.deepEqual(order, ['map', 'town', 'enemies']);
+});
+
+test('落ちる破片も描画補間に載る', () => {
+    const piece = { x: 1, y: 2 };
+    const seen = [];
+    const g = {
+        player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
+        repairKits: [], autoAimUnits: [], missileKits: [],
+        map: { town: { falling: [piece] } },
+    };
+    Game._forEachMovingEntity.call(g, (e) => seen.push(e));
+    assert.deepEqual(seen, [piece]);
+});
