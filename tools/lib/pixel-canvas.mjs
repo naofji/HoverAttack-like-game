@@ -38,6 +38,8 @@ class PixelCtx {
     save() { this.stack.push([this.tx, this.ty, this.globalAlpha, this.fillStyle]); }
     restore() { [this.tx, this.ty, this.globalAlpha, this.fillStyle] = this.stack.pop(); }
     translate(x, y) { this.tx += x; this.ty += y; }
+    // 落ちる破片だけが使う。書き出しの絵では回さずに貼る（回転は見た目だけで、壊れ方の確認には要らない）
+    rotate() {}
     blend(x, y, [r, g, b, a]) {
         const { cv } = this;
         if (x < 0 || y < 0 || x >= cv._w || y >= cv._h) return;
@@ -69,7 +71,10 @@ class PixelCtx {
         }
     }
     drawImage(src, ...a) {
-        // 3引数 (dx, dy) と 7引数 (sx, sy, sw, sh, dx, dy) を受ける
+        // 本物の canvas と同じ (img, dx, dy) と (img, sx, sy, sw, sh, dx, dy, dw, dh) を受ける。
+        // 町は拡大縮小して貼らないので、dw/dh が sw/sh と違えば例外にする（黙って違う絵を作らない）
+        if (a.length !== 2 && a.length !== 8) throw new Error(`drawImage: 引数 ${a.length + 1} 個は未対応`);
+        if (a.length === 8 && (a[6] !== a[2] || a[7] !== a[3])) throw new Error('drawImage: 拡大縮小は未対応');
         const [sx, sy, sw, sh, dx, dy] = a.length === 2 ? [0, 0, src._w, src._h, a[0], a[1]] : a;
         const s = src.px;
         for (let y = 0; y < sh; y++) {

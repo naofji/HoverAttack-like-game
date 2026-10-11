@@ -4,7 +4,10 @@
 // 使い方:
 //   node tools/render-town-scene.mjs --out town.png                       # 今週の3面、左上（開始の部屋）
 //   node tools/render-town-scene.mjs --seed 3 --x 1200 --y 300 --w 1366 --h 768 --scale 1 --out a.png
-//   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間
+//   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間・壊す時間
+//   node tools/render-town-scene.mjs --x 1200 --y 300 --blast "1300,420,150;1340,400,36" --ticks 120 --out b.png
+//       # 壊した後（段2）。--blast は「x,y,粒の数」を ; 区切りで何発でも（グレネード 150・ミサイル 36）。
+//       # --ticks で town.update を回して、破片が落ちて瓦礫になるまで進める（落ちる破片は回さずに描く）
 //
 // 実物の Map を生成し、Map._buildTownSpecs() の設計図から画素を持つ canvas で町を作り直して描く。
 // 地形はタイルを2色（縁と中）で塗るだけ（面取りは再現しない）。描く順はゲームと同じ
@@ -36,8 +39,43 @@ const t0 = performance.now();
 const specs = map._buildTownSpecs();
 const t1 = performance.now();
 // 画素を持たない canvas で作る時間 ＝ かけらの表と支えの計算（実機の canvas の確保・塗りは別）
-new Town(specs, { isSolidTile: (r, c) => map.isSolid(r, c), createCanvas: () => ({ getContext: () => noopCtx }) });
+const noPixels = () => ({ getContext: () => noopCtx });
+const bench = new Town(specs, { isSolidTile: (r, c) => map.isSolid(r, c), createCanvas: noPixels });
 const t2 = performance.now();
+
+// 粒は出さない（camera が無いので注文は画面の中扱いで particles に積まれるだけ）
+const fakeGame = () => ({ particles: [], projectiles: [], camera: null, canvas: null });
+function applyBlasts(town, list, ticks) {
+    const game = fakeGame();
+    let maxFalling = 0;
+    for (const [x, y, size] of list) {
+        town.blast(x, y, size);
+        maxFalling = Math.max(maxFalling, town.falling.length);
+    }
+    for (let i = 0; i < ticks; i++) {
+        town.update(game);
+        maxFalling = Math.max(maxFalling, town.falling.length);
+    }
+    return maxFalling;
+}
+
+/**
+ * 床の建物の中ほど 50 か所にグレネード（粒 150）を1発ずつ当て、120 tick 進めるまでの時間。
+ * 画素を持たない canvas なので、ゲームでの clearRect・drawImage の費用は入らない（かけら・支え・落下の計算だけ）
+ */
+function blastStats() {
+    const floors = bench.buildings.filter((b) => b.site === 'floor');
+    const step = Math.max(1, Math.floor(floors.length / 50));
+    const list = floors.filter((_, i) => i % step === 0).slice(0, 50)
+        .map((b) => [b.x + b.width / 2, b.y + b.height / 2, 150]);
+    const t3 = performance.now();
+    const maxFalling = applyBlasts(bench, list, 120);
+    const ms = performance.now() - t3;
+    return {
+        blasts: list.length, blastMs: +ms.toFixed(1), perBlastMs: +(ms / list.length).toFixed(2), maxFalling,
+        collapsed: bench.buildings.filter((b) => b.collapsed).length, rubbleHeaps: bench.rubble.length,
+    };
+}
 
 if (args.stats) {
     const by = {};
@@ -47,6 +85,7 @@ if (args.stats) {
         seed, map: `${map.cols}x${map.rows}`, buildings: specs.length, byKind: by,
         spriteMB: +(area * 4 / 1e6).toFixed(2),
         specsMs: +(t1 - t0).toFixed(1), rasterizeMs: +(t2 - t1).toFixed(1),
+        ...blastStats(),
     }, null, 2));
     process.exit(0);
 }
@@ -55,6 +94,11 @@ const town = new Town(specs, {
     isSolidTile: (r, c) => map.isSolid(r, c),
     createCanvas: (w, h) => new PixelCanvas(w, h),
 });
+
+if (args.blast) {
+    const list = String(args.blast).split(';').filter(Boolean).map((t) => t.split(',').map(Number));
+    applyBlasts(town, list, Number(args.ticks ?? 0));
+}
 
 const X = Number(args.x ?? 0), Y = Number(args.y ?? 0);
 const W = Number(args.w ?? 1366), H = Number(args.h ?? 768);
