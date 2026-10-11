@@ -17,7 +17,7 @@
 | 落ちるタイミング | **少し震えてから落ちる（約 0.4 秒）。** 下の機体が避ける余地を残す |
 | ダメージ | **つららの大きさに比例（15〜35）。** 自機と敵に同じ数値 |
 | 置き場所 | **開始の部屋と基地の部屋を避けて、面全体の天井。** 木と同じ「村」の濃淡で分ける |
-| 音 | 最初の段では無音。仕組みが固まってから別の段で足す（A特性で実測するため。3面の町の段 4 と同じ） |
+| 音 | 最初の段では無音。仕組みが固まってから別の段で足す（A特性で実測するため。3面の町の段 4 と同じ）。**段 2 で足した（下の「音」の節）** |
 
 ## 作り方（3 面の町の仕組みに載せる）
 
@@ -94,7 +94,7 @@
 ## 段の分け方
 
 - **段 1（この spec の範囲）:** 設計図（絵・置き場所）、震えて落ちる、ダメージ、着地、連鎖、テスト、`tools/render-town-scene.mjs --stage 5` で PNG
-- **段 2（別の spec/plan）:** 音。震え（小さな氷のきしみ）・落下（風を切る短い音）・着地（氷の砕ける音）。`audio/sounds/` に足し、A特性で実測する
+- **段 2:** 音（実装済み。下の「音」の節）
 
 ## テスト
 
@@ -113,6 +113,23 @@
 - 変更: `Constants.js`（定数・`STAGE_ENVIRONMENTS`）、`world/town/chunks.js`（`MAT_ICE`）、`world/town/palette.js`（`ICICLE_COLORS`）、`world/town/Town.js`（`brittle`・震え・`_updateIcicle`・描画の揺れ・氷の粒）、
   `world/Map.js`（`props: 'snow'`）、`tools/render-town-scene.mjs`、`CLAUDE.md`（表に 1 行）
 - `main.js` は触らない
+
+## 音（段 2）
+
+`audio/sounds/icicleSounds.js`（`AudioIcicleSounds`）。音の部品の並びは純関数（`icicleShakeVoices` / `icicleFallVoice` / `icicleSinkVoices`）で、
+オフライン再現と A特性の実測は `tools/render-icicle-sounds.mjs`（WebAudio 版と対。片方だけ変えない）。`Town` が震え始め・落ち始め・先が床に触れた瞬間の注文
+（`type: 'iceSound'`）を出し、`_flushEffects` が画面の近くのものだけ `audioManager.playIcicleShake / Fall / Sink(x)` へ渡す。
+
+| 音 | 作り | 小さい爆発との差（A特性、同じ窓） |
+|---|---|---|
+| 震え（きしみ） | 高い帯域（2.8〜4.8kHz のバンドパス）の小さなクリック 4 回を 0.34 秒にばらまく | 約 -20dB（-24〜-16 で縛る） |
+| 落下（風を切る） | バンドパスのノイズが 3.6kHz → 1.4kHz へ下降、0.26 秒 | 約 -14dB（-18〜-10） |
+| 床に刺さる | ザクッ（ローパスのノイズ 3.5kHz → 0.7kHz、0.09 秒）＋ サーッ（バンドパス 2.4kHz → 1.1kHz、0.35 秒＝最長のつららのめり込む時間） | 約 -9dB（-12〜-6。3 つの中で一番はっきり） |
+
+- 同じ種類の音が 80ms 以内に重なったら 1 つだけ（グレネードで十数本が同時に震えても 1 回）。種類が違えば別
+- 比べる窓は全部同じ（0.8 秒 → 2 の冪の窓）。窓が違うと短い音ほど薄まって小さく出る（最初に違う窓で測ってしまい、床の音が小さい爆発より 9dB 大きく出た → 同じ窓で測り直して、ゲインを下げて決めた）
+- サーッがザクッに埋もれないこと（ザクッだけとの差が 1dB 以上）、サーッの長さがめり込む時間に合うことをテストで縛る
+- 調整用の定数: `ICICLE_SOUND_SHAKE` / `ICICLE_SOUND_FALL` / `ICICLE_SOUND_SINK`（ゲイン・周波数・長さ）、`ICICLE_SOUND_MERGE_MS`。試聴: `node tools/render-icicle-sounds.mjs`（`audio-preview/` に WAV）
 
 ## 実測（今週の 5面、seed 384264646、`tools/render-town-scene.mjs --stage 5 --stats`）
 

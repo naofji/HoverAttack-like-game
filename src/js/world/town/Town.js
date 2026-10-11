@@ -44,6 +44,8 @@ import {
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
+// つららの音の注文の種類 → audioManager のメソッド（audio/sounds/icicleSounds.js）
+const ICICLE_SOUND_METHODS = { shake: 'playIcicleShake', fall: 'playIcicleFall', sink: 'playIcicleSink' };
 // 弾・爆発と建物の当たりを引くマス目の大きさ（px）。総当たりにしない（spec 5章）
 const HIT_GRID = 64;
 const NONE = new Set();
@@ -434,6 +436,7 @@ export class Town {
             p.vy = 0;
             p.groundY = Math.floor(ty / TILE_SIZE) * TILE_SIZE;
             this._emit('leaf', tx, p.groundY, { count: ICICLE_POWDER.land, flora: this._floraOf(p), mode: 'powder', spread: 3 });
+            this._emit('iceSound', tx, p.groundY, { kind: 'sink' });
         }
     }
 
@@ -601,6 +604,10 @@ export class Town {
         for (const e of this.effects) {
             if (cam && cv && (e.x < cam.x - m || e.x > cam.x + cv.width + m
                 || e.y < cam.y - m || e.y > cam.y + cv.height + m)) continue;
+            if (e.type === 'iceSound') {   // つららの音（震え・落下・床に刺さる）。画面の近くのものだけがここへ来る
+                audioManager[ICICLE_SOUND_METHODS[e.kind]](e.x);
+                continue;
+            }
             if ((e.type === 'collapse' || e.type === 'shatter') && e.size > 0 && (!loud || e.size > loud.size)) loud = e;
             if (e.type === 'leaf' && e.flora === 'ice') {
                 this._spawnIceShards(game, e);
@@ -646,6 +653,7 @@ export class Town {
         b.shakeLeft = ICICLE_SHAKE_TICKS;
         this.shaking.push(b);
         this._emit('leaf', x, y, { count: ICICLE_SHARDS.hit, flora: b.flora, mode: 'hit', spread: 3 });
+        this._emit('iceSound', x, y, { kind: 'shake' });
         return 1;
     }
 
@@ -838,6 +846,7 @@ export class Town {
         if (b.brittle) {
             // つららは全体が 1 つの IcicleFall。震えが終わったとき（_releaseWhole）も、支えの岩が壊れたとき（_settle）も同じ
             this.falling.push(new IcicleFall({ ...piece, damage: b.damage }));
+            this._emit('iceSound', piece.x + pw / 2, piece.y + ph / 2, { kind: 'fall' });   // 落ち始めの音（震えて落ちたときも、支えが壊れてすぐ落ちたときも）
         } else if (b.flora === 'snow' && group.length >= SNOWTREE_TOPPLE_MIN_CELLS) {
             // 雪の木の大きな塊は、傾きながら倒れる（ToppleTree）。撃たれた側から離れる向きへ。撃った位置が
             // 塊の真ん中と同じ（幹をまっすぐ撃った）か分からない（岩が壊れた）ときは、位置から決めた向き

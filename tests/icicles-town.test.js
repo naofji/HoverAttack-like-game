@@ -8,6 +8,7 @@ import { MAT_ICE, SOLID, CHUNK } from '../src/js/world/town/chunks.js';
 import { ICE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS } from '../src/js/world/town/palette.js';
 import { SnowFlurryParticle } from '../src/js/entities/Particle.js';
 import { fakeCanvas } from './helpers/town-fixtures.js';
+import { audioManager } from '../src/js/audio/AudioManager.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
     ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_KNOCK_VY, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
@@ -503,4 +504,98 @@ test('粉雪（powder: 大きめ・上へ舞い上がる、dust: 小さく・ほ
     assert.ok(mean(powder, (p) => p.size) > mean(dust, (p) => p.size) * 1.5, 'powder が dust より大きくない（大きめの粉雪）');
     for (const p of powder) assert.ok(p.vy <= 1e-9, 'powder が下へ飛んだ');
     assert.ok(mean(powder, (p) => Math.hypot(p.vx, p.vy)) > mean(dust, (p) => Math.hypot(p.vx, p.vy)) * 2, 'powder の勢いが dust と同じ');
+});
+
+// --- 音（段 2）。呼び出しの配線。音そのものは tests/icicle-sounds.test.js ---
+
+/** audioManager のメソッドを差し替えて呼び出しを記録する（tests/audio-wiring.test.js の spyAudio と同じ形） */
+function spySounds() {
+    const names = ['playIcicleShake', 'playIcicleFall', 'playIcicleSink'];
+    const calls = [];
+    const originals = {};
+    for (const n of names) { originals[n] = audioManager[n]; audioManager[n] = (...a) => calls.push({ name: n, args: a }); }
+    return { calls, restore() { for (const n of names) audioManager[n] = originals[n]; }, names: (n) => calls.filter((c) => c.name === n) };
+}
+
+test('音: 当たって震え始めた瞬間に震えの音、落ち始めた瞬間に落下の音、先が床に触れた瞬間に床の音。それぞれ 1 回、音源の x つき', () => {
+    const spy = spySounds();
+    try {
+        const town = makeTown();
+        const b = town.buildings[0];
+        const game = fakeGame();
+        const tip = tipOf(b);
+        town.chip(b, tip.x, tip.y, 6);
+        town.update(game);
+        assert.equal(spy.names('playIcicleShake').length, 1);
+        assert.equal(spy.names('playIcicleShake')[0].args[0], tip.x);
+        assert.equal(spy.names('playIcicleFall').length, 0);
+        run(town, game, ICICLE_SHAKE_TICKS);
+        assert.equal(spy.names('playIcicleFall').length, 1, '落ち始めの音');
+        assert.equal(spy.names('playIcicleSink').length, 0);
+        const p = town.falling.find((q) => q instanceof IcicleFall);
+        for (let t = 0; t < 200 && !p.sinking; t++) town.update(game);
+        assert.equal(spy.names('playIcicleSink').length, 1, '床に触れた音');
+        assert.ok(Math.abs(spy.names('playIcicleSink')[0].args[0] - p.tipX) < 1e-9);
+        run(town, game, 100);
+        assert.equal(spy.names('playIcicleSink').length, 1, 'めり込んでいる間は鳴らし直さない');
+        assert.equal(spy.names('playIcicleShake').length, 1, '震えは 1 本につき 1 回');
+    } finally { spy.restore(); }
+});
+
+test('音: 支えの岩が壊れて震えずに落ちたときも、落下の音（震えの音は無い）', () => {
+    const spy = spySounds();
+    try {
+        let ceiling = true;
+        const town = makeTown([icicleSpec()], (r) => (ceiling ? r <= 9 : r <= 8) || r >= 20);
+        const b = town.buildings[0];
+        ceiling = false;
+        for (const a of new Set(b.anchors.map((q) => `${q.r},${q.c}`))) town.onBlockDestroyed(...a.split(',').map(Number));
+        town.update(fakeGame());
+        assert.equal(spy.names('playIcicleFall').length, 1);
+        assert.equal(spy.names('playIcicleShake').length, 0);
+    } finally { spy.restore(); }
+});
+
+test('音: 画面の外のつららは鳴らさない（シミュレーションは進む）。画面の近くなら鳴らす', () => {
+    const spy = spySounds();
+    try {
+        const town = makeTown();
+        const b = town.buildings[0];
+        const tip = tipOf(b);
+        const far = fakeGame({ camera: { x: 9000, y: 0 }, canvas: { width: 800, height: 600 } });
+        town.chip(b, tip.x, tip.y, 6);
+        run(town, far, ICICLE_SHAKE_TICKS + 5);
+        assert.equal(spy.calls.length, 0, `画面の外なのに ${spy.calls.length} 回鳴らした`);
+        assert.ok(town.falling.length > 0 || b.remaining === 0, '画面の外でシミュレーションが止まった');
+        const town2 = makeTown();
+        const b2 = town2.buildings[0];
+        const near = fakeGame({ camera: { x: 0, y: 0 }, canvas: { width: 800, height: 600 } });
+        town2.chip(b2, tipOf(b2).x, tipOf(b2).y, 6);
+        town2.update(near);
+        assert.equal(spy.names('playIcicleShake').length, 1);
+    } finally { spy.restore(); }
+});
+
+test('音: 爆風が複数のつららを同時に震わせたら、震えの音の注文は本数ぶん出る（まとめるのは audioManager の仕事）', () => {
+    const spy = spySounds();
+    try {
+        const town = makeTown([icicleSpec(3, 200), icicleSpec(4, 216), icicleSpec(5, 232)]);
+        town.blast(216, CEIL_BOTTOM + 20, 150);
+        town.update(fakeGame());
+        assert.equal(spy.names('playIcicleShake').length, 3);
+    } finally { spy.restore(); }
+});
+
+test('音: 4面の植物・雪の木・町の建物は、つららの音を鳴らさない', () => {
+    const spy = spySounds();
+    try {
+        const b0 = buildIcicle(new SeededRNG(3), { maxLength: 400 });
+        const plain = { ...icicleSpec(), brittle: undefined, flora: 'snow' };
+        const town = makeTown([plain]);
+        const b = town.buildings[0];
+        town.chip(b, b.x + 6, b.y + 20, 6);
+        town.update(fakeGame());
+        assert.equal(spy.calls.length, 0);
+        assert.ok(b0);
+    } finally { spy.restore(); }
 });

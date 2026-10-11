@@ -11,6 +11,7 @@ import { AudioSeBus } from './engine/seBus.js';
 import { AudioHover } from './sounds/hover.js';
 import { AudioFortressSounds } from './sounds/fortressSounds.js';
 import { AudioTownSounds } from './sounds/townSounds.js';
+import { AudioIcicleSounds } from './sounds/icicleSounds.js';
 
 export class AudioManager {
     constructor() {
@@ -203,7 +204,7 @@ Object.assign(
     AudioManager.prototype,
     AudioSeBus, AudioOutput,
     AudioHover,    AudioEnemySounds, AudioLoopSounds, AudioPlayerSounds, AudioStings,
-    AudioFortressSounds, AudioTownSounds,
+    AudioFortressSounds, AudioTownSounds, AudioIcicleSounds,
 );
 
 export const audioManager = new AudioManager();

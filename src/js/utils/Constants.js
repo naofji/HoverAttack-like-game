@@ -2314,3 +2314,20 @@ export const ICICLE_SINK_SPEED = 2.5;
 export const ICICLE_POWDER = { land: 8, sink: 2, end: 6 };
 export const ICICLE_POWDER_SIZE = [2, 4];
 export const ICICLE_POWDER_BIG_SHARE = 0.4;
+
+// --- 5面のつららの音（段 2）---
+// 設計: docs/superpowers/specs/2026-10-11-stage5-icicles-design.md（音の節）。部品の並びは audio/sounds/icicleSounds.js の純関数、
+// オフライン再現と A特性の実測は tools/render-icicle-sounds.mjs（tests/icicle-sounds.test.js が音量を爆発との相対 dB で縛る）。
+// 震え（きしみ）・落下（風を切る）・床に刺さる（ザクッ＋サーッ）の 3 つ。数値は最初の出発点で、実機で聴いて調整する前提
+// 同じ種類の音が MERGE_MS 以内に重なったら 1 つだけ鳴らす（グレネードで十数本が同時に震えても 1 回）
+export const ICICLE_SOUND_MERGE_MS = 80;
+// 震え: 高い帯域の小さなクリックを spread 秒（震えの 0.4 秒より少し短く）のあいだに clicks 回ばらまく。
+// freq はバンドパスの中心（下限〜上限）、dur は 1 回の長さ（最短〜最長）
+export const ICICLE_SOUND_SHAKE = { clicks: 4, spread: 0.34, gain: 0.018, freq: [2800, 4800], Q: 4, dur: [0.012, 0.024] };
+// 落下: 帯域を絞ったノイズの下降（風を切る）
+export const ICICLE_SOUND_FALL = { gain: 0.014, dur: 0.26, from: 3600, to: 1400, Q: 4 };
+// 床に刺さる: crunch（ザクッ。ローパスのノイズの一撃）と swish（サーッ。めり込む時間に合わせた粉雪のノイズ）
+export const ICICLE_SOUND_SINK = {
+    crunch: { gain: 0.021, dur: 0.09, from: 3500, to: 700 },
+    swish: { gain: 0.0085, dur: 0.35, from: 2400, to: 1100, Q: 1.5 },
+};
