@@ -2048,3 +2048,24 @@ export const TOWN_PROJECTILE_IMPACT = {
 };
 // 弾の通り道を調べる刻み（px）。かけら 4px と同じにして、速い弾が薄い壁をすり抜けないように
 export const TOWN_SWEEP_STEP = 4;
+
+// --- 3面の町並み 段3（火）---
+// 燃え進みを計算する間隔（フレーム）。燃料・確率はこの1回ごとに数える（spec 3章）
+export const TOWN_FIRE_TICK = 6;
+// 面全体で同時に燃える火元の上限と、1棟あたりの上限。上限のあいだは新しく火がつかない
+export const TOWN_FIRES_MAX = 60;
+export const TOWN_FIRES_PER_BUILDING = 4;
+// 材料ごとの燃え方（spec 3章の表）。キーはかけらの材料の番号（chunks.js の MAT_*）。
+//   burns:        燃えるか（金属は燃えない。熱で焦げるだけで、燃え移りを中継しない）
+//   bulletIgnite: マシンガンの弾が当たって火がつく確率（spec の初期値 木 15%・土 3%）
+//   spread:       燃え進みの1回に、隣のかけらへ火が進む確率
+//   catch:        別の建物の燃えているかけらから TOWN_FIRE_JUMP_RANGE 以内のとき、燃え進みの1回に燃え移る確率
+//   fuel:         火元の燃料（フレーム）。spec の初期値 木 12〜20秒・土 5〜8秒
+//   crumble:      燃えている建物の焦げたかけらが、燃え進みの1回に崩れて抜ける確率
+// 爆発物（4）は段3b で爆発の規則を足すまで木と同じに燃やす
+export const TOWN_MATERIALS = {
+    1: { burns: true, bulletIgnite: 0.03, spread: 0.1, catch: 0.02, fuel: [300, 480], crumble: 0.004 },
+    2: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
+    3: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
+    4: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
+};

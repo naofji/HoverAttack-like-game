@@ -19,6 +19,7 @@ import { createExplosion, Particle } from '../../entities/Particle.js';
 import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
+import { FireSystem } from './fire.js';
 import {
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
@@ -44,9 +45,12 @@ export class Town {
      * @param {Array<object>} specs generateTown() の設計図
      * @param {{isSolidTile?: (r:number, c:number) => boolean, createCanvas?: (w:number, h:number) => object}} [opts]
      */
-    constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas } = {}) {
+    constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas, random = Math.random } = {}) {
         this.isSolidTile = isSolidTile;
         this.createCanvas = createCanvas;
+        // 火のつき方・燃え広がりの乱数（spec 3章「乱数」: Math.random で構わない。テストは種つきを渡す）
+        this.random = random;
+        this.fire = new FireSystem(this);
         this.falling = [];
         this.rubble = [];
         // 弾ごとの覚え書き（発射位置で無視する建物・細い部品を欠かせた建物）。弾が消えれば一緒に消える
@@ -66,6 +70,8 @@ export class Town {
                 cells, cw, ch,
                 anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile),
                 canvas, ctx, total, remaining: total, collapsed: false,
+                // 火が焦がしたかけら（燃えているあいだ崩れの対象。fire.js）
+                burnt: new Set(),
             };
         });
         // 建物は動かないので、外接矩形が掛かるマス目に1度だけ登録する
@@ -170,6 +176,15 @@ export class Town {
             b.ctx.clearRect(i * CHUNK, ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
         }
         b.remaining -= list.length;
+        this.fire.onCellsRemoved(b, list);
+    }
+
+    /** かけらを抜いて支えを確かめ直す（燃えて崩れたかけら。fire.js から） */
+    removeAndSettle(b, list) {
+        if (list.length === 0) return;
+        this._removeCells(b, list);
+        this._charEdges(b, list);
+        this._settle(b);
     }
 
     /** 消えたかけらの上下左右に残ったかけらへ焦げを重ねる（1回の欠けで同じかけらは1度だけ） */
@@ -292,6 +307,7 @@ export class Town {
             for (const p of game.projectiles) this.sweepProjectile(p, exposed);
         }
         this._updateFalling();
+        this.fire.update();
         this._flushEffects(game);
     }
 
