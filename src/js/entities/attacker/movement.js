@@ -498,6 +498,8 @@ export const AttackerMovement = {
         this.jumpCooldown = 60; // ~1 second cooldown
         // 自機のバーストジャンプと同じく、跳んだ直後は噴射で水面に水滴を舞わせる（_kickHoverWaterMist）
         this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
+        // 雪面の上なら、飛び立つ瞬間に粉雪を 1 回（motion はこのフレームの update の先頭で引いた値。無い道具・テストは出さない）
+        this._burstSnowPuff = !!(this.motion && this.motion.slide > 0);
         this._emitJetBubbles('burst');
         audioManager.playEnemyBurst(this.x + this.width / 2, this.y + this.height / 2);
     },

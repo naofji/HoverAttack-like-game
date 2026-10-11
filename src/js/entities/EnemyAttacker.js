@@ -9,7 +9,7 @@ import {
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
-    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
+    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
     HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
@@ -84,6 +84,7 @@ export class EnemyAttacker {
         this.aiState = 'patrol'; // 'patrol', 'chase' or 'return'
         this.jumpCooldown = 0;
         this._burstMistFrames = 0; // ジャンプの直後、水面に水滴を舞わせる残りフレーム（_kickHoverWaterMist）
+        this._burstSnowPuff = false; // ジャンプで飛び立った直後、雪面に粉雪を 1 回出す印（_kickHoverSnowMist）
 
         // Home position (spawn point) — the attacker returns here when displaced
         this.homeX = x;
@@ -291,6 +292,9 @@ export class EnemyAttacker {
      * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
      */
     _kickHoverSnowMist() {
+        // ジャンプの印は、この呼び出しで必ず使い切る（画面外などで出せなかったときに、古い印があとで効かないように）
+        const burst = this._burstSnowPuff;
+        this._burstSnowPuff = false;
         if (!this.game.spawnSnowMist) return;
         if (this.onTerrain) return;
         if (this.motion.slide <= 0) return;
@@ -298,10 +302,16 @@ export class EnemyAttacker {
             && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
         const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
+        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
+        const fx = this.x + this.width / 2, fy = this.y + this.height + clearance;
+        if (burst) {
+            this._hoverMistTimer = 0;
+            this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_BURST_COUNT, onSlope);
+            return;
+        }
         this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
         if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
-        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
-        this.game.spawnSnowMist(this.x + this.width / 2, this.y + this.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
+        this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
     /**

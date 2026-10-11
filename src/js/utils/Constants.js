@@ -1399,7 +1399,11 @@ export const SNOW_KICK_LIFETIME = 30;
 // 0.5〜3ブロック上空 = TILE_SIZE*0.5(8) 〜 TILE_SIZE*3(48)px。それより低ければ普通の
 // SNOW_KICK（着地・滑走）の対象になり、高ければただ飛んでいるだけに見える
 // （実機の指摘: 1〜2ブロック(16〜32px)は範囲が狭すぎたので緩めた）
-export const HOVER_SNOW_MIST_MIN_ALT = TILE_SIZE * 0.5;
+// 下限は 0（足元から雪面まで 0〜48px なら出す。2026-10-11 ユーザー指定「雪が舞う条件のアタッカーと地面の距離の下限を0に」）。
+// 以前は半タイル（8px）で、バーストで飛び立つとき（最初の 1 フレームで足元から 6px 上がる）の噴射が雪面を叩く瞬間が
+// 条件の外だった。接地中（onTerrain）は SNOW_KICK の担当のまま変わらない（下限を 0 にしても、歩いているあいだは出ない）。
+// キャリアは元から下限なし（Carrier._kickHoverSnowMistSide）
+export const HOVER_SNOW_MIST_MIN_ALT = 0;
 export const HOVER_SNOW_MIST_MAX_ALT = TILE_SIZE * 3;
 // 発生間隔(F)。歩行の SNOW_KICK_WALK と違い滞空は何秒も続きうるので、毎フレーム
 // 撒くと粒が多すぎる。4F(≈0.07秒 @60fps) おきにまとめて
@@ -1409,6 +1413,11 @@ export const HOVER_SNOW_MIST_INTERVAL = 4;
 // 地面との当たり判定を付けたぶん、下向きに飛んだ粒の半分近くが着地直後に
 // 吸収されて消える（実機の指摘: 見た目の量が半減した）。その分を見込んで増量
 export const HOVER_SNOW_MIST_COUNT = 12;
+// バースト（自機のバーストジャンプ・敵アタッカーのジャンプ）で飛び立つ瞬間に、足元の雪面へ出す粉雪の数。
+// ホバー中は INTERVAL(4F) おきの間引きで、バーストの 1 フレーム目に当たるかは位相次第だった（実測: 4 通りの位相で最初の粉雪が
+// 0〜3 フレーム目にばらけた）。水面の水滴は「バーストの直後は出す」（HOVER_WATER_MIST_BURST_FRAMES）が、雪面にも同じことを
+// 求められ、飛び立つ瞬間に必ず 1 回出す形にした。ホバーの粉雪（12）の 1.5 倍を出発点にした。実機で見て調整する
+export const HOVER_SNOW_MIST_BURST_COUNT = 18;
 export const HOVER_SNOW_MIST_LIFETIME = 75;
 // SNOW_KICK より少し暗めにして重ならず見分けやすく（実測ではなく既存の雪色からの派生）
 export const HOVER_SNOW_MIST_COLOR = '#C7D2DF';

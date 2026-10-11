@@ -20,7 +20,7 @@ import {
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
     SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, PLATE_TIP_SLIDE_ACCEL,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE, SLOPE_SNAP_COYOTE,
-    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
+    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
     HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
@@ -135,6 +135,7 @@ export class Player {
         this.invincibleTimer = 0; // frames of invincibility after respawn
         this.hoverCooldown = 0;   // frames before hover can activate after jump
         this._burstMistFrames = 0; // バーストの直後、水面に水滴を舞わせる残りフレーム（_kickHoverWaterMist）
+        this._burstSnowPuff = false; // バーストで飛び立った直後、雪面に粉雪を 1 回出す印（_kickHoverSnowMist）
         this.missileCooldown = 0; // frames before next missile can be fired
 
         // Machine Gun state
@@ -343,16 +344,25 @@ export class Player {
      * 見て住み分ける。地面までの距離は groundClearance が持つ（副作用なし）。
      */
     _kickHoverSnowMist() {
+        // バーストの印は、この呼び出しで必ず使い切る（条件に合わず出せなかったときに、あとの呼び出しで古い印が効かないように）
+        const burst = this._burstSnowPuff;
+        this._burstSnowPuff = false;
         if (!this.game.spawnSnowMist) return;
         if (this.onTerrain) return;
         if (this.motion.slide <= 0) return;
         const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
-        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
-        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
         const fx = this.x + this.width / 2;
         const fy = this.y + this.height + clearance;
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
+        if (burst) {
+            // 飛び立つ瞬間は間引きを待たず、多めに 1 回。次のホバーの粉雪は INTERVAL 後
+            this._hoverMistTimer = 0;
+            this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_BURST_COUNT, onSlope);
+            return;
+        }
+        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
+        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
         this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
@@ -429,6 +439,8 @@ export class Player {
                 this.hoverFuel -= BURST_FUEL_CONSUMPTION;
                 this.hoverCooldown = HOVER_COOLDOWN_AFTER_BURST;
                 this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
+                // 雪面の上なら、飛び立つ瞬間に粉雪を 1 回（motion は今フレームの先頭で引いた値）
+                this._burstSnowPuff = this.motion.slide > 0;
                 // 水中なら一吹きぶんの泡（水の外では spawnBubbles が粒ごとに捨てる）
                 if (this.game.spawnBubbles) {
                     const n = this._hoverNozzle();
@@ -884,6 +896,7 @@ export class Player {
         this.stunTimer = 0;
         this.hoverCooldown = 0;
         this._burstMistFrames = 0;
+        this._burstSnowPuff = false;
         this.missileCooldown = 0;
         this.walkFrame = 2;
         this.walkTimer = 0;
