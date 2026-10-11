@@ -60,7 +60,7 @@ test('爆発物は床の岩の上: 下端の 4px が岩に入り、その上は�
     }
 });
 
-test.todo('Map の町には爆発物があり、建物として支えを持つ（作った町に explosive の印）', () => {
+test('Map の町には爆発物があり、建物として支えを持つ（作った町に explosive の印）', () => {
     const m = maps()[0];
     const xs = m.town.buildings.filter((b) => b.explosive);
     assert.ok(xs.length > 0);

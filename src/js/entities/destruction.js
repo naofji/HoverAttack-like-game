@@ -15,7 +15,7 @@ import { ImpactFlash, MACHINE_EXPLOSION_OPTS, PLAYER_EXPLOSION_OPTS, CARRIER_EXP
 import { DelayedCall } from './DelayedCall.js';
 import { DEBRIS_SPECS } from './debris/index.js';
 import {
-    IMPACT_FLASH_RADIUS, IMPACT_FLASH_RADIUS_MG, DEATH_FLASH_STAGGER,
+    IMPACT_FLASH_RADIUS, IMPACT_FLASH_RADIUS_MG, DEATH_FLASH_STAGGER, TOWN_EXPLOSIVE_BLAST_COUNT,
     EXPLOSION_PARTICLE_COUNT, GRENADE_EXPLOSION_COUNT,
     PLAYER_DEATH_EXPLOSION_COUNT, CARRIER_DEATH_EXPLOSION_COUNT,
     FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
@@ -110,8 +110,9 @@ export function playDestruction(game, entity, kind) {
 /**
  * 爆心から LANDMINE_DEATH_TRIGGER_RADIUS 以内の地雷を誘爆させる。
  * detonate() は連鎖で他の地雷にも触るので、配列のコピーを回す。
+ * 3面の町の爆発物も、画面の外で爆発したとき（粒と音を出さずに地雷だけ誘爆させる）にこれを呼ぶ。
  */
-function detonateNearbyMines(game, cx, cy) {
+export function detonateNearbyMines(game, cx, cy) {
     if (!game.landmines) return;
     for (const mine of [...game.landmines]) {
         if (!mine.alive) continue;
@@ -174,6 +175,10 @@ export const BLAST_PROFILES = {
     landmine: {
         flash: { count: 2, radius: IMPACT_FLASH_RADIUS * 1.2, spread: 16 },
         blast: { count: EXPLOSION_PARTICLE_COUNT },
+    },
+    townExplosive: {   // 3面の町の爆発物（ドラム缶・木箱・ボンベ・油壺の倉）。地雷より少し大きい閃光
+        flash: { count: 2, radius: IMPACT_FLASH_RADIUS * 1.3, spread: 12 },
+        blast: { count: TOWN_EXPLOSIVE_BLAST_COUNT },
     },
 
     // --- 敵基地 ---

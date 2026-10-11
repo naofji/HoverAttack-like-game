@@ -2091,3 +2091,9 @@ export const TOWN_EMBER_SMOKE_EVERY = 40; // 残り火が細い煙を出す間�
 // --- 3面の町並み 段3b（爆発物と誘爆）---
 // 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（3b章）
 export const TOWN_EXPLOSIVE_EVERY = 8;   // 床の建物何棟に1つ、脇に爆発物を置くか（spec の初期値）
+// 機体へのダメージは地雷（LANDMINE_DAMAGE / LANDMINE_BLAST_RADIUS）と同じから始める。
+// グレネード（80）より弱い。別に持つのは、実機で町の爆発物だけを詰められるように（spec 3b章）
+export const TOWN_EXPLOSIVE_DAMAGE = 25;
+export const TOWN_EXPLOSIVE_RADIUS = 50;   // 機体へのダメージと誘爆の届く半径（px）
+// 爆発の粒の数。町を欠かせる半径は K×√80 ≒ 30px（ミサイル 36粒の 20px とグレネード 150粒の 40px のあいだ）
+export const TOWN_EXPLOSIVE_BLAST_COUNT = 80;

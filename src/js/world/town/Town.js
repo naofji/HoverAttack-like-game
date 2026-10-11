@@ -12,7 +12,7 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE } from './chunks.js';
 import { paintParts } from './shapes.js';
 import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR } from './palette.js';
 import { createExplosion, Particle } from '../../entities/Particle.js';
@@ -20,6 +20,7 @@ import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import { FireSystem } from './fire.js';
+import { ExplosiveSystem } from './explosives.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import {
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
@@ -55,6 +56,7 @@ export class Town {
         // 煙のパフの絵（SmokeScreen と同じ焼いたもの）。node の書き出しの道具は () => null を渡す
         this.smokeSprites = smokeSprites;
         this.fire = new FireSystem(this);
+        this.explosives = new ExplosiveSystem(this);
         this.falling = [];
         this.rubble = [];
         // 弾ごとの覚え書き（発射位置で無視する建物・細い部品を欠かせた建物）。弾が消えれば一緒に消える
@@ -76,6 +78,8 @@ export class Town {
                 canvas, ctx, total, remaining: total, collapsed: false,
                 // 火が焦がしたかけら（燃えているあいだ崩れの対象。fire.js）
                 burnt: new Set(),
+                // 段3b: 爆発物（かけらに爆発物の材料がある建物）。爆発したら exploded
+                explosive: cells.some((v) => (v & MAT_MASK) === MAT_EXPLOSIVE), exploded: false,
             };
         });
         // 建物は動かないので、外接矩形が掛かるマス目に1度だけ登録する
@@ -146,9 +150,10 @@ export class Town {
      * ぎざぎざにする（位置から決まるので、同じ所に撃てば同じ穴）。当たった点のかけらは必ず欠ける
      * （マシンガンの 4px でも何かが欠けないと、撃っても変わらない壁に見える）。
      * 描き直しは消えたかけらを clearRect で抜き、縁に焦げを重ねるだけ。建物全体は描き直さない
+     * @param {'hit'|'blast'} [cause] 爆風（blast）か、弾・破片（hit）か。爆発物の誘爆の遅れに使う（段3b）
      * @returns {number} 欠けたかけらの数
      */
-    chip(b, x, y, radius) {
+    chip(b, x, y, radius, cause = 'hit') {
         const lx = x - b.x;
         const ly = y - b.y;
         const reach = radius + TOWN_CHIP_JAGGED;
@@ -170,6 +175,8 @@ export class Town {
         this._removeCells(b, removed);
         this._charEdges(b, removed);
         this._settle(b);
+        // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）
+        if (b.explosive) this.explosives.trigger(b, 0);
         return removed.length;
     }
 
@@ -189,6 +196,14 @@ export class Town {
         this._removeCells(b, list);
         this._charEdges(b, list);
         this._settle(b);
+    }
+
+    /** 爆発した爆発物の残りのかけらを全部抜く。崩壊の閃光と粒は出さない（爆発そのものが演出） */
+    consume(b) {
+        const left = [];
+        for (let k = 0; k < b.cells.length; k++) if (b.cells[k]) left.push(k);
+        if (left.length > 0) this._removeCells(b, left);
+        b.collapsed = true;
     }
 
     /** 消えたかけらの上下左右に残ったかけらへ焦げを重ねる（1回の欠けで同じかけらは1度だけ） */
@@ -218,7 +233,7 @@ export class Town {
     blast(x, y, size) {
         const radius = TOWN_BLAST_RADIUS_K * Math.sqrt(size);
         for (const b of this.buildingsInCircle(x, y, radius)) {
-            this.chip(b, x, y, radius);
+            this.chip(b, x, y, radius, 'blast');
             // 爆風の中の燃える材料には必ず火がつく（spec 3章）。半径の中は欠けて無くなるので、
             // 穴の縁（かけら2つぶん外まで）に残ったかけらにつける
             this.fire.igniteNear(b, x, y, radius + CHUNK * 2);
@@ -319,7 +334,9 @@ export class Town {
         }
         this._updateFalling();
         const cam = game.camera, cv = game.canvas;
-        this.fire.update(cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null);
+        const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
+        this.fire.update(view);
+        this.explosives.update(game, view);
         this._flushEffects(game);
     }
 
