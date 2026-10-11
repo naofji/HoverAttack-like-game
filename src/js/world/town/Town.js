@@ -16,6 +16,7 @@ import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID } from
 import { paintParts } from './shapes.js';
 import { TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR } from './palette.js';
 import { createExplosion, Particle } from '../../entities/Particle.js';
+import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import {
@@ -29,6 +30,7 @@ import {
 const HALF = CHUNK / 2;
 // 弾・爆発と建物の当たりを引くマス目の大きさ（px）。総当たりにしない（spec 5章）
 const HIT_GRID = 64;
+const NONE = new Set();
 
 function defaultCreateCanvas(w, h) {
     const cv = document.createElement('canvas');
@@ -108,6 +110,17 @@ export class Town {
             }
         }
         return [...found].sort((a, b) => a.id - b.id);
+    }
+
+    /** 機体（x, y, width, height。中心の求め方は Physics.centerOf）が重なっている建物の番号 */
+    buildingsUnder(entities) {
+        const ids = new Set();
+        for (const e of entities) {
+            const c = centerOf(e);
+            const r = Math.max(e.width || 0, e.height || 0) / 2;
+            for (const b of this.buildingsInCircle(c.x, c.y, r)) ids.add(b.id);
+        }
+        return ids;
     }
 
     /** ワールド座標のかけらの番号。建物の外は -1（空かどうかは見ない） */
@@ -200,9 +213,12 @@ export class Town {
      * 調べる。厚い壁に当たったら当たった所を欠かせて p.onTownWall(x, y)。細い部品は 1棟1回欠かせて
      * 飛び続ける（表の thin）。
      * 撃った位置に重なる建物は、その弾では無視する。機体は建物の手前に重なって描かれるので、
-     * 建物の前で撃つと撃った瞬間に目の前の壁で消えてしまう（遮蔽になるのは撃った者と的のあいだの建物）
+     * 建物の前で撃つと撃った瞬間に目の前の壁で消えてしまう（遮蔽になるのは撃った者と的のあいだの建物）。
+     * 的の側も同じで、exposed（的になりうる機体が重なっている建物の番号。buildingsUnder() で作る）は
+     * 止めない。塔の手前に止まった戦車を外から撃つと、塔の縁で弾が止まって戦車に届かなかった
+     * （最終レビュー指摘。敵の湧き位置の 15% が厚い壁の上）
      */
-    sweepProjectile(p) {
+    sweepProjectile(p, exposed = NONE) {
         const spec = TOWN_PROJECTILE_IMPACT[p.townKind];
         if (!spec || !p.alive || p.exploded) return;
         if (spec.pierce) {
@@ -222,7 +238,7 @@ export class Town {
             const px = x0 + ((p.x - x0) * s) / n;
             const py = y0 + ((p.y - y0) * s) / n;
             for (const b of this.buildingsAt(px, py)) {
-                if (st.ignore.has(b.id)) continue;
+                if (st.ignore.has(b.id) || exposed.has(b.id)) continue;
                 const k = this.cellAt(b, px, py);
                 if (k < 0 || !b.cells[k]) continue;
                 if (b.cells[k] & SOLID) {
@@ -263,8 +279,12 @@ export class Town {
 
     /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */
     update(game) {
-        // 自機側の弾（ミサイル・グレネード・マシンガン）。敵弾は CollisionManager が更新の直後に見る
-        for (const p of game.projectiles) this.sweepProjectile(p);
+        // 自機側の弾（ミサイル・グレネード・マシンガン）。敵弾は CollisionManager が更新の直後に見る。
+        // 敵が重なっている建物は、自機側の弾を止めない（1 tick に1回だけ集める）
+        if (game.projectiles.length > 0) {
+            const exposed = this.buildingsUnder(game.enemies.filter((e) => e.alive));
+            for (const p of game.projectiles) this.sweepProjectile(p, exposed);
+        }
         this._updateFalling();
         this._flushEffects(game);
     }

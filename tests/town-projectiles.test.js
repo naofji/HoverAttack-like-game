@@ -165,7 +165,7 @@ test('CollisionManager は敵の弾を更新した直後に町の当たりを見
     const bullet = { alive: true, x: 0, y: 0, update() { order.push('update'); } };
     const game = {
         enemyBullets: [bullet], projectiles: [], enemies: [], player: null, carrier: null,
-        map: { town: { sweepProjectile: (p) => { order.push('town'); p.alive = false; } } },
+        map: { town: { buildingsUnder: () => new Set(), sweepProjectile: (p) => { order.push('town'); p.alive = false; } } },
     };
     const cm = new CollisionManager(game);
     cm._updateEnemyBullets();
@@ -231,4 +231,50 @@ test('反射ビームは厚い壁も貫通し、通り道の建物を1棟1回ず
         t.sweepProjectile(beam);
     }
     assert.deepEqual(chips, [1, 1], '2棟とも、欠かせたのは1回ずつ');
+});
+
+test('的が重なっている建物は、その的を狙う弾を止めない（遮蔽は撃った者と的の「あいだ」の建物だけ）', () => {
+    // 戦車が塔の手前に止まっている（画面では戦車が塔より手前に描かれる）。外から撃った弾は
+    // 塔の縁で止まらず、戦車まで届く
+    const game = world(); const t = town();
+    const tank = { x: 210, y: 90, width: 20, height: 20, alive: true };
+    game.enemies.push(tank);
+    const b = new PlayerBullet(game, 150, 100, 0);
+    game.projectiles.push(b);
+    for (let i = 0; i < 40 && b.alive && b.x < 215; i++) {
+        b._prevX = b.x; b._prevY = b.y;
+        b.update();
+        t.update(game);
+    }
+    assert.ok(b.alive && b.x >= 215, `塔の縁で止まった（x=${b.x}）`);
+});
+
+test('的が重なっていない建物は、今までどおり弾を止める（遮蔽）', () => {
+    const game = world(); const t = town();
+    game.enemies.push({ x: 300, y: 90, width: 20, height: 20, alive: true });   // 塔の向こう側
+    const b = new PlayerBullet(game, 150, 100, 0);
+    game.projectiles.push(b);
+    for (let i = 0; i < 40 && b.alive; i++) {
+        b._prevX = b.x; b._prevY = b.y;
+        b.update();
+        t.update(game);
+    }
+    assert.equal(b.alive, false);
+    assert.ok(b.x >= 200 && b.x < 208);
+});
+
+test('CollisionManager: 自機・母艦が重なっている建物は、敵の弾を止めない', async () => {
+    const { CollisionManager } = await import('../src/js/systems/CollisionManager.js');
+    const t = town();
+    const seen = [];
+    const realSweep = t.sweepProjectile.bind(t);
+    t.sweepProjectile = (p, exposed) => { seen.push([...(exposed || [])]); return realSweep(p, exposed); };
+    const bullet = { alive: true, x: 0, y: 0, update() {} };
+    const game = {
+        enemyBullets: [bullet], projectiles: [], enemies: [], carrier: null,
+        player: { x: 205, y: 90, width: 20, height: 20, alive: true, docked: false, invincibleTimer: 1 },
+        map: { town: t },
+    };
+    new CollisionManager(game)._updateEnemyBullets();
+    assert.deepEqual(seen, [[0]], '塔（0番）が自機の下にあるので無視する');
 });

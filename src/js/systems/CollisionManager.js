@@ -42,12 +42,17 @@ export class CollisionManager {
     _updateEnemyBullets() {
         const game = this.game;
 
+        // 3面の町の厚い壁（遮蔽）。自機・母艦が重なっている建物は止めない（その建物の手前にいるので、
+        // 撃った者とのあいだにはない）。1回の更新で1度だけ集める
+        const town = game.map && game.map.town;
+        const exposed = town && game.enemyBullets.length > 0
+            ? town.buildingsUnder([game.player, game.carrier].filter((e) => e && e.alive)) : null;
+
         for (let i = game.enemyBullets.length - 1; i >= 0; i--) {
             const bullet = game.enemyBullets[i];
             bullet.update();
-            // 3面の町の厚い壁（遮蔽）。自機・母艦との当たりより先に見る（壁で止まった弾は当たらない）
-            const town = game.map && game.map.town;
-            if (town && bullet.alive) town.sweepProjectile(bullet);
+            // 自機・母艦との当たりより先に見る（壁で止まった弾は当たらない）
+            if (town && bullet.alive) town.sweepProjectile(bullet, exposed);
 
             if (bullet.alive) {
                 const playerVulnerable = game.player && game.player.alive
