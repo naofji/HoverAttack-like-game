@@ -17,8 +17,9 @@ import {
     TOWN_MATERIALS, TOWN_FIRE_TICK, TOWN_FIRES_MAX, TOWN_FIRES_PER_BUILDING,
     TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH, TOWN_EMBER_FRAMES, TOWN_EMBERS_MAX,
     TOWN_FLAMES_PER_FIRE, TOWN_FLAMES_MAX, TOWN_SMOKE_EVERY, TOWN_SMOKE_MAX, TOWN_EMBER_SMOKE_EVERY, VIEW_CULL_MARGIN,
-    TOWN_EXPLOSIVE_COOKOFF,
+    TOWN_EXPLOSIVE_COOKOFF, TOWN_FIRE_SOUND_FULL,
 } from '../../utils/Constants.js';
+import { positionalVolume } from '../../utils/audioFalloff.js';
 
 const HALF = CHUNK / 2;
 
@@ -141,6 +142,24 @@ export class FireSystem {
         for (const e of this.embers) {
             if (inView(e.x, e.y, 4) && this.town.random() < 0.5) ctx.fillRect(Math.round(e.x), Math.round(e.y) - 1, 1, 1);
         }
+    }
+
+    /**
+     * 炎のループの強さと左右（Town.update が毎 tick audioManager へ渡す。spec 4章）。
+     * view は Town の {x, y, w, h}。無ければ（道具・テスト）全部の火元を音量 1 とする
+     * @returns {{intensity:number, x:number|null}}
+     */
+    soundLevel(view) {
+        const lv = view ? { cx: view.x + view.w / 2, cy: view.y + view.h / 2, halfW: view.w / 2, halfH: view.h / 2 } : null;
+        let sum = 0, sx = 0;
+        for (const f of this.fires) {
+            const c = FireSystem.center(f.b, f.k);
+            const w = lv ? positionalVolume(c.x, c.y, lv) : 1;
+            sum += w;
+            sx += w * c.x;
+        }
+        if (sum <= 0) return { intensity: 0, x: null };
+        return { intensity: Math.min(1, Math.sqrt(sum / TOWN_FIRE_SOUND_FULL)), x: sx / sum };
     }
 
     _tick() {

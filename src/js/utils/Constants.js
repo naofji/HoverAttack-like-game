@@ -2142,3 +2142,6 @@ export const TOWN_FIRE_CRACKLE_FILTER = 1800;
 export const TOWN_FIRE_CRACKLE_RATE = 14;        // 1秒あたりのクリックの数
 export const TOWN_FIRE_CRACKLE_SECONDS = 3.7;    // 繰り返しが耳につかない長さ（2秒だと周期が分かる）
 export const TOWN_FIRE_CRACKLE_SEED = 0x7F1E;
+// 炎のループの強さ = √(Σ 火元ごとの位置の音量 / FULL) を 1 で頭打ち。√ にしたのは火元1つでも聞こえるように
+// （1つで -10dB）。位置の音量は positionalVolume（画面の中 1、外は下がって1画面ぶんで 0）
+export const TOWN_FIRE_SOUND_FULL = 10;

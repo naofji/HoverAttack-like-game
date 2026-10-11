@@ -22,6 +22,7 @@ import { FallingPiece } from './FallingPiece.js';
 import { FireSystem } from './fire.js';
 import { ExplosiveSystem } from './explosives.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
+import { audioManager } from '../../audio/AudioManager.js';
 import {
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
@@ -337,6 +338,10 @@ export class Town {
         const cam = game.camera, cv = game.canvas;
         const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
         this.fire.update(view);
+        // 炎のループ（spec 4章）。画面に近い火元が無くなったら引いて止める
+        const fireSound = this.fire.soundLevel(view);
+        if (fireSound.intensity > 0) audioManager.startTownFire(fireSound.intensity, fireSound.x);
+        else audioManager.stopTownFire();
         this.explosives.update(game, view);
         this._flushEffects(game);
     }
@@ -378,7 +383,7 @@ export class Town {
         }
         const mat = p.mainMaterial();
         this._addRubble(p.x, p.width, groundY, p.count, mat);
-        this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES });
+        this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES, size: p.count });
         if (p.fireFuel > 0) this.fire.addEmber(p.cx, groundY);
     }
 
@@ -450,15 +455,19 @@ export class Town {
     /**
      * 溜めた注文を出す。画面の中かそのすぐ外（VIEW_CULL_MARGIN）だけ。
      * 崩壊は createExplosion を直接足す（spawnExplosion を通すと town.blast に戻って
-     * 崩壊が隣を崩す連鎖が止まらなくなる。spec 2章）。音は段4
+     * 崩壊が隣を崩す連鎖が止まらなくなる。spec 2章）。
+     * 崩れる音は、画面の近くの崩壊・砕けのうち一番大きい1つだけ鳴らす（グレネード1発で何棟も同時に
+     * 崩れても1回。spec 4章「80ms 以内はまとめる」の tick の中の分。tick をまたぐ分は playTownCollapse が見る）
      */
     _flushEffects(game) {
         const cam = game.camera;
         const cv = game.canvas;
         const m = VIEW_CULL_MARGIN;
+        let loud = null;
         for (const e of this.effects) {
             if (cam && cv && (e.x < cam.x - m || e.x > cam.x + cv.width + m
                 || e.y < cam.y - m || e.y > cam.y + cv.height + m)) continue;
+            if ((e.type === 'collapse' || e.type === 'shatter') && e.size > 0 && (!loud || e.size > loud.size)) loud = e;
             if (e.type === 'collapse') {
                 game.particles.push(...createExplosion(e.x, e.y, TOWN_COLLAPSE_PARTICLES));
             } else {
@@ -475,6 +484,7 @@ export class Town {
                 }
             }
         }
+        if (loud) audioManager.playTownCollapse(loud.size, loud.x);
         this.effects.length = 0;
     }
 
