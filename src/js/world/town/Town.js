@@ -476,6 +476,9 @@ export class Town {
             b.collapsed = true;
             mask = supportedMask(b.cells, b.cw, b.ch, anchors, TOWN_RUIN_DEPTH);
             this._charRuins(b, mask);
+            // 土台の上で燃えていた火は残り火にする（焦げた骨組みが燃え続けて崩れ去らないように。
+            // 最終レビュー指摘: 約15秒燃え続けて土台の6割が崩れた）。落ちる塊の火は _detach で破片が持っていく
+            this.fire.quench(b, mask);
             this._emit('collapse', b.x + b.width / 2, b.y + b.height / 2, { size: b.remaining });
         }
         for (const group of detachedGroups(b.cells, b.cw, b.ch, mask)) this._detach(b, group);

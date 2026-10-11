@@ -105,3 +105,24 @@ test('崩壊で焦げた土台（CHARRED）はもう燃えない', () => {
     for (let k = 0; k < b.cells.length; k++) b.cells[k] |= CHARRED;
     assert.equal(town.fire.ignite(b, 0), false);
 });
+
+test('燃えている建物が崩壊したら、焦げた土台の上の火は残り火になって消え、土台は崩れ続けない', () => {
+    // 最終レビュー指摘: 崩壊の前からあった火が土台に残り、燃料が尽きるまで（約15秒）土台を崩し続けた
+    for (let seed = 1; seed <= 10; seed++) {
+        const rng = new SeededRNG(seed);
+        // 16x48 の木の家。支えは最下段（行 2 = y 32〜47 の、中心 y=46 の段）
+        const town = new Town([made(0, 0, 16, 48, MAT_WOOD)], {
+            createCanvas: fakeCanvas, isSolidTile: (r) => r === 2, random: () => rng.next(),
+        });
+        const b = town.buildings[0];
+        for (const k of [b.cells.length - 1, b.cells.length - 2, b.cells.length - 3, b.cells.length - 4]) town.fire.ignite(b, k);
+        // 下から4段目を横断して欠かせ、上の大部分を落として崩壊させる
+        for (let x = 2; x < 16; x += 4) town.chip(b, x, 34, 1);
+        assert.ok(b.collapsed, `seed ${seed}: 崩壊していない`);
+        assert.equal(town.fire.countIn(b), 0, `seed ${seed}: 土台に火が残った`);
+        assert.ok(town.fire.embers.length > 0, `seed ${seed}: 残り火が無い`);
+        const left = b.remaining;
+        run(town, 1200);
+        assert.equal(b.remaining, left, `seed ${seed}: 土台が崩れ続けた`);
+    }
+});

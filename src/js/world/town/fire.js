@@ -58,6 +58,15 @@ export class FireSystem {
         return true;
     }
 
+    /** 崩壊で残った土台（mask が 1 のかけら）の上の火を消し、残り火にする */
+    quench(b, mask) {
+        for (const f of this.fires.filter((g) => g.b === b && mask[g.k])) {
+            const c = FireSystem.center(b, f.k);
+            this.addEmber(c.x, c.y);
+            this._remove(f);
+        }
+    }
+
     /** かけらが消えた（欠け・崩れ・切り離し）。その上の火も消す */
     onCellsRemoved(b, list) {
         if (this.fires.length === 0) return;
