@@ -86,7 +86,7 @@
 | `ICICLE_FILL_SCALE` | `1` | 村の濃さに掛ける |
 | `ICICLE_KEEP_BELOW` | `3` | 床まで残す余白（タイル） |
 | `ICICLE_TRAIL_EVERY` / `ICICLE_TRAIL_COUNT` | `2` / `2` | 落ちている間の粉雪の間隔（tick）と 1 回の粒数 |
-| `ICICLE_SINK_SPEED` | `1.5` | 床にめり込む速さ（px/tick。重力は使わない） |
+| `ICICLE_SINK_SPEED` | `2.5` | 床にめり込む速さ（px/tick。重力は使わない）。最初は 1.5 で、実機で「もう少し速く」と言われた |
 | `ICICLE_POWDER` / `ICICLE_POWDER_SIZE` | `{land 8, sink 2, end 6}` / `[2, 4]` | めり込みの粉雪の数（触れた瞬間・毎 tick・消えるとき）と大きさ（px） |
 
 初案の数値は、実機で見て調整する前提の出発点。濃さは、最初は木の半分くらいの本数（面全体で 150〜250 本）を狙い、実測してコメントに残す。

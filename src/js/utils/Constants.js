@@ -2306,8 +2306,9 @@ export const ICICLE_SHARDS = { hit: 4, land: 14 };
 export const ICICLE_TRAIL_EVERY = 2;
 export const ICICLE_TRAIL_COUNT = 2;
 // 先が床に触れたら、消えずに先からめり込んでいく（実機で「いきなり消えるのではなくて、先からめり込んでいって大きめの粉雪に変わる方がいい」
-// と言われた）。めり込む速さ（px/tick。重力は使わない）。全体が地面の線の下に入るまで（長さ 48px で約 0.6 秒）
-export const ICICLE_SINK_SPEED = 1.5;
+// と言われた）。めり込む速さ（px/tick。重力は使わない）。全体が地面の線の下に入るまで（長さ 48px で約 0.35 秒）。
+// 最初は 1.5（約 0.6 秒）で、実機で「めり込む速度をもう少し速く」と言われて 2.5 にした
+export const ICICLE_SINK_SPEED = 2.5;
 // 地面の線から出る大きめの粉雪の数。land: 触れた瞬間、sink: めり込んでいる間の毎 tick、end: 潜りきって消えるとき。
 // 大きさ [最小, 最大]（px。落ちている間の粉雪や木の雪より大きめ。大きい方は ICICLE_POWDER_BIG_SHARE の割合）
 export const ICICLE_POWDER = { land: 8, sink: 2, end: 6 };
