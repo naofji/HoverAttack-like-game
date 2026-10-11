@@ -19,6 +19,7 @@ export const MAT_WOOD = 2;      // 板・梁・綱（燃えやすい）
 export const MAT_METAL = 3;     // トタン・配管・ランタンの枠（燃えない）
 export const MAT_EXPLOSIVE = 4; // ドラム缶・ダイナマイト箱（段3b）
 export const MAT_PLANT = 5;     // 苔・シダ（4面。燃えない・誘爆しない）
+export const MAT_ICE = 6;       // つらら（5面。燃えない・誘爆しない）
 export const MAT_MASK = 0x07;
 export const SOLID = 0x10;      // 厚い壁。段2で弾を止める（細い部品は止めない）
 export const CHARRED = 0x20;    // 焦げ（段3）

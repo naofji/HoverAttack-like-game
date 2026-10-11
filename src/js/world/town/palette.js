@@ -105,3 +105,14 @@ export const SNOWTREE_PARTICLE_COLORS = ['#d6e0ec', '#c3d0de', '#d6e0ec', '#2a4a
 // 舞う雪の色（SnowFlurryParticle）。雪の 3 色のうち明るい側。舞う粒は手前に出るので、木の本体の雪より白くてよいが、
 // 足場の雪のふち（SNOW_CAP_COLOR）よりは暗く保つ（tests/snowtrees-palette.test.js）
 export const SNOWTREE_FLURRY_COLORS = ['#e2eaf3', '#d6e0ec', '#c3d0de'];
+
+// 5面のつららの色。岩（鋼青、輝度 118）より明るく、足場の雪のふち（輝度 243）より暗い（輝度 140 / 173 / 208）。
+// 雪の木の白（青の強さ 17〜27）より青を強く（53〜71）して見分ける。描き順は body → light → dark
+// （light は左の明るい面、dark は右の影の筋）。tests/icicles-palette.test.js が縛る
+export const ICICLE_COLORS = {
+    body: '#8fb4d6',
+    light: '#b9d6ee',
+    dark: '#6f93b6',
+};
+// 砕けた氷の粒の色（明るい側。手前に出る粒なので本体より白くてよいが、雪のふちよりは暗い）
+export const ICE_PARTICLE_COLORS = ['#b9d6ee', '#8fb4d6', '#e2eef8'];

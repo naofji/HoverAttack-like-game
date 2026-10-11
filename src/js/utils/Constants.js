@@ -2087,6 +2087,8 @@ export const TOWN_MATERIALS = {
     4: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
     // 植物（苔・シダ。4面）。燃えない・火を中継しない（金属と同じ行）。ユーザーの指定: 誘爆も延焼もしない
     5: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
+    // つらら（5面）。燃えない・火を中継しない（植物と同じ行）
+    6: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
 };
 // 火が隣へ進むとき、元の火元を残したまま新しい火元を増やす確率（それ以外は火元が移る）。
 // 増やしすぎると 1棟の上限 4 にすぐ届く
@@ -2271,3 +2273,30 @@ export const SNOWTREE_FLURRY_START_HEIGHT = 0.4;
 export const SNOWTREE_FLURRY_TRICKLE_STEP = 0.382;
 // 大きい粒（MODES の size の大きい方）の割合。残りは小さい方
 export const SNOWTREE_FLURRY_BIG_SHARE = 0.25;
+
+// --- 5面のつらら ---
+// 設計: docs/superpowers/specs/2026-10-11-stage5-icicles-design.md
+// 3面の町の仕組み（world/town/）に、天井に吊るした「もろい」建物として載せる。絵は world/town/icicles.js、
+// 置き場所は generateIcicles.js、落ちる塊は IcicleFall.js。STAGE_ENVIRONMENTS の props: 'snow' の面だけ。
+// 数値は spec の初案で、実機で見て調整する前提の出発点（ユーザー決定: 震えて落ちる約 0.4 秒・ダメージは大きさに比例 15〜35・
+// 開始の部屋と基地の部屋を避けて面全体の天井）。
+// 見える長さ・根元の幅（px。長さは 4px 刻み）
+export const ICICLE_LENGTH = [24, 64];
+export const ICICLE_WIDTH = [8, 12];
+// ダメージ [最短, 最長]。長さに比例（短い → 長い）。自機・母艦・敵に同じ数値。参考: 自機 HP 100、敵アタッカー 15〜45、地雷 25
+export const ICICLE_DAMAGE = [15, 35];
+// 当たってから落ちるまで（tick。0.4 秒）。震えている間の追加の当たりは時間を延ばさない。揺れる幅（px。描画だけ）
+export const ICICLE_SHAKE_TICKS = 24;
+export const ICICLE_SHAKE_AMPLITUDE = 1;
+// 当たった機体の vy を、少なくともこの値（下向き）にする。vx は変えない（applyKnockback は vx を上書きするので使わない）
+export const ICICLE_KNOCK_VY = 2;
+// 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる
+export const ICICLE_FILL_SCALE = 1;
+// 天井の空きから、床まで残す余白（タイル）。吊るす長さは (空き - この値) × タイルまで
+export const ICICLE_KEEP_BELOW = 3;
+// 隣のつららとの間隔（px、4px 刻みで引く）。つららの幅に足す
+export const ICICLE_GAP = [4, 20];
+// 震えているあいだ、先から水滴の粒を 1 つ落とす間隔（tick。予兆）
+export const ICICLE_DRIP_EVERY = 6;
+// 氷の粒の数。hit: 当たって震え始めるとき、land: 落ちて砕けるとき
+export const ICICLE_SHARDS = { hit: 4, land: 14 };
