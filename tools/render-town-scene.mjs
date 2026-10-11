@@ -5,7 +5,7 @@
 //   node tools/render-town-scene.mjs --out town.png                       # 今週の3面、左上（開始の部屋）
 //   node tools/render-town-scene.mjs --seed 3 --x 1200 --y 300 --w 1366 --h 768 --scale 1 --out a.png
 //   node tools/render-town-scene.mjs --stage 4 --out ferns.png            # 4面の苔とシダ（既定は3面の町）
-//   node tools/render-town-scene.mjs --stage 5 --out snowtrees.png        # 5面の雪の木（地形の雪のふちは 5px の帯で近似）
+//   node tools/render-town-scene.mjs --stage 5 --out snow.png             # 5面の雪の木と天井のつらら（地形の雪のふちは 5px の帯で近似）
 //   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間・壊す時間
 //   node tools/render-town-scene.mjs --x 1200 --y 300 --blast "1300,420,150;1340,400,36" --ticks 120 --out b.png
 //       # 壊した後（段2）。--blast は「x,y,粒の数」を ; 区切りで何発でも（グレネード 150・ミサイル 36）。
@@ -46,7 +46,9 @@ const seed = args.seed ? Number(args.seed) : stageSeed(getCurrentWeek().seed, MI
 const map = new GameMap({ rng: new SeededRNG(seed) }, MISSION);
 
 const t0 = performance.now();
-const specs = PROPS === 'ferns' ? map._buildPlantSpecs() : PROPS === 'snowtrees' ? map._buildSnowTreeSpecs() : map._buildTownSpecs();
+const specs = PROPS === 'ferns' ? map._buildPlantSpecs()
+    : PROPS === 'snow' ? [...map._buildSnowTreeSpecs(), ...map._buildIcicleSpecs()]
+        : map._buildTownSpecs();
 const t1 = performance.now();
 // 画素を持たない canvas で作る時間 ＝ かけらの表と支えの計算（実機の canvas の確保・塗りは別）
 const noPixels = () => ({ getContext: () => noopCtx });
@@ -154,7 +156,7 @@ if (args.stats) {
         seed, map: `${map.cols}x${map.rows}`, buildings: specs.length, byKind: by,
         spriteMB: +(area * 4 / 1e6).toFixed(2),
         // 4面の植物は多角形。実機の canvas の fill の回数（色ごとに1回）と輪の数（node では塗りの時間を測れない）
-        ...(PROPS === 'ferns' || PROPS === 'snowtrees' ? { fillCalls: specs.reduce((n, sp) => n + sp.parts.length, 0), rings: specs.reduce((n, sp) => n + sp.parts.reduce((m, p) => m + p.rings.length, 0), 0) } : {}),
+        ...(PROPS === 'ferns' || PROPS === 'snow' ? { fillCalls: specs.reduce((n, sp) => n + sp.parts.length, 0), rings: specs.reduce((n, sp) => n + sp.parts.reduce((m, p) => m + p.rings.length, 0), 0) } : {}),
         specsMs: +(t1 - t0).toFixed(1), rasterizeMs: +(t2 - t1).toFixed(1),
         ...blastStats(),
         chain: chainStats(),
@@ -211,7 +213,7 @@ for (let r = Math.floor(Y / T); r <= Math.floor((Y + H) / T); r++) {
         ctx.fillStyle = st.border; ctx.fillRect(c * T, r * T, T, T);
         ctx.fillStyle = st.fill; ctx.fillRect(c * T + 1, r * T + 1, T - 2, T - 2);
         // 5面: 上が空いている岩の上面に雪のふち（実機は面ごとの描き込みで、ここは同じ色の 5px の帯で近似）
-        if (PROPS === 'snowtrees' && r > 0 && map.grid[r - 1][c] === 0) { ctx.fillStyle = SNOW_CAP_COLOR; ctx.fillRect(c * T, r * T, T, SNOW_CAP_THICKNESS); }
+        if (PROPS === 'snow' && r > 0 && map.grid[r - 1][c] === 0) { ctx.fillStyle = SNOW_CAP_COLOR; ctx.fillRect(c * T, r * T, T, SNOW_CAP_THICKNESS); }
     }
 }
 const out = args.out || 'town-scene.png';

@@ -968,8 +968,8 @@ export const STAGE_PALETTES = [
 // （'fortress' は Map._generateFortress() が読む。設計:
 //  docs/superpowers/specs/2026-09-06-stage7-fortress-design.md）。
 // props = 地形の上に置く飾り（'town' は3面の壊せる町並み。設計:
-//  docs/superpowers/specs/2026-10-11-stage3-town-design.md。'ferns' は4面の苔とシダ、'snowtrees' は5面の
-//  雪をかぶった木。設計: docs/superpowers/specs/2026-10-11-stage5-snowtrees-design.md）。無ければ置かない。
+//  docs/superpowers/specs/2026-10-11-stage3-town-design.md。'ferns' は4面の苔とシダ、'snow' は5面の雪をかぶった木と
+//  天井のつらら。設計: docs/superpowers/specs/2026-10-11-stage5-snowtrees-design.md ・ 2026-10-11-stage5-icicles-design.md）。無ければ置かない。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
@@ -977,7 +977,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
-    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snowtrees' }, // 5: 雪と氷（雪をかぶった木）
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
 ];
@@ -2199,7 +2199,7 @@ export const PLANT_LEAF_PARTICLES_FALL = 8;
 
 // --- 5面の雪の木 ---
 // 4面の植物（上）と同じ Town の仕組み（燃えない・誘爆しない・壊せる・弾が止まる）に、雪をかぶった木を載せる。
-// 絵は world/town/snowTrees.js、置き場所は world/town/generateSnowTrees.js。STAGE_ENVIRONMENTS の props: 'snowtrees' の面だけ。
+// 絵は world/town/snowTrees.js、置き場所は world/town/generateSnowTrees.js。STAGE_ENVIRONMENTS の props: 'snow' の面だけ（つららと同じ面）。
 // 高さは「見える高さ」（根元の 4px は地面に埋まる）。ユーザー指定（2026-10-11）: 機体（PLAYER_HEIGHT 24px）の
 // 8割（19.2px → 4px 刻みで 20）から 3倍（72px）まで。4面のシダ（見える高さ 24〜約 90px、半分以上は 24px 未満の
 // 苔と低いシダ）より背の高い木が中心になる。枯れ木は枝が横に張って背が伸びないので、上限を低く取る

@@ -153,7 +153,7 @@ test('stage 4 builds plants (soft buildings); stage 3 keeps its town; mission 11
   assert.ok(ferns.buildings.length > 0);
   assert.ok(ferns.buildings.every((b) => b.soft && b.style === 'P'));
   assert.ok(buildMap(Map, 42, 2).town.buildings.every((b) => !b.soft), '3面の町は soft でない');
-  assert.ok(buildMap(Map, 42, 4).town.buildings.every((b) => b.soft && b.flora === 'snow'), '5面は雪の木');
+  assert.ok(buildMap(Map, 42, 4).town.buildings.every((b) => b.soft && (b.flora === 'snow' || b.flora === 'ice')), '5面は雪の木とつらら');
   assert.equal(buildMap(Map, 42, 5).town, null, '6面には何も置かない');
   assert.ok(buildMap(Map, 42, 10).town.buildings.every((b) => b.soft && b.flora === 'leaf'), 'debugStartMission で面数を超えても剰余で4面');
 });
@@ -193,13 +193,13 @@ test('building the snow trees does not consume game.rng (SpawnManager runs on it
   const withTrees = { rng: new SeededRNG(42) };
   new Map(withTrees, 4);
 
-  const original = Map.prototype._generateSnowTrees;
-  Map.prototype._generateSnowTrees = function () { /* no-op: 木を作らない */ };
+  const original = Map.prototype._generateSnow;
+  Map.prototype._generateSnow = function () { /* no-op: 木を作らない */ };
   const without = { rng: new SeededRNG(42) };
   try {
     new Map(without, 4);
   } finally {
-    Map.prototype._generateSnowTrees = original;
+    Map.prototype._generateSnow = original;
   }
   assert.equal(withTrees.rng.state, without.rng.state);
 });

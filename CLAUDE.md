@@ -26,6 +26,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 敵アタッカーの型 | `Constants.js` の `ENEMY_ATTACKER_TYPES` に1行 ＋ 脚を変えるなら `entities/attacker/legs.js` の `LEG_STYLES` | `EnemyAttacker.js` の `update()` |
 | 壊せる背景の植物の種類（4面） | `src/js/world/town/plants.js` に build 関数 ＋ `generatePlants.js` の置き方（燃えず誘爆しない。`soft: true` で崩壊の演出なし） | `Town.js`（町と同じ仕組み） |
 | 壊せる背景の木の種類（5面の雪の木） | `src/js/world/town/snowTrees.js` に build 関数 ＋ `generateSnowTrees.js` の置き方、色は `palette.js` の `SNOWTREE_COLORS`（燃えず誘爆しない。雪は岩より明るく、地形の雪のふちより暗い） | `Town.js`（4面の植物と同じ。置けるかの判定は `placer.js` を共有） |
+| 壊せる背景の「もろい」建物（5面のつらら） | `src/js/world/town/icicles.js` に build 関数 ＋ `generateIcicles.js` の置き方、色は `palette.js` の `ICICLE_COLORS`（`brittle: true` の設計図は当たると欠けずに震え、全体が `IcicleFall` になって落ちて機体にダメージ） | `Town.js`（`_shake` / `_updateShaking` / `_icicleImpact`） |
 | 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |

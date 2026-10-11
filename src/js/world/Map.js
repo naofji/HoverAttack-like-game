@@ -50,6 +50,7 @@ import { carveFortressZones } from './fortress.js';
 import { generateTown } from './town/generate.js';
 import { generatePlants } from './town/generatePlants.js';
 import { generateSnowTrees } from './town/generateSnowTrees.js';
+import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 
@@ -319,14 +320,14 @@ export class Map {
         // Step 13: 3面の町並み（設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md）。
         // 遠景と同じく派生ストリームで、game.rng は消費しない（このあと SpawnManager が使う）。
         // missionLevel はデバッグで面数を超えうるので、パレットと同じく剰余で丸める
-        // 4面は苔とシダ（props: 'ferns'）、5面は雪をかぶった木（props: 'snowtrees'）。同じ Town の仕組みに、
+        // 4面は苔とシダ（props: 'ferns'）、5面は雪をかぶった木と天井のつらら（props: 'snow'）。同じ Town の仕組みに、
         // 燃えない植物の設計図を載せる
         // （map.town という名前は、弾・爆発・岩の破壊の配線がすべてこれを見ているので変えない）
         this.town = null;
         const props = STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].props;
         if (props === 'town') this._generateTown();
         else if (props === 'ferns') this._generatePlants();
-        else if (props === 'snowtrees') this._generateSnowTrees();
+        else if (props === 'snow') this._generateSnow();
     }
 
     // 開始の部屋・基地の部屋を避けるための矩形。水（_generateWater）と雪の階段
@@ -383,8 +384,22 @@ export class Map {
         });
     }
 
-    _generateSnowTrees() {
-        this.town = new Town(this._buildSnowTreeSpecs(), { isSolidTile: (r, c) => this.isSolid(r, c) });
+    /**
+     * つららの設計図。tools/render-town-scene.mjs も同じものを呼ぶ（町・植物・木と同じ理由）。
+     * 木・植物とは別の派生ストリーム。除外の矩形は開始の部屋と基地の部屋の**両方**（ユーザー決定: 面に入った直後に
+     * 事故らないよう開始の部屋は避ける。木は開始の部屋にも置く）
+     */
+    _buildIcicleSpecs() {
+        return generateIcicles({
+            grid: this.grid, rows: this.rows, cols: this.cols,
+            excludeRects: this._reservedRects(),
+            rng: new SeededRNG((this.game.rng.state ^ 0x1C1CE5) >>> 0),
+        });
+    }
+
+    /** 5面: 雪の木 ＋ 天井のつらら を 1 つの Town に載せる。木が先（建物の番号が変わらず、木の欠け方の乱数が変わらない） */
+    _generateSnow() {
+        this.town = new Town([...this._buildSnowTreeSpecs(), ...this._buildIcicleSpecs()], { isSolidTile: (r, c) => this.isSolid(r, c) });
     }
 
     _generateTown() {
