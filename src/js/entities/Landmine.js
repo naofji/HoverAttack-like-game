@@ -8,9 +8,8 @@ import {
     LANDMINE_BLINK_INTERVAL,
     LANDMINE_BLAST_RADIUS
 } from '../utils/Constants.js';
-import { applyKnockback } from '../utils/Knockback.js';
+import { applyBlastDamage } from '../utils/blastDamage.js';
 import { playBlast } from './destruction.js';
-import { recordHit } from '../utils/hitPoint.js';
 
 export class Landmine {
     constructor(game, x, y) {
@@ -65,30 +64,10 @@ export class Landmine {
         const cy = this.y + this.height / 2;
         playBlast(this.game, cx, cy, 'landmine');
 
-        const applyAoE = (entity) => {
-            if (!entity || !entity.alive || entity === this) return;
-            // Use center of entity
-            const ex = entity.x + entity.width / 2;
-            const ey = entity.y + entity.height / 2;
-            const dx = ex - cx;
-            const dy = ey - cy;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist <= LANDMINE_BLAST_RADIUS) {
-                if (typeof entity.takeDamage === 'function') {
-                    recordHit(entity, cx, cy);
-                    entity.takeDamage(LANDMINE_DAMAGE);
-                    applyKnockback(entity, dx, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX);
-                } else if (typeof entity.detonate === 'function') {
-                    entity.detonate(); // Chain reaction
-                }
-            }
-        };
-
-        applyAoE(this.game.player);
-        applyAoE(this.game.carrier);
-        for (const enemy of this.game.enemies) applyAoE(enemy);
-        for (const mine of this.game.landmines) applyAoE(mine);
+        applyBlastDamage(this.game, cx, cy, {
+            radius: LANDMINE_BLAST_RADIUS, damage: LANDMINE_DAMAGE,
+            knockVy: LANDMINE_KNOCKBACK_VY, knockVx: LANDMINE_KNOCKBACK_VX, source: this,
+        });
     }
 
     draw(ctx) {
