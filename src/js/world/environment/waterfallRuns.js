@@ -33,6 +33,27 @@ export function bandLeftX(c, align) {
     return c * TILE_SIZE + Math.floor((TILE_SIZE - WATERFALL_BAND_WIDTH) / 2);
 }
 
+/**
+ * 床の縁から落ちる滝の上端で、水の進む側の角を丸める四分円（純関数）。
+ * 中心は帯の内側（床の水につながる側）の、上端から radius 下がった点。
+ * 左から流れてくる（align 'left'）水は右側が、右から（'right'）なら左側が丸い。
+ * 半径は帯の幅で頭打ちにする（それ以上は帯の外へ広がるだけで角にならない）。
+ *
+ * @returns {Array<[number, number]>} 上端から1pxずつ下がる各行の塗る範囲 [x0, x1]。
+ *   行の中心 (i + 0.5) での円の幅を取る（行の上端や下端で取ると、最上行が幅0か
+ *   最下行が欠けるかのどちらかになる）
+ */
+export function spillArcRows(align, x, width, radius) {
+    const r = Math.min(radius, width);
+    const rows = [];
+    for (let i = 0; i < r; i++) {
+        const dy = r - (i + 0.5);
+        const w = Math.sqrt(r * r - dy * dy);
+        rows.push(align === 'right' ? [x + width - w, x + width] : [x, x + w]);
+    }
+    return rows;
+}
+
 /** (r, c) の上に水が乗れるか（床か、満水の水）。落ち際・着水の判定に使う。シミュレーションと同じ定義 */
 function supports(map, r, c) {
     return supportsWater(map.water, map.rows, map.cols, map._waterSolidFn(), r, c);

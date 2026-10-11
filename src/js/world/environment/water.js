@@ -7,14 +7,14 @@
 // sin で上下させる。当たり判定は波打たない（水面の行は固定）。
 // しぶきが落ちた場所は波紋として一時的に振幅を足し、毎フレーム減衰する。
 
-import { collectWaterfallRuns } from './waterfallRuns.js';
+import { collectWaterfallRuns, spillArcRows } from './waterfallRuns.js';
 import {
     TILE_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT,
     WATER_FILL, WATER_BEHIND_FILL, WATER_SURFACE_COLOR, WATER_SURFACE_LINE_WIDTH, WATER_WAVE_AMPLITUDE, WATER_WAVE_LENGTH, WATER_WAVE_SPEED,
     WATER_RIPPLE_DECAY, WATER_RIPPLE_MIN,
     WATER_BUBBLE_COLOR, WATER_BUBBLE_RISE_MIN, WATER_BUBBLE_RISE_MAX, WATER_BUBBLE_EMIT_CHANCE,
     WATER_BUBBLE_LIFETIME, WATER_BUBBLE_MAX, WATER_BUBBLE_DRAG, WATER_BUBBLE_BUOYANCY, WATER_BUBBLE_SPAWNED_MAX,
-    WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS,
+    WATERFALL_MOUTH_TAPER, WATERFALL_MOUTH_WIDTH, RUNNING_WATER_THICKNESS, WATERFALL_SPILL_ARC_RADIUS,
     WATERFALL_SPLASH_INTERVAL, WATERFALL_SPLASH_FULL_DROP, WATERFALL_SPLASH_RIPPLE,
 } from '../../utils/Constants.js';
 
@@ -436,6 +436,15 @@ export function createWaterRenderer(env) {
                     }
                     top += taper;
                 }
+                // 床の縁から落ちる水は、進む側の角を四分円で丸める。床の水の上面と同じ高さで
+                // 始まるので、水が縁を回り込んで落ち始める形になる
+                if (run.source === 'spill') {
+                    const arc = spillArcRows(run.align, run.x, run.width, WATERFALL_SPILL_ARC_RADIUS);
+                    for (let i = 0; i < arc.length && top + i < run.bottomY; i++) {
+                        ctx.fillRect(arc[i][0], top + i, arc[i][1] - arc[i][0], 1);
+                    }
+                    top += Math.min(arc.length, Math.max(0, run.bottomY - top));
+                }
                 if (run.bottomY > top) ctx.fillRect(run.x, top, run.width, run.bottomY - top);
                 for (const sheet of [run.sheet, run.feedSheet]) {
                     if (!sheet) continue;
@@ -451,6 +460,8 @@ export function createWaterRenderer(env) {
                     for (let k = 0; k < 2; k++) {
                         const py = r * TILE_SIZE + ((t + k * 8 + run.c * 5 + r * 3) % TILE_SIZE);
                         if (py < run.topY || py + streakLen > run.bottomY) continue;
+                        // 丸めた角の外（水の無いところ）に筋が浮かないよう、丸めた範囲では描かない
+                        if (run.source === 'spill' && py < run.topY + WATERFALL_SPILL_ARC_RADIUS) continue;
                         ctx.fillRect(run.x + 1.5 + k * (run.width - 4), py, 1.5, streakLen);
                     }
                 }

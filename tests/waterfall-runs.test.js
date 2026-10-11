@@ -348,7 +348,16 @@ test('床の水の流れの筋は、帯を敷いたところにだけ描く（�
     renderer.t = t;
     const ctx = makeFakeCtx();
     renderer.drawOverWorld(ctx, 0, 0);
-    const streaks = ctx.calls.filter((c) => c.name === 'fillRect' && c.args[1] === sheetY + 1 && c.args[3] === 1);
+    // 筋は明るい色（STREAK_FILL）で塗る。高さ1pxで y が同じでも、床の縁から落ちる滝の
+    // 丸めた角（水の色）の行は筋ではないので、塗り色で見分ける
+    let fill = null;
+    const streaks = [];
+    for (const c of ctx.calls) {
+      if (c.name === 'set:fillStyle') fill = c.args[0];
+      else if (c.name === 'fillRect' && fill === 'rgba(220, 245, 255, 0.65)'
+        && c.args[1] === sheetY + 1 && c.args[3] === 1) streaks.push(c);
+    }
+    assert.ok(streaks.length > 0 || t > 0, 't=0 では筋が描かれているはず（絞り込みが空振りしていない）');
     for (const c of streaks) {
       assert.ok(c.args[0] >= 6 * T && c.args[0] + c.args[2] <= 7 * T,
         `t=${t}: 筋 x=${c.args[0]} w=${c.args[2]} が岩の上（列6）の外にはみ出している`);
