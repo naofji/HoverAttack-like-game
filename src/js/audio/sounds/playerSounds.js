@@ -13,6 +13,16 @@
 // リテラルで、`this` は audioManager シングルトンを指す
 // （理由は audio/sounds/stings.js の冒頭）。
 
+/**
+ * 爆発音の数値。playExplosion と、そのオフライン再現（tests/helpers/dsp.js の noiseBurstGen）が
+ * 両方これを読む。町の崩れる音（段4）をこの音との相対 dB で縛るため、表に出した
+ * （tests/se-synthesis.test.js がこの値をノードの予約として押さえている）
+ */
+export const EXPLOSION_BURSTS = {
+    large: { gain: 0.42, dur: 0.8, end: 0.01, from: 1000, to: 40, sweepDur: 0.5 },
+    small: { gain: 0.21, dur: 0.3, end: 0.01, from: 600, to: 40, sweepDur: 0.2 },
+};
+
 export const AudioPlayerSounds = {
     /**
      * 着地音。強い着地（スタンする落下）ほど重く鳴る。
@@ -102,9 +112,7 @@ export const AudioPlayerSounds = {
         // 掃引のほうが包絡より短い＝暗くなりきってから尾を引く
         this._noiseBurst({
             t: this.ctx.currentTime, dest: this._out(sourceX),
-            gain: large ? 0.42 : 0.21,
-            dur: large ? 0.8 : 0.3, end: 0.01,
-            from: large ? 1000 : 600, to: 40, sweepDur: large ? 0.5 : 0.2,
+            ...EXPLOSION_BURSTS[large ? 'large' : 'small'],
         });
     },
 

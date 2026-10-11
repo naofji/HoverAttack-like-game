@@ -8,27 +8,38 @@
 export const SAMPLE_RATE = 48000;
 
 /**
- * WebAudio の BiquadFilterNode と同じ RBJ 係数のフィルタ。
- * @param {'bandpass'|'lowpass'} type
- * @param {number} f0 中心／遮断周波数
- * @param {number} Q
- * @returns {(x:number)=>number} 1サンプルずつ通す関数
+ * RBJ の係数（a0 で割った後）。WebAudio の BiquadFilterNode と同じ式。
+ * @param {'bandpass'|'lowpass'|'highpass'} type
+ * @returns {number[]} [b0, b1, b2, a1, a2]
  */
-export function biquad(type, f0, Q) {
+export function biquadCoeffs(type, f0, Q) {
     const w0 = 2 * Math.PI * f0 / SAMPLE_RATE;
     const cw = Math.cos(w0);
     const al = Math.sin(w0) / (2 * Q);
     let b0, b1, b2;
     if (type === 'bandpass') {
         b0 = al; b1 = 0; b2 = -al;
+    } else if (type === 'highpass') {
+        b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0;
     } else {
         b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0;
     }
-    const a0 = 1 + al, a1 = -2 * cw, a2 = 1 - al;
+    const a0 = 1 + al;
+    return [b0 / a0, b1 / a0, b2 / a0, -2 * cw / a0, (1 - al) / a0];
+}
+
+/**
+ * WebAudio の BiquadFilterNode と同じ RBJ 係数のフィルタ。
+ * @param {'bandpass'|'lowpass'|'highpass'} type
+ * @param {number} f0 中心／遮断周波数
+ * @param {number} Q
+ * @returns {(x:number)=>number} 1サンプルずつ通す関数
+ */
+export function biquad(type, f0, Q) {
+    const [b0, b1, b2, a1, a2] = biquadCoeffs(type, f0, Q);
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     return (x) => {
-        const y = (b0 / a0) * x + (b1 / a0) * x1 + (b2 / a0) * x2
-                - (a1 / a0) * y1 - (a2 / a0) * y2;
+        const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
         x2 = x1; x1 = x; y2 = y1; y1 = y;
         return y;
     };
@@ -142,4 +153,27 @@ export function transientLevel(gen, seconds) {
     let n = 1;
     while (n < seconds * SAMPLE_RATE) n <<= 1;
     return aWeightedRms(gen, n, { window: 'none' });
+}
+
+/**
+ * AudioOutput._noiseBurst（audio/engine/output.js）のオフライン再現。**片方だけ変えない。**
+ * ローパスを from から to へ指数で掃引し（sweepDur 以後は to のまま）、ゲインを gain から end へ
+ * dur かけて指数で落とし、dur で止まる。Q の既定 1 は BiquadFilterNode の既定値（_noiseBurst は Q を設定しない）。
+ * 掃引中は係数をサンプルごとに計算し直す（WebAudio も a-rate で追う）
+ * @returns {(i:number)=>number}
+ */
+export function noiseBurstGen({ gain, dur, end = 0.001, from, to, sweepDur = dur, Q = 1 }, seed = 3) {
+    const n = whiteNoise(Math.ceil(dur * SAMPLE_RATE) + 2, seed);
+    const fixed = to === undefined ? biquadCoeffs('lowpass', from, Q) : null;
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    return (i) => {
+        const t = i / SAMPLE_RATE;
+        if (t > dur) return 0;
+        const f = to === undefined ? from : (t >= sweepDur ? to : from * Math.pow(to / from, t / sweepDur));
+        const [b0, b1, b2, a1, a2] = fixed || biquadCoeffs('lowpass', f, Q);
+        const x = n[i];
+        const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x; y2 = y1; y1 = y;
+        return y * gain * Math.pow(end / gain, t / dur);
+    };
 }
