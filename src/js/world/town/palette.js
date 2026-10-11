@@ -50,3 +50,9 @@ export const TOWN_RUBBLE_COLORS = {
     4: '#4f3519',   // 爆発物（段3b。木箱と同じ色）
 };
 export const TOWN_DUST_COLOR = '#8a7a5a';
+
+// 段3: 炎の粒の色。生まれたて（熱い）→ 昇って冷える の順。角ばった四角で描く（spec 3章「見た目」）。
+// 町の層（岩の縁より奥）に描くので、地形の黄色い岩より明るい黄でも岩に被って見えることはない
+export const TOWN_FLAME_COLORS = ['#ffd860', '#ff9a2a', '#d8401a'];
+// 残り火の火の粉
+export const TOWN_EMBER_COLOR = '#ff7a1a';

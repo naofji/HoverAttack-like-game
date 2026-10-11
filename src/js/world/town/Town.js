@@ -20,6 +20,7 @@ import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import { FireSystem } from './fire.js';
+import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import {
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
@@ -45,11 +46,14 @@ export class Town {
      * @param {Array<object>} specs generateTown() の設計図
      * @param {{isSolidTile?: (r:number, c:number) => boolean, createCanvas?: (w:number, h:number) => object}} [opts]
      */
-    constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas, random = Math.random } = {}) {
+    constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas, random = Math.random,
+        smokeSprites = getSmokeSprites } = {}) {
         this.isSolidTile = isSolidTile;
         this.createCanvas = createCanvas;
         // 火のつき方・燃え広がりの乱数（spec 3章「乱数」: Math.random で構わない。テストは種つきを渡す）
         this.random = random;
+        // 煙のパフの絵（SmokeScreen と同じ焼いたもの）。node の書き出しの道具は () => null を渡す
+        this.smokeSprites = smokeSprites;
         this.fire = new FireSystem(this);
         this.falling = [];
         this.rubble = [];
@@ -314,7 +318,8 @@ export class Town {
             for (const p of game.projectiles) this.sweepProjectile(p, exposed);
         }
         this._updateFalling();
-        this.fire.update();
+        const cam = game.camera, cv = game.canvas;
+        this.fire.update(cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null);
         this._flushEffects(game);
     }
 
@@ -544,6 +549,8 @@ export class Town {
             if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
             ctx.drawImage(b.canvas, b.x, b.y);
         }
+        // 火（煙 → 炎 → 残り火）。建物の直後＝瓦礫・破片より奥、岩の縁よりも奥。煙が無いときは絵を焼かない
+        this.fire.draw(ctx, view, this.fire.smoke.length > 0 ? this.smokeSprites() : null);
         // 瓦礫の山: 下に広い段、上に狭い段の2つの四角（fillRect だけで描く決まり）
         for (const r of this.rubble) {
             if (r.x >= x1 || r.x + r.w <= view.x || r.groundY - r.h >= y1 || r.groundY <= view.y) continue;

@@ -2080,3 +2080,10 @@ export const TOWN_METAL_SCORCH = 0.2;
 // 残り火（燃え尽きた所・燃えて砕けた破片の所）が細い煙と火の粉を出し続けるフレーム数と、同時の上限
 export const TOWN_EMBER_FRAMES = 480;   // 8秒
 export const TOWN_EMBERS_MAX = 40;
+// 炎・煙の粒。燃え進みの1回に火元1つから出す数と、同時の上限（画面の中の火だけが出す）
+export const TOWN_FLAMES_PER_FIRE = 2;
+export const TOWN_FLAMES_MAX = 360;
+export const TOWN_SMOKE_EVERY = 3;      // 燃え進み何回に1回、火元から煙を1つ出すか
+export const TOWN_SMOKE_MAX = 60;
+export const TOWN_SMOKE_ALPHA = 0.35;   // 煙幕（SmokeScreen）より薄く。町の煙は見通しを遮らない
+export const TOWN_EMBER_SMOKE_EVERY = 40; // 残り火が細い煙を出す間隔（フレーム）

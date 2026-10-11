@@ -11,10 +11,12 @@
 // 乱数は town.random（既定 Math.random。spec 3章「乱数」）。
 
 import { CHUNK, MAT_MASK, CHARRED } from './chunks.js';
-import { TOWN_RUIN_SHADE } from './palette.js';
+import { TOWN_RUIN_SHADE, TOWN_EMBER_COLOR } from './palette.js';
+import { FlameParticle, SmokePuff } from './fireFx.js';
 import {
     TOWN_MATERIALS, TOWN_FIRE_TICK, TOWN_FIRES_MAX, TOWN_FIRES_PER_BUILDING,
     TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH, TOWN_EMBER_FRAMES, TOWN_EMBERS_MAX,
+    TOWN_FLAMES_PER_FIRE, TOWN_FLAMES_MAX, TOWN_SMOKE_EVERY, TOWN_SMOKE_MAX, TOWN_EMBER_SMOKE_EVERY, VIEW_CULL_MARGIN,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -30,6 +32,9 @@ export class FireSystem {
         this.town = town;
         this.fires = [];
         this.embers = [];
+        this.flames = [];
+        this.smoke = [];
+        this.view = null;
         this.frame = 0;
     }
 
@@ -61,12 +66,69 @@ export class FireSystem {
     }
 
     /** 毎フレーム。燃え進みは TOWN_FIRE_TICK フレームに1回。燃えている破片の燃料と残り火は毎フレーム減る */
-    update() {
+    update(view = null) {
+        this.view = view;
         this.frame++;
         for (const p of this.town.falling) if (p.fireFuel > 0) p.fireFuel--;
         for (const e of this.embers) e.frames--;
         this.embers = this.embers.filter((e) => e.frames > 0);
         if (this.frame % TOWN_FIRE_TICK === 0) this._tick();
+        this._updateFx();
+    }
+
+    /** 画面の中かそのすぐ外か。view が無い（道具・テスト）なら全部見えている扱い */
+    _visible(x, y) {
+        const v = this.view;
+        if (!v) return true;
+        const m = VIEW_CULL_MARGIN;
+        return x >= v.x - m && x <= v.x + v.w + m && y >= v.y - m && y <= v.y + v.h + m;
+    }
+
+    _flame(x, y) {
+        if (this.flames.length >= TOWN_FLAMES_MAX || !this._visible(x, y)) return;
+        const r = this.town.random;
+        this.flames.push(new FlameParticle(x + (r() - 0.5) * 4, y, (r() - 0.5) * 0.6, -0.5 - r() * 0.7,
+            2 + r() * 2, 16 + Math.floor(r() * 14)));
+    }
+
+    _puff(x, y, size) {
+        if (this.smoke.length >= TOWN_SMOKE_MAX || !this._visible(x, y)) return;
+        const r = this.town.random;
+        this.smoke.push(new SmokePuff(x, y - 4, size, 60 + Math.floor(r() * 30), Math.floor(r() * 4)));
+    }
+
+    /** 粒を出す（燃え進みの1回ごと）と、毎フレーム動かす */
+    _updateFx() {
+        if (this.frame % TOWN_FIRE_TICK === 0) {
+            const tick = this.frame / TOWN_FIRE_TICK;
+            for (const f of this.fires) {
+                const c = FireSystem.center(f.b, f.k);
+                for (let i = 0; i < TOWN_FLAMES_PER_FIRE; i++) this._flame(c.x, c.y);
+                if (tick % TOWN_SMOKE_EVERY === 0) this._puff(c.x, c.y, 10);
+            }
+            for (const p of this.town.falling) {
+                if (p.fireFuel > 0) for (let i = 0; i < TOWN_FLAMES_PER_FIRE; i++) this._flame(p.cx, p.y);
+            }
+        }
+        for (const e of this.embers) {
+            if (e.frames % TOWN_EMBER_SMOKE_EVERY === 0) this._puff(e.x, e.y, 6);
+        }
+        for (const q of this.flames) q.update();
+        for (const q of this.smoke) q.update();
+        this.flames = this.flames.filter((q) => q.alive);
+        this.smoke = this.smoke.filter((q) => q.alive);
+    }
+
+    /** 町の層に描く（Town.draw が建物の直後に呼ぶ）。煙を先に、炎を手前に */
+    draw(ctx, view, sprites) {
+        const inView = (x, y, m) => x >= view.x - m && x <= view.x + view.w + m && y >= view.y - m && y <= view.y + view.h + m;
+        for (const q of this.smoke) if (inView(q.x, q.y, q.size)) q.draw(ctx, sprites);
+        for (const q of this.flames) if (inView(q.x, q.y, 8)) q.draw(ctx, this.town.random());
+        // 残り火: 小さな火の粉が明滅する（細い煙は _updateFx が出す）
+        ctx.fillStyle = TOWN_EMBER_COLOR;
+        for (const e of this.embers) {
+            if (inView(e.x, e.y, 4) && this.town.random() < 0.5) ctx.fillRect(Math.round(e.x), Math.round(e.y) - 1, 1, 1);
+        }
     }
 
     _tick() {
