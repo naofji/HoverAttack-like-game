@@ -148,3 +148,31 @@ test('雪の木が欠けると、舞う雪（SnowFlurryParticle）が SNOWTREE_F
     leaf.update(g2);
     assert.ok(g2.particles.length > 0 && !g2.particles.some((p) => p instanceof SnowFlurryParticle), '4面の植物が舞う雪を出した');
 });
+
+test('地面の線の上の点（横たわった木・床で砕けた欠片）から出た舞う雪は、最初の更新で岩に入って消えない', () => {
+    const town = makeTown();
+    // 岩は y 320（行 20）から。効果の点が、その線の上
+    const game = { particles: [], map: { isSolidAtPixel: (x, y) => y >= 320 } };
+    town.effects.push({ type: 'leaf', x: 100, y: 320, count: 600, flora: 'snow', spread: 6 });
+    town._flushEffects(game);
+    const flurry = game.particles.filter((p) => p instanceof SnowFlurryParticle);
+    assert.ok(flurry.length >= 400);
+    for (const p of flurry) p.update();
+    const dead = flurry.filter((p) => !p.alive).length;
+    assert.equal(dead, 0, `${dead} 粒が最初の更新で消えた（岩の中で生まれた）`);
+});
+
+test('シミュレーション（欠ける・切り離す・倒れる）は Math.random を使わない。使ってよいのは見た目の粒を作る _flushEffects だけ', () => {
+    const real = Math.random;
+    Math.random = () => { throw new Error('シミュレーションで Math.random は使わない'); };
+    try {
+        const town = makeTown([treeSpec(fir())]);
+        const b = town.buildings[0];
+        town.chip(b, midOf(b).x, midOf(b).y, 6);
+        const root = [];
+        for (let i = 0; i < b.cw; i++) if (b.cells[(b.ch - 1) * b.cw + i]) root.push(i);
+        town.chip(b, b.x + root[0] * 4 - 2, b.y + (b.ch - 2) * 4 + 2, 8);
+        for (let t = 0; t < 120; t++) town._updateFalling();
+        assert.ok(town.effects.length > 0, '粒の注文が出ていない（この検証が意味を失った）');
+    } finally { Math.random = real; }
+});

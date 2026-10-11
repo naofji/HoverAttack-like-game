@@ -40,7 +40,6 @@ test('左右に揺れる（揺れが横の動きに乗る）。粒ごとに位�
         aMin = Math.min(aMin, a.x); aMax = Math.max(aMax, a.x);
     }
     assert.ok(aMax - aMin > 2, `揺れが小さい ${aMax - aMin}`);
-    assert.ok(Math.abs(a.x - b.x) > 0.5 || aMax - aMin > 2);
     // 位相が逆なら、同じ時刻に逆向きに揺れる
     const c = make(null, 0, 0, 400), d = make(null, 0, 0, 400);
     c.phase = 0; d.phase = Math.PI;

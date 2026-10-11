@@ -2239,3 +2239,13 @@ export const SNOWTREE_FLURRY_GRAVITY = 0.02;         // ホバーの粉雪（0.0
 export const SNOWTREE_FLURRY_SWAY = 0.3;             // 左右に揺れる幅（px/tick）
 export const SNOWTREE_FLURRY_SWAY_FREQ = 0.14;       // 揺れの速さ（rad/tick。周期約 45 tick）
 export const SNOWTREE_FLURRY_NEEDLE_EVERY = 6;       // 6 粒に 1 粒は、雪ではなく針葉の欠片（暗い緑）
+// 出る位置の散らばり（px。出来事の点から上へ、横へはこの幅で）。上だけにしたのは、点が床の線にある（横たわった木・床で砕けた欠片）と
+// 下に散った粒が岩の中で生まれ、最初の更新で消えたため（実測: 20 本を切って 819 粒のうち 139 粒＝17% が即死）
+export const SNOWTREE_FLURRY_SPREAD = { hit: 4, trickle: 5, puff: 6 };
+// 倒れ始めの雪を出す高さ（倒れる塊の上端から、塊の高さの何割下か）
+export const SNOWTREE_FLURRY_START_HEIGHT = 0.4;
+// 倒れているあいだにこぼれる位置を、木の長さの何割の所にするか。毎回この割合ずつ進めて 1 で折り返す（黄金比 0.382:
+// 木の上を満遍なく行き来して、同じ位置に何度も出ない。乱数を使わずに位置を散らす）
+export const SNOWTREE_FLURRY_TRICKLE_STEP = 0.382;
+// 大きい粒（3px）の割合。残りは 2px
+export const SNOWTREE_FLURRY_BIG_SHARE = 0.25;
