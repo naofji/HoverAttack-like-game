@@ -112,3 +112,30 @@ test('NEWTYPE mode is unaffected: one tick per frame, full-speed motion', () => 
     assert.ok(Math.abs(step - 1) < 1e-9, `expected 1.0 per frame, got ${step}`);
   }
 });
+
+// 倒れる木（world/town/ToppleTree）は軸が動かないあいだ、傾き theta だけが動く
+test('theta is interpolated too (a toppling tree whose pivot stands still), and restored afterwards', () => {
+  const e = { x: 5, y: 5, theta: 0.2 };
+  snapshotEntity(e);
+  e.theta = 0.6;
+
+  interpolateEntity(e, 0.5);
+  assert.ok(Math.abs(e.theta - 0.4) < 1e-12);
+  assert.equal(e.x, 5);
+
+  restoreEntity(e);
+  assert.equal(e.theta, 0.6);
+  // 次の補間に古い真値が残らない
+  restoreEntity(e);
+  assert.equal(e.theta, 0.6);
+});
+
+test('entities without theta are untouched (no theta key appears)', () => {
+  const e = { x: 0, y: 0 };
+  snapshotEntity(e);
+  e.x = 10;
+  interpolateEntity(e, 0.5);
+  restoreEntity(e);
+  assert.ok(!('theta' in e));
+  assert.ok(!('_prevTheta' in e));
+});

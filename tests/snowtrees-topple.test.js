@@ -7,7 +7,7 @@ import { FallingPiece } from '../src/js/world/town/FallingPiece.js';
 import { buildFir, buildBareTree } from '../src/js/world/town/snowTrees.js';
 import { buildTallFern } from '../src/js/world/town/plants.js';
 import { rasterizeParts, MAT_PLANT, SOLID, CHUNK } from '../src/js/world/town/chunks.js';
-import { fakeCanvas } from './helpers/town-fixtures.js';
+import { fakeCanvas, block } from './helpers/town-fixtures.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
     SNOWTREE_TOPPLE_LIE_TICKS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES,
@@ -311,4 +311,45 @@ test('書き出しの道具（PixelCanvas）は、translate のあとの rotate 
     const flat = new PixelCanvas(20, 20);
     flat.getContext().drawImage(img, 3, 3);
     assert.deepEqual(Array.from(flat.px.slice((3 * 20 + 3) * 4, (3 * 20 + 3) * 4 + 4)).map(Math.round), [255, 0, 0, 1]);
+});
+
+test('右へ倒れる木が床の縁にちょうど乗っていても、軸は足場の上（縁の外の穴へ落ちない）', () => {
+    // 床（行 20 以下が岩）は列 C0 まで。木の外接矩形の右端がタイルの境目（C0 + 1）にちょうど来る
+    // （レビュー指摘: 軸の x が矩形の 1px 外で、真下の列が穴 → 床の上の木が宙に浮いた扱いで、穴の底まで落ちた）
+    const C0 = 12;
+    const b = fir();
+    const spec = { ...treeSpec(b), x: (C0 + 1) * 16 - b.w };
+    const edge = (r, c) => r >= FLOOR_ROW && (c <= C0 || r >= 40);   // 縁の外は 20 行ぶん深い穴
+    const town = makeTown([spec], edge);
+    const tb = town.buildings[0];
+    cutTrunk(town, tb, 'left');   // 左から撃つ → 右へ倒れる
+    const p = town.falling.find((q) => q.topple);
+    assert.equal(p.lean, 1);
+    assert.equal(p.pivotX % 16, 0, 'この検証が意味を失った（軸がタイルの境目にない）');
+    const y0 = p.y;
+    for (let t = 0; t < 200 && p.alive; t++) town.update(fakeGame());
+    assert.equal(p.y, y0, `軸が ${p.y - y0}px 落ちた（穴へ落ちた）`);
+    assert.ok(p.lying || !p.alive, '横たわらない');
+});
+
+test('倒れる木の軸が落ちる先の別の建物は、1 棟 1 回だけ欠かす', () => {
+    // 町の建物は欠けて 4 割を割ると崩れて全部落ちる（一度の欠けで全部消えて、回数を数えられない）ので、崩れない soft の建物を使う。
+    // 高さ 68px の塊が、行 4（y 64 から）の岩に根元を埋めて立つ。軸はその上から落ちて、塊の中を通り抜けて岩に着く
+    const town = makeTown([{ ...block(0, 0, 32, 68), soft: true }], (r) => r >= 4);
+    const target = town.buildings[0];
+    assert.ok(target.anchors.length > 0, '塊が岩に支えられていない（この検証が意味を失った）');
+    const b = fir();
+    const p = new ToppleTree({
+        canvas: fakeCanvas(b.w, b.h), cells: rasterizeParts(b.parts, b.w, b.h).cells, cw: b.w / CHUNK, ch: b.h / CHUNK,
+        x: 16 - b.w, y: -b.h - 40, lean: 1,   // 軸（右下の角）が (16, -40)。そこから target（x 0〜32、y 0〜68）へ落ちる
+    });
+    town.falling.push(p);
+    const calls = [];
+    const chip = town.chip.bind(town);
+    town.chip = (...a) => { calls.push(a[0].id); return chip(...a); };
+    const before = target.remaining;
+    for (let t = 0; t < 60; t++) town._updateTopple(p);
+    assert.ok(p.pivotY > 60, `軸が塊を抜けて岩に着いていない（${p.pivotY}）`);
+    assert.equal(calls.filter((id) => id === target.id).length, 1, `target を ${calls.length} 回欠かした`);
+    assert.ok(target.remaining < before, '欠けていない');
 });

@@ -23,6 +23,9 @@ export function snapshotEntity(e) {
     if (!e) return;
     e._prevX = e.x;
     e._prevY = e.y;
+    // 倒れる木（town/ToppleTree）は軸が動かないあいだ、傾き theta だけが動く。x/y だけ補間すると
+    // 傾きが tick ごとの段になる（0.8x では 5 フレームに 1 回 tick が無く、速い所で止まって見える）
+    if (e.theta !== undefined) e._prevTheta = e.theta;
 }
 
 /** Shift an entity to its interpolated draw position. Pair with restoreEntity. */
@@ -46,6 +49,10 @@ export function interpolateEntity(e, alpha) {
     e._trueY = e.y;
     e.x = lerp(e._prevX, e.x, alpha);
     e.y = lerp(e._prevY, e.y, alpha);
+    if (e.theta !== undefined && e._prevTheta !== undefined) {
+        e._trueTheta = e.theta;
+        e.theta = lerp(e._prevTheta, e.theta, alpha);
+    }
 }
 
 /** Put an entity back on its true simulation position after drawing. */
@@ -53,4 +60,8 @@ export function restoreEntity(e) {
     if (!e || e._trueX === undefined) return;
     e.x = e._trueX;
     e.y = e._trueY;
+    if (e._trueTheta !== undefined) {
+        e.theta = e._trueTheta;
+        e._trueTheta = undefined;
+    }
 }

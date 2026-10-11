@@ -17,12 +17,10 @@ import { CHUNK } from './chunks.js';
 import {
     TOWN_FALL_GRAVITY, TOWN_FALL_MAX_SPEED,
     SNOWTREE_TOPPLE_ACCEL, SNOWTREE_TOPPLE_SEED, SNOWTREE_TOPPLE_LIE_TICKS,
+    SNOWTREE_TOPPLE_LIE_SCAN as LIE_SCAN, SNOWTREE_TOPPLE_LIE_MAX as LIE_MAX,
 } from '../../utils/Constants.js';
 
 const QUARTER = Math.PI / 2;
-// 横たわる角度の上限（π/2 から先へ、先端が地面に着くまで進める。薄い木で軸が大きく傾いても 135° まで）
-const LIE_MAX = (3 * Math.PI) / 4;
-const LIE_SCAN = Math.PI / 360;   // 0.5° 刻みで探す
 
 export class ToppleTree extends FallingPiece {
     /** @param {{lean: 1|-1}} opts lean: 倒れる向き。1 が右、-1 が左 */
@@ -65,6 +63,13 @@ export class ToppleTree extends FallingPiece {
     }
 
     get pivotX() { return this.x + this.px; }
+    /**
+     * 軸の下に足場があるかを見る x。右へ倒れる木の軸は外接矩形の右端（x + width）で、矩形の 1px 外。
+     * 矩形の右端が足場の縁（タイルの境目）にちょうど乗ると、真下の列が穴になって、床の上の木が
+     * 「宙に浮いた」と判定され、穴の底まで落ちた（レビュー指摘。今週の5面の 990 回の切断のうち 23 回）。
+     * 左へ倒れる木の軸は矩形の左端で、境目の右側が矩形の中なのでそのままでよい
+     */
+    get contactX() { return this.lean > 0 ? this.pivotX - 1 : this.pivotX; }
     get pivotY() { return this.y + this.py; }
     get lying() { return this.lieLeft >= 0; }
     get done() { return this.lieLeft === 0; }

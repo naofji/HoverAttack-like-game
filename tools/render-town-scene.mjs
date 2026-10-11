@@ -9,7 +9,7 @@
 //   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間・壊す時間
 //   node tools/render-town-scene.mjs --x 1200 --y 300 --blast "1300,420,150;1340,400,36" --ticks 120 --out b.png
 //       # 壊した後（段2）。--blast は「x,y,粒の数」を ; 区切りで何発でも（グレネード 150・ミサイル 36）。
-//       # --ticks で town.update を回して、破片が落ちて瓦礫になるまで進める（落ちる破片は回さずに描く）
+//       # --ticks で town.update を回して、破片が落ちて瓦礫になるまで進める（落ちる破片・倒れる木は PixelCanvas.rotate で回して描く）
 //   node tools/render-town-scene.mjs --x 1380 --y 660 --fire "1502,810" --ticks 900 --out f.png
 //       # 燃やした後（段3）。--fire の点にミサイル1発ぶん（粒 36）の爆発を当てて火をつけ、--ticks 進める。
 //       # 炎は四角で出る。煙は描かない（PixelCanvas は煙のパフを焼けない）

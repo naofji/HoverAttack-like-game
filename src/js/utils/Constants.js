@@ -2219,3 +2219,9 @@ export const SNOWTREE_TOPPLE_PUFFS = 3;
 export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 4;
 // これより小さい塊（かけらの数）は倒れず、ふつうの破片として落ちて砕ける（枝先の欠片が90°倒れるのは不自然）
 export const SNOWTREE_TOPPLE_MIN_CELLS = 8;
+// 倒れる向きは、撃たれた位置と塊の真ん中の x の差が DEADZONE（px）以上あれば撃たれた側と反対、未満なら（幹をまっすぐ撃った）
+// 位置から決めた向き。横たわる角度は 90° から LIE_SCAN 刻みで先端が床に着くまで探し、LIE_MAX（135°）で打ち切る
+// （薄い木で軸が大きく傾いても無限に探さない。実測の最大は 111°）。0.5° 刻みは先端 60px で 0.5px の粒度
+export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
+export const SNOWTREE_TOPPLE_LIE_SCAN = Math.PI / 360;
+export const SNOWTREE_TOPPLE_LIE_MAX = (3 * Math.PI) / 4;

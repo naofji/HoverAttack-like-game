@@ -33,7 +33,7 @@ import {
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
     TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
-    SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES,
+    SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES, SNOWTREE_TOPPLE_LEAN_DEADZONE,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -394,18 +394,18 @@ export class Town {
      * 横たわったら、木の長さに沿って雪の粒を数回に分けて出し（1か所で一斉に出すと爆発に見える）、薄れて消える
      */
     _updateTopple(p) {
-        const supported = this._solidAtPixel(p.pivotX, p.pivotY + 1);
+        const supported = this._solidAtPixel(p.contactX, p.pivotY + 1);
         const landed = p.advance(supported);
-        if (!supported && this._solidAtPixel(p.pivotX, p.pivotY)) {
+        if (!supported && this._solidAtPixel(p.contactX, p.pivotY)) {
             p.y = Math.floor(p.pivotY / TILE_SIZE) * TILE_SIZE - p.py;
             p.vy = 0;
         }
         if (!supported) {
-            for (const b of this.buildingsAt(p.pivotX, p.pivotY)) {
-                const k = this.cellAt(b, p.pivotX, p.pivotY);
+            for (const b of this.buildingsAt(p.contactX, p.pivotY)) {
+                const k = this.cellAt(b, p.contactX, p.pivotY);
                 if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
                 p.hitIds.add(b.id);
-                this.chip(b, p.pivotX, p.pivotY, TOWN_FALL_CHIP_RADIUS);
+                this.chip(b, p.contactX, p.pivotY, TOWN_FALL_CHIP_RADIUS);
             }
         }
         if (landed) {
@@ -631,7 +631,7 @@ export class Town {
             // 雪の木の大きな塊は、傾きながら倒れる（ToppleTree）。撃たれた側から離れる向きへ。撃った位置が
             // 塊の真ん中と同じ（幹をまっすぐ撃った）か分からない（岩が壊れた）ときは、位置から決めた向き
             const mid = piece.x + pw / 2;
-            const lean = hitX !== undefined && Math.abs(mid - hitX) >= 1
+            const lean = hitX !== undefined && Math.abs(mid - hitX) >= SNOWTREE_TOPPLE_LEAN_DEADZONE
                 ? Math.sign(mid - hitX)
                 : (chunkHash(b.id, i0 + 503, j0 + 601) < 0.5 ? -1 : 1);
             this.falling.push(new ToppleTree({ ...piece, vx: 0, spin: 0, lean }));
