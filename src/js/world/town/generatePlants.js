@@ -8,55 +8,23 @@
 // 返す設計図は Town にそのまま渡せる。soft: true の建物は燃えず、崩壊の演出（爆発・地鳴り）を持たない。
 
 import {
-    TILE_SIZE as T, BLOCK_EMPTY, TOWN_CHUNK as CH,
+    TILE_SIZE as T, TOWN_CHUNK as CH,
     TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_VILLAGE_DENSE_FILL,
     PLANT_FLOOR_MIX, PLANT_FILL_SCALE, PLANT_WALL_SPACING, PLANT_WALL_CHANCE, PLANT_CEIL_CHANCE,
     PLANT_WALL_MIN_RUN, PLANT_WALL_MIN_REACH, PLANT_CEIL_MIN_RUN, PLANT_CEIL_MIN_DROP, PLANT_CEIL_KEEP_BELOW,
 } from '../../utils/Constants.js';
 import { findSites } from './placement.js';
 import { placeVillages, villageFill } from './villages.js';
-import { overlaps, touchesRect } from './generate.js';
+import { makePlacer } from './placer.js';
 import { mirrorParts, step4 } from './shapes.js';
-import { rasterizeParts } from './chunks.js';
 import { buildMoss, buildLowFern, buildTallFern, buildWallPlant, buildHangingVine } from './plants.js';
-
-// 見える部分の半分以上が岩の中に入る植物は置かない（岩の奥に隠れて、絵も当たりも無いのと同じ）
-const MAX_BURIED_SHARE = 0.35;
 
 export function generatePlants({
     grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols),
 }) {
     const sites = findSites(grid, rows, cols);
-    const solid = (r, c) => r < 0 || r >= rows || c < 0 || c >= cols || grid[r][c] !== BLOCK_EMPTY;
+    const { specs, add, freeUp } = makePlacer({ grid, rows, cols, excludeRects });
     const fillAt = (c, r) => Math.min(1, villageFill(villages, c, r) * PLANT_FILL_SCALE);
-    const specs = [];
-    const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
-        && !excludeRects.some((rc) => touchesRect(s, rc));
-
-    // 絵（多角形）が掛かるかけらのうち、岩のタイルに入っている割合。かけらは Town と同じ規則で求める。
-    // 根元の段（床は一番下、天井は一番上、壁は壁の列 wallCol）は岩に埋めるものなので数えない
-    const buriedShare = (s, wallCol = -1) => {
-        const { cells, cw, ch } = rasterizeParts(s.parts, s.w, s.h);
-        let all = 0, buried = 0;
-        for (let j = 0; j < ch; j++) {
-            if ((s.site === 'floor' && j === ch - 1) || (s.site === 'ceiling' && j === 0)) continue;
-            for (let i = 0; i < cw; i++) {
-                if (!cells[j * cw + i]) continue;
-                const tc = Math.floor((s.x + i * CH + CH / 2) / T);
-                if (tc === wallCol) continue;   // 壁の植物の根元の列は、壁に埋めるもの
-                all++;
-                if (solid(Math.floor((s.y + j * CH + CH / 2) / T), tc)) buried++;
-            }
-        }
-        return all === 0 ? 0 : buried / all;
-    };
-    const add = (s, overlapOk, wallCol = -1) => {
-        if (!fits(s) || buriedShare(s, wallCol) > MAX_BURIED_SHARE) return false;
-        if (!overlapOk && specs.some((o) => overlaps(o, s))) return false;
-        specs.push(s);
-        return true;
-    };
-    const freeUp = (r, c) => { let n = 0; while (!solid(r - 1 - n, c)) n++; return n; };
 
     // --- 床 ---
     for (const run of sites.floors) {
