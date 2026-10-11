@@ -2132,3 +2132,13 @@ export const TOWN_COLLAPSE_RATTLE_GAIN = 0.15;
 export const TOWN_COLLAPSE_RATTLE_FREQ_MIN = 1200;
 export const TOWN_COLLAPSE_RATTLE_FREQ_RANGE = 2400;
 export const TOWN_COLLAPSE_RATTLE_Q = 3;
+// 炎のループ: 低いゴーッ（ノイズのループを ROAR_FILTER でローパス）＋パチパチ（まばらなクリックを並べた
+// CRACKLE_SECONDS 秒のバッファをループ、CRACKLE_FILTER でハイパス）。最大でもバリアの唸り（-48dB）以下
+// 実測（2026-10-11）: 最大 -49.3dB（唸り -48.1dB の -1.2dB）。ゴーッだけ -51.4dB、パチパチだけ -53.4dB
+export const TOWN_FIRE_ROAR_GAIN = 0.2;
+export const TOWN_FIRE_ROAR_FILTER = 300;
+export const TOWN_FIRE_CRACKLE_GAIN = 0.25;
+export const TOWN_FIRE_CRACKLE_FILTER = 1800;
+export const TOWN_FIRE_CRACKLE_RATE = 14;        // 1秒あたりのクリックの数
+export const TOWN_FIRE_CRACKLE_SECONDS = 3.7;    // 繰り返しが耳につかない長さ（2秒だと周期が分かる）
+export const TOWN_FIRE_CRACKLE_SEED = 0x7F1E;

@@ -17,7 +17,10 @@ import {
     TOWN_COLLAPSE_RUMBLE_GAIN, TOWN_COLLAPSE_RUMBLE_TIME, TOWN_COLLAPSE_RUMBLE_FROM, TOWN_COLLAPSE_RUMBLE_TO,
     TOWN_COLLAPSE_RATTLES, TOWN_COLLAPSE_RATTLE_SPREAD, TOWN_COLLAPSE_RATTLE_GAIN,
     TOWN_COLLAPSE_RATTLE_FREQ_MIN, TOWN_COLLAPSE_RATTLE_FREQ_RANGE, TOWN_COLLAPSE_RATTLE_Q,
+    TOWN_FIRE_ROAR_GAIN, TOWN_FIRE_ROAR_FILTER, TOWN_FIRE_CRACKLE_GAIN, TOWN_FIRE_CRACKLE_FILTER,
+    TOWN_FIRE_CRACKLE_RATE, TOWN_FIRE_CRACKLE_SECONDS, TOWN_FIRE_CRACKLE_SEED,
 } from '../../utils/Constants.js';
+import { SeededRNG } from '../../utils/SeededRNG.js';
 
 /** 崩れたかけらの数 → 音の大きさ k（MIN〜1） */
 export function townCollapseScale(size) {
@@ -48,6 +51,23 @@ export function townCollapseVoices(size, rand) {
         });
     }
     return { k, rumble, rattles };
+}
+
+/**
+ * パチパチのバッファ（n サンプル）。まばらなクリック（数 ms の減衰するノイズ）を並べる。
+ * WebAudio 版は1度だけ作ってループし、再現も同じものを使う
+ * @param {{next: () => number}} rng
+ */
+export function crackleSamples(n, sampleRate, rng) {
+    const out = new Float32Array(n);
+    const count = Math.round(TOWN_FIRE_CRACKLE_RATE * n / sampleRate);
+    for (let c = 0; c < count; c++) {
+        const at = Math.floor(rng.next() * n);
+        const len = Math.floor(sampleRate * (0.002 + rng.next() * 0.004));
+        const amp = 0.3 + 0.7 * rng.next();
+        for (let k = 0; k < len && at + k < n; k++) out[at + k] += (rng.next() * 2 - 1) * amp * Math.exp(-5 * k / len);
+    }
+    return out;
 }
 
 export const AudioTownSounds = {
@@ -83,5 +103,72 @@ export const AudioTownSounds = {
             src.start(t + r.at, r.at);
             src.stop(t + r.at + r.dur);
         }
+    },
+
+    /**
+     * 画面の近くで火が燃えているあいだのループ。毎 tick 呼んでよい（町の側が Town.update から呼ぶ）。
+     * 強さは近い火元の数と位置から（FireSystem.soundLevel）。0 になったら stopTownFire を呼ぶこと
+     * @param {number} [intensity] 0〜1
+     * @param {number} [sourceX] 火元のワールドX（重み付きの平均）
+     */
+    startTownFire(intensity = 0, sourceX = null) {
+        const level = Math.max(0, Math.min(1, intensity));
+        this._loopSound('townFire', {
+            build: () => {
+                const roar = this.ctx.createBufferSource();
+                roar.buffer = this.noiseBuffer;
+                roar.loop = true;
+                const lp = this.ctx.createBiquadFilter();
+                lp.type = 'lowpass';
+                lp.frequency.value = TOWN_FIRE_ROAR_FILTER;
+                const roarGain = this.ctx.createGain();
+                roarGain.gain.value = TOWN_FIRE_ROAR_GAIN;
+
+                const crackle = this.ctx.createBufferSource();
+                crackle.buffer = this._townCrackleBuffer();
+                crackle.loop = true;
+                const hp = this.ctx.createBiquadFilter();
+                hp.type = 'highpass';
+                hp.frequency.value = TOWN_FIRE_CRACKLE_FILTER;
+                hp.Q.value = 0.7;
+                const crackleGain = this.ctx.createGain();
+                crackleGain.gain.value = TOWN_FIRE_CRACKLE_GAIN;
+
+                const gain = this.ctx.createGain();
+                gain.gain.value = 0;
+                roar.connect(lp); lp.connect(roarGain); roarGain.connect(gain);
+                crackle.connect(hp); hp.connect(crackleGain); crackleGain.connect(gain);
+                // 火元が動くので、パンナーは作り置いて追従させる（_panned は1回きりの音用）
+                let pan = null;
+                if (typeof this.ctx.createStereoPanner === 'function') {
+                    pan = this.ctx.createStereoPanner();
+                    gain.connect(pan);
+                    pan.connect(this._seDest());
+                } else {
+                    gain.connect(this._seDest());
+                }
+                return { gain, pan, sources: [roar, crackle] };
+            },
+            tune: (n, t) => {
+                n.gain.gain.setTargetAtTime(level, t, 0.25);
+                if (n.pan) n.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, this._panFor(sourceX))), t, 0.25);
+            },
+        });
+    },
+
+    /** 炎のループを止める（火が消えた・画面から火が無くなった・ミッションを抜けた）。燃え尽きるように少し長めに引く */
+    stopTownFire() {
+        this._stopLoopSound('townFire', 0.4);
+    },
+
+    /** パチパチのバッファ。1度だけ作る */
+    _townCrackleBuffer() {
+        if (!this.townCrackleBuffer || this.townCrackleBuffer.sampleRate !== this.ctx.sampleRate) {
+            const n = Math.round(TOWN_FIRE_CRACKLE_SECONDS * this.ctx.sampleRate);
+            const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+            buf.getChannelData(0).set(crackleSamples(n, this.ctx.sampleRate, new SeededRNG(TOWN_FIRE_CRACKLE_SEED)));
+            this.townCrackleBuffer = buf;
+        }
+        return this.townCrackleBuffer;
     },
 };

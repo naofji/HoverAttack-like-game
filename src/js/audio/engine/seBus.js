@@ -153,7 +153,7 @@ export const AudioSeBus = {
     /**
      * 鳴り続ける音を全部止める。
      *
-     * 自機のホバー、敵のホバー、母艦のエンジン、回復ハムの4つは、
+     * 自機のホバー、敵のホバー、母艦のエンジン、回復ハム、3面の町の炎のループの5つは、
      * 止める指示があるまで鳴り続ける作り（毎フレームの更新で音量を
      * 追従させている）。ミッションを抜けると更新が止まるので、
      * 抜けるときに明示的に止めないと鳴りっぱなしになる。
@@ -166,6 +166,7 @@ export const AudioSeBus = {
         this.stopEnemyHover();
         this.stopCarrierEngine();
         this.stopRepairHum();
+        this.stopTownFire();
     },
 
     fadeOutSe(seconds = SE_FADE_OUT_SECONDS) {

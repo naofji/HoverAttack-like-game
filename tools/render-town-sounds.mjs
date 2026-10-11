@@ -13,11 +13,15 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { TOWN_COLLAPSE_SOUND_REF, TOWN_COLLAPSE_RATTLE_Q } from '../src/js/utils/Constants.js';
-import { townCollapseVoices } from '../src/js/audio/sounds/townSounds.js';
+import {
+    TOWN_COLLAPSE_SOUND_REF, TOWN_COLLAPSE_RATTLE_Q,
+    TOWN_FIRE_ROAR_GAIN, TOWN_FIRE_ROAR_FILTER, TOWN_FIRE_CRACKLE_GAIN, TOWN_FIRE_CRACKLE_FILTER,
+    TOWN_FIRE_CRACKLE_SECONDS, TOWN_FIRE_CRACKLE_SEED,
+} from '../src/js/utils/Constants.js';
+import { townCollapseVoices, crackleSamples } from '../src/js/audio/sounds/townSounds.js';
 import { EXPLOSION_BURSTS } from '../src/js/audio/sounds/playerSounds.js';
 import {
-    SAMPLE_RATE, biquad, whiteNoise, noiseBurstGen, transientLevel, db,
+    SAMPLE_RATE, biquad, whiteNoise, noiseBurstGen, transientLevel, aWeightedRms, db,
 } from '../tests/helpers/dsp.js';
 
 /** 爆発音（playExplosion）の再現。比べる相手 */
@@ -50,6 +54,24 @@ export function collapseGen(size, seed = 1, { rattles = true } = {}) {
     };
 }
 
+/**
+ * 炎のループ（startTownFire）の再現。ゴーッは noiseBuffer（2秒の白色ノイズ）のループをローパス、
+ * パチパチは crackleSamples のループをハイパス（Q 0.7）
+ * @param {{roar?: boolean, crackle?: boolean}} [opts] 片方だけを測るとき
+ */
+export function fireLoopGen(intensity, seed = 1, { roar = true, crackle = true } = {}) {
+    const noise = whiteNoise(2 * SAMPLE_RATE, seed + 300);
+    const nC = Math.round(TOWN_FIRE_CRACKLE_SECONDS * SAMPLE_RATE);
+    const clicks = crackleSamples(nC, SAMPLE_RATE, new SeededRNG(TOWN_FIRE_CRACKLE_SEED));
+    const lp = biquad('lowpass', TOWN_FIRE_ROAR_FILTER, 1);
+    const hp = biquad('highpass', TOWN_FIRE_CRACKLE_FILTER, 0.7);
+    return (i) => {
+        const r = roar ? lp(noise[i % noise.length]) * TOWN_FIRE_ROAR_GAIN : 0;
+        const c = crackle ? hp(clicks[i % nC]) * TOWN_FIRE_CRACKLE_GAIN : 0;
+        return (r + c) * intensity;
+    };
+}
+
 function toWav(samples) {
     const data = Buffer.alloc(samples.length * 2);
     for (let i = 0; i < samples.length; i++) {
@@ -77,6 +99,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
         ['town-collapse-large', collapseGen(TOWN_COLLAPSE_SOUND_REF), 1.4],
         ['town-collapse-small', collapseGen(TOWN_COLLAPSE_SOUND_REF / 3), 1.4],
         ['town-shatter', collapseGen(TOWN_COLLAPSE_SOUND_REF / 8), 1.0],
+        ['town-fire', fireLoopGen(1), 4.0],
     ];
     for (const [name, gen, sec] of items) writeFileSync(new URL(`${name}.wav`, OUT_DIR), toWav(render(gen, sec)));
 
@@ -86,5 +109,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     console.log(`崩壊（${TOWN_COLLAPSE_SOUND_REF} かけら）     ${L(collapseGen(TOWN_COLLAPSE_SOUND_REF), 1.2).toFixed(1)} dB`);
     console.log(`小さい爆発（比較）      ${L(explosionGen(false), 0.8).toFixed(1)} dB`);
     console.log(`破片（${TOWN_COLLAPSE_SOUND_REF / 8} かけら）       ${L(collapseGen(TOWN_COLLAPSE_SOUND_REF / 8), 0.8).toFixed(1)} dB`);
+    const { humGen } = await import('./render-barrier-sounds.mjs');
+    console.log(`バリアの唸り（比較）    ${db(aWeightedRms(humGen())).toFixed(1)} dB`);
+    console.log(`炎のループ（最大）      ${db(aWeightedRms(fireLoopGen(1))).toFixed(1)} dB`);
+    console.log(`  ゴーッだけ            ${db(aWeightedRms(fireLoopGen(1, 1, { crackle: false }))).toFixed(1)} dB`);
+    console.log(`  パチパチだけ          ${db(aWeightedRms(fireLoopGen(1, 1, { roar: false }))).toFixed(1)} dB`);
     console.log(`\n書き出し: ${OUT_DIR.pathname}`);
 }
