@@ -145,3 +145,46 @@ test('更新の途中で増えた破片は、その tick には動かない（�
     assert.ok(born, '下の建物に当たらなかった');
     assert.equal(born.y, 50);
 });
+
+// --- 瓦礫と、その下の床（実機で「床が崩れた後の瓦礫が空中に浮いている」と指摘された） ---
+
+/** 行 10 と行 20 が床の岩。壊した岩は gone に入れる */
+function twoFloors() {
+    const gone = new Set();
+    const solid = (r, c) => (r === 10 || r >= 20) && !gone.has(`${r},${c}`);
+    return { gone, solid };
+}
+
+test('瓦礫の下の床が全部壊れると、瓦礫は落ちて下の床に積もり直す（宙に残らない）', () => {
+    const { gone, solid } = twoFloors();
+    const town = new Town([], { createCanvas: fakeCanvas, isSolidTile: solid });
+    town._addRubble(32, 32, 160, 16, 1);       // 列 2〜3 の上（x 32〜64）
+    assert.equal(town.rubble.length, 1);
+    for (const c of [2, 3]) { gone.add(`10,${c}`); town.onBlockDestroyed(10, c); }
+    assert.equal(town.rubble.filter((r) => r.groundY === 160).length, 0, '元の床の瓦礫は残っていない');
+    assert.equal(town.falling.length, 1);
+    const game = fakeGame();
+    for (let t = 0; t < 300 && town.falling.length; t++) town.update(game);
+    assert.equal(town.rubble.length, 1);
+    assert.equal(town.rubble[0].groundY, 320);
+});
+
+test('瓦礫の下の床が一部だけ壊れたら、残った床の上に収まるよう瓦礫を縮める', () => {
+    const { gone, solid } = twoFloors();
+    const town = new Town([], { createCanvas: fakeCanvas, isSolidTile: solid });
+    town._addRubble(32, 48, 160, 16, 1);       // 列 2〜4（x 32〜80）
+    gone.add('10,4'); town.onBlockDestroyed(10, 4);
+    assert.equal(town.rubble.length, 1);
+    const r = town.rubble[0];
+    assert.ok(r.x >= 32 && r.x + r.w <= 64, `x ${r.x}〜${r.x + r.w}`);
+    assert.equal(town.falling.length, 0);
+});
+
+test('床の縁で砕けた瓦礫は、床からはみ出さない', () => {
+    const { solid } = twoFloors();
+    const narrow = (r, c) => solid(r, c) && (r !== 10 || c <= 2);   // 行 10 の床は列 0〜2 まで
+    const town = new Town([], { createCanvas: fakeCanvas, isSolidTile: narrow });
+    town._addRubble(32, 32, 160, 16, 1);       // 列 2〜3 にまたがって置こうとする
+    const r = town.rubble[0];
+    assert.ok(r.x + r.w <= 48, `右端 ${r.x + r.w} が床の縁 48 を越える`);
+});

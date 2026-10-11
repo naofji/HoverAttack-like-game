@@ -203,6 +203,12 @@ export class Town {
 
     /** 岩のタイルが壊れた（Map.damageBlock の「壊れた」分岐から）。支えていた建物を確かめ直す */
     onBlockDestroyed(r, c) {
+        // その岩の上の瓦礫は、残った床に収まるよう縮める。収まらなければ落とす（宙に浮かせない）
+        const groundY = r * TILE_SIZE;
+        const x0 = c * TILE_SIZE, x1 = x0 + TILE_SIZE;
+        for (const heap of this.rubble.filter((h) => h.groundY === groundY && h.x < x1 && x0 < h.x + h.w)) {
+            if (!this._fitRubble(heap)) this._dropRubble(heap);
+        }
         const set = this._anchorIndex.get(`${r},${c}`);
         if (!set) return;
         for (const b of set) this._settle(b);
@@ -321,18 +327,69 @@ export class Town {
         this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES });
     }
 
-    /** 床に瓦礫の山を足す。同じ床で横に重なる山は1つにまとめる（数が増え続けないように） */
+    /**
+     * 床に瓦礫の山を足す。同じ床で横に重なる山は1つにまとめる（数が増え続けないように）。
+     * 置いた山は下の床に収まるよう縮める（_fitRubble）。床の縁で砕けた破片の瓦礫が、
+     * 床の外へはみ出して浮かないように
+     */
     _addRubble(x, w, groundY, cellCount, mat) {
         const h = Math.max(2, Math.min(TOWN_RUBBLE_MAX_H, Math.round(Math.sqrt(cellCount))));
-        for (const r of this.rubble) {
-            if (r.groundY !== groundY || x >= r.x + r.w || r.x >= x + w) continue;
-            const x0 = Math.min(r.x, x);
-            r.w = Math.max(r.x + r.w, x + w) - x0;
-            r.x = x0;
-            r.h = Math.min(TOWN_RUBBLE_MAX_H, Math.max(r.h, h) + 1);
-            return;
+        let heap = this.rubble.find((r) => r.groundY === groundY && x < r.x + r.w && r.x < x + w);
+        if (heap) {
+            const x0 = Math.min(heap.x, x);
+            heap.w = Math.max(heap.x + heap.w, x + w) - x0;
+            heap.x = x0;
+            heap.h = Math.min(TOWN_RUBBLE_MAX_H, Math.max(heap.h, h) + 1);
+        } else {
+            heap = { x, w, groundY, h, mat, color: TOWN_RUBBLE_COLORS[mat] || TOWN_RUBBLE_COLORS[1] };
+            this.rubble.push(heap);
         }
-        this.rubble.push({ x, w, groundY, h, color: TOWN_RUBBLE_COLORS[mat] || TOWN_RUBBLE_COLORS[1] });
+        if (!this._fitRubble(heap)) this._dropRubble(heap);
+    }
+
+    /**
+     * 瓦礫の山を、真下の床（岩が続いている列のひと続き）の上に収まる幅へ縮める。
+     * 山の真ん中に一番近いひと続きを選ぶ。下に岩が1列も無ければ false（落とす）
+     */
+    _fitRubble(heap) {
+        const row = heap.groundY / TILE_SIZE;
+        const c0 = Math.floor(heap.x / TILE_SIZE);
+        const c1 = Math.floor((heap.x + heap.w - 1) / TILE_SIZE);
+        const mid = (heap.x + heap.w / 2) / TILE_SIZE;
+        let best = null;
+        for (let c = c0; c <= c1; c++) {
+            if (!this.isSolidTile(row, c)) continue;
+            let e = c;
+            while (e + 1 <= c1 && this.isSolidTile(row, e + 1)) e++;
+            const d = mid < c ? c - mid : mid > e + 1 ? mid - (e + 1) : 0;
+            if (!best || d < best.d) best = { s: c, e, d };
+            c = e;
+        }
+        if (!best) return false;
+        const x0 = Math.max(heap.x, best.s * TILE_SIZE);
+        const x1 = Math.min(heap.x + heap.w, (best.e + 1) * TILE_SIZE);
+        heap.x = x0;
+        heap.w = x1 - x0;
+        return true;
+    }
+
+    /** 下の床が無くなった瓦礫の山を、同じ形の破片にして落とす（落ちた先でまた瓦礫になる） */
+    _dropRubble(heap) {
+        this.rubble.splice(this.rubble.indexOf(heap), 1);
+        const cw = Math.ceil(heap.w / CHUNK), ch = Math.ceil(heap.h / CHUNK);
+        const canvas = this.createCanvas(cw * CHUNK, ch * CHUNK);
+        const ctx = canvas.getContext('2d');
+        // draw() の山と同じ2段の四角を、破片の canvas の下端に揃えて描く
+        const top = ch * CHUNK - heap.h;
+        const low = Math.ceil(heap.h / 2);
+        ctx.fillStyle = heap.color;
+        ctx.fillRect(0, top + heap.h - low, heap.w, low);
+        ctx.fillRect(heap.w / 4, top, heap.w / 2, heap.h - low);
+        this.falling.push(new FallingPiece({
+            canvas, cells: new Uint8Array(cw * ch).fill(heap.mat || 1), cw, ch,
+            x: heap.x, y: heap.groundY - ch * CHUNK, sourceId: -1,
+        }));
+        this._trimFalling();
     }
 
     /**
