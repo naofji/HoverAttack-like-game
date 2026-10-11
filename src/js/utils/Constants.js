@@ -2240,10 +2240,12 @@ export const SNOWTREE_FLURRY_TRICKLE = 3;
 export const SNOWTREE_FLURRY_LIE_EVERY = 6;
 export const SNOWTREE_FLURRY_LIE_PARTICLES = 4;
 export const SNOWTREE_FLURRY_LIFE = [50, 90];
+// size は [ふつうの粒, 大きい粒（BIG_SHARE の割合）]（px）。倒れる木の雪（shake / puff）は、ユーザー指定「木が倒れた際の雪の粒子を
+// 小さめに」で 2px / 3px から 1px / 2px にした。欠けたとき（hit）は 2px / 3px のまま
 export const SNOWTREE_FLURRY_MODES = {
-    hit: { speed: [0.2, 0.7], angle: [-Math.PI * 0.8, -Math.PI * 0.2] },      // 上向きの扇。勢いは puff の約 1/3（空気抵抗で飛ぶのは最大でも約 14px）
-    shake: { speed: [0.05, 0.4], angle: [Math.PI * 0.1, Math.PI * 0.9] },     // 下向き。ほぼ勢い無し
-    puff: { speed: [0.6, 2.0], angle: [-Math.PI, 0] },                        // 上半分すべて
+    hit: { speed: [0.2, 0.7], angle: [-Math.PI * 0.8, -Math.PI * 0.2], size: [2, 3] },     // 上向きの扇。勢いは puff の約 1/3（空気抵抗で飛ぶのは最大でも約 14px）
+    shake: { speed: [0.05, 0.4], angle: [Math.PI * 0.1, Math.PI * 0.9], size: [1, 2] },    // 下向き。ほぼ勢い無し
+    puff: { speed: [0.6, 2.0], angle: [-Math.PI, 0], size: [1, 2] },                       // 上半分すべて
 };
 export const SNOWTREE_FLURRY_DRAG = 0.95;            // 毎 tick 速度に掛ける。落ちる速さは GRAVITY / (1 - DRAG) = 0.4px/tick に収まる
 export const SNOWTREE_FLURRY_GRAVITY = 0.02;         // ホバーの粉雪（0.02）と同じ軽さ
@@ -2258,5 +2260,5 @@ export const SNOWTREE_FLURRY_START_HEIGHT = 0.4;
 // 倒れているあいだにこぼれる位置を、木の長さの何割の所にするか。毎回この割合ずつ進めて 1 で折り返す（黄金比 0.382:
 // 木の上を満遍なく行き来して、同じ位置に何度も出ない。乱数を使わずに位置を散らす）
 export const SNOWTREE_FLURRY_TRICKLE_STEP = 0.382;
-// 大きい粒（3px）の割合。残りは 2px
+// 大きい粒（MODES の size の大きい方）の割合。残りは小さい方
 export const SNOWTREE_FLURRY_BIG_SHARE = 0.25;

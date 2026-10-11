@@ -596,11 +596,11 @@ export class Town {
             const x = e.x + (Math.random() - 0.5) * 2 * spread, y = e.y - Math.random() * spread;
             if (i % SNOWTREE_FLURRY_NEEDLE_EVERY === SNOWTREE_FLURRY_NEEDLE_EVERY - 1) {
                 game.particles.push(new Particle(x, y, Math.cos(a) * sp, Math.sin(a) * sp,
-                    SNOWTREE_PARTICLE_COLORS[SNOWTREE_PARTICLE_COLORS.length - 1], 1 + Math.random() * 2, 20 + Math.floor(Math.random() * 20)));
+                    SNOWTREE_PARTICLE_COLORS[SNOWTREE_PARTICLE_COLORS.length - 1], ((mode.size[0] + mode.size[1]) / 2) * (0.5 + Math.random()), 20 + Math.floor(Math.random() * 20)));
             } else {
                 const life = SNOWTREE_FLURRY_LIFE[0] + Math.floor(Math.random() * (SNOWTREE_FLURRY_LIFE[1] - SNOWTREE_FLURRY_LIFE[0] + 1));
                 game.particles.push(new SnowFlurryParticle(game, x, y, Math.cos(a) * sp, Math.sin(a) * sp,
-                    SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length], Math.random() < SNOWTREE_FLURRY_BIG_SHARE ? 3 : 2, life));
+                    SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length], Math.random() < SNOWTREE_FLURRY_BIG_SHARE ? mode.size[1] : mode.size[0], life));
             }
         }
     }

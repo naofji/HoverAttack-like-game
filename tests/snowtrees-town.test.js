@@ -225,3 +225,20 @@ test('欠けたときの雪は、倒れ始めに振るい落とす雪の半分�
     town._spawnSnowFlurry(game, { x: 0, y: 0, count: 200, flora: 'snow' });
     assert.ok(Math.max(...game.particles.map(upSpeed)) <= SNOWTREE_FLURRY_MODES.hit.speed[1] + 1e-9);
 });
+
+test('粒の大きさ: 倒れる木の雪（shake / puff）は 1px か 2px、欠けたとき（hit）は 2px か 3px。針葉の欠片も倒れる木のほうが小さい', () => {
+    const sizes = (mode) => spawnMode(mode, 900);
+    for (const mode of ['shake', 'puff']) {
+        const ps = sizes(mode);
+        const flurry = ps.filter((p) => p instanceof SnowFlurryParticle);
+        const needles = ps.filter((p) => !(p instanceof SnowFlurryParticle));
+        assert.ok(flurry.length > 600 && needles.length > 100);
+        for (const p of flurry) assert.ok(p.size === 1 || p.size === 2, `${mode}: 大きさ ${p.size}`);
+        assert.ok(flurry.some((p) => p.size === 1) && flurry.some((p) => p.size === 2), `${mode}: 大小が混ざらない`);
+        for (const p of needles) assert.ok(p.size <= 2.25 + 1e-9, `${mode}: 針葉の欠片 ${p.size}`);
+    }
+    const hit = sizes('hit');
+    for (const p of hit.filter((q) => q instanceof SnowFlurryParticle)) assert.ok(p.size === 2 || p.size === 3, `hit: 大きさ ${p.size}`);
+    const mean = (a) => a.reduce((x, p) => x + p.size, 0) / a.length;
+    assert.ok(mean(sizes('puff')) < mean(hit) * 0.75, '倒れる木の雪が欠けたときの雪より小さくない');
+});
