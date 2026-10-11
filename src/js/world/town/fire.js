@@ -14,6 +14,7 @@ import { CHUNK, MAT_MASK, CHARRED } from './chunks.js';
 import { TOWN_RUIN_SHADE } from './palette.js';
 import {
     TOWN_MATERIALS, TOWN_FIRE_TICK, TOWN_FIRES_MAX, TOWN_FIRES_PER_BUILDING,
+    TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -71,7 +72,70 @@ export class FireSystem {
             if (!b.cells[f.k]) { this._remove(f); continue; }
             this._char(b, f.k);
             f.fuel -= TOWN_FIRE_TICK;
-            if (f.fuel <= 0) this._remove(f);
+            if (f.fuel <= 0) { this._remove(f); continue; }
+            this._spreadWithin(f);
+            this._jumpAcross(f);
+        }
+        this._crumble();
+    }
+
+    _neighbors(b, k) {
+        const i = k % b.cw;
+        const nb = [];
+        if (i > 0) nb.push(k - 1);
+        if (i < b.cw - 1) nb.push(k + 1);
+        if (k >= b.cw) nb.push(k - b.cw);
+        if (k + b.cw < b.cells.length) nb.push(k + b.cw);
+        return nb;
+    }
+
+    /**
+     * 材料に沿って隣のかけらへ進む。燃える隣から1つ選び、その材料の spread の確率で火が進む
+     * （たいていは火元が移る。TOWN_FIRE_BRANCH の確率で元を残して増える）。
+     * 隣の金属は熱で焦げるだけで、火は金属の上に乗らない＝燃え移りを中継しない
+     */
+    _spreadWithin(f) {
+        const { b } = f;
+        const fuelable = [];
+        for (const n of this._neighbors(b, f.k)) {
+            const v = b.cells[n];
+            if (!v || this.isBurning(b, n)) continue;
+            if (burnable(v)) fuelable.push(n);
+            else if (!(v & CHARRED) && !matOf(v).burns && this.town.random() < TOWN_METAL_SCORCH) this._char(b, n);
+        }
+        if (fuelable.length === 0) return;
+        const n = fuelable[Math.floor(this.town.random() * fuelable.length)];
+        if (this.town.random() >= matOf(b.cells[n]).spread) return;
+        if (this.town.random() < TOWN_FIRE_BRANCH && this.ignite(b, n)) return;
+        f.k = n;
+    }
+
+    /** 別の建物の、TOWN_FIRE_JUMP_RANGE 以内で一番近い燃えるかけらへ、その材料の catch の確率で燃え移る */
+    _jumpAcross(f) {
+        const { x, y } = FireSystem.center(f.b, f.k);
+        for (const b2 of this.town.buildingsInCircle(x, y, TOWN_FIRE_JUMP_RANGE)) {
+            if (b2 === f.b) continue;
+            let best = -1, bestD = Infinity;
+            for (let k = 0; k < b2.cells.length; k++) {
+                if (!burnable(b2.cells[k])) continue;
+                const c = FireSystem.center(b2, k);
+                const d = Math.hypot(c.x - x, c.y - y);
+                if (d <= TOWN_FIRE_JUMP_RANGE && d < bestD) { best = k; bestD = d; }
+            }
+            if (best >= 0 && this.town.random() < matOf(b2.cells[best]).catch) this.ignite(b2, best);
+        }
+    }
+
+    /** 燃えている建物の、火が焦がしたかけら（今燃えていないもの）が crumble の確率で崩れて抜ける */
+    _crumble() {
+        for (const b of new Set(this.fires.map((f) => f.b))) {
+            const list = [];
+            for (const k of b.burnt) {
+                if (!b.cells[k] || this.isBurning(b, k)) continue;
+                if (this.town.random() < matOf(b.cells[k]).crumble) list.push(k);
+            }
+            for (const k of list) b.burnt.delete(k);
+            this.town.removeAndSettle(b, list);
         }
     }
 

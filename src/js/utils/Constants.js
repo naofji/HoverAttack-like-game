@@ -2069,3 +2069,10 @@ export const TOWN_MATERIALS = {
     3: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
     4: { burns: true, bulletIgnite: 0.15, spread: 0.5, catch: 0.25, fuel: [720, 1200], crumble: 0.02 },
 };
+// 火が隣へ進むとき、元の火元を残したまま新しい火元を増やす確率（それ以外は火元が移る）。
+// 増やしすぎると 1棟の上限 4 にすぐ届く
+export const TOWN_FIRE_BRANCH = 0.15;
+// 別の建物へ燃え移る距離（px。spec 3章）
+export const TOWN_FIRE_JUMP_RANGE = 8;
+// 燃えている火元の隣の金属が熱で焦げる確率（燃え進みの1回）。焦げるだけで火元にはならない
+export const TOWN_METAL_SCORCH = 0.2;
