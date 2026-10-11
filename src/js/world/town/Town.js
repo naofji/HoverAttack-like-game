@@ -12,17 +12,19 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
 import { paintParts } from './shapes.js';
 import {
     TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR, PLANT_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS,
-    SNOWTREE_CHAR_EDGE, SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS,
+    SNOWTREE_CHAR_EDGE, SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS, ICE_PARTICLE_COLORS,
 } from './palette.js';
 import { createExplosion, Particle, SnowFlurryParticle } from '../../entities/Particle.js';
 import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import { ToppleTree } from './ToppleTree.js';
+import { IcicleFall } from './IcicleFall.js';
+import { impactTargets, applyImpact } from '../../utils/impactDamage.js';
 import { FireSystem } from './fire.js';
 import { ExplosiveSystem } from './explosives.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
@@ -37,6 +39,7 @@ import {
     SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_TRICKLE_EVERY, SNOWTREE_FLURRY_TRICKLE,
     SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES, SNOWTREE_FLURRY_SPREAD,
     SNOWTREE_FLURRY_START_HEIGHT, SNOWTREE_FLURRY_TRICKLE_STEP, SNOWTREE_FLURRY_BIG_SHARE,
+    ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_KNOCK_VY, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -68,6 +71,8 @@ export class Town {
         this.explosives = new ExplosiveSystem(this);
         this.falling = [];
         this.rubble = [];
+        // 震えているつらら（brittle の建物。当たってから ICICLE_SHAKE_TICKS 数える。_shake / _updateShaking）
+        this.shaking = [];
         // 弾ごとの覚え書き（発射位置で無視する建物・細い部品を欠かせた建物）。弾が消えれば一緒に消える
         this._projState = new WeakMap();
         // 粒・土煙の注文。update() でまとめて、画面の中の分だけ出す（spec 2章「画面の外」）。
@@ -88,6 +93,12 @@ export class Town {
                 flora: spec.flora || 'leaf',
                 // 木の幹の x（建物の左端から px）。倒れる木の軸の手がかり（幹が丸ごと壊されても、根元の位置が分かる）
                 footX: spec.footX,
+                // 5面のつらら。当たっても欠けずに震え、震えが終わったら全体が 1 つの塊（IcicleFall）になって落ちる。
+                // damage: 落ちたときに機体へ与える値。shakeLeft: 震えの残り tick（0 は震えていない）。shaken: 一度震えたら二度と震えない
+                brittle: spec.brittle === true,
+                damage: spec.damage || 0,
+                shakeLeft: 0,
+                shaken: false,
                 x: spec.x, y: spec.y, width: spec.w, height: spec.h,
                 cells, cw, ch,
                 anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile),
@@ -170,6 +181,8 @@ export class Town {
      * @returns {number} 欠けたかけらの数
      */
     chip(b, x, y, radius, cause = 'hit') {
+        // もろい建物（つらら）は、欠けずに震える。弾・爆風・敵の弾・落ちる破片のどれでも同じ
+        if (b.brittle) return this._shake(b, x, y);
         const lx = x - b.x;
         const ly = y - b.y;
         const reach = radius + TOWN_CHIP_JAGGED;
@@ -350,7 +363,8 @@ export class Town {
             const exposed = this.buildingsUnder(game.enemies.filter((e) => e.alive));
             for (const p of game.projectiles) this.sweepProjectile(p, exposed);
         }
-        this._updateFalling();
+        this._updateShaking();
+        this._updateFalling(game);
         const cam = game.camera, cv = game.canvas;
         const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
         this.fire.update(view);
@@ -370,13 +384,14 @@ export class Town {
         return this.isSolidTile(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
     }
 
-    _updateFalling() {
+    _updateFalling(game) {
         // 写しで回す: 欠けが新しい破片を足したり、上限で古い破片を消したりするため。
         // 新しく増えた破片は次の tick から動く
         for (const p of [...this.falling]) {
             if (!p.alive) continue;
             if (p.topple) { this._updateTopple(p); continue; }
             p.step();
+            if (p.icicle) this._icicleImpact(p, game);   // 落ちるつららが機体に当たる。着地する tick にも当てる（この後で砕ける）
             const by = p.y + p.height;
             for (const b of this.buildingsAt(p.cx, by)) {
                 const k = this.cellAt(b, p.cx, by);
@@ -453,6 +468,10 @@ export class Town {
             return;
         }
         const mat = p.mainMaterial();
+        if (mat === MAT_ICE) {   // つららは山にならない。氷の粒になって砕ける（音はこの段では鳴らさない）
+            this._emit('leaf', p.cx, groundY, { count: ICICLE_SHARDS.land, flora: this._floraOf(p), mode: 'land', spread: p.width / 2 });
+            return;
+        }
         if (mat === MAT_PLANT) {   // 葉は山にならない。粒になって散る（音も鳴らさない）
             this._emit('leaf', p.cx, groundY, { count: PLANT_LEAF_PARTICLES_FALL, flora: this._floraOf(p) });
             return;
@@ -543,7 +562,9 @@ export class Town {
             if (cam && cv && (e.x < cam.x - m || e.x > cam.x + cv.width + m
                 || e.y < cam.y - m || e.y > cam.y + cv.height + m)) continue;
             if ((e.type === 'collapse' || e.type === 'shatter') && e.size > 0 && (!loud || e.size > loud.size)) loud = e;
-            if (e.type === 'leaf' && e.flora === 'snow') {
+            if (e.type === 'leaf' && e.flora === 'ice') {
+                this._spawnIceShards(game, e);
+            } else if (e.type === 'leaf' && e.flora === 'snow') {
                 this._spawnSnowFlurry(game, e);
             } else if (e.type === 'leaf') {
                 const colors = e.flora === 'snow' ? SNOWTREE_PARTICLE_COLORS : PLANT_LEAF_PARTICLE_COLORS;
@@ -573,6 +594,81 @@ export class Town {
         }
         if (loud) audioManager.playTownCollapse(loud.size, loud.x);
         this.effects.length = 0;
+    }
+
+    /**
+     * もろい建物（つらら）が当たった。欠かさずに震え始める。一度震えたら、追加の当たりは時間を延ばさず、粒も出さない
+     * @returns {number} 震え始めたら 1、すでに震えた・空なら 0（chip の戻り値「欠けたかけらの数」に合わせた）
+     */
+    _shake(b, x, y) {
+        if (b.shaken || b.remaining === 0) return 0;
+        b.shaken = true;
+        b.shakeLeft = ICICLE_SHAKE_TICKS;
+        this.shaking.push(b);
+        this._emit('leaf', x, y, { count: ICICLE_SHARDS.hit, flora: b.flora, mode: 'hit', spread: 3 });
+        return 1;
+    }
+
+    /**
+     * 震えているつららを 1 tick 進める。震えが終わったら全体を落とす。先から水滴の粒を ICICLE_DRIP_EVERY tick おきに落とす（予兆）。
+     * 震えている間に支えの岩が壊れて、すでに落ちた（remaining 0）つららは、時間切れで二重に落とさない
+     */
+    _updateShaking() {
+        for (const b of this.shaking) {
+            if (b.remaining === 0) { b.shakeLeft = 0; continue; }
+            b.shakeLeft--;
+            if (b.shakeLeft > 0 && b.shakeLeft % ICICLE_DRIP_EVERY === 0) {
+                this._emit('leaf', b.x + b.footX, b.y + b.height, { count: 1, flora: b.flora, mode: 'drip', spread: 1 });
+            }
+            if (b.shakeLeft <= 0) this._releaseWhole(b);
+        }
+        this.shaking = this.shaking.filter((b) => b.shakeLeft > 0);
+    }
+
+    /** 建物の残りのかけら全部を 1 つの塊にして切り離す（つららが落ち始める） */
+    _releaseWhole(b) {
+        const group = [];
+        for (let k = 0; k < b.cells.length; k++) if (b.cells[k]) group.push(k);
+        if (group.length > 0) this._detach(b, group);
+    }
+
+    /** 震えている間の描画の横ずれ（px）。偶数・奇数 tick で左右。描画だけで、当たりと支えは動かさない */
+    _shakeOffset(b) {
+        if (b.shakeLeft <= 0) return 0;
+        return (b.shakeLeft % 2 === 0 ? 1 : -1) * ICICLE_SHAKE_AMPLITUDE;
+    }
+
+    /**
+     * 落ちるつららが機体に当たる。かけらが機体の矩形に掛かったら、1 本につき 1 機体 1 回だけ。
+     * game が無い（道具・テストの引数なしの更新）ときは何もしない
+     */
+    _icicleImpact(p, game) {
+        if (!game) return;
+        for (const e of impactTargets(game)) {
+            if (p.hit.has(e) || !p.touches(e)) continue;
+            p.hit.add(e);
+            applyImpact(e, e.x + e.width / 2, p.y + p.height, p.damage, ICICLE_KNOCK_VY);
+        }
+    }
+
+    /**
+     * 氷の粒（当たって震え始めた hit・落ちて砕けた land・震えの予兆の drip）。見た目だけなので Math.random でよい。
+     * hit は少なく控えめ、land は上へ多く散る、drip は 1 粒がほぼ真下へ。上へだけ散らす（床の線の点から下へ散ると岩の中で生まれる）
+     */
+    _spawnIceShards(game, e) {
+        const spread = e.spread ?? 3;
+        for (let i = 0; i < e.count; i++) {
+            const x = e.x + (Math.random() - 0.5) * 2 * spread, y = e.y - Math.random() * spread;
+            let vx = 0, vy = 0.2, life = 40, size = 1;
+            if (e.mode !== 'drip') {
+                const a = -Math.PI * Math.random();
+                const sp = e.mode === 'land' ? 0.6 + Math.random() * 1.6 : 0.2 + Math.random() * 0.8;
+                vx = Math.cos(a) * sp; vy = Math.sin(a) * sp;
+                life = 18 + Math.floor(Math.random() * 20);
+                size = 1 + Math.floor(Math.random() * 3);
+            }
+            game.particles.push(new Particle(x, y, vx, vy, ICE_PARTICLE_COLORS[i % ICE_PARTICLE_COLORS.length], size, life));
+        }
     }
 
     /** 落ちる破片の元の建物の flora（葉か雪か）。元の建物が分からなければ葉 */
@@ -678,7 +774,10 @@ export class Town {
             spin: (chunkHash(b.id, j0 + 307, i0 + 401) - 0.5) * 2 * TOWN_FALL_SPIN_MAX,
             sourceId: b.id, fireFuel,
         };
-        if (b.flora === 'snow' && group.length >= SNOWTREE_TOPPLE_MIN_CELLS) {
+        if (b.brittle) {
+            // つららは全体が 1 つの IcicleFall。震えが終わったとき（_releaseWhole）も、支えの岩が壊れたとき（_settle）も同じ
+            this.falling.push(new IcicleFall({ ...piece, damage: b.damage }));
+        } else if (b.flora === 'snow' && group.length >= SNOWTREE_TOPPLE_MIN_CELLS) {
             // 雪の木の大きな塊は、傾きながら倒れる（ToppleTree）。撃たれた側から離れる向きへ。撃った位置が
             // 塊の真ん中と同じ（幹をまっすぐ撃った）か分からない（岩が壊れた）ときは、位置から決めた向き
             const mid = piece.x + pw / 2;
@@ -709,6 +808,7 @@ export class Town {
             const old = this.falling.shift();
             old.alive = false;
             const mat = old.mainMaterial();
+            if (mat === MAT_ICE) { this._emit('leaf', old.cx, old.cy, { count: ICICLE_SHARDS.land, flora: this._floraOf(old), mode: 'land', spread: old.width / 2 }); continue; }
             if (mat === MAT_PLANT) this._emit('leaf', old.cx, old.cy, { count: PLANT_LEAF_PARTICLES_FALL, flora: this._floraOf(old) });
             else this._emit('dust', old.cx, old.cy, { mat });
         }
@@ -725,7 +825,7 @@ export class Town {
         const y1 = view.y + view.h;
         for (const b of this.buildings) {
             if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
-            ctx.drawImage(b.canvas, b.x, b.y);
+            ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
         }
         // 火（煙 → 炎 → 残り火）。建物の直後＝瓦礫・破片より奥、岩の縁よりも奥。煙が無いときは絵を焼かない
         this.fire.draw(ctx, view, this.fire.smoke.length > 0 ? this.smokeSprites() : null);
