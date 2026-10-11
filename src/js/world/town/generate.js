@@ -14,12 +14,12 @@ import {
     TOWN_ADOBE_HEADROOM_WIDE, TOWN_ADOBE_SHARE_WIDE, TOWN_ADOBE_HEADROOM_NARROW, TOWN_ADOBE_SHARE_NARROW,
     TOWN_TOWER_BRIDGE_CHANCE,
     TOWN_WALL_MIN_RUN, TOWN_WALL_MIN_REACH, TOWN_WALL_SPACING, TOWN_WALL_HOUSE_CHANCE,
-    TOWN_CEIL_MIN_RUN, TOWN_CEIL_MIN_DROP, TOWN_CEIL_KEEP_BELOW,
+    TOWN_CEIL_MIN_RUN, TOWN_CEIL_MIN_DROP, TOWN_CEIL_KEEP_BELOW, TOWN_EXPLOSIVE_EVERY,
 } from '../../utils/Constants.js';
 import { findSites, chainFloors } from './placement.js';
 import { placeVillages, villageFill, quietFactor } from './villages.js';
-import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge } from './adobe.js';
-import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack } from './mining.js';
+import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge, buildOilJarStore } from './adobe.js';
+import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack, buildMiningExplosive } from './mining.js';
 import { mirrorParts, rect, pick, step4 } from './shapes.js';
 import { MAT_WOOD } from './chunks.js';
 import { TOWN_BODY_COLORS, TOWN_DETAIL_COLORS } from './palette.js';
@@ -93,13 +93,49 @@ function standsWell(s, run, solid) {
     return true;
 }
 
+/** 下端の 4px（TOWN_FOUNDATION_SINK）が床の岩に入り、その上は全部空いている（段の岩に埋もれない・宙に浮かない） */
+function onBareFloor(e, solid) {
+    const ground = (e.y + e.h - TOWN_FOUNDATION_SINK) / T;
+    for (let c = Math.floor(e.x / T); c <= Math.floor((e.x + e.w - 1) / T); c++) {
+        if (!solid(ground, c)) return false;
+        for (let r = Math.floor(e.y / T); r < ground; r++) if (solid(r, c)) return false;
+    }
+    return true;
+}
+
+/**
+ * 段3b: 床の建物の脇に爆発物を置く（建物 TOWN_EXPLOSIVE_EVERY 棟に1つくらい。spec 3b章）。
+ * 乱数は建物と別の派生ストリーム。建物を並べる rng を使うと、実機で見て決めた町並みが
+ * 週ごとに全部入れ替わる（村の比率をユーザーが手で詰めた直後）。
+ * 支えは岩だけなので、床の岩の上にしか置かない（足場の上の爆発物は、面に入った瞬間に落ちる）
+ */
+function placeExplosives(specs, rng, { solid, fits }) {
+    const placed = [];
+    for (const s of specs) {
+        if (s.site !== 'floor' || rng.next() >= 1 / TOWN_EXPLOSIVE_EVERY) continue;
+        const b = s.style === 'A' ? buildOilJarStore(rng) : buildMiningExplosive(rng);
+        const right = rng.next() < 0.5;
+        const gap = step4(rng, 0, 4);
+        const foot0 = s.x + s.footX;
+        const foot1 = foot0 + s.footW;
+        const e = {
+            site: 'floor', style: s.style, kind: b.kind,
+            x: right ? foot1 + gap : foot0 - gap - b.w, y: s.y + s.h - b.h, w: b.w, h: b.h, parts: b.parts,
+        };
+        if (!fits(e) || placed.some((o) => overlaps(o, e)) || !onBareFloor(e, solid)) continue;
+        placed.push(e);
+    }
+    return placed;
+}
+
 /**
  * villages を渡さなければ rng で村を置く（Map はこちら）。テストは村を指定して効き方を見る。
  * quietZones（[{c, r, inner, outer}]、タイル）は町を建てない区域。inner 以内に掛かる建物は置かず、
- * outer までは建てる確率を下げて、区域の縁で町が急に途切れないようにする
+ * outer までは建てる確率を下げて、区域の縁で町が急に途切れないようにする。
+ * explosiveRng を渡せば、床の建物の脇に爆発物を足す（設計図の後ろに。前の建物は変わらない）
  */
 export function generateTown({
-    grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [],
+    grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [], explosiveRng = null,
 }) {
     const sites = findSites(grid, rows, cols);
     const fillAt = (c, r) => villageFill(villages, c, r) * quietFactor(quietZones, c, r);
@@ -226,5 +262,7 @@ export function generateTown({
             c += Math.max(3, Math.ceil((b ? b.w : 16) / T)) + Math.floor(rng.next() * 4);
         }
     }
+    // --- 爆発物（段3b）。建物の後ろに足すので、描く順でも建物より手前に出る（狙って撃てるように）
+    if (explosiveRng) specs.push(...placeExplosives(specs, explosiveRng, { solid, fits }));
     return specs;
 }

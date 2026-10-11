@@ -7,9 +7,9 @@
 // 上の階どうしを橋で結ぶ）、クリフ・パレス（崖のくぼみの家、壁から突き出た梁、丸い塔）。
 // 形の数値は描画専用のパラメータなのでここに置く（Constants.js ではない）。
 
-import { MAT_ADOBE, MAT_WOOD } from './chunks.js';
+import { MAT_ADOBE, MAT_WOOD, MAT_EXPLOSIVE } from './chunks.js';
 import { rect, step4, pick, normalizeUp } from './shapes.js';
-import { TOWN_BODY_COLORS as BODY, TOWN_DETAIL_COLORS as DETAIL, shade } from './palette.js';
+import { TOWN_BODY_COLORS as BODY, TOWN_DETAIL_COLORS as DETAIL, TOWN_EXPLOSIVE_COLORS, shade } from './palette.js';
 
 // 1階の高さ。自機（24px）の半分。これより低いと窓の段が詰まって縞に見える
 const FLOOR_H = 12;
@@ -187,4 +187,23 @@ export function buildHangingBridge(rng, { span, maxHang }) {
         h = ly + 6;
     }
     return { kind: 'bridge', w: n * 4, h, parts };
+}
+
+/**
+ * 段3b: 油壺の倉（spec 3b章）。土の平屋根を柱で支えた小さな倉に、赤い封の壺を並べる。
+ * 屋根と柱まで全部爆発物のかけら（1棟まるごと爆発物）。20x20、下の 4px は床の岩に埋まる
+ */
+export function buildOilJarStore(rng) {
+    const C = TOWN_EXPLOSIVE_COLORS;
+    const parts = [];
+    rect(parts, 0, 0, 20, 20, DETAIL.winDark, MAT_EXPLOSIVE, true);   // 倉の奥（暗い）
+    rect(parts, 0, 0, 20, 4, pick(rng, BODY.adobe));                  // 平屋根
+    rect(parts, 0, 4, 2, 16, DETAIL.beam);                            // 柱
+    rect(parts, 18, 4, 2, 16, DETAIL.beam);
+    for (const x of [3, 8, 13]) {
+        rect(parts, x, 9, 4, 11, C.jar);
+        rect(parts, x + 1, 8, 2, 1, C.jarSeal);
+        rect(parts, x, 10, 4, 1, C.jarSeal);
+    }
+    return { kind: 'oiljars', w: 20, h: 20, parts };
 }

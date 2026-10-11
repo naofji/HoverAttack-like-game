@@ -7,9 +7,9 @@
 // 狭い通路・低い天井に多く置く（generate.js の adobeShare）。
 // 小屋は「下端 = y 0、上へ y を負に」積んでから normalizeUp で下げる。
 
-import { MAT_WOOD, MAT_METAL } from './chunks.js';
+import { MAT_WOOD, MAT_METAL, MAT_EXPLOSIVE } from './chunks.js';
 import { rect, step4, pick, normalizeUp } from './shapes.js';
-import { TOWN_BODY_COLORS as BODY, TOWN_DETAIL_COLORS as DETAIL, shade } from './palette.js';
+import { TOWN_BODY_COLORS as BODY, TOWN_DETAIL_COLORS as DETAIL, TOWN_EXPLOSIVE_COLORS, shade } from './palette.js';
 
 // 軒・看板・ランタンが壁の外へ出るぶんの余白（外接矩形の左右）
 const EAVE = 4;
@@ -169,4 +169,39 @@ export function buildHangingShack(rng, { maxHang }) {
     }
     shack(parts, rng, x, bottom, footW, h1);
     return { kind: 'hangingShack', w: footW + EAVE * 2, h: bottom, parts };
+}
+
+// 段3b: 坑道の町の爆発物（spec 3b章）。どの部品も材料は爆発物・厚い壁（1棟まるごと爆発物。
+// 建物単位で「爆発した」を決めるため）。下の 4px は床の岩に埋まる（TOWN_FOUNDATION_SINK。支えのかけら）
+const EXPLOSIVE_KINDS = ['drum', 'crate', 'gas'];
+
+export function buildMiningExplosive(rng) {
+    const C = TOWN_EXPLOSIVE_COLORS;
+    const kind = pick(rng, EXPLOSIVE_KINDS);
+    const parts = [];
+    if (kind === 'drum') {   // 燃料のドラム缶 8x16（見えるのは 8x12）
+        rect(parts, 0, 0, 8, 16, C.drum, MAT_EXPLOSIVE, true);
+        rect(parts, 0, 0, 8, 1, C.drumRim);
+        rect(parts, 0, 4, 8, 1, C.drumBand);
+        rect(parts, 0, 9, 8, 1, C.drumBand);
+        rect(parts, 6, 1, 2, 11, shade(C.drum));
+        return { kind, w: 8, h: 16, parts };
+    }
+    if (kind === 'crate') {   // ダイナマイトの木箱 12x12（見えるのは 12x8）。赤い印に白
+        const wood = pick(rng, BODY.wood);
+        rect(parts, 0, 0, 12, 12, wood, MAT_EXPLOSIVE, true);
+        rect(parts, 0, 0, 12, 1, DETAIL.beam);
+        rect(parts, 0, 7, 12, 1, DETAIL.beam);
+        rect(parts, 3, 2, 6, 4, C.crateMark);
+        rect(parts, 5, 3, 2, 2, C.crateMarkInner);
+        return { kind, w: 12, h: 12, parts };
+    }
+    // ガスボンベ2本 8x16（見えるのは 8x12）。肩を 1px 細くして丸く見せる
+    rect(parts, 0, 0, 8, 16, null, MAT_EXPLOSIVE, true);
+    for (const x of [0, 5]) {
+        rect(parts, x + 1, 0, 1, 2, C.gasCap);
+        rect(parts, x, 2, 3, 14, C.gas);
+        rect(parts, x, 6, 3, 1, C.gasBand);
+    }
+    return { kind, w: 8, h: 16, parts };
 }

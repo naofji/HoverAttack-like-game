@@ -2087,3 +2087,7 @@ export const TOWN_SMOKE_EVERY = 3;      // 燃え進み何回に1回、火元か
 export const TOWN_SMOKE_MAX = 60;
 export const TOWN_SMOKE_ALPHA = 0.35;   // 煙幕（SmokeScreen）より薄く。町の煙は見通しを遮らない
 export const TOWN_EMBER_SMOKE_EVERY = 40; // 残り火が細い煙を出す間隔（フレーム）
+
+// --- 3面の町並み 段3b（爆発物と誘爆）---
+// 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（3b章）
+export const TOWN_EXPLOSIVE_EVERY = 8;   // 床の建物何棟に1つ、脇に爆発物を置くか（spec の初期値）

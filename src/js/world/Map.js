@@ -344,6 +344,8 @@ export class Map {
             // 基地の部屋だけ避ける。開始の部屋には置く（面に入った瞬間に町だと分かるように）
             excludeRects: [this._reservedRects()[1]],
             rng: new SeededRNG((this.game.rng.state ^ 0x70E4E5) >>> 0),
+            // 爆発物の置き場所（段3b）は別の派生ストリーム。建物の rng に混ぜると町並みが変わる
+            explosiveRng: new SeededRNG((this.game.rng.state ^ 0xB0A3B5) >>> 0),
             // 最後の敵基地の周りは岩肌だけにする（基地へ近づくほど町が途切れる）
             quietZones: [{
                 c: this.enemyBaseCenter.c, r: this.enemyBaseCenter.r,

@@ -56,3 +56,19 @@ export const TOWN_DUST_COLOR = '#8a7a5a';
 export const TOWN_FLAME_COLORS = ['#ffd860', '#ff9a2a', '#d8401a'];
 // 残り火の火の粉
 export const TOWN_EMBER_COLOR = '#ff7a1a';
+
+// 段3b: 爆発物の色。狙って撃てるよう「見て爆発物と分かる」赤にする（spec 3b章）。
+// 建物の輝度の上限（地形の岩の 0.85 倍）からは外す。弾（明るい黄色の丸）とは色の距離で離し
+// （tests/town-palette.test.js）、形も四角にする
+export const TOWN_EXPLOSIVE_COLORS = {
+    drum: '#b0301e',            // 燃料のドラム缶
+    drumBand: '#5a1a10',        // ドラム缶のたが
+    drumRim: '#c84030',         // ドラム缶の縁（上の 1px）。#d0503a は弾の黄色まで 149 で近すぎた
+    crateMark: '#c8281a',       // ダイナマイトの木箱の赤い印
+    crateMarkInner: '#e8e0d0',  // 印の中の白
+    gas: '#a82a22',             // ガスボンベ
+    gasBand: '#e0d8c8',         // ボンベの白い帯
+    gasCap: '#4f4a42',          // ボンベの口金
+    jar: '#5a3a20',             // 油壺
+    jarSeal: '#c8281a',         // 油壺の赤い封
+};
