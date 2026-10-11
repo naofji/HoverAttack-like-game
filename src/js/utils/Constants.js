@@ -2107,3 +2107,28 @@ export const TOWN_CHAIN_DELAY_RANGE = 7;
 // 60 フレームあたりの爆発物の爆発の上限。超えた分は消さずに後ろへずらす
 // （消すと「撃ったのに爆発しない」に見える）
 export const TOWN_EXPLOSIONS_PER_SECOND = 6;
+
+// --- 3面の町並み 段4（音）---
+// 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（4章）。音量は A特性で実測して
+// tests/town-sounds.test.js が爆発・バリアの唸りとの相対 dB で縛る（tools/render-town-sounds.mjs で測れる）
+// 崩れる音の大きさ k = (崩れたかけら / REF)^EXP を MIN〜1 に収める。REF は塔1棟の崩壊。
+// 平方根（0.5 乗）だと 20 かけらの破片が -58.2dB で、小さい爆発（-58.0dB）とほぼ同じ大きさになる（実測）。
+// 0.75 乗で -63.4dB（小さい爆発より 5dB 小さい）
+export const TOWN_COLLAPSE_SOUND_REF = 160;
+export const TOWN_COLLAPSE_SOUND_EXP = 0.75;
+export const TOWN_COLLAPSE_SOUND_MIN = 0.1;
+export const TOWN_COLLAPSE_SOUND_MERGE_MS = 80;   // これより近く続いた崩れる音は、大きいほうだけ鳴らす
+// 実測（2026-10-11、tools/render-town-sounds.mjs）: 崩壊 160 かけら -47.6dB（大きい爆発 -44.1dB の -3.5dB）、
+// 破片 20 かけら -63.4dB（小さい爆発 -58.0dB より小さい）
+// 低い地鳴り: ローパスしたノイズを FROM → TO へ掃引しながら TIME 秒で落とす（k で長さが半分まで縮む）
+export const TOWN_COLLAPSE_RUMBLE_GAIN = 0.5;
+export const TOWN_COLLAPSE_RUMBLE_TIME = 1.2;
+export const TOWN_COLLAPSE_RUMBLE_FROM = 400;
+export const TOWN_COLLAPSE_RUMBLE_TO = 60;
+// 瓦礫のガラガラ: 短いバンドパスのノイズを RATTLES 発（k 倍）、SPREAD 秒の中にばらまく
+export const TOWN_COLLAPSE_RATTLES = 10;
+export const TOWN_COLLAPSE_RATTLE_SPREAD = 0.6;
+export const TOWN_COLLAPSE_RATTLE_GAIN = 0.15;
+export const TOWN_COLLAPSE_RATTLE_FREQ_MIN = 1200;
+export const TOWN_COLLAPSE_RATTLE_FREQ_RANGE = 2400;
+export const TOWN_COLLAPSE_RATTLE_Q = 3;
