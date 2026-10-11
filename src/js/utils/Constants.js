@@ -2196,10 +2196,26 @@ export const SNOWTREE_HEIGHT = { fir: [20, 72], bare: [20, 56] };
 // 床に立てるときに枯れ木になる割合。残りは針葉樹（雪の面らしい絵が針葉樹なので多めに）
 export const SNOWTREE_BARE_SHARE = 0.25;
 // 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる。隣と重なる所には置かない（placer.js）ので、
-// 詰めても重ならず、置ける足場が埋まるだけ。今週の5面で 262 本（4面は小さな苔を含めて 540 本）。初期値のまま
-export const SNOWTREE_FILL_SCALE = 1;
+// 詰めても重ならず、置ける足場が埋まるだけ。最初は 1・間隔 4〜24px で、今週の5面で 232 本（床 100 タイルあたり 8.6 本）
+// しかなく、ユーザーに「もっとたくさん木があった方がいい」と言われた（村の外は 10% しか置かないため）。
+// 実測（今週の5面、床 2,702 タイル）: 濃さ 2 → 369 本、3 → 456 本、3＋間隔 0〜8 → 534 本（19.8 本）、5＋間隔 0〜8 → 648 本。
+// 5 は足場がほぼ埋まるので、森に見える 3 と間隔 0〜8 にした
+export const SNOWTREE_FILL_SCALE = 3;
 // 隣の木との間隔（px、4px 刻みで引く）。木の幅に足す
-export const SNOWTREE_GAP = [4, 24];
+export const SNOWTREE_GAP = [0, 8];
 // 木 1 本の幅の上限（px）。20000 通りの乱数で測った最大は針葉樹 56・枯れ木 52（tests/snowtrees-build.test.js が超えないことを縛る）。
 // 床に置くとき、この幅ぶんの列の天井までの空きを測る（枝の先が天井に刺さらないように）
 export const SNOWTREE_MAX_WIDTH = 56;
+// 雪の木の倒壊。幹が切れて切り離された塊は、切れ目の下端の角（倒れる側）を軸に傾きながら倒れる（ユーザー指定:
+// 「傾きながら下に落ちていく様な感じで倒壊する」。それまでは根元で切れた塊が落ち始めた最初のコマで床に触れ、
+// その場で雪の粒になって消えていた）。傾きの角加速度は ACCEL × (sinθ + SEED): 真っ直ぐ立った状態から始まるので
+// SEED が最初の傾きの種。実測（tools の数値実験）: ACCEL 0.005・SEED 0.2 で 90° まで 41 tick（0.68秒。15° まで 21 tick
+// とゆっくり傾き始め、45° で 32 tick、70° で 38 tick と加速する）。0.01・0.3 だと 25 tick で、ぱたんと倒れて重みが出なかった
+export const SNOWTREE_TOPPLE_ACCEL = 0.005;
+export const SNOWTREE_TOPPLE_SEED = 0.2;
+// 倒れきった（床に横たわった）あと、薄れて消えるまでの tick。この間に雪の粒を PUFFS 回、木の長さに沿って出す
+export const SNOWTREE_TOPPLE_LIE_TICKS = 30;
+export const SNOWTREE_TOPPLE_PUFFS = 3;
+export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 4;
+// これより小さい塊（かけらの数）は倒れず、ふつうの破片として落ちて砕ける（枝先の欠片が90°倒れるのは不自然）
+export const SNOWTREE_TOPPLE_MIN_CELLS = 8;

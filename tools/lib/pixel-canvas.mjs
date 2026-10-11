@@ -33,13 +33,15 @@ export class PixelCanvas {
 class PixelCtx {
     constructor(cv) {
         this.cv = cv; this.fillStyle = '#000'; this.globalAlpha = 1;
-        this.tx = 0; this.ty = 0; this.stack = [];
+        this.tx = 0; this.ty = 0; this.rot = 0; this.stack = [];
     }
-    save() { this.stack.push([this.tx, this.ty, this.globalAlpha, this.fillStyle]); }
-    restore() { [this.tx, this.ty, this.globalAlpha, this.fillStyle] = this.stack.pop(); }
+    save() { this.stack.push([this.tx, this.ty, this.rot, this.globalAlpha, this.fillStyle]); }
+    restore() { [this.tx, this.ty, this.rot, this.globalAlpha, this.fillStyle] = this.stack.pop(); }
     translate(x, y) { this.tx += x; this.ty += y; }
-    // 落ちる破片だけが使う。書き出しの絵では回さずに貼る（回転は見た目だけで、壊れ方の確認には要らない）
-    rotate() {}
+    // 落ちる破片と倒れる木（ToppleTree）が使う。translate のあとの rotate を、2 引数の drawImage だけが見る
+    // （最近傍の逆写像。fillRect などは回さない）。ふつうの落ちる破片は見た目だけの回転なので、
+    // 書き出しの絵では回さない道具もあった（その場合は rot が 0 のまま貼られる）
+    rotate(a) { this.rot += a; }
     blend(x, y, [r, g, b, a]) {
         const { cv } = this;
         if (x < 0 || y < 0 || x >= cv._w || y >= cv._h) return;
@@ -112,6 +114,22 @@ class PixelCtx {
         if (a.length === 8 && (a[6] !== a[2] || a[7] !== a[3])) throw new Error('drawImage: 拡大縮小は未対応');
         const [sx, sy, sw, sh, dx, dy] = a.length === 2 ? [0, 0, src._w, src._h, a[0], a[1]] : a;
         const s = src.px;
+        if (this.rot !== 0 && a.length === 2) {
+            // 回した先の外接矩形を走り、画素の中心を逆に回して元の画素を引く
+            const c = Math.cos(this.rot), n = Math.sin(this.rot);
+            const r = Math.ceil(Math.hypot(sw, sh) + Math.hypot(dx, dy));
+            for (let Y = Math.floor(this.ty) - r; Y <= Math.ceil(this.ty) + r; Y++) {
+                for (let X = Math.floor(this.tx) - r; X <= Math.ceil(this.tx) + r; X++) {
+                    const u = X + 0.5 - this.tx, v = Y + 0.5 - this.ty;
+                    const lx = Math.floor(u * c + v * n - dx), ly = Math.floor(-u * n + v * c - dy);
+                    if (lx < 0 || ly < 0 || lx >= sw || ly >= sh) continue;
+                    const i = ((sy + ly) * src._w + (sx + lx)) * 4;
+                    if (s[i + 3] <= 0) continue;
+                    this.blend(X, Y, [s[i], s[i + 1], s[i + 2], s[i + 3]]);
+                }
+            }
+            return;
+        }
         for (let y = 0; y < sh; y++) {
             for (let x = 0; x < sw; x++) {
                 const X = sx + x, Y = sy + y;

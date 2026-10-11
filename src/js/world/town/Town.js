@@ -22,6 +22,7 @@ import { createExplosion, Particle } from '../../entities/Particle.js';
 import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
+import { ToppleTree } from './ToppleTree.js';
 import { FireSystem } from './fire.js';
 import { ExplosiveSystem } from './explosives.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
@@ -32,6 +33,7 @@ import {
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
     TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
+    SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -183,7 +185,7 @@ export class Town {
         if (removed.length === 0) return 0;
         this._removeCells(b, removed);
         this._charEdges(b, removed);
-        this._settle(b);
+        this._settle(b, x);
         if (b.soft) this._emit('leaf', x, y, { count: PLANT_LEAF_PARTICLES_HIT, flora: b.flora });
         // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）、
         // 爆風なら 8〜15 フレーム遅れて（一斉に爆発させず連鎖を見せる）
@@ -368,6 +370,7 @@ export class Town {
         // 新しく増えた破片は次の tick から動く
         for (const p of [...this.falling]) {
             if (!p.alive) continue;
+            if (p.topple) { this._updateTopple(p); continue; }
             p.step();
             const by = p.y + p.height;
             for (const b of this.buildingsAt(p.cx, by)) {
@@ -383,6 +386,36 @@ export class Town {
             if ([p.x + 2, p.cx, p.x + p.width - 2].some((sx) => this._solidAtPixel(sx, by))) this._shatter(p, by);
         }
         this.falling = this.falling.filter((p) => p.alive);
+    }
+
+    /**
+     * 倒れる木（ToppleTree）を 1 tick 進める。軸が岩に乗っていれば傾くだけ、乗っていなければ落ちながら傾く。
+     * 軸が岩に入り込んだら、岩の上に乗せ直す。落ちる軸の下の建物（隣の木）は、ふつうの破片と同じく 1 棟 1 回欠かす。
+     * 横たわったら、木の長さに沿って雪の粒を数回に分けて出し（1か所で一斉に出すと爆発に見える）、薄れて消える
+     */
+    _updateTopple(p) {
+        const supported = this._solidAtPixel(p.pivotX, p.pivotY + 1);
+        const landed = p.advance(supported);
+        if (!supported && this._solidAtPixel(p.pivotX, p.pivotY)) {
+            p.y = Math.floor(p.pivotY / TILE_SIZE) * TILE_SIZE - p.py;
+            p.vy = 0;
+        }
+        if (!supported) {
+            for (const b of this.buildingsAt(p.pivotX, p.pivotY)) {
+                const k = this.cellAt(b, p.pivotX, p.pivotY);
+                if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
+                p.hitIds.add(b.id);
+                this.chip(b, p.pivotX, p.pivotY, TOWN_FALL_CHIP_RADIUS);
+            }
+        }
+        if (landed) {
+            const length = p.height;   // 倒れた木の長さ（もとの高さ）
+            for (let i = 1; i <= SNOWTREE_TOPPLE_PUFFS; i++) {
+                const pt = p.pointAlong((length * i) / (SNOWTREE_TOPPLE_PUFFS + 1));
+                this._emit('leaf', pt.x, pt.y, { count: SNOWTREE_TOPPLE_PUFF_PARTICLES, flora: this._floraOf(p) });
+            }
+        }
+        if (p.done) p.alive = false;
     }
 
     _shatter(p, by) {
@@ -535,7 +568,7 @@ export class Town {
      * 下回るなら崩壊: 支えから TOWN_RUIN_DEPTH かけら以内の土台だけを残して焦がし、残りは全部落とす。
      * 崩壊は1棟1回（焦げた土台がまた欠けても、ふつうに支えを確かめるだけ）
      */
-    _settle(b) {
+    _settle(b, hitX) {
         const anchors = this._liveAnchors(b);
         let mask = supportedMask(b.cells, b.cw, b.ch, anchors);
         const kept = mask.reduce((n, v) => n + v, 0);
@@ -548,7 +581,7 @@ export class Town {
             this.fire.quench(b, mask);
             this._emit('collapse', b.x + b.width / 2, b.y + b.height / 2, { size: b.remaining });
         }
-        for (const group of detachedGroups(b.cells, b.cw, b.ch, mask)) this._detach(b, group);
+        for (const group of detachedGroups(b.cells, b.cw, b.ch, mask)) this._detach(b, group, hitX);
     }
 
     /** 崩壊で残った土台を焦がす（焦げた骨組み）。段3の火はこの印を見て、燃え尽きた所として扱う */
@@ -563,7 +596,7 @@ export class Town {
     }
 
     /** かけらの塊を建物から切り離して、自分の canvas を持つ破片にする */
-    _detach(b, group) {
+    _detach(b, group, hitX) {
         let i0 = Infinity, i1 = -1, j0 = Infinity, j1 = -1;
         for (const k of group) {
             const i = k % b.cw, j = (k - i) / b.cw;
@@ -587,13 +620,24 @@ export class Town {
         // 塊の上の火は破片が持っていく（_removeCells で消す前に外す）
         const fireFuel = this.fire.takeFires(b, group);
         this._removeCells(b, group);
-        this.falling.push(new FallingPiece({
+        const piece = {
             canvas, cells, cw: pcw, ch: pch,
             x: b.x + i0 * CHUNK, y: b.y + j0 * CHUNK,
             vx: (chunkHash(b.id, i0 + 101, j0 + 211) - 0.5) * 2 * TOWN_FALL_DRIFT_MAX,
             spin: (chunkHash(b.id, j0 + 307, i0 + 401) - 0.5) * 2 * TOWN_FALL_SPIN_MAX,
             sourceId: b.id, fireFuel,
-        }));
+        };
+        if (b.flora === 'snow' && group.length >= SNOWTREE_TOPPLE_MIN_CELLS) {
+            // 雪の木の大きな塊は、傾きながら倒れる（ToppleTree）。撃たれた側から離れる向きへ。撃った位置が
+            // 塊の真ん中と同じ（幹をまっすぐ撃った）か分からない（岩が壊れた）ときは、位置から決めた向き
+            const mid = piece.x + pw / 2;
+            const lean = hitX !== undefined && Math.abs(mid - hitX) >= 1
+                ? Math.sign(mid - hitX)
+                : (chunkHash(b.id, i0 + 503, j0 + 601) < 0.5 ? -1 : 1);
+            this.falling.push(new ToppleTree({ ...piece, vx: 0, spin: 0, lean }));
+        } else {
+            this.falling.push(new FallingPiece(piece));
+        }
         this._trimFalling();
     }
 
@@ -633,7 +677,7 @@ export class Town {
         }
         // 落ちる破片。回るので長辺の正方形で見る
         for (const p of this.falling) {
-            const s = Math.max(p.width, p.height);
+            const s = p.reach || Math.max(p.width, p.height);
             if (p.cx - s >= x1 || p.cx + s <= view.x || p.cy - s >= y1 || p.cy + s <= view.y) continue;
             p.draw(ctx);
         }
