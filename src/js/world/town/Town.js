@@ -175,8 +175,9 @@ export class Town {
         this._removeCells(b, removed);
         this._charEdges(b, removed);
         this._settle(b);
-        // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）
-        if (b.explosive) this.explosives.trigger(b, 0);
+        // 欠けた爆発物は爆発する（spec 3b章）。弾・破片ならすぐ（その tick の update で）、
+        // 爆風なら 8〜15 フレーム遅れて（一斉に爆発させず連鎖を見せる）
+        if (b.explosive) this.explosives.trigger(b, cause === 'blast' ? this.explosives.chainDelay() : 0);
         return removed.length;
     }
 
@@ -369,6 +370,12 @@ export class Town {
     _shatter(p, by) {
         p.alive = false;
         const groundY = Math.floor(by / TILE_SIZE) * TILE_SIZE;
+        // 爆発物の破片は、砕けた所で爆発する。瓦礫は残さない（爆発が吹き飛ばす）
+        const src = p.sourceId >= 0 ? this.buildings[p.sourceId] : null;
+        if (src && src.explosive && !src.exploded && p.cells.some((v) => (v & MAT_MASK) === MAT_EXPLOSIVE)) {
+            this.explosives.trigger(src, 0, p.cx, groundY);
+            return;
+        }
         const mat = p.mainMaterial();
         this._addRubble(p.x, p.width, groundY, p.count, mat);
         this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES });

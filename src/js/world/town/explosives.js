@@ -15,6 +15,7 @@ import { applyBlastDamage } from '../../utils/blastDamage.js';
 import {
     TOWN_EXPLOSIVE_DAMAGE, TOWN_EXPLOSIVE_RADIUS, TOWN_EXPLOSIVE_BLAST_COUNT,
     LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX, VIEW_CULL_MARGIN,
+    TOWN_CHAIN_DELAY_MIN, TOWN_CHAIN_DELAY_RANGE, TOWN_EXPLOSIONS_PER_SECOND,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -25,6 +26,7 @@ export class ExplosiveSystem {
         this.frame = 0;
         // 建物 → { due, x, y, landed }。x, y は爆発する場所の控え（かけらも破片も残っていないとき使う）
         this.queue = new Map();
+        this.recent = [];   // 爆発したフレーム（直近 60 フレームの数で上限を見る）
     }
 
     /**
@@ -47,12 +49,25 @@ export class ExplosiveSystem {
         if (landed) Object.assign(e, { x, y, landed });
     }
 
-    /** 毎 tick（Town.update から）。期限の来たものを早い順に爆発させる */
+    /** 爆風から誘爆するまでの遅れ（8〜15 フレーム）。火のつき方と同じ town.random */
+    chainDelay() {
+        return TOWN_CHAIN_DELAY_MIN + Math.floor(this.town.random() * (TOWN_CHAIN_DELAY_RANGE + 1));
+    }
+
+    /**
+     * 毎 tick（Town.update から）。期限の来たものを早い順に、60 フレームに TOWN_EXPLOSIONS_PER_SECOND 回まで
+     * 爆発させる。上限に掛かった分は順番待ちに残り、次の tick 以降に爆発する
+     */
     update(game, view) {
         this.frame++;
+        this.recent = this.recent.filter((f) => f > this.frame - 60);
         if (this.queue.size === 0) return;
         const ready = [...this.queue].filter(([, e]) => e.due <= this.frame).sort((p, q) => p[1].due - q[1].due);
-        for (const [b, e] of ready) this._explode(b, e, game, view);
+        for (const [b, e] of ready) {
+            if (this.recent.length >= TOWN_EXPLOSIONS_PER_SECOND) break;
+            if (b.exploded) continue;
+            this._explode(b, e, game, view);
+        }
     }
 
     _near(view, x, y) {
@@ -89,11 +104,17 @@ export class ExplosiveSystem {
         for (const p of town.falling) if (p.sourceId === b.id) p.alive = false;
         town.falling = town.falling.filter((p) => p.alive);
         town.consume(b);
+        this.recent.push(this.frame);
         if (this._near(view, x, y)) {
             playBlast(game, x, y, 'townExplosive');
         } else {
             town.blast(x, y, TOWN_EXPLOSIVE_BLAST_COUNT);
             detonateNearbyMines(game, x, y);
+        }
+        // 爆風（機体へのダメージと同じ半径）の中の別の爆発物は、少し遅れて誘爆する。町を欠かせる半径
+        // （約 30px）だけだと、建物 8 棟に1つの爆発物どうしにはほとんど届かない
+        for (const o of town.buildingsInCircle(x, y, TOWN_EXPLOSIVE_RADIUS)) {
+            if (o.explosive) this.trigger(o, this.chainDelay());
         }
         applyBlastDamage(game, x, y, {
             radius: TOWN_EXPLOSIVE_RADIUS, damage: TOWN_EXPLOSIVE_DAMAGE,

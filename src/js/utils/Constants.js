@@ -2097,3 +2097,11 @@ export const TOWN_EXPLOSIVE_DAMAGE = 25;
 export const TOWN_EXPLOSIVE_RADIUS = 50;   // 機体へのダメージと誘爆の届く半径（px）
 // 爆発の粒の数。町を欠かせる半径は K×√80 ≒ 30px（ミサイル 36粒の 20px とグレネード 150粒の 40px のあいだ）
 export const TOWN_EXPLOSIVE_BLAST_COUNT = 80;
+// 火が届いてから爆発するまで（フレーム）。燃えているのが見えてから爆発する（spec 3b章）。0.75秒
+export const TOWN_EXPLOSIVE_COOKOFF = 45;
+// 爆風の中の別の爆発物が爆発するまで 8〜15 フレーム。一斉に爆発させず、連鎖が見えるように
+export const TOWN_CHAIN_DELAY_MIN = 8;
+export const TOWN_CHAIN_DELAY_RANGE = 7;
+// 60 フレームあたりの爆発物の爆発の上限。超えた分は消さずに後ろへずらす
+// （消すと「撃ったのに爆発しない」に見える）
+export const TOWN_EXPLOSIONS_PER_SECOND = 6;

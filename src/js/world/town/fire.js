@@ -10,13 +10,14 @@
 // 町の状態（かけら・支え・破片）を変えるのは Town のメソッド経由だけにする。ここは火のことだけを持つ。
 // 乱数は town.random（既定 Math.random。spec 3章「乱数」）。
 
-import { CHUNK, MAT_MASK, CHARRED } from './chunks.js';
+import { CHUNK, MAT_MASK, MAT_EXPLOSIVE, CHARRED } from './chunks.js';
 import { TOWN_RUIN_SHADE, TOWN_EMBER_COLOR } from './palette.js';
 import { FlameParticle, SmokePuff } from './fireFx.js';
 import {
     TOWN_MATERIALS, TOWN_FIRE_TICK, TOWN_FIRES_MAX, TOWN_FIRES_PER_BUILDING,
     TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH, TOWN_EMBER_FRAMES, TOWN_EMBERS_MAX,
     TOWN_FLAMES_PER_FIRE, TOWN_FLAMES_MAX, TOWN_SMOKE_EVERY, TOWN_SMOKE_MAX, TOWN_EMBER_SMOKE_EVERY, VIEW_CULL_MARGIN,
+    TOWN_EXPLOSIVE_COOKOFF,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -55,6 +56,8 @@ export class FireSystem {
         if (!burnable(v) || this.isBurning(b, k) || this.countIn(b) >= TOWN_FIRES_PER_BUILDING) return false;
         const [lo, hi] = matOf(v).fuel;
         this.fires.push({ b, k, fuel: lo + Math.floor(this.town.random() * (hi - lo + 1)) });
+        // 爆発物に火が届いたら、燃えているのが見えてから爆発する（spec 3b章）
+        if ((v & MAT_MASK) === MAT_EXPLOSIVE) this.town.explosives.trigger(b, TOWN_EXPLOSIVE_COOKOFF);
         return true;
     }
 
