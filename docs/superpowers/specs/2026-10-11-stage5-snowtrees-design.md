@@ -47,7 +47,7 @@ canvas の塗りの時間は node では測れない（実機で面の読み込�
 ## 調整用の定数（`Constants.js`）
 
 `SNOWTREE_HEIGHT`（見える高さの範囲 px）、`SNOWTREE_BARE_SHARE`（枯れ木の割合）、`SNOWTREE_FILL_SCALE`（全体の濃さ）、
-`SNOWTREE_GAP`（隣との間隔）。葉の粒の数は 4面と共通（`PLANT_LEAF_PARTICLES_*`）。
+`SNOWTREE_GAP`（隣との間隔）、`SNOWTREE_MAX_WIDTH`（木の幅の上限 56px。天井までの空きを測る列の幅。測った最大で、テストが超えないことを縛る）。葉の粒の数は 4面と共通（`PLANT_LEAF_PARTICLES_*`）。
 
 ## この次
 

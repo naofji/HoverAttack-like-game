@@ -46,5 +46,5 @@ export function makePlacer({ grid, rows, cols, excludeRects = [] }) {
     /** (r, c) の真上に続く空きのタイル数 */
     const freeUp = (r, c) => { let n = 0; while (!solid(r - 1 - n, c)) n++; return n; };
 
-    return { specs, solid, add, freeUp };
+    return { specs, add, freeUp };
 }

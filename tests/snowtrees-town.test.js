@@ -8,6 +8,8 @@ import {
     SNOWTREE_PARTICLE_COLORS, SNOWTREE_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS, PLANT_CHAR_EDGE,
 } from '../src/js/world/town/palette.js';
 import { fakeCanvas } from './helpers/town-fixtures.js';
+import { FallingPiece } from '../src/js/world/town/FallingPiece.js';
+import { TOWN_FALLING_MAX } from '../src/js/utils/Constants.js';
 
 // 4面の植物（plants-town.test.js）と同じ Town の仕組みに載る。ここでは雪の木だけの違い
 // （砕けた粒と穴の縁の色）と、燃えない・誘爆しないが雪の木でも保たれることを見る
@@ -68,9 +70,21 @@ test('支えの岩が壊れると、雪の木は雪の破片になって落ち�
 test('落ちる破片の数が上限を超えて古いものが消えるときも、粒は雪の色', () => {
     const town = makeTown();
     const b = town.buildings[0];
-    const piece = { sourceId: b.id };
-    assert.equal(town._floraOf(piece), 'snow');
-    assert.equal(town._floraOf({ sourceId: -1 }), 'leaf');
+    const canvas = fakeCanvas(8, 8);
+    const piece = () => new FallingPiece({ canvas, cells: [MAT_PLANT | SOLID], cw: 1, ch: 1, x: 100, y: 100, sourceId: b.id });
+    for (let i = 0; i < TOWN_FALLING_MAX + 5; i++) town.falling.push(piece());
+    town._trimFalling();
+    assert.equal(town.falling.length, TOWN_FALLING_MAX);
+    const leaf = town.effects.filter((e) => e.type === 'leaf');
+    assert.equal(leaf.length, 5, '消した破片の数だけ粒の注文が出る');
+    for (const e of leaf) assert.equal(e.flora, 'snow');
+    // 元の建物が分からない破片は葉（4面の植物と同じ）。一番古い位置に置いて、次に消えるのがこれになるようにする
+    town.effects.length = 0;
+    town.falling.unshift(new FallingPiece({ canvas, cells: [MAT_PLANT | SOLID], cw: 1, ch: 1, x: 0, y: 0, sourceId: -1 }));
+    town.falling.push(piece());
+    town._trimFalling();
+    assert.equal(town.effects.length, 2);
+    assert.equal(town.effects[0].flora, 'leaf');
 });
 
 test('燃えない・誘爆しない・弾で欠ける（雪の木でも植物の材料のまま）', () => {

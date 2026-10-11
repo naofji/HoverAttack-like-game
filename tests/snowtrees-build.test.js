@@ -5,7 +5,7 @@ import { rasterizeParts, MAT_PLANT, SOLID, CHUNK } from '../src/js/world/town/ch
 import { signedArea } from '../src/js/world/town/polygons.js';
 import { buildFir, buildBareTree } from '../src/js/world/town/snowTrees.js';
 import { SNOWTREE_COLORS } from '../src/js/world/town/palette.js';
-import { SNOWTREE_HEIGHT, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
+import { SNOWTREE_HEIGHT, SNOWTREE_MAX_WIDTH, PLAYER_HEIGHT } from '../src/js/utils/Constants.js';
 
 const SEEDS = Array.from({ length: 80 }, (_, i) => i * 7919 + 1);
 const each = (fn) => { for (const seed of SEEDS) fn(new SeededRNG(seed), seed); };
@@ -115,4 +115,13 @@ test('針葉樹は枝の段が重なり、背が高いほど段が多い', () =>
         return b.parts.find((p) => p.color === SNOWTREE_COLORS.needle[1]).rings.length;
     };
     assert.ok(tiers(72) > tiers(20), `${tiers(72)} vs ${tiers(20)}`);
+});
+
+test('木の幅は SNOWTREE_MAX_WIDTH を超えない（床に置くとき、この幅ぶんの列の天井までの空きを測る）', () => {
+    for (let i = 0; i < 6000; i++) {
+        for (const build of [buildFir, buildBareTree]) {
+            const b = build(new SeededRNG(i * 7 + 1), BIG);
+            assert.ok(b.w <= SNOWTREE_MAX_WIDTH, `seed ${i * 7 + 1}: ${b.kind} の幅 ${b.w}`);
+        }
+    }
 });

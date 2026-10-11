@@ -2200,3 +2200,6 @@ export const SNOWTREE_BARE_SHARE = 0.25;
 export const SNOWTREE_FILL_SCALE = 1;
 // 隣の木との間隔（px、4px 刻みで引く）。木の幅に足す
 export const SNOWTREE_GAP = [4, 24];
+// 木 1 本の幅の上限（px）。20000 通りの乱数で測った最大は針葉樹 56・枯れ木 52（tests/snowtrees-build.test.js が超えないことを縛る）。
+// 床に置くとき、この幅ぶんの列の天井までの空きを測る（枝の先が天井に刺さらないように）
+export const SNOWTREE_MAX_WIDTH = 56;

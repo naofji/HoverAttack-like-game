@@ -95,7 +95,7 @@ export const PLANT_LEAF_PARTICLE_COLORS = ['#4a6a24', '#44621f', '#3a5a1c'];
 // 括弧の数字は輝度（遠景 rockLight 39.8、岩 117.8、雪のふち 243）
 export const SNOWTREE_COLORS = {
     needle: ['#1f3a33', '#2a4a40'],                          // 49 / 63（下側の影の帯 / 針葉の本体）
-    trunk: ['#4a3a30', '#3d3027'],                           // 62 / 51
+    trunk: ['#4a3a30'],                                      // 62
     snow: ['#9fb0c4', '#c3d0de', '#d6e0ec', '#e2eaf3'],      // 173 / 206 / 222 / 233（雪の影 / 本体 / 明るい面 / 頂の光）
 };
 // 雪の木の穴の縁に重ねる暗い青灰色（町の茶色の焦げは、木が焼けたように見える）

@@ -11,16 +11,13 @@
 
 import {
     TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK,
-    SNOWTREE_BARE_SHARE, SNOWTREE_FILL_SCALE, SNOWTREE_GAP,
+    SNOWTREE_BARE_SHARE, SNOWTREE_FILL_SCALE, SNOWTREE_GAP, SNOWTREE_MAX_WIDTH,
 } from '../../utils/Constants.js';
 import { findSites } from './placement.js';
 import { placeVillages, villageFill } from './villages.js';
 import { makePlacer } from './placer.js';
 import { step4 } from './shapes.js';
 import { buildFir, buildBareTree } from './snowTrees.js';
-
-// 木の幅の最大（針葉樹の半幅 20px × 2）。天井までの空きを測る列の数に使う
-const MAX_TREE_WIDTH = 40;
 
 export function generateSnowTrees({
     grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols),
@@ -35,9 +32,9 @@ export function generateSnowTrees({
         let x = run.c0 * T;   // 次の木の左端
         while (xEnd - x >= 8) {
             if (rng.next() >= fillAt(x / T, run.r)) { x += step4(rng, 8, 24); continue; }
-            // 木の左端から最大幅ぶんの列の、天井までの空きの最小。枝が横に張るので 1 列では足りない
+            // 木の左端から最大幅（SNOWTREE_MAX_WIDTH）ぶんの列の、天井までの空きの最小。枝が横に張るので 1 列では足りない
             let head = Infinity;
-            for (let c = Math.floor(x / T); c <= Math.floor((x + MAX_TREE_WIDTH) / T); c++) head = Math.min(head, freeUp(run.r, c));
+            for (let c = Math.floor(x / T); c <= Math.floor((x + SNOWTREE_MAX_WIDTH) / T); c++) head = Math.min(head, freeUp(run.r, c));
             const maxH = (head - TOWN_CEILING_CLEARANCE) * T + TOWN_FOUNDATION_SINK;
             const b = rng.next() < SNOWTREE_BARE_SHARE ? buildBareTree(rng, { maxH }) : buildFir(rng, { maxH });
             // 根元（x + footX から右へ 4px）は床の上に立つ。枝や葉が張り出すのは構わないが、根元が縁の外では浮く
