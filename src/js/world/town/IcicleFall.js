@@ -19,6 +19,33 @@ export class IcicleFall extends FallingPiece {
         this.icicle = true;
         this.damage = damage;
         this.hit = new Set();
+        this.age = 0;           // 落ち始めてからの tick（Town が粉雪を舞わせる間隔に使う）
+        // 先のかけら（一番下の段）の真ん中の x（塊の左端から px）。先が床に触れたかは、外接矩形の角ではなくここで見る
+        let sum = 0, n = 0;
+        const last = this.ch - 1;
+        for (let i = 0; i < this.cw; i++) if (this.cells[last * this.cw + i]) { sum += (i + 0.5) * CHUNK; n++; }
+        this.tipLocalX = n > 0 ? sum / n : this.width / 2;
+        // 床に触れてからは、先からめり込んでいく（Town._sinkIcicle）。groundY はめり込む地面の線（触れた床のタイルの上端）
+        this.sinking = false;
+        this.groundY = 0;
+    }
+
+    get tipX() { return this.x + this.tipLocalX; }
+
+    step() {
+        super.step();
+        this.age++;
+    }
+
+    /**
+     * めり込んでいる間は、地面の線より下を描かない（薄い足場の下から先がはみ出さないように。地形が上から隠すだけに頼らない）。
+     * 描く元の絵の上から、見える高さだけを切り出す（クリップを使わない: 書き出しの道具 PixelCanvas が持っていない）
+     */
+    draw(ctx) {
+        if (!this.sinking) { super.draw(ctx); return; }
+        const visible = Math.min(this.height, this.groundY - this.y);
+        if (visible <= 0) return;
+        ctx.drawImage(this.canvas, 0, 0, this.width, visible, this.x, this.y, this.width, visible);
     }
 
     /**

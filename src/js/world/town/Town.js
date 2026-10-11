@@ -40,6 +40,7 @@ import {
     SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES, SNOWTREE_FLURRY_SPREAD,
     SNOWTREE_FLURRY_START_HEIGHT, SNOWTREE_FLURRY_TRICKLE_STEP, SNOWTREE_FLURRY_BIG_SHARE,
     ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_KNOCK_VY, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
+    ICICLE_TRAIL_EVERY, ICICLE_TRAIL_COUNT, ICICLE_SINK_SPEED, ICICLE_POWDER, ICICLE_POWDER_SIZE, ICICLE_POWDER_BIG_SHARE,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -390,22 +391,65 @@ export class Town {
         for (const p of [...this.falling]) {
             if (!p.alive) continue;
             if (p.topple) { this._updateTopple(p); continue; }
+            if (p.icicle) { this._updateIcicle(p, game); continue; }
             p.step();
-            if (p.icicle) this._icicleImpact(p, game);   // 落ちるつららが機体に当たる。着地する tick にも当てる（この後で砕ける）
             const by = p.y + p.height;
-            for (const b of this.buildingsAt(p.cx, by)) {
-                const k = this.cellAt(b, p.cx, by);
-                if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
-                p.hitIds.add(b.id);
-                this.chip(b, p.cx, by, TOWN_FALL_CHIP_RADIUS);
-                // 燃えている破片は、落ちた先の建物に燃え移る（spec 3章）
-                if (p.fireFuel > 0) this.fire.igniteNear(b, p.cx, by, TOWN_FALL_CHIP_RADIUS + CHUNK);
-            }
+            this._chipBelow(p, p.cx, by);
             // 下端の左・中・右のどれかが岩に入ったら砕ける。盤面の外は岩（Map.isSolid と同じ）なので
             // 盤面の下へ抜けることはない
             if ([p.x + 2, p.cx, p.x + p.width - 2].some((sx) => this._solidAtPixel(sx, by))) this._shatter(p, by);
         }
         this.falling = this.falling.filter((p) => p.alive);
+    }
+
+    /** 落ちる破片が下の建物を欠かす（(x, y) の建物のかけらを、1 棟 1 回。燃えている破片は燃え移る。spec 3章） */
+    _chipBelow(p, x, y) {
+        for (const b of this.buildingsAt(x, y)) {
+            const k = this.cellAt(b, x, y);
+            if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
+            p.hitIds.add(b.id);
+            this.chip(b, x, y, TOWN_FALL_CHIP_RADIUS);
+            if (p.fireFuel > 0) this.fire.igniteNear(b, x, y, TOWN_FALL_CHIP_RADIUS + CHUNK);
+        }
+    }
+
+    /**
+     * 落ちるつららを 1 tick 進める。落ちている間は、機体に当てる・下の建物を欠かす・粉雪を舞わせる。
+     * 先（先のかけらの真ん中）が岩に触れたら、砕けずに先からめり込み始める（_sinkIcicle）。
+     * 触れたかを先の位置で見るのは、外接矩形の下の角で見ると、足場の縁が角だけに掛かったときに先が空中のまま触れた扱いになるため
+     */
+    _updateIcicle(p, game) {
+        if (p.sinking) { this._sinkIcicle(p); return; }
+        p.step();
+        this._icicleImpact(p, game);   // 触れる tick にも当てる
+        const tx = p.tipX, ty = p.y + p.height;
+        this._chipBelow(p, tx, ty);
+        if (p.age % ICICLE_TRAIL_EVERY === 0) {
+            // 粉雪を体に沿って舞わせる。位置は経過 tick から決める（上下に行き来する。シミュレーションに乱数を使わない）
+            this._emit('leaf', tx, p.y + p.height * ((p.age * SNOWTREE_FLURRY_TRICKLE_STEP) % 1),
+                { count: ICICLE_TRAIL_COUNT, flora: this._floraOf(p), mode: 'dust', spread: p.width / 2 });
+        }
+        if (this._solidAtPixel(tx, ty)) {
+            p.sinking = true;
+            p.vy = 0;
+            p.groundY = Math.floor(ty / TILE_SIZE) * TILE_SIZE;
+            this._emit('leaf', tx, p.groundY, { count: ICICLE_POWDER.land, flora: this._floraOf(p), mode: 'powder', spread: 3 });
+        }
+    }
+
+    /**
+     * めり込み中のつらら。一定の速さで下がり（重力は使わない）、地面の線から大きめの粉雪を出し続け、
+     * 頭が地面の線より下に潜りきったら最後にもう一度出して消える。めり込み中は機体に当てない
+     * （先が床に刺さった状態。床に立つ機体にまで当てると、避けようのない当たりになる）。描画は IcicleFall.draw が地面の線で切る
+     */
+    _sinkIcicle(p) {
+        p.y += ICICLE_SINK_SPEED;
+        const depth = p.y + p.height - p.groundY;   // 先が地面の線より下へ入った深さ
+        const done = p.y >= p.groundY;
+        // 粉雪の広がりは、潜って太い所が地面の線に来るほど広がる（先は細いので、最初は狭い）
+        const spread = Math.min(p.width / 2, 2 + depth * 0.15);
+        this._emit('leaf', p.tipX, p.groundY, { count: done ? ICICLE_POWDER.end : ICICLE_POWDER.sink, flora: this._floraOf(p), mode: 'powder', spread });
+        if (done) p.alive = false;
     }
 
     /**
@@ -468,10 +512,6 @@ export class Town {
             return;
         }
         const mat = p.mainMaterial();
-        if (mat === MAT_ICE) {   // つららは山にならない。氷の粒になって砕ける（音はこの段では鳴らさない）
-            this._emit('leaf', p.cx, groundY, { count: ICICLE_SHARDS.land, flora: this._floraOf(p), mode: 'land', spread: p.width / 2 });
-            return;
-        }
         if (mat === MAT_PLANT) {   // 葉は山にならない。粒になって散る（音も鳴らさない）
             this._emit('leaf', p.cx, groundY, { count: PLANT_LEAF_PARTICLES_FALL, flora: this._floraOf(p) });
             return;
@@ -657,6 +697,7 @@ export class Town {
      */
     _spawnIceShards(game, e) {
         const spread = e.spread ?? 3;
+        if (e.mode === 'powder' || e.mode === 'dust') { this._spawnIcePowder(game, e, spread); return; }
         for (let i = 0; i < e.count; i++) {
             const x = e.x + (Math.random() - 0.5) * 2 * spread, y = e.y - Math.random() * spread;
             let vx = 0, vy = 0.2, life = 40, size = 1;
@@ -668,6 +709,26 @@ export class Town {
                 size = 1 + Math.floor(Math.random() * 3);
             }
             game.particles.push(new Particle(x, y, vx, vy, ICE_PARTICLE_COLORS[i % ICE_PARTICLE_COLORS.length], size, life));
+        }
+    }
+
+    /**
+     * つららの粉雪（舞う雪の粒 SnowFlurryParticle。雪の色）。powder: 床にめり込むところから出る大きめの粉雪で、上半分へ舞い上がる。
+     * dust: 落ちている間につららの体から出る小さな粉雪で、ほとんど動かず、落ちたあとの筋になって残り、ゆっくり落ちる。
+     * 上へだけ散らす（床の線の点から下へ散ると岩の中で生まれる）。見た目だけなので Math.random でよい
+     */
+    _spawnIcePowder(game, e, spread) {
+        const powder = e.mode === 'powder';
+        for (let i = 0; i < e.count; i++) {
+            const x = e.x + (Math.random() - 0.5) * 2 * spread, y = e.y - Math.random() * spread;
+            const a = powder ? -Math.PI * Math.random() : Math.random() * Math.PI * 2;
+            const sp = powder ? 0.3 + Math.random() * 1.1 : 0.05 + Math.random() * 0.3;
+            const size = powder
+                ? (Math.random() < ICICLE_POWDER_BIG_SHARE ? ICICLE_POWDER_SIZE[1] : ICICLE_POWDER_SIZE[0] + Math.floor(Math.random() * (ICICLE_POWDER_SIZE[1] - ICICLE_POWDER_SIZE[0])))
+                : 1 + Math.floor(Math.random() * 2);
+            const life = SNOWTREE_FLURRY_LIFE[0] + Math.floor(Math.random() * (SNOWTREE_FLURRY_LIFE[1] - SNOWTREE_FLURRY_LIFE[0] + 1));
+            game.particles.push(new SnowFlurryParticle(game, x, y, Math.cos(a) * sp, Math.sin(a) * sp,
+                SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length], size, life));
         }
     }
 

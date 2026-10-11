@@ -2281,8 +2281,9 @@ export const SNOWTREE_FLURRY_BIG_SHARE = 0.25;
 // 数値は spec の初案で、実機で見て調整する前提の出発点（ユーザー決定: 震えて落ちる約 0.4 秒・ダメージは大きさに比例 15〜35・
 // 開始の部屋と基地の部屋を避けて面全体の天井）。
 // 見える長さ・根元の幅（px。長さは 4px 刻み）
-export const ICICLE_LENGTH = [24, 64];
-export const ICICLE_WIDTH = [8, 12];
+// 最初は長さ [24, 64]・幅 [8, 12] で、実機で「つららの最大サイズをもう少し小さく」と言われて [24, 48]・[8, 10] にした
+export const ICICLE_LENGTH = [24, 48];
+export const ICICLE_WIDTH = [8, 10];
 // ダメージ [最短, 最長]。長さに比例（短い → 長い）。自機・母艦・敵に同じ数値。参考: 自機 HP 100、敵アタッカー 15〜45、地雷 25
 export const ICICLE_DAMAGE = [15, 35];
 // 当たってから落ちるまで（tick。0.4 秒）。震えている間の追加の当たりは時間を延ばさない。揺れる幅（px。描画だけ）
@@ -2300,3 +2301,15 @@ export const ICICLE_GAP = [4, 20];
 export const ICICLE_DRIP_EVERY = 6;
 // 氷の粒の数。hit: 当たって震え始めるとき、land: 落ちて砕けるとき
 export const ICICLE_SHARDS = { hit: 4, land: 14 };
+// 落ちている間、つららの体から粉雪を舞わせる間隔（tick）と 1 回の粒数（実機で「落ちるときに粉雪が舞う方がいい」と言われて足した。
+// 小さい粒がほとんど動かずに残り、落ちたつららの跡が粉雪の筋になる）
+export const ICICLE_TRAIL_EVERY = 2;
+export const ICICLE_TRAIL_COUNT = 2;
+// 先が床に触れたら、消えずに先からめり込んでいく（実機で「いきなり消えるのではなくて、先からめり込んでいって大きめの粉雪に変わる方がいい」
+// と言われた）。めり込む速さ（px/tick。重力は使わない）。全体が地面の線の下に入るまで（長さ 48px で約 0.6 秒）
+export const ICICLE_SINK_SPEED = 1.5;
+// 地面の線から出る大きめの粉雪の数。land: 触れた瞬間、sink: めり込んでいる間の毎 tick、end: 潜りきって消えるとき。
+// 大きさ [最小, 最大]（px。落ちている間の粉雪や木の雪より大きめ。大きい方は ICICLE_POWDER_BIG_SHARE の割合）
+export const ICICLE_POWDER = { land: 8, sink: 2, end: 6 };
+export const ICICLE_POWDER_SIZE = [2, 4];
+export const ICICLE_POWDER_BIG_SHARE = 0.4;

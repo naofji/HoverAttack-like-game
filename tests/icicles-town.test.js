@@ -5,12 +5,13 @@ import { Town } from '../src/js/world/town/Town.js';
 import { IcicleFall } from '../src/js/world/town/IcicleFall.js';
 import { buildIcicle } from '../src/js/world/town/icicles.js';
 import { MAT_ICE, SOLID, CHUNK } from '../src/js/world/town/chunks.js';
-import { ICE_PARTICLE_COLORS } from '../src/js/world/town/palette.js';
+import { ICE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS } from '../src/js/world/town/palette.js';
+import { SnowFlurryParticle } from '../src/js/entities/Particle.js';
 import { fakeCanvas } from './helpers/town-fixtures.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
     ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_KNOCK_VY, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
-    TOWN_FALLING_MAX, ICICLE_DAMAGE,
+    TOWN_FALLING_MAX, ICICLE_DAMAGE, ICICLE_TRAIL_EVERY, ICICLE_TRAIL_COUNT, ICICLE_POWDER, ICICLE_SINK_SPEED, ICICLE_POWDER_SIZE,
 } from '../src/js/utils/Constants.js';
 
 // 行 0〜9 が天井の岩、行 20 から下が床。つららは天井の下端（y 160）に上の 4px を埋めて吊るす
@@ -263,23 +264,140 @@ test('game を渡さない更新（道具・テスト）でも例外を出さず
 
 // --- 着地 ---
 
-test('床で砕けて氷の粒（land）を出す。瓦礫は残さない。落ちた先は床の上', () => {
+/** 落ちて先が床に触れるまで進める（その tick の effects を溜めて返す）。touch した tick の p を返す */
+function untilTouch(town, game, p) {
+    const seen = [];
+    for (let t = 0; t < 200 && !p.sinking && p.alive; t++) {
+        town._updateFalling(game);
+        seen.push(...town.effects);
+        town.effects.length = 0;
+    }
+    return seen;
+}
+
+test('落ちている間、粉雪が舞う（先から ICICLE_TRAIL_EVERY tick ごとに ICICLE_TRAIL_COUNT 粒。つららの体に沿って）', () => {
     const town = makeTown();
     const b = town.buildings[0];
     const game = fakeGame();
     const p = released(town, game, b);
     town.effects.length = 0;
-    const seen = [];
-    for (let t = 0; t < 200 && p.alive; t++) {
+    const seen = untilTouch(town, game, p);
+    const dust = seen.filter((e) => e.flora === 'ice' && e.mode === 'dust');
+    assert.ok(p.age >= 20, `落ちた時間が短すぎる（${p.age} tick。この検証が意味を失った）`);
+    assert.equal(dust.length, Math.floor(p.age / ICICLE_TRAIL_EVERY), `${dust.length} 回`);
+    for (const e of dust) {
+        assert.equal(e.count, ICICLE_TRAIL_COUNT);
+        assert.ok(e.spread > 0);
+    }
+    // 位置はつららの体の高さの中に散らばる（同じ所ばかりに出ない）
+    assert.ok(new Set(dust.map((e) => Math.round(e.y))).size > dust.length / 2, '同じ高さにばかり出る');
+});
+
+test('先が床に触れたら消えずに、先からめり込んでいく（ICICLE_SINK_SPEED）。めり込み始めは大きめの粉雪が出る', () => {
+    const town = makeTown();
+    const b = town.buildings[0];
+    const game = fakeGame();
+    const p = released(town, game, b);
+    town.effects.length = 0;
+    const seen = untilTouch(town, game, p);
+    assert.equal(p.sinking, true);
+    assert.equal(p.alive, true, '触れた瞬間に消えた');
+    assert.equal(p.groundY, FLOOR_Y, '地面の線が、触れた床のタイルの上端でない');
+    assert.equal(p.vy, 0);
+    const burst = seen.filter((e) => e.mode === 'powder');
+    assert.equal(burst.length, 1);
+    assert.equal(burst[0].count, ICICLE_POWDER.land);
+    assert.ok(Math.abs(burst[0].y - FLOOR_Y) < 1e-9, '粉雪が地面の線から出ていない');
+    assert.equal(seen.filter((e) => e.mode === 'land').length, 0, '硬い氷の欠片（land）を出した');
+    // めり込む: 毎 tick 一定の速さで下がる。重力では落ちない
+    const ys = [];
+    for (let t = 0; t < 5; t++) { ys.push(p.y); town._updateFalling(game); }
+    for (let i = 1; i < ys.length; i++) assert.ok(Math.abs(ys[i] - ys[i - 1] - ICICLE_SINK_SPEED) < 1e-9, `${i} tick 目に ${ys[i] - ys[i - 1]}px`);
+    assert.equal(p.vy, 0);
+});
+
+test('めり込み切る（つらら全体が地面の線より下）まで消えない。そのあいだ毎 tick 粉雪が出て、最後にもう一度出して消える', () => {
+    const town = makeTown();
+    const b = town.buildings[0];
+    const game = fakeGame();
+    const p = released(town, game, b);
+    untilTouch(town, game, p);
+    town.effects.length = 0;
+    let sinkTicks = 0, sinkPowder = 0, endPowder = 0;
+    while (p.alive && sinkTicks < 400) {
+        const before = p.y;
         town._updateFalling(game);
-        seen.push(...town.effects.filter((e) => e.flora === 'ice' && e.mode === 'land'));
+        sinkTicks++;
+        for (const e of town.effects.filter((q) => q.mode === 'powder')) {
+            if (p.alive) { assert.equal(e.count, ICICLE_POWDER.sink); sinkPowder++; } else { assert.equal(e.count, ICICLE_POWDER.end); endPowder++; }
+            assert.ok(Math.abs(e.y - FLOOR_Y) < 1e-9);
+        }
         town.effects.length = 0;
+        assert.ok(p.y > before);
     }
     assert.equal(p.alive, false);
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].count, ICICLE_SHARDS.land);
-    assert.ok(Math.abs(seen[0].y - FLOOR_Y) <= 16, `y ${seen[0].y} が床から遠い`);
+    assert.ok(p.y >= p.groundY, '地面の線に頭が出たまま消えた');
+    assert.ok(p.y - ICICLE_SINK_SPEED < p.groundY, '頭が地面の線の下に潜りきってから、さらに潜り続けた');
+    assert.equal(endPowder, 1);
+    assert.ok(sinkPowder >= (p.height - 16) / ICICLE_SINK_SPEED - 2, `粉雪が ${sinkPowder} 回しか出ない`);
     assert.equal(town.rubble.length, 0);
+});
+
+test('めり込んでいる間は、地面の線より下を描かない（薄い足場の下から先がはみ出さない）。頭が潜りきれば何も描かない', () => {
+    const town = makeTown();
+    const b = town.buildings[0];
+    const game = fakeGame();
+    const p = released(town, game, b);
+    untilTouch(town, game, p);
+    for (let t = 0; t < 12; t++) town._updateFalling(game);
+    const view = { x: 0, y: 0, w: 1000, h: 400 };
+    const ctx = makeFakeCtx();
+    town.draw(ctx, view);
+    const call = ctx.calls.find((c) => c.name === 'drawImage' && c.args[0] === p.canvas);
+    assert.ok(call, 'めり込み中のつららを描いていない');
+    // drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh): 描く下端が地面の線を超えない
+    const [, sx, sy, sw, sh, dx, dy, dw, dh] = call.args;
+    assert.equal(call.args.length, 9);
+    assert.equal(sh, dh);
+    assert.ok(dy + dh <= p.groundY + 1e-9, `地面の線 ${p.groundY} より下 ${dy + dh} まで描いた`);
+    assert.ok(dh > 0 && dh < p.height, `見える高さ ${dh}`);
+    assert.equal(sy, 0);
+    assert.equal(dx, p.x);
+    assert.equal(dy, p.y);
+    // 落ちている間（まだ触れていない）は、全体を描く
+    const town2 = makeTown();
+    const p2 = released(town2, fakeGame(), town2.buildings[0]);
+    const ctx2 = makeFakeCtx();
+    town2.draw(ctx2, view);
+    assert.equal(ctx2.calls.some((c) => c.name === 'drawImage' && c.args[0] === p2.canvas), true);
+});
+
+test('めり込み中はもう機体に当てない（すでに当てた機体にも、床の上に立つ機体にも）', () => {
+    const town = makeTown();
+    const b = town.buildings[0];
+    const game = fakeGame();
+    const p = released(town, game, b);
+    untilTouch(town, game, p);
+    // 地面の線のすぐ上に立つ機体（めり込み中のつららと重なる）
+    const e = entity(b.x + b.footX - 5, FLOOR_Y - 12);
+    game.enemies.push(e);
+    for (let t = 0; t < 60 && p.alive; t++) town._updateFalling(game);
+    assert.equal(e.hp, 100, 'めり込み中のつららが機体に当たった');
+});
+
+test('触れたかは先の位置（外接矩形の下の角ではなく、先のかけらの真ん中）で見る。足場の縁が外接矩形の角だけに掛かっても、落ち続ける', () => {
+    // 幅 24px（6 かけら）・先は左端のかけら（x 102）の塊。床は x 112 以降（列 7〜）だけ。
+    // 外接矩形の右下の角（x 122）は床の上でも、先（x 102）は空中
+    const cells = new Uint8Array(6 * 3);
+    for (let i = 0; i < 6; i++) cells[i] = MAT_ICE | SOLID;   // 上の段は全部
+    cells[6] = MAT_ICE | SOLID; cells[12] = MAT_ICE | SOLID;   // 先は左端の列だけ
+    const town = makeTown([], (r, c) => r >= 20 && c >= 7);
+    const p = new IcicleFall({ canvas: fakeCanvas(24, 12), cells, cw: 6, ch: 3, x: 100, y: FLOOR_Y - 60, damage: 20 });
+    assert.ok(Math.abs(p.tipX - 102) < 1e-9, `先の x ${p.tipX}`);
+    town.falling.push(p);
+    for (let t = 0; t < 60 && p.y + p.height < FLOOR_Y + 8; t++) town._updateFalling(fakeGame());
+    assert.equal(p.sinking, false, '先が空中なのに触れた扱いになった');
+    assert.ok(p.y + p.height >= FLOOR_Y + 8, '落ち続けていない');
 });
 
 test('落ちた先の建物を 1 棟 1 回だけ欠かす（下の雪の木・植物など、brittle でない建物）', () => {
@@ -360,4 +478,29 @@ test('氷の注文は _flushEffects を通して氷の粒になる（雪の木�
     assert.equal(game.particles.length, 5);
     for (const p of game.particles) assert.ok(ICE_PARTICLE_COLORS.includes(p.color), p.color);
     assert.equal(town.effects.length, 0);
+});
+
+test('粉雪（powder: 大きめ・上へ舞い上がる、dust: 小さく・ほとんど動かず落ちるつららの跡に残る）は、舞う雪の粒（SnowFlurryParticle）で、雪の色', () => {
+    const town = makeTown();
+    const game = fakeGame();
+    const spawn = (mode, count = 400) => {
+        game.particles.length = 0;
+        town._spawnIceShards(game, { x: 100, y: 100, count, flora: 'ice', mode, spread: 3 });
+        return game.particles.slice();
+    };
+    const powder = spawn('powder'), dust = spawn('dust');
+    for (const p of [...powder, ...dust]) {
+        assert.ok(p instanceof SnowFlurryParticle, '舞う雪の粒でない');
+        assert.ok(SNOWTREE_FLURRY_COLORS.includes(p.color), p.color);
+        assert.ok(p.y <= 100 + 1e-9, `出る点（地面の線）より下 ${p.y} で生まれた`);
+        assert.equal(p.game, game);
+    }
+    const [s0, s1] = ICICLE_POWDER_SIZE;
+    for (const p of powder) assert.ok(p.size >= s0 && p.size <= s1, `powder の大きさ ${p.size}`);
+    assert.ok(powder.some((p) => p.size === s1) && powder.some((p) => p.size === s0), 'powder の大小が混ざらない');
+    for (const p of dust) assert.ok(p.size === 1 || p.size === 2, `dust の大きさ ${p.size}`);
+    const mean = (ps, f) => ps.reduce((a, p) => a + f(p), 0) / ps.length;
+    assert.ok(mean(powder, (p) => p.size) > mean(dust, (p) => p.size) * 1.5, 'powder が dust より大きくない（大きめの粉雪）');
+    for (const p of powder) assert.ok(p.vy <= 1e-9, 'powder が下へ飛んだ');
+    assert.ok(mean(powder, (p) => Math.hypot(p.vx, p.vy)) > mean(dust, (p) => Math.hypot(p.vx, p.vy)) * 2, 'powder の勢いが dust と同じ');
 });

@@ -57,7 +57,7 @@ test('長さは設定の範囲。ダメージは長さに比例（icicleDamage �
             assert.ok(s.footX > 0 && s.footX < s.w);
         }
     }
-    assert.ok(lengths.some((l) => l <= 32) && lengths.some((l) => l >= 56), '短いか長いつららが出ない');
+    assert.ok(lengths.some((l) => l <= 32) && lengths.some((l) => l >= ICICLE_LENGTH[1] - 8), '短いか長いつららが出ない');
 });
 
 /** 天井は行 20 まで、空洞は行 21 から emptyRows 行（列 6〜93）、その下が床。吊るせる長さが空きで決まる部屋 */
