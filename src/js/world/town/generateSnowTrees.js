@@ -40,7 +40,7 @@ export function generateSnowTrees({
             // 根元（x + footX から右へ 4px）は床の上に立つ。枝や葉が張り出すのは構わないが、根元が縁の外では浮く
             if (!b || x + b.footX + 4 > xEnd) { x += 8; continue; }
             const placed = add({
-                site: 'floor', style: 'P', soft: true, flora: 'snow', kind: b.kind,
+                site: 'floor', style: 'P', soft: true, flora: 'snow', kind: b.kind, footX: b.footX,
                 x, y: groundY - b.h, w: b.w, h: b.h, parts: b.parts,
             }, false);
             x += placed ? b.w + step4(rng, SNOWTREE_GAP[0], SNOWTREE_GAP[1]) : 8;

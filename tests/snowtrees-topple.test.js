@@ -20,7 +20,7 @@ const GROUND_Y = FLOOR_ROW * 16;
 const DEG = Math.PI / 180;
 
 function treeSpec(b, x = 100, flora = 'snow') {
-    return { site: 'floor', style: 'P', soft: true, ...(flora ? { flora } : {}), kind: b.kind, x: x - b.footX, y: GROUND_Y + 4 - b.h, w: b.w, h: b.h, parts: b.parts };
+    return { site: 'floor', style: 'P', soft: true, ...(flora ? { flora } : {}), kind: b.kind, footX: b.footX, x: x - b.footX, y: GROUND_Y + 4 - b.h, w: b.w, h: b.h, parts: b.parts };
 }
 const fir = (seed = 3) => buildFir(new SeededRNG(seed), { maxH: 400 });
 const fakeGame = () => ({ particles: [], projectiles: [], camera: null, canvas: null });
@@ -73,30 +73,56 @@ test('横たわったあと LIE_TICKS 続いて消え、その間に薄れる', 
     assert.ok(q.alpha > 0.4 && q.alpha < 0.6, `半分で alpha ${q.alpha}`);
 });
 
-test('横たわった木は床から浮かない（軸を 90° で止めると、円錐形の木は先端が約20px宙に浮いた）', () => {
+test('軸は根元: 一番下の段のかけらの中心の x と、塊の下端の高さ。倒れる向きに関係なく同じ（箱の角を軸にすると、根元が切り株から持ち上がって箱が転がるように見えた）', () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
         for (const build of [() => fir(seed), () => buildBareTree(new SeededRNG(seed), { maxH: 400 })]) {
-            for (const lean of [1, -1]) {
-                const b = build();
-                const p = pieceOf(b, lean);
-                while (!p.lying) p.advance(true);
-                assert.ok(p.theta >= 90 * DEG - 1e-9 && p.theta <= 135 * DEG + 1e-9, `${p.theta / DEG}°`);
-                // 横たわった姿のかけらの下端（軸の高さを 0 として、下向きが正）。全部 0 以下（床にめり込まない）で、
-                // 一番低い点は床の線から 1px 以内（0.5° 刻みの走査の粒度。90° で止めると、先端が浮いた分だけ
-                // 木のどこも床に着かず、この下限を割る）
-                let lowest = -Infinity;
-                const a = lean * p.theta;
-                for (let k = 0; k < p.cells.length; k++) {
-                    if (!p.cells[k]) continue;
-                    const i = k % p.cw, j = (k - i) / p.cw;
-                    const u = (i + 0.5) * CHUNK - p.px, v = (j + 0.5) * CHUNK - p.py + CHUNK / 2;
-                    // 回した先の y（canvas の回転: y' = u sin a + v cos a）
-                    lowest = Math.max(lowest, u * Math.sin(a) + v * Math.cos(a));
-                }
-                assert.ok(lowest <= 1e-6, `seed ${seed} lean ${lean}: 床の下に ${lowest}px めり込む`);
-                assert.ok(lowest >= -1, `seed ${seed} lean ${lean}: 床から ${-lowest}px 浮いている`);
+            const b = build();
+            const r = pieceOf(b, 1), l = pieceOf(b, -1);
+            assert.equal(r.px, l.px, '向きで軸が変わる');
+            assert.equal(r.py, r.height);
+            // 一番下の段のかけら（根元）の真ん中あたり。矩形の角（0 や width）ではない
+            const bottom = [];
+            for (let i = 0; i < r.cw; i++) if (r.cells[(r.ch - 1) * r.cw + i]) bottom.push((i + 0.5) * CHUNK);
+            assert.ok(r.px >= Math.min(...bottom) && r.px <= Math.max(...bottom), `軸 ${r.px} が根元の段 ${bottom} の外`);
+            assert.ok(r.px > CHUNK && r.px < r.width - CHUNK, `軸 ${r.px} が矩形の端（幅 ${r.width}）`);
+        }
+    }
+});
+
+test('Town が切り離した木の軸は、幹の位置（切り株の真上）。幹の横の枝や針葉樹の段の角が一番下の段にあっても、そこへ外れない', () => {
+    let checked = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+        for (const build of [() => fir(seed), () => buildBareTree(new SeededRNG(seed), { maxH: 400 })]) {
+            for (const from of ['left', 'right']) {
+                const town = makeTown([treeSpec(build())]);
+                const tb = town.buildings[0];
+                cutTrunk(town, tb, from);
+                const p = town.falling.find((q) => q.topple);
+                if (!p) continue;
+                checked++;
+                const trunkX = tb.x + tb.footX;
+                assert.ok(Math.abs(p.pivotX - trunkX) <= CHUNK, `seed ${seed} ${from}: 軸 ${p.pivotX} が幹 ${trunkX} から外れている`);
+                assert.equal(p.pivotY, p.y + p.height);
             }
         }
+    }
+    assert.ok(checked >= 12, `${checked} 回しか確かめていない（この検証が意味を失った）`);
+});
+
+test('傾いているあいだ、軸（根元）は動かない。横たわると木は水平（軸から長さ方向が水平）', () => {
+    for (const lean of [1, -1]) {
+        const p = pieceOf(fir(), lean);
+        const px = p.pivotX, py = p.pivotY;
+        for (let t = 0; t < 45; t++) {
+            p.advance(true);
+            assert.equal(p.pivotX, px);
+            assert.equal(p.pivotY, py);
+        }
+        assert.ok(p.lying);
+        assert.equal(p.theta, Math.PI / 2);
+        const tip = p.pointAlong(30);
+        assert.ok(Math.abs(tip.y - py) < 1e-9, `横たわった木の先が軸の高さにない（${tip.y - py}）`);
+        assert.ok(lean * (tip.x - px) > 29.9, '倒れる向きへ伸びていない');
     }
 });
 
@@ -113,17 +139,13 @@ test('軸の下に足場が無ければ、傾きながら落ちる。足場が�
     // 倒れきっても、足場が無ければ横たわらない（宙で消えない）
     const c = pieceOf(fir());
     run(c, 120, false);
-    assert.equal(c.theta, c.thetaMax);
+    assert.equal(c.theta, Math.PI / 2);
     assert.equal(c.lying, false);
 });
 
-test('軸は倒れる側の下端の角。左へ倒れる木は左の角', () => {
+test('立っているあいだ、木の上は真上。倒れ始めたら倒れる向きへ', () => {
     const b = fir();
     const r = pieceOf(b, 1), l = pieceOf(b, -1);
-    assert.equal(r.px, r.width);
-    assert.equal(l.px, 0);
-    assert.equal(r.py, r.height);
-    // 立っているあいだ、木の上は真上、倒れたら倒れる側へ
     assert.deepEqual([Math.round(r.pointAlong(10).x - r.pivotX), Math.round(r.pointAlong(10).y - r.pivotY)], [0, -10]);
     run(r, 25);
     run(l, 25);
@@ -313,43 +335,68 @@ test('書き出しの道具（PixelCanvas）は、translate のあとの rotate 
     assert.deepEqual(Array.from(flat.px.slice((3 * 20 + 3) * 4, (3 * 20 + 3) * 4 + 4)).map(Math.round), [255, 0, 0, 1]);
 });
 
-test('右へ倒れる木が床の縁にちょうど乗っていても、軸は足場の上（縁の外の穴へ落ちない）', () => {
-    // 床（行 20 以下が岩）は列 C0 まで。木の外接矩形の右端がタイルの境目（C0 + 1）にちょうど来る
-    // （レビュー指摘: 軸の x が矩形の 1px 外で、真下の列が穴 → 床の上の木が宙に浮いた扱いで、穴の底まで落ちた）
+test('根元が床の上なら、枝が床の縁の外へ張り出していても、軸は足場の上（縁の外の穴へ落ちない）', () => {
+    // 床（行 20 以下が岩）は列 C0 まで。木の根元は列 C0 の中で、右半分の枝は縁の外（穴の上）に張り出す。右へ倒れる
     const C0 = 12;
     const b = fir();
-    const spec = { ...treeSpec(b), x: (C0 + 1) * 16 - b.w };
+    const spec = { ...treeSpec(b), x: (C0 + 1) * 16 - 8 - b.footX };
     const edge = (r, c) => r >= FLOOR_ROW && (c <= C0 || r >= 40);   // 縁の外は 20 行ぶん深い穴
     const town = makeTown([spec], edge);
     const tb = town.buildings[0];
-    cutTrunk(town, tb, 'left');   // 左から撃つ → 右へ倒れる
+    cutTrunk(town, tb, 'left');
     const p = town.falling.find((q) => q.topple);
     assert.equal(p.lean, 1);
-    assert.equal(p.pivotX % 16, 0, 'この検証が意味を失った（軸がタイルの境目にない）');
+    assert.ok(p.pivotX < (C0 + 1) * 16 && p.pivotX + p.width / 2 > (C0 + 1) * 16, 'この検証が意味を失った（枝が縁の外へ出ていない）');
     const y0 = p.y;
     for (let t = 0; t < 200 && p.alive; t++) town.update(fakeGame());
     assert.equal(p.y, y0, `軸が ${p.y - y0}px 落ちた（穴へ落ちた）`);
     assert.ok(p.lying || !p.alive, '横たわらない');
 });
 
-test('倒れる木の軸が落ちる先の別の建物は、1 棟 1 回だけ欠かす', () => {
-    // 町の建物は欠けて 4 割を割ると崩れて全部落ちる（一度の欠けで全部消えて、回数を数えられない）ので、崩れない soft の建物を使う。
-    // 高さ 68px の塊が、行 4（y 64 から）の岩に根元を埋めて立つ。軸はその上から落ちて、塊の中を通り抜けて岩に着く
+test('高い所で切れた木は、切り株の上に乗って傾く（落ち続けない）。切り株が無くなると落ちる', () => {
+    // 幹の長い枯れ木の、根元から 4 段（16px）上の 1 段を横一列に切る。下に切り株（3 段）が残り、
+    // 切れ目の上の塊は 4px 落ちて切り株の上に乗る
+    const b0 = buildBareTree(new SeededRNG(1), { maxH: 400 });
+    const town = makeTown([treeSpec(b0)]);
+    const tb = town.buildings[0];
+    const row = tb.ch - 4;
+    const cut = [];
+    for (let i = 0; i < tb.cw; i++) if (tb.cells[row * tb.cw + i]) cut.push(row * tb.cw + i);
+    town.removeAndSettle(tb, cut);
+    const p = town.falling.find((q) => q.topple);
+    assert.ok(p && p.count > tb.total / 2, '木の大部分が倒れる木になっていない（この検証が意味を失った）');
+    const stumpTop = tb.y + (tb.ch - 3) * CHUNK;
+    for (let t = 0; t < 20; t++) town._updateTopple(p);
+    assert.ok(p.pivotY >= stumpTop - 1 && p.pivotY <= stumpTop + 4, `軸 ${p.pivotY} が切り株の上端 ${stumpTop} にない`);
+    const y1 = p.y;
+    for (let t = 0; t < 20; t++) town._updateTopple(p);
+    assert.equal(p.y, y1, `切り株の上なのに ${p.y - y1}px 落ちた`);
+    assert.ok(p.theta > 0.3, '傾いていない');
+    // 切り株のかけらを全部壊すと、軸の下が空いて落ちる
+    const left = [];
+    for (let k = 0; k < tb.cells.length; k++) if (tb.cells[k]) left.push(k);
+    town.removeAndSettle(tb, left);
+    for (let t = 0; t < 10; t++) town._updateTopple(p);
+    assert.ok(p.y > y1 + 3, '切り株が無くなっても落ちない');
+});
+
+test('落ちる軸は、下の建物のかけら（隣の木・切り株）の上に乗って止まる。すり抜けない', () => {
+    // 町の建物は欠けて 4 割を割ると崩れる（支えの無い塊は全部落ちる）ので、岩に根元を埋めて立つ soft の建物を使う。
+    // 高さ 68px の塊が、行 4（y 64 から）の岩に立つ。軸はその上（y 0 より上）から落ちてくる
     const town = makeTown([{ ...block(0, 0, 32, 68), soft: true }], (r) => r >= 4);
     const target = town.buildings[0];
     assert.ok(target.anchors.length > 0, '塊が岩に支えられていない（この検証が意味を失った）');
     const b = fir();
     const p = new ToppleTree({
         canvas: fakeCanvas(b.w, b.h), cells: rasterizeParts(b.parts, b.w, b.h).cells, cw: b.w / CHUNK, ch: b.h / CHUNK,
-        x: 16 - b.w, y: -b.h - 40, lean: 1,   // 軸（右下の角）が (16, -40)。そこから target（x 0〜32、y 0〜68）へ落ちる
+        x: 0, y: 0, lean: 1,
     });
+    p.x = 16 - p.px;   // 軸（根元）が (16, -40)。そこから target（x 0〜32、y 0〜68）の上へ落ちる
+    p.y = -40 - p.py;
     town.falling.push(p);
-    const calls = [];
-    const chip = town.chip.bind(town);
-    town.chip = (...a) => { calls.push(a[0].id); return chip(...a); };
     const before = target.remaining;
     for (let t = 0; t < 60; t++) town._updateTopple(p);
-    assert.ok(p.pivotY > 60, `軸が塊を抜けて岩に着いていない（${p.pivotY}）`);
-    assert.equal(calls.filter((id) => id === target.id).length, 1, `target を ${calls.length} 回欠かした`);
-    assert.ok(target.remaining < before, '欠けていない');
+    assert.ok(p.pivotY >= -1 && p.pivotY <= 8, `軸 ${p.pivotY} が塊の上端（0）に乗っていない`);
+    assert.equal(target.remaining, before, '乗っただけで欠けた');
+    assert.ok(p.lying, '横たわらない');
 });

@@ -2206,7 +2206,7 @@ export const SNOWTREE_GAP = [0, 8];
 // 木 1 本の幅の上限（px）。20000 通りの乱数で測った最大は針葉樹 56・枯れ木 52（tests/snowtrees-build.test.js が超えないことを縛る）。
 // 床に置くとき、この幅ぶんの列の天井までの空きを測る（枝の先が天井に刺さらないように）
 export const SNOWTREE_MAX_WIDTH = 56;
-// 雪の木の倒壊。幹が切れて切り離された塊は、切れ目の下端の角（倒れる側）を軸に傾きながら倒れる（ユーザー指定:
+// 雪の木の倒壊。幹が切れて切り離された塊は、根元（切れ目の中心）を軸に傾きながら倒れる（ユーザー指定:
 // 「傾きながら下に落ちていく様な感じで倒壊する」。それまでは根元で切れた塊が落ち始めた最初のコマで床に触れ、
 // その場で雪の粒になって消えていた）。傾きの角加速度は ACCEL × (sinθ + SEED): 真っ直ぐ立った状態から始まるので
 // SEED が最初の傾きの種。実測（tools の数値実験）: ACCEL 0.005・SEED 0.2 で 90° まで 41 tick（0.68秒。15° まで 21 tick
@@ -2220,8 +2220,5 @@ export const SNOWTREE_TOPPLE_PUFF_PARTICLES = 4;
 // これより小さい塊（かけらの数）は倒れず、ふつうの破片として落ちて砕ける（枝先の欠片が90°倒れるのは不自然）
 export const SNOWTREE_TOPPLE_MIN_CELLS = 8;
 // 倒れる向きは、撃たれた位置と塊の真ん中の x の差が DEADZONE（px）以上あれば撃たれた側と反対、未満なら（幹をまっすぐ撃った）
-// 位置から決めた向き。横たわる角度は 90° から LIE_SCAN 刻みで先端が床に着くまで探し、LIE_MAX（135°）で打ち切る
-// （薄い木で軸が大きく傾いても無限に探さない。実測の最大は 111°）。0.5° 刻みは先端 60px で 0.5px の粒度
+// 位置から決めた向き
 export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
-export const SNOWTREE_TOPPLE_LIE_SCAN = Math.PI / 360;
-export const SNOWTREE_TOPPLE_LIE_MAX = (3 * Math.PI) / 4;

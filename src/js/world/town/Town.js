@@ -83,6 +83,8 @@ export class Town {
                 soft: spec.soft === true,
                 // 5面の雪の木は 'snow'。砕けた粒と穴の縁の色が葉と変わる（それ以外は同じ）
                 flora: spec.flora || 'leaf',
+                // 木の幹の x（建物の左端から px）。倒れる木の軸の手がかり（幹が丸ごと壊されても、根元の位置が分かる）
+                footX: spec.footX,
                 x: spec.x, y: spec.y, width: spec.w, height: spec.h,
                 cells, cw, ch,
                 anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile),
@@ -389,24 +391,17 @@ export class Town {
     }
 
     /**
-     * 倒れる木（ToppleTree）を 1 tick 進める。軸が岩に乗っていれば傾くだけ、乗っていなければ落ちながら傾く。
-     * 軸が岩に入り込んだら、岩の上に乗せ直す。落ちる軸の下の建物（隣の木）は、ふつうの破片と同じく 1 棟 1 回欠かす。
+     * 倒れる木（ToppleTree）を 1 tick 進める。軸（根元）が岩か切り株に乗っていれば傾くだけ、乗っていなければ落ちながら傾く。
+     * 軸が岩に入り込んだら、岩の上に乗せ直す。落ちる軸は、下の建物のかけら（隣の木・切り株）の上に乗って止まる
+     * （ふつうの破片のように欠かさない。木の根元が隣の木にめり込んで、欠けて落ちる、を避ける）。
      * 横たわったら、木の長さに沿って雪の粒を数回に分けて出し（1か所で一斉に出すと爆発に見える）、薄れて消える
      */
     _updateTopple(p) {
-        const supported = this._solidAtPixel(p.contactX, p.pivotY + 1);
+        const supported = this._supportedAt(p.pivotX, p.pivotY);
         const landed = p.advance(supported);
-        if (!supported && this._solidAtPixel(p.contactX, p.pivotY)) {
+        if (!supported && this._solidAtPixel(p.pivotX, p.pivotY)) {
             p.y = Math.floor(p.pivotY / TILE_SIZE) * TILE_SIZE - p.py;
             p.vy = 0;
-        }
-        if (!supported) {
-            for (const b of this.buildingsAt(p.contactX, p.pivotY)) {
-                const k = this.cellAt(b, p.contactX, p.pivotY);
-                if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
-                p.hitIds.add(b.id);
-                this.chip(b, p.contactX, p.pivotY, TOWN_FALL_CHIP_RADIUS);
-            }
         }
         if (landed) {
             const length = p.height;   // 倒れた木の長さ（もとの高さ）
@@ -416,6 +411,23 @@ export class Town {
             }
         }
         if (p.done) p.alive = false;
+    }
+
+    /**
+     * 倒れる木の軸（根元）の 1px 下に足場があるか。岩のタイルか、残っている建物のかけら（切り株）。
+     * 高い所で切れた木は切り株の上で傾き、切り株が壊れる（かけらが無くなる）と落ちる
+     */
+    _supportedAt(x, y) {
+        if (this._solidAtPixel(x, y + 1)) return true;
+        // 軸は一番下の段のかけらの中心の平均で、かけらの境目に来ることがある。幹は下へ向かって左右に 1px ほど
+        // ずれる（揺れる幹）ので、真下の 1 本の列だけを見ると切り株をすり抜ける。左右 1px も見る
+        for (const dx of [0, -1, 1]) {
+            for (const b of this.buildingsAt(x + dx, y + 1)) {
+                const k = this.cellAt(b, x + dx, y + 1);
+                if (k >= 0 && b.cells[k]) return true;
+            }
+        }
+        return false;
     }
 
     _shatter(p, by) {
@@ -634,7 +646,15 @@ export class Town {
             const lean = hitX !== undefined && Math.abs(mid - hitX) >= SNOWTREE_TOPPLE_LEAN_DEADZONE
                 ? Math.sign(mid - hitX)
                 : (chunkHash(b.id, i0 + 503, j0 + 601) < 0.5 ? -1 : 1);
-            this.falling.push(new ToppleTree({ ...piece, vx: 0, spin: 0, lean }));
+            // 塊の真下（4 段まで。切れ目の穴の分）に残ったかけら（切り株）があれば、その x を軸の手がかりにする
+            let footX;
+            for (let j = j1 + 1; j <= Math.min(b.ch - 1, j1 + 4) && footX === undefined; j++) {
+                const cols = [];
+                for (let i = i0; i <= i1; i++) if (b.cells[j * b.cw + i]) cols.push(i - i0 + 0.5);
+                if (cols.length > 0) footX = (cols.reduce((a, c) => a + c, 0) / cols.length) * CHUNK;
+            }
+            if (footX === undefined && b.footX !== undefined) footX = b.footX - i0 * CHUNK;   // 切り株が無い（根元の段ごと壊れた）: 木の幹の位置
+            this.falling.push(new ToppleTree({ ...piece, vx: 0, spin: 0, lean, footX }));
         } else {
             this.falling.push(new FallingPiece(piece));
         }

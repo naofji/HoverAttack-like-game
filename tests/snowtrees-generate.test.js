@@ -37,6 +37,16 @@ test('設計図の印: 全部 soft（燃えない・崩壊の演出なし）で�
     }
 });
 
+test('設計図に木の幹の x（footX）がある。根元の段のかけらの上（倒れる木の軸の手がかり）', () => {
+    for (const s of gen(11)) {
+        assert.equal(typeof s.footX, 'number');
+        const { cells, cw, ch } = rasterizeParts(s.parts, s.w, s.h);
+        let near = false;
+        for (let i = 0; i < cw; i++) if (cells[(ch - 1) * cw + i] && Math.abs((i + 0.5) * CHUNK - s.footX) <= CHUNK) near = true;
+        assert.ok(near, `${s.kind}: footX ${s.footX} の近くに根元のかけらが無い`);
+    }
+});
+
 test('どの木も岩につながっている（支えのかけらが1つ以上）', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
         for (const s of gen(seed)) {
