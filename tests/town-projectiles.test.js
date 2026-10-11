@@ -213,3 +213,22 @@ test('細い部品が厚くても（12px の足場）、1発で欠かせるの�
     assert.ok(b.alive && b.x > 112, '足場を抜けた');
     assert.equal(chips, 1);
 });
+
+test('反射ビームは厚い壁も貫通し、通り道の建物を1棟1回ずつ欠かせる', async () => {
+    const { ReflectBeam } = await import('../src/js/entities/ReflectBeam.js');
+    const game = world();
+    // 岩に支えられた建物にする（支えが無いと最初の1回で崩壊して丸ごと落ち、2回目を削る物が残らない）
+    const t = new Town([block(200, 0, 32, 200), block(400, 0, 32, 200)], { createCanvas: fakeCanvas, isSolidTile: () => true });
+    const beam = new ReflectBeam(game, 150, 100, 0);
+    assert.equal(beam.townKind, 'beam');
+    // 欠けた tick の数ではなく chip の呼び出しを数える。1回だけの規則が無いと、最初の tick に
+    // 4px 刻みの点ごとに削ってトンネルを掘り切ってしまい、tick で数えると 1 のままになる
+    const chips = [0, 0];
+    const realChip = t.chip.bind(t);
+    t.chip = (b, ...rest) => { chips[b.id]++; return realChip(b, ...rest); };
+    for (let i = 0; i < 200 && beam.alive; i++) {
+        beam.update();
+        t.sweepProjectile(beam);
+    }
+    assert.deepEqual(chips, [1, 1], '2棟とも、欠かせたのは1回ずつ');
+});

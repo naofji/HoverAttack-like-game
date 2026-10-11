@@ -48,6 +48,8 @@ export class ReflectBeam {
         this.alive = true;
         // CollisionManager が「点ではなく帯で見る」相手だと見分けるための印
         this.isReflectBeam = true;
+        // 3面の町では全部貫通して、通り道の建物を1棟1回ずつ欠かせる（TOWN_PROJECTILE_IMPACT.beam）
+        this.townKind = 'beam';
 
         // 以前は1発が2本の扇型（同一フレーム・同一座標）だったため、両方鳴らすと
         // playWeapon が重なり実効+6dBになる問題があり、2本目以降を silent にしていた。

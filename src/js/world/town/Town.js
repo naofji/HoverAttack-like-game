@@ -206,7 +206,7 @@ export class Town {
         const spec = TOWN_PROJECTILE_IMPACT[p.townKind];
         if (!spec || !p.alive || p.exploded) return;
         if (spec.pierce) {
-            if (this._sweepBeam) this._sweepBeam(p, spec);
+            this._sweepBeam(p, spec);
             return;
         }
         // 発射したその tick は tick の頭の位置の記録が無い。1 tick 前の位置は x - vx で見積もる
@@ -232,6 +232,29 @@ export class Town {
                 }
                 if (spec.thin === 'chip' && !st.thin.has(b.id)) {
                     st.thin.add(b.id);
+                    this.chip(b, px, py, spec.chip);
+                }
+            }
+        }
+    }
+
+    /**
+     * 反射ビーム。帯全体（描画・CollisionManager と同じ segments()）を TOWN_SWEEP_STEP 刻みで調べ、
+     * かけらに触れた建物を1発につき1棟1回欠かせる。止まらない
+     */
+    _sweepBeam(p, spec) {
+        let st = this._projState.get(p);
+        if (!st) { st = { chipped: new Set() }; this._projState.set(p, st); }
+        for (const sg of p.segments()) {
+            const n = Math.max(1, Math.ceil(Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1) / TOWN_SWEEP_STEP));
+            for (let s = 0; s <= n; s++) {
+                const px = sg.x1 + ((sg.x2 - sg.x1) * s) / n;
+                const py = sg.y1 + ((sg.y2 - sg.y1) * s) / n;
+                for (const b of this.buildingsAt(px, py)) {
+                    if (st.chipped.has(b.id)) continue;
+                    const k = this.cellAt(b, px, py);
+                    if (k < 0 || !b.cells[k]) continue;
+                    st.chipped.add(b.id);
                     this.chip(b, px, py, spec.chip);
                 }
             }
