@@ -2039,10 +2039,11 @@ export const TOWN_RUBBLE_MAX_H = 10;
 //   chip:   当たった所を欠かせる半径（px）。ミサイル・グレネードの欠けは、爆発（blast）の側で大きく開く
 //   thin:   細い部品（厚い壁の印の無いかけら）に当たったら 'chip'＝1棟1回欠かせて飛び続ける / 'pass'＝すり抜ける
 //   pierce: 厚い壁も貫通する（反射ビーム）
+//   ignite: 当たった所に、かけらの材料の bulletIgnite の確率で火をつける（段3）
 // 厚い壁で止まったときの反応は、弾ごとの onTownWall(x, y)（岩に当たったときと同じ。岩は壊さない）
 export const TOWN_PROJECTILE_IMPACT = {
-    bullet: { chip: 4, thin: 'chip' },
-    missile: { chip: 4, thin: 'chip' },
+    bullet: { chip: 4, thin: 'chip', ignite: true },
+    missile: { chip: 4, thin: 'chip', ignite: true },
     grenade: { chip: 0, thin: 'pass' },
     beam: { chip: 6, thin: 'chip', pierce: true },
 };
@@ -2076,3 +2077,6 @@ export const TOWN_FIRE_BRANCH = 0.15;
 export const TOWN_FIRE_JUMP_RANGE = 8;
 // 燃えている火元の隣の金属が熱で焦げる確率（燃え進みの1回）。焦げるだけで火元にはならない
 export const TOWN_METAL_SCORCH = 0.2;
+// 残り火（燃え尽きた所・燃えて砕けた破片の所）が細い煙と火の粉を出し続けるフレーム数と、同時の上限
+export const TOWN_EMBER_FRAMES = 480;   // 8秒
+export const TOWN_EMBERS_MAX = 40;

@@ -11,7 +11,7 @@ import { CHUNK, MAT_MASK } from './chunks.js';
 import { TOWN_FALL_GRAVITY, TOWN_FALL_MAX_SPEED } from '../../utils/Constants.js';
 
 export class FallingPiece {
-    constructor({ canvas, cells, cw, ch, x, y, vx = 0, vy = 0, spin = 0, sourceId = -1 }) {
+    constructor({ canvas, cells, cw, ch, x, y, vx = 0, vy = 0, spin = 0, sourceId = -1, fireFuel = 0 }) {
         this.canvas = canvas;
         this.cells = cells;
         this.cw = cw;
@@ -22,6 +22,8 @@ export class FallingPiece {
         this.vy = vy;
         this.spin = spin;
         this.sourceId = sourceId;
+        // 燃えている破片の残り燃料（フレーム）。毎フレーム fire.js が 1 ずつ減らす。0 なら燃えていない
+        this.fireFuel = fireFuel;
         this.width = cw * CHUNK;
         this.height = ch * CHUNK;
         this.angle = 0;

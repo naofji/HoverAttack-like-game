@@ -213,7 +213,12 @@ export class Town {
      */
     blast(x, y, size) {
         const radius = TOWN_BLAST_RADIUS_K * Math.sqrt(size);
-        for (const b of this.buildingsInCircle(x, y, radius)) this.chip(b, x, y, radius);
+        for (const b of this.buildingsInCircle(x, y, radius)) {
+            this.chip(b, x, y, radius);
+            // 爆風の中の燃える材料には必ず火がつく（spec 3章）。半径の中は欠けて無くなるので、
+            // 穴の縁（かけら2つぶん外まで）に残ったかけらにつける
+            this.fire.igniteNear(b, x, y, radius + CHUNK * 2);
+        }
     }
 
     /** 岩のタイルが壊れた（Map.damageBlock の「壊れた」分岐から）。支えていた建物を確かめ直す */
@@ -264,12 +269,14 @@ export class Town {
                 if (k < 0 || !b.cells[k]) continue;
                 if (b.cells[k] & SOLID) {
                     if (spec.chip > 0) this.chip(b, px, py, spec.chip);
+                    if (spec.ignite) this.fire.igniteByBullet(b, px, py);
                     p.onTownWall(px, py);
                     return;
                 }
                 if (spec.thin === 'chip' && !st.thin.has(b.id)) {
                     st.thin.add(b.id);
                     this.chip(b, px, py, spec.chip);
+                    if (spec.ignite) this.fire.igniteByBullet(b, px, py);
                 }
             }
         }
@@ -327,6 +334,8 @@ export class Town {
                 if (p.hitIds.has(b.id) || k < 0 || !b.cells[k]) continue;
                 p.hitIds.add(b.id);
                 this.chip(b, p.cx, by, TOWN_FALL_CHIP_RADIUS);
+                // 燃えている破片は、落ちた先の建物に燃え移る（spec 3章）
+                if (p.fireFuel > 0) this.fire.igniteNear(b, p.cx, by, TOWN_FALL_CHIP_RADIUS + CHUNK);
             }
             // 下端の左・中・右のどれかが岩に入ったら砕ける。盤面の外は岩（Map.isSolid と同じ）なので
             // 盤面の下へ抜けることはない
@@ -341,6 +350,7 @@ export class Town {
         const mat = p.mainMaterial();
         this._addRubble(p.x, p.width, groundY, p.count, mat);
         this._emit('shatter', p.cx, groundY, { mat, count: TOWN_SHATTER_PARTICLES });
+        if (p.fireFuel > 0) this.fire.addEmber(p.cx, groundY);
     }
 
     /**
@@ -499,13 +509,15 @@ export class Town {
         for (let q = 0; q < cells.length; q++) {
             if (!cells[q]) ctx.clearRect((q % pcw) * CHUNK, Math.floor(q / pcw) * CHUNK, CHUNK, CHUNK);
         }
+        // 塊の上の火は破片が持っていく（_removeCells で消す前に外す）
+        const fireFuel = this.fire.takeFires(b, group);
         this._removeCells(b, group);
         this.falling.push(new FallingPiece({
             canvas, cells, cw: pcw, ch: pch,
             x: b.x + i0 * CHUNK, y: b.y + j0 * CHUNK,
             vx: (chunkHash(b.id, i0 + 101, j0 + 211) - 0.5) * 2 * TOWN_FALL_DRIFT_MAX,
             spin: (chunkHash(b.id, j0 + 307, i0 + 401) - 0.5) * 2 * TOWN_FALL_SPIN_MAX,
-            sourceId: b.id,
+            sourceId: b.id, fireFuel,
         }));
         this._trimFalling();
     }

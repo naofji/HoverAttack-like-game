@@ -14,7 +14,7 @@ import { CHUNK, MAT_MASK, CHARRED } from './chunks.js';
 import { TOWN_RUIN_SHADE } from './palette.js';
 import {
     TOWN_MATERIALS, TOWN_FIRE_TICK, TOWN_FIRES_MAX, TOWN_FIRES_PER_BUILDING,
-    TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH,
+    TOWN_FIRE_BRANCH, TOWN_FIRE_JUMP_RANGE, TOWN_METAL_SCORCH, TOWN_EMBER_FRAMES, TOWN_EMBERS_MAX,
 } from '../../utils/Constants.js';
 
 const HALF = CHUNK / 2;
@@ -29,6 +29,7 @@ export class FireSystem {
     constructor(town) {
         this.town = town;
         this.fires = [];
+        this.embers = [];
         this.frame = 0;
     }
 
@@ -59,9 +60,12 @@ export class FireSystem {
         this.fires = this.fires.filter((f) => !(f.b === b && gone.has(f.k)));
     }
 
-    /** 毎フレーム。燃え進みは TOWN_FIRE_TICK フレームに1回 */
+    /** 毎フレーム。燃え進みは TOWN_FIRE_TICK フレームに1回。燃えている破片の燃料と残り火は毎フレーム減る */
     update() {
         this.frame++;
+        for (const p of this.town.falling) if (p.fireFuel > 0) p.fireFuel--;
+        for (const e of this.embers) e.frames--;
+        this.embers = this.embers.filter((e) => e.frames > 0);
         if (this.frame % TOWN_FIRE_TICK === 0) this._tick();
     }
 
@@ -72,7 +76,12 @@ export class FireSystem {
             if (!b.cells[f.k]) { this._remove(f); continue; }
             this._char(b, f.k);
             f.fuel -= TOWN_FIRE_TICK;
-            if (f.fuel <= 0) { this._remove(f); continue; }
+            if (f.fuel <= 0) {
+                const c = FireSystem.center(b, f.k);
+                this.addEmber(c.x, c.y);
+                this._remove(f);
+                continue;
+            }
             this._spreadWithin(f);
             this._jumpAcross(f);
         }
@@ -137,6 +146,58 @@ export class FireSystem {
             for (const k of list) b.burnt.delete(k);
             this.town.removeAndSettle(b, list);
         }
+    }
+
+    /** (x, y) から半径 r 以内の燃えるかけらに、近い順に火をつける（1棟の上限まで）。爆発から */
+    igniteNear(b, x, y, r) {
+        const cand = [];
+        for (let k = 0; k < b.cells.length; k++) {
+            if (!burnable(b.cells[k])) continue;
+            const c = FireSystem.center(b, k);
+            const d = Math.hypot(c.x - x, c.y - y);
+            if (d <= r) cand.push([d, k]);
+        }
+        cand.sort((p, q) => p[0] - q[0]);
+        let lit = 0;
+        for (const [, k] of cand) {
+            if (this.countIn(b) >= TOWN_FIRES_PER_BUILDING || this.fires.length >= TOWN_FIRES_MAX) break;
+            if (this.ignite(b, k)) lit++;
+        }
+        return lit;
+    }
+
+    /**
+     * 弾が当たった点から CHUNK*2（8px）以内で一番近い燃えるかけらに、その材料の bulletIgnite の確率で。
+     * 当たった所は弾の欠け（半径 4px＋ぎざぎざ）で先に抜けているので、6px では候補が残らないことがある
+     */
+    igniteByBullet(b, x, y) {
+        let best = -1, bestD = Infinity;
+        for (let k = 0; k < b.cells.length; k++) {
+            if (!burnable(b.cells[k])) continue;
+            const c = FireSystem.center(b, k);
+            const d = Math.hypot(c.x - x, c.y - y);
+            if (d <= CHUNK * 2 && d < bestD) { best = k; bestD = d; }
+        }
+        if (best < 0 || this.town.random() >= matOf(b.cells[best]).bulletIgnite) return false;
+        return this.ignite(b, best);
+    }
+
+    /** 切り離される塊の上の火を外し、破片に持たせる燃料（いちばん多い残り）を返す */
+    takeFires(b, group) {
+        const set = new Set(group);
+        let fuel = 0;
+        this.fires = this.fires.filter((f) => {
+            if (f.b !== b || !set.has(f.k)) return true;
+            fuel = Math.max(fuel, f.fuel);
+            return false;
+        });
+        return fuel;
+    }
+
+    /** 残り火を置く。上限を超えたら古いものから消す */
+    addEmber(x, y) {
+        this.embers.push({ x, y, frames: TOWN_EMBER_FRAMES });
+        while (this.embers.length > TOWN_EMBERS_MAX) this.embers.shift();
     }
 
     _remove(f) {
