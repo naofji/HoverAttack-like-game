@@ -129,3 +129,45 @@ test('update: 火があれば startTownFire、無くなれば stopTownFire', () 
         assert.equal(spy.of('stopTownFire').length, 0);
     } finally { spy.restore(); }
 });
+
+test('遊んでいる最中でなければ（ゲームオーバー・クリアの後）、燃えていても炎のループを始めず止める', () => {
+    // 最終レビュー指摘: 最後の自機を失った tick の後半で Town.update がループを作り直し、
+    // CONTINUE で町の無い面へ移っても鳴り続けた（同じ tick の中で stopLoopingSe より後に start が来る）
+    const spy = spyAudio(NAMES);
+    try {
+        const town = townOf([made(100, 100, 32, 32, MAT_WOOD)]);
+        town.fire.ignite(town.buildings[0], 0);
+        for (const gameState of ['gameover', 'mission_clear', 'game_clear']) {
+            spy.calls.length = 0;
+            town.update({ ...gameAt(null), gameState });
+            assert.equal(spy.of('startTownFire').length, 0, `${gameState} で始めた`);
+            assert.equal(spy.of('stopTownFire').length, 1, `${gameState} で止めない`);
+        }
+        spy.calls.length = 0;
+        town.update({ ...gameAt(null), gameState: 'playing' });
+        assert.equal(spy.of('startTownFire').length, 1, 'playing で始めない');
+    } finally { spy.restore(); }
+});
+
+test('面を作り直すとき（resetLevel）は炎のループを止める。町の無い面では誰も止めないため', async () => {
+    const { GameStateManager } = await import('../src/js/systems/GameStateManager.js');
+    const stubCtx = new Proxy({}, {
+        get: (t, prop) => (prop in t ? t[prop] : (typeof prop === 'string' ? () => ({ addColorStop() {} }) : undefined)),
+        set: () => true,
+    });
+    const originalDocument = globalThis.document;
+    globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => stubCtx }) };
+    const spy = spyAudio(NAMES);
+    try {
+        const game = {
+            score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
+            spawnManager: { findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() {}, spawnTreasures() {}, spawnBarriers() {}, spawnEnemies() {} },
+            camera: { follow() {}, snapToTarget() {} },
+        };
+        new GameStateManager(game).resetLevel(false);
+        assert.ok(spy.of('stopTownFire').length >= 1);
+    } finally {
+        spy.restore();
+        globalThis.document = originalDocument;
+    }
+});

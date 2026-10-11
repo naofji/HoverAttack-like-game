@@ -9,10 +9,15 @@ export const SAMPLE_RATE = 48000;
 
 /**
  * RBJ の係数（a0 で割った後）。WebAudio の BiquadFilterNode と同じ式。
+ * **WebAudio のローパス・ハイパスの Q は dB で読まれる**（α = sin(w0) / (2·10^(Q/20))。バンドパスは線形）。
+ * WebAudio のノードを写すときは qDb: true を渡す。既定（線形）は、この関数より前からある再現
+ * （バリアの唸りなど）の測り方を変えないため
  * @param {'bandpass'|'lowpass'|'highpass'} type
+ * @param {{qDb?: boolean}} [opts]
  * @returns {number[]} [b0, b1, b2, a1, a2]
  */
-export function biquadCoeffs(type, f0, Q) {
+export function biquadCoeffs(type, f0, Q, { qDb = false } = {}) {
+    if (qDb && type !== 'bandpass') Q = Math.pow(10, Q / 20);
     const w0 = 2 * Math.PI * f0 / SAMPLE_RATE;
     const cw = Math.cos(w0);
     const al = Math.sin(w0) / (2 * Q);
@@ -35,8 +40,8 @@ export function biquadCoeffs(type, f0, Q) {
  * @param {number} Q
  * @returns {(x:number)=>number} 1サンプルずつ通す関数
  */
-export function biquad(type, f0, Q) {
-    const [b0, b1, b2, a1, a2] = biquadCoeffs(type, f0, Q);
+export function biquad(type, f0, Q, opts) {
+    const [b0, b1, b2, a1, a2] = biquadCoeffs(type, f0, Q, opts);
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     return (x) => {
         const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
@@ -158,19 +163,19 @@ export function transientLevel(gen, seconds) {
 /**
  * AudioOutput._noiseBurst（audio/engine/output.js）のオフライン再現。**片方だけ変えない。**
  * ローパスを from から to へ指数で掃引し（sweepDur 以後は to のまま）、ゲインを gain から end へ
- * dur かけて指数で落とし、dur で止まる。Q の既定 1 は BiquadFilterNode の既定値（_noiseBurst は Q を設定しない）。
+ * dur かけて指数で落とし、dur で止まる。Q の既定 1 は BiquadFilterNode の既定値（_noiseBurst は Q を設定しない）で、dB として読む。
  * 掃引中は係数をサンプルごとに計算し直す（WebAudio も a-rate で追う）
  * @returns {(i:number)=>number}
  */
 export function noiseBurstGen({ gain, dur, end = 0.001, from, to, sweepDur = dur, Q = 1 }, seed = 3) {
     const n = whiteNoise(Math.ceil(dur * SAMPLE_RATE) + 2, seed);
-    const fixed = to === undefined ? biquadCoeffs('lowpass', from, Q) : null;
+    const fixed = to === undefined ? biquadCoeffs('lowpass', from, Q, { qDb: true }) : null;
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     return (i) => {
         const t = i / SAMPLE_RATE;
         if (t > dur) return 0;
         const f = to === undefined ? from : (t >= sweepDur ? to : from * Math.pow(to / from, t / sweepDur));
-        const [b0, b1, b2, a1, a2] = fixed || biquadCoeffs('lowpass', f, Q);
+        const [b0, b1, b2, a1, a2] = fixed || biquadCoeffs('lowpass', f, Q, { qDb: true });
         const x = n[i];
         const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
         x2 = x1; x1 = x; y2 = y1; y1 = y;

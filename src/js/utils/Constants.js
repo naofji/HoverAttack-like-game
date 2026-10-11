@@ -2112,14 +2112,14 @@ export const TOWN_EXPLOSIONS_PER_SECOND = 6;
 // 設計: docs/superpowers/specs/2026-10-11-stage3-town-design.md（4章）。音量は A特性で実測して
 // tests/town-sounds.test.js が爆発・バリアの唸りとの相対 dB で縛る（tools/render-town-sounds.mjs で測れる）
 // 崩れる音の大きさ k = (崩れたかけら / REF)^EXP を MIN〜1 に収める。REF は塔1棟の崩壊。
-// 平方根（0.5 乗）だと 20 かけらの破片が -58.2dB で、小さい爆発（-58.0dB）とほぼ同じ大きさになる（実測）。
-// 0.75 乗で -63.4dB（小さい爆発より 5dB 小さい）
+// 平方根（0.5 乗）だと 20 かけらの破片が小さい爆発とほぼ同じ大きさになる（差 0.2dB の実測）。
+// 0.75 乗で小さい爆発より約 5dB 小さい
 export const TOWN_COLLAPSE_SOUND_REF = 160;
 export const TOWN_COLLAPSE_SOUND_EXP = 0.75;
 export const TOWN_COLLAPSE_SOUND_MIN = 0.1;
 export const TOWN_COLLAPSE_SOUND_MERGE_MS = 80;   // これより近く続いた崩れる音は、大きいほうだけ鳴らす
-// 実測（2026-10-11、tools/render-town-sounds.mjs）: 崩壊 160 かけら -47.6dB（大きい爆発 -44.1dB の -3.5dB）、
-// 破片 20 かけら -63.4dB（小さい爆発 -58.0dB より小さい）
+// 実測（2026-10-11、tools/render-town-sounds.mjs。ローパスの Q を dB で読む再現）: 崩壊 160 かけら -47.1dB
+// （大きい爆発 -43.4dB の -3.7dB）、破片 20 かけら -62.8dB（小さい爆発 -57.3dB より小さい）
 // 低い地鳴り: ローパスしたノイズを FROM → TO へ掃引しながら TIME 秒で落とす（k で長さが半分まで縮む）
 export const TOWN_COLLAPSE_RUMBLE_GAIN = 0.5;
 export const TOWN_COLLAPSE_RUMBLE_TIME = 1.2;
@@ -2134,10 +2134,12 @@ export const TOWN_COLLAPSE_RATTLE_FREQ_RANGE = 2400;
 export const TOWN_COLLAPSE_RATTLE_Q = 3;
 // 炎のループ: 低いゴーッ（ノイズのループを ROAR_FILTER でローパス）＋パチパチ（まばらなクリックを並べた
 // CRACKLE_SECONDS 秒のバッファをループ、CRACKLE_FILTER でハイパス）。最大でもバリアの唸り（-48dB）以下
-// 実測（2026-10-11）: 最大 -49.3dB（唸り -48.1dB の -1.2dB）。ゴーッだけ -51.4dB、パチパチだけ -53.4dB
-export const TOWN_FIRE_ROAR_GAIN = 0.2;
+// ゲインは最初 0.2 / 0.25 だった。WebAudio のローパス・ハイパスの Q が dB で読まれることを再現に入れたら
+// 最大 -48.6dB（唸りの -0.5dB）まで詰まったので、両方 1割下げた（最終レビュー指摘）。
+// 実測: 最大 -49.5dB（唸り -48.1dB の -1.4dB）。ゴーッだけ -51.6dB、パチパチだけ -53.6dB
+export const TOWN_FIRE_ROAR_GAIN = 0.18;
 export const TOWN_FIRE_ROAR_FILTER = 300;
-export const TOWN_FIRE_CRACKLE_GAIN = 0.25;
+export const TOWN_FIRE_CRACKLE_GAIN = 0.225;
 export const TOWN_FIRE_CRACKLE_FILTER = 1800;
 export const TOWN_FIRE_CRACKLE_RATE = 14;        // 1秒あたりのクリックの数
 export const TOWN_FIRE_CRACKLE_SECONDS = 3.7;    // 繰り返しが耳につかない長さ（2秒だと周期が分かる）

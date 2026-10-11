@@ -9,6 +9,7 @@ import { Carrier } from '../entities/Carrier.js';
 import { HUD } from '../ui/HUD.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { stageSeed } from '../utils/WeekSeed.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export class GameStateManager {
     constructor(game) {
@@ -29,6 +30,9 @@ export class GameStateManager {
             game.stageResults = [];
         }
 
+        // 3面の町の炎のループは町が毎 tick 止める作りなので、町の無い面へ移ると誰も止めない。
+        // 面を作り直すたびにここで止めておく（念のための止め。ふだんは Town.update が止めている）
+        audioManager.stopTownFire();
         game.missionTimer = 0;
         game.pendingTimeBonus = 0;
         game.slotRunning = false;

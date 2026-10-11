@@ -338,9 +338,13 @@ export class Town {
         const cam = game.camera, cv = game.canvas;
         const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
         this.fire.update(view);
-        // 炎のループ（spec 4章）。画面に近い火元が無くなったら引いて止める
+        // 炎のループ（spec 4章）。画面に近い火元が無くなったら引いて止める。
+        // 遊んでいる最中（'playing'）でなければ始めない。最後の自機を失った tick やクリアの tick は、
+        // stopLoopingSe のあとにこの update が来るので、ここで作り直すと CONTINUE や次の面
+        // （町が無く、誰も止めない）まで鳴り続けた（最終レビュー指摘）。gameState の無い道具・テストは遊んでいる扱い
+        const playing = game.gameState === undefined || game.gameState === 'playing';
         const fireSound = this.fire.soundLevel(view);
-        if (fireSound.intensity > 0) audioManager.startTownFire(fireSound.intensity, fireSound.x);
+        if (playing && fireSound.intensity > 0) audioManager.startTownFire(fireSound.intensity, fireSound.x);
         else audioManager.stopTownFire();
         this.explosives.update(game, view);
         this._flushEffects(game);

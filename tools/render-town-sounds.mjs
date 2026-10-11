@@ -56,15 +56,16 @@ export function collapseGen(size, seed = 1, { rattles = true } = {}) {
 
 /**
  * 炎のループ（startTownFire）の再現。ゴーッは noiseBuffer（2秒の白色ノイズ）のループをローパス、
- * パチパチは crackleSamples のループをハイパス（Q 0.7）
+ * パチパチは crackleSamples のループをハイパス（Q 0.7。どちらの Q も WebAudio と同じく dB で読む）
  * @param {{roar?: boolean, crackle?: boolean}} [opts] 片方だけを測るとき
  */
 export function fireLoopGen(intensity, seed = 1, { roar = true, crackle = true } = {}) {
     const noise = whiteNoise(2 * SAMPLE_RATE, seed + 300);
     const nC = Math.round(TOWN_FIRE_CRACKLE_SECONDS * SAMPLE_RATE);
     const clicks = crackleSamples(nC, SAMPLE_RATE, new SeededRNG(TOWN_FIRE_CRACKLE_SEED));
-    const lp = biquad('lowpass', TOWN_FIRE_ROAR_FILTER, 1);
-    const hp = biquad('highpass', TOWN_FIRE_CRACKLE_FILTER, 0.7);
+    // WebAudio のローパス・ハイパスの Q は dB（ローパスは既定の 1、ハイパスは 0.7 を設定）
+    const lp = biquad('lowpass', TOWN_FIRE_ROAR_FILTER, 1, { qDb: true });
+    const hp = biquad('highpass', TOWN_FIRE_CRACKLE_FILTER, 0.7, { qDb: true });
     return (i) => {
         const r = roar ? lp(noise[i % noise.length]) * TOWN_FIRE_ROAR_GAIN : 0;
         const c = crackle ? hp(clicks[i % nC]) * TOWN_FIRE_CRACKLE_GAIN : 0;

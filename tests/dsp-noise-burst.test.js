@@ -9,10 +9,12 @@ import {
 import { EXPLOSION_BURSTS } from '../src/js/audio/sounds/playerSounds.js';
 
 test('掃引しない noiseBurstGen は、固定のローパスに通したノイズに包絡を掛けたものと同じ', () => {
+    // WebAudio のローパス・ハイパスの Q は dB（α = sin(w0) / (2·10^(Q/20))）。既定の Q=1 は線形で 1.122。
+    // 最終レビュー指摘: 線形で読んでいて、炎のループの音量が実際より 0.7dB 小さく出ていた
     const o = { gain: 0.3, dur: 0.2, end: 0.001, from: 800 };
     const gen = noiseBurstGen(o, 5);
     const n = whiteNoise(Math.ceil(o.dur * SAMPLE_RATE) + 2, 5);
-    const lp = biquad('lowpass', 800, 1);
+    const lp = biquad('lowpass', 800, Math.pow(10, 1 / 20));
     for (let i = 0; i < 2000; i++) {
         const t = i / SAMPLE_RATE;
         const want = lp(n[i]) * o.gain * Math.pow(o.end / o.gain, t / o.dur);
