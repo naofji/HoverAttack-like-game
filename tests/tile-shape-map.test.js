@@ -187,14 +187,17 @@ test('形の焼き込みは乱数を使わない（5面の地図を作ったあ�
     const { Map } = await import('../src/js/world/Map.js');
     const a = { rng: new SeededRNG(11) };
     new Map(a, 4);
-    const orig = Map.prototype._buildTileShapes;
+    const orig = Map.prototype._buildTileShapes, origSeat = Map.prototype._seatSpawnsOnShapes;
     Map.prototype._buildTileShapes = function () {};
+    // 湧き位置の置き直し（段4）は形の表を読むので、形を焼かないときは一緒に外す
+    Map.prototype._seatSpawnsOnShapes = function () {};
     try {
         const b = { rng: new SeededRNG(11) };
         new Map(b, 4);
         assert.equal(a.rng.state, b.rng.state);
     } finally {
         Map.prototype._buildTileShapes = orig;
+        Map.prototype._seatSpawnsOnShapes = origSeat;
     }
 });
 

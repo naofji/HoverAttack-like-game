@@ -67,16 +67,42 @@ export class PickupItem {
         const motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this.vy += GRAVITY * motion.gravity;
         if (this.vy > MAX_FALL_SPEED) this.vy = MAX_FALL_SPEED;
-        this.y += this.vy * motion.speed;
+        const dy = this.vy * motion.speed;
+        this.y += dy;
 
         const map = this.game.map;
         const feetY = this.y + this.height;
+        if (map.hasShapedTileIn(this.x, feetY - TILE_SIZE, this.width, TILE_SIZE + 1)) {
+            this._landOnShape(feetY - dy, feetY);
+            return;
+        }
         if (map.isSolidAtPixel(this.x + GROUND_PROBE_INSET, feetY) ||
             map.isSolidAtPixel(this.x + this.width - GROUND_PROBE_INSET, feetY)) {
             this.y = Math.floor(feetY / TILE_SIZE) * TILE_SIZE - this.height;
             this.vy = 0;
             this.onGround = true;
         }
+    }
+
+    /**
+     * 5面の坂と面取りの近くでは、足の2列を形で当て、当たった列の床の高さ（このフレームに
+     * 動いた範囲で一番高いもの）へ合わせる（決定12）。タイルの上端へ寄せると、坂では最大 16px、
+     * 面取りでは 8px 浮いて止まった
+     * @param {number} prevFeet このフレームに動く前の足の y
+     * @param {number} feetY 動いた後の足の y
+     */
+    _landOnShape(prevFeet, feetY) {
+        const map = this.game.map;
+        let floor = null;
+        for (const px of [this.x + GROUND_PROBE_INSET, this.x + this.width - GROUND_PROBE_INSET]) {
+            if (!map.isSolidPoint(px, feetY)) continue;
+            const top = map.terrainTopY(px, prevFeet, feetY);
+            if (top !== null && (floor === null || top < floor)) floor = top;
+        }
+        if (floor === null) return;
+        this.y = floor - this.height;
+        this.vy = 0;
+        this.onGround = true;
     }
 
     /** 自機が重なったら拾う。ドッキング中は拾えない。 */
