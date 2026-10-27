@@ -12,7 +12,15 @@ import { Player } from '../src/js/entities/Player.js';
 import { EnemyTank } from '../src/js/entities/EnemyTank.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { makeMap, makeGame, makeAttacker } from '../tests/helpers/enemy-world.js';
-import { TILE_SIZE } from '../src/js/utils/Constants.js';
+import { Grenade } from '../src/js/entities/Grenade.js';
+import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
+import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
+import { Missile } from '../src/js/entities/Missile.js';
+import { EnemyHomingMissile } from '../src/js/entities/EnemyHomingMissile.js';
+import { EnemyCruiseMissile } from '../src/js/entities/EnemyCruiseMissile.js';
+import { EnemyDrone } from '../src/js/entities/EnemyDrone.js';
+import { stepBeam } from '../src/js/utils/beamPath.js';
+import { TILE_SIZE, GRENADE_SPEED, REFLECT_BEAM_SPEED } from '../src/js/utils/Constants.js';
 
 // 幅50・高さ24。床 row 20。列 12 に高さ1の段、列 20〜21 に高さ2の段、列 30〜31 は幅2の穴
 // （底は row 22）、列 36〜44 は row 13 まで岩の低い天井、列 48 は壁。
@@ -132,6 +140,134 @@ export function digest(rec = record()) {
     return d;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// ---------------------------------------------------------------
+// 段3（飛び道具。docs/superpowers/plans/2026-10-27-tile-shape-3-projectiles.md）の基準線。
+// 同じ地図で、グレネード・反射ビーム・弾・ミサイル・追尾ミサイル・巡航ミサイル・ドローンを
+// 段・天井・壁・床に当てる。段2の record() の出力は変えない。
+// ---------------------------------------------------------------
+
+/** ミサイルが壊したタイルも記録に入れる（地図は書き換えない。壊れ方の差より当たった場所を見たい） */
+function projectileWorld(hits) {
+    const game = world();
+    game.map.damageBlock = (r, c, dmg) => { hits.push(`dmg ${r},${c},${dmg}`); };
+    game.map.destroyArea = (r, c, rad, dmg) => { hits.push(`area ${r},${c},${rad},${dmg}`); return []; };
+    game.spawnDebris = () => {};
+    game.map.width = game.map.cols * TILE_SIZE;
+    game.map.height = game.map.rows * TILE_SIZE;
+    game.player = {
+        x: 40 * TILE_SIZE, y: 19 * TILE_SIZE - 24, width: 16, height: 24, vx: 0, vy: 0,
+        alive: true, docked: false, takeDamage() {}, hp: 100,
+    };
+    return game;
+}
+
+const pline = (e) => `${r3(e.x)},${r3(e.y)},${r3(e.vx ?? 0)},${r3(e.vy ?? 0)},${e.alive ? 1 : 0}`;
+
+/** 飛び道具を1本、消えるか maxFrames まで回して、各フレームの状態を out に積む */
+function fly(out, e, maxFrames, hits) {
+    for (let f = 0; f < maxFrames && e.alive; f++) {
+        e.update();
+        out.push(pline(e) + (hits.length ? ' ' + hits.splice(0).join(';') : ''));
+    }
+    out.push('end');
+}
+
+/** @returns {{ grenade: string[], beam: string[], bullet: string[], missile: string[], homing: string[], cruise: string[], drone: string[] }} */
+export function recordProjectiles() {
+    const out = { grenade: [], beam: [], bullet: [], missile: [], homing: [], cruise: [], drone: [] };
+    // 軌跡の粒子・ドローンの AI が Math.random を使うので、記録の間だけ種つきの乱数に差し替える
+    // ドローンの上下の揺れは Date.now から作る（EnemyDrone の巡回・ホバー）ので、時計もフレームで進める
+    const origRandom = Math.random, origNow = Date.now;
+    const rng = new SeededRNG(3);
+    Math.random = () => rng.next();
+    let clock = 0;
+    Date.now = () => clock;
+    try {
+        const hits = [];
+        const ox = 8 * TILE_SIZE, oy = 19 * TILE_SIZE;
+        const deg = (d) => d * Math.PI / 180;
+
+        // グレネード: 右上へ 8 方向 × 2 通りの速さ。段・天井・壁に当たって跳ね、床を転がる
+        for (let d = -80; d <= -10; d += 10) {
+            for (const sp of [GRENADE_SPEED, GRENADE_SPEED / 2]) {
+                const game = projectileWorld(hits);
+                fly(out.grenade, new Grenade(game, ox, oy, deg(d), sp), 400, hits);
+            }
+        }
+
+        // 反射ビーム: 天井・壁・床・段の角に当たる 8 方向
+        {
+            const map = projectileWorld(hits).map;
+            for (const d of [-75, -45, -30, -10, 10, 30, 45, 170]) {
+                let b = { x: ox, y: oy - 20, vx: Math.cos(deg(d)) * REFLECT_BEAM_SPEED, vy: Math.sin(deg(d)) * REFLECT_BEAM_SPEED };
+                for (let f = 0; f < 400; f++) {
+                    b = stepBeam(b, map);
+                    out.beam.push(`${r3(b.x)},${r3(b.y)},${r3(b.vx)},${r3(b.vy)},${b.bounced ? 1 : 0}`);
+                }
+                out.beam.push('end');
+            }
+        }
+
+        // 弾（自機・敵）とミサイル: 壁・段・天井・床へ
+        const shots = [-60, -30, -5, 0, 20, 160];
+        for (const d of shots) {
+            const g1 = projectileWorld(hits);
+            fly(out.bullet, new PlayerBullet(g1, ox, oy - 4, deg(d)), 300, hits);
+            const g2 = projectileWorld(hits);
+            fly(out.bullet, new EnemyBullet(g2, ox, oy - 4, deg(d)), 300, hits);
+            const g3 = projectileWorld(hits);
+            fly(out.missile, new Missile(g3, ox, oy - 4, deg(d)), 300, hits);
+        }
+
+        // 追尾ミサイル: 右の奥の標的へ。途中の段・天井・壁を避けるか当たる
+        for (const d of [-90, -45, 0]) {
+            const game = projectileWorld(hits);
+            fly(out.homing, new EnemyHomingMissile(game, ox, oy - 8, deg(d)), 400, hits);
+        }
+
+        // 巡航ミサイル: 経路なしで直進（発射から 45 フレームは地形を見ない）
+        for (const d of [-90, -20, 0, 15]) {
+            const game = projectileWorld(hits);
+            fly(out.cruise, new EnemyCruiseMissile(game, 4 * TILE_SIZE, 16 * TILE_SIZE, deg(d)), 400, hits);
+        }
+
+        // ドローン: 巡回と体当たり
+        {
+            const game = projectileWorld(hits);
+            const dr = new EnemyDrone(game, 24 * TILE_SIZE, 15 * TILE_SIZE);
+            dr.fireTimer = 1e9;
+            game.enemies.push(dr);
+            for (let f = 0; f < 600; f++) {
+                clock += 1000 / 60;
+                dr.update();
+                out.drone.push(`${pline(dr)},${dr.state}`);
+            }
+        }
+        {
+            const game = projectileWorld(hits);
+            const dr = new EnemyDrone(game, 24 * TILE_SIZE, 15 * TILE_SIZE);
+            dr.fireTimer = 1e9;
+            game.enemies.push(dr);
+            dr._startKamikaze(game.player);
+            for (let f = 0; f < 600 && dr.alive; f++) {
+                clock += 1000 / 60;
+                dr.update();
+                out.drone.push(`${pline(dr)},${dr.state}`);
+            }
+        }
+    } finally {
+        Math.random = origRandom;
+        Date.now = origNow;
+    }
+    return out;
+}
+
+export function digestProjectiles(rec = recordProjectiles()) {
+    return digest(rec);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--projectiles')) {
+    console.log(JSON.stringify(digestProjectiles(), null, 2));
+} else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     console.log(JSON.stringify(digest(), null, 2));
 }
