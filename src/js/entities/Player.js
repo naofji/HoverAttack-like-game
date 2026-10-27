@@ -475,6 +475,7 @@ export class Player {
      * 分けたのは読む範囲を絞るためで、判定そのものは1行も変えていない。
      */
     _moveAndCollide() {
+        this._frameStartX = this.x; // 坂の吸着の届く距離（slopeBody.js の _glueDownSlope）
         // --- 横 ---
         const hitHMap = this._moveHorizontalIntoMap();
         if (!hitHMap) this._pushOutOfCarrierHorizontally();
@@ -501,6 +502,7 @@ export class Player {
      * @returns {boolean} マップに当たって止まったか（母艦の押し出しを飛ばす判断に使う）
      */
     _moveHorizontalIntoMap() {
+        const xBefore = this.x;
         this.x += this.vx * this.motion.speed;
 
         let hitHMap = false;
@@ -528,6 +530,7 @@ export class Player {
                 } else if (this.vx < 0) {
                     this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
                 }
+                this._undoSnapIntoRock('x', xBefore);
                 this.vx = 0;
             }
         }
@@ -593,6 +596,7 @@ export class Player {
     /** 縦方向。マップへの着地（強い落下ならスタン）と天井への衝突。 */
     _landOnMapOrHitCeiling() {
         if (this._collidesWithMap()) {
+            const yBefore = this.y - this.vy * this.motion.speed;
             if (this.vy > 0) {
                 // Landing on map
                 if (this.vy > PLAYER_STUN_FALL_SPEED) { // Hard landing threshold
@@ -600,6 +604,7 @@ export class Player {
                 }
                 if (!this._landOnSlope()) {
                     this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
+                    this._undoSnapIntoRock('y', yBefore);
                 }
                 this.onGround = true;
                 this.onTerrain = true;
@@ -608,6 +613,7 @@ export class Player {
                 // Hit ceiling
                 if (!this._hitCeilingSlope()) {
                     this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
+                    this._undoSnapIntoRock('y', yBefore);
                 }
                 // 天井に当たったらバースト後のクールダウンを解除する。
                 //

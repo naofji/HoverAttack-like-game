@@ -22,13 +22,20 @@ export function collidesWithMap(entity, map, customPoints) {
 
 /**
  * collidesWithMap と同じ点で、タイルの形（utils/tileShape.js）に当てる。坂の削れた部分の空中は
- * 岩ではない。四角い地形（5面以外）では isSolidPoint が isSolidAtPixel と同じ答えを返すので、
- * 同じ結果になる（tests/tile-shape-map.test.js）
+ * 岩ではない。四角い地形（5面以外）では isSolidPoint が isSolidAtPixel と同じ答えを返し、
+ * 形のあるタイルも無いので、collidesWithMap と同じ結果になる（tests/tile-shape-map.test.js・
+ * terrain-shape-invariance.test.js）
  */
 export function collidesWithTerrain(entity, map, customPoints) {
     const points = customPoints || getDefaultCheckPoints(entity);
     for (const p of points) {
         if (map.isSolidPoint(p.x, p.y)) return true;
+    }
+    // 既定の点は縦に y+2・y+h/2・y+h−1 の3段しかなく、面取りの細い先（岩の厚みが 7px ほどの列）は
+    // 点のすき間を抜けて体に入り込んだ（段2の最終レビュー。本物の5面で12万フレーム中 1089 フレーム）。
+    // 形のあるタイルの近くでは、既定の点が囲む矩形でも当てる。四角い地形では点だけで答えは変わらない
+    if (!customPoints && map.hasShapedTileIn(entity.x, entity.y, entity.width, entity.height)) {
+        return map.rectHitsTerrain(entity.x + 2, entity.y + 2, entity.width - 4, entity.height - 3);
     }
     return false;
 }

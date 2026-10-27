@@ -58,6 +58,7 @@ export const SlopeBody = {
         this.y -= lift;
         const slope = this.game.map.floorSlopeAt(this.x + this.width / 2, this.y + this.height);
         this.vx += -slope * this.vy * SLOPE_DEFLECT;
+        this._capSlopeVx();
         return true;
     },
 
@@ -74,7 +75,30 @@ export const SlopeBody = {
         this.y += drop;
         const slope = this.game.map.ceilingSlopeAt(this.x + this.width / 2, this.y - 0.01);
         this.vx += -slope * Math.abs(this.vy) * SLOPE_DEFLECT;
+        this._capSlopeVx();
         return true;
+    },
+
+    /**
+     * 斜辺に当たって足した横の速さを、坂で滑るときの最高速で頭打ちにする。ホバーで天井の斜面に
+     * 張り付くと毎フレーム足され、上限が無いと 7px/フレームを超えて弾き飛ばされた（段2の最終レビュー。
+     * 速いほど押し出せる距離 |dx|+余裕 も伸びて、細い面取りの先へ入り込みやすくなる）
+     */
+    _capSlopeVx() {
+        this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+    },
+
+    /**
+     * 形のあるタイルの近くで、四角いタイル用のスナップ（タイルの境目へ寄せる）が体を岩の中へ
+     * 置いてしまったら、動く前の位置へ戻す。坂として解けなかった当たり（面取りの細い先が点の
+     * すき間を抜けて当たった、など）の戻り先が四角い地形の前提のままだと、頭が当たったのに
+     * 足のタイルの上端へ寄せて板を突き抜けた（段2の最終レビュー。戦車の Safety Fallback と同じ考え）
+     * @param {'x'|'y'} axis 戻す軸
+     * @param {number} before 動く前の値
+     */
+    _undoSnapIntoRock(axis, before) {
+        if (!this._touchesShapedTile(TILE_SIZE, TILE_SIZE)) return;
+        if (this._collidesWithMap()) this[axis] = before;
     },
 
     /**
@@ -86,7 +110,11 @@ export const SlopeBody = {
      */
     _glueDownSlope(prevOnTerrain) {
         if (this.onGround || this.vy < 0 || !prevOnTerrain) return false;
-        const reach = Math.abs(this.vx * this.motion.speed) + SLOPE_CLIMB_MARGIN;
+        // 届く距離は、このフレームに実際に横へ動いた量から取る。坂の上で壁に押し付けると、壁への
+        // 吸着が x を戻して vx を 0 にするので、vx から取ると足元の坂の下がりに届かず、4フレーム
+        // ごとに落ちては着地した（段2の最終レビュー。_frameStartX は _moveAndCollide の冒頭で記録）
+        const moved = this._frameStartX === undefined ? Math.abs(this.vx * this.motion.speed) : Math.abs(this.x - this._frameStartX);
+        const reach = moved + SLOPE_CLIMB_MARGIN;
         if (!this._touchesShapedTile(reach, reach)) return false;
         // 上から 1px 余分に探す: 重力で床へ 1px 未満沈んだ足の位置をそのまま「床」と読むと、
         // 坂の下の平らな床で 0.3px ずつ沈んでいった（実測）
@@ -109,7 +137,12 @@ export const SlopeBody = {
     _settleOnSlope() {
         if (!this._touchesShapedTile(0, 1)) return false;
         const floor = floorBelow(this.game.map, this, 1, this._slopePoints, 1);
-        if (floor !== null) this.y = floor - this.height;
+        if (floor !== null) {
+            // 足の列の床へ合わせた先で、体の別の所（足の列のあいだの面取りの先など）が岩に入るなら合わせない
+            const prevY = this.y;
+            this.y = floor - this.height;
+            if (this._collidesWithMap()) this.y = prevY;
+        }
         return true;
     },
 

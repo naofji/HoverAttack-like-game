@@ -20,8 +20,10 @@ export const AttackerCollision = {
 
     _moveAndCollide() {
         const map = this.game.map;
+        this._frameStartX = this.x; // 坂の吸着の届く距離（slopeBody.js の _glueDownSlope）
 
         // --- Horizontal ---
+        const xBefore = this.x;
         this.x += this.vx * this.motion.speed;
         // Horizontal Map Collision
         let hitHMap = false;
@@ -47,6 +49,7 @@ export const AttackerCollision = {
                 } else if (this.vx < 0) {
                     this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
                 }
+                this._undoSnapIntoRock('x', xBefore);
                 this.vx = 0;
 
                 const mType = this.config.movementType || 'stop_and_shoot';
@@ -109,10 +112,12 @@ export const AttackerCollision = {
         this.onTerrain = false;
 
         if (this._collidesWithMap()) {
+            const yBefore = this.y - this.vy * this.motion.speed;
             if (this.vy > 0) {
                 // Landing（坂なら斜辺へ。slopeBody.js）
                 if (!this._landOnSlope()) {
                     this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
+                    this._undoSnapIntoRock('y', yBefore);
                 }
                 this.onGround = true;
                 this.onTerrain = true;
@@ -121,6 +126,7 @@ export const AttackerCollision = {
                 // Hit ceiling（天井の斜面なら沿って流れる。slopeBody.js）
                 if (!this._hitCeilingSlope()) {
                     this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
+                    this._undoSnapIntoRock('y', yBefore);
                 }
             }
             this.vy = 0;

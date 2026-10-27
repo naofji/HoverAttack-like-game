@@ -28,7 +28,8 @@ function collidesAt(map, entity, dy, pointsFn) {
     const y0 = entity.y;
     entity.y = y0 + dy;
     try {
-        return collidesWithTerrain(entity, map, pointsFn(entity));
+        // 既定の点なら点を渡さない（collidesWithTerrain が形の近くで点の囲む矩形も見る）
+        return collidesWithTerrain(entity, map, pointsFn === getDefaultCheckPoints ? undefined : pointsFn(entity));
     } finally {
         entity.y = y0;
     }
