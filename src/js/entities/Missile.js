@@ -48,7 +48,8 @@ export class Missile {
         const map = this.game.map;
         const tile = map.pixelToTile(this.x, this.y);
 
-        if (map.isSolid(tile.r, tile.c)) {
+        // 5面の坂と面取りは形で当てる。削れた空中で爆発すると、何も無い所で足場が壊れて見える
+        if (map.isSolidPoint(this.x, this.y)) {
             map.damageBlock(tile.r, tile.c, 1);
             playBlast(this.game, this.x, this.y, 'missileTerrain');
             this.exploded = true;

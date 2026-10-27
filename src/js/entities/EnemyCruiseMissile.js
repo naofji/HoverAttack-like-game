@@ -158,14 +158,28 @@ export class EnemyCruiseMissile {
         const startR = Math.floor((this.y + minY + 2) / TS);
         const endR = Math.floor((this.y + maxY - 2) / TS);
 
-        let hitR = -1, hitC = -1;
-        outer: for (let r = startR; r <= endR; r++) {
-            for (let c = startC; c <= endC; c++) {
-                if (map.isSolid(r, c)) { hitR = r; hitC = c; break outer; }
+        // 5面の坂と面取りの近くでは、矩形を形で当てる（板の先の削れた空中をかすめて爆発しない）。
+        // それ以外は今までのタイルの総当たりのまま。端のタイルを含む閉区間なので、半開の
+        // rectHitsTerrain に替えると矩形の端がタイルの境目ちょうどのとき答えが変わる（段2の
+        // collidesWithTerrain と同じく、形のあるタイルの近くだけ形で見る）
+        const x0 = this.x + minX + 2, y0 = this.y + minY + 2;
+        const x1 = this.x + maxX - 2, y1 = this.y + maxY - 2;
+        let hit;
+        if (map.hasShapedTileIn(x0, y0, x1 - x0, y1 - y0)) {
+            hit = map.rectHitsTerrain(x0, y0, x1 - x0, y1 - y0);
+        } else {
+            // 地図の上の外（row −1）で当たると hitR が −1 になって「当たらなかった」と同じに読まれる
+            // （上端すれすれでは爆発せず、画面外の判定で消える）。5面以外の軌跡を変えないため、そのまま残す
+            let hitR = -1;
+            outer: for (let r = startR; r <= endR; r++) {
+                for (let c = startC; c <= endC; c++) {
+                    if (map.isSolid(r, c)) { hitR = r; break outer; }
+                }
             }
+            hit = hitR !== -1;
         }
 
-        if (hitR !== -1) {
+        if (hit) {
             this._explode();
             return;
         }

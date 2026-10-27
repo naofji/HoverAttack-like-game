@@ -62,7 +62,8 @@ export class EnemyHomingMissile {
 
         const map  = this.game.map;
         const tile = map.pixelToTile(this.x, this.y);
-        if (map.isSolid(tile.r, tile.c)) {
+        // 形で当てる（Missile と同じ）。5面の足場を削るのは主に敵のミサイル
+        if (map.isSolidPoint(this.x, this.y)) {
             map.damageBlock(tile.r, tile.c, 1);
             playBlast(this.game, this.x, this.y, 'missileTerrain');
             this.exploded = true;

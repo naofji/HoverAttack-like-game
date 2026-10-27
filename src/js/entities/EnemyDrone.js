@@ -17,7 +17,7 @@ import {
     ENEMY_RECOIL_PROFILES,
     DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE, TILE_SIZE
 } from '../utils/Constants.js';
-import { collidesWithMap, hasLineOfSight, withinSight } from '../utils/Physics.js';
+import { collidesWithTerrain, hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
@@ -483,7 +483,8 @@ export class EnemyDrone {
             { x: this.x + 2, y: this.y + this.height - 2 },
             { x: this.x + this.width - 2, y: this.y + this.height - 2 },
         ];
-        return collidesWithMap(this, this.game.map, points);
+        // 5面の坂と面取りは形で当てる（体当たりが削れた空中で墜落しないように）。点を渡すので点だけで見る
+        return collidesWithTerrain(this, this.game.map, points);
     }
 
     _hasLineOfSight(target) {

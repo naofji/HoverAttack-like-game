@@ -7,7 +7,7 @@ import { BULLET_WATER_DRAG, BULLET_WATER_MIN_SPEED } from '../src/js/utils/Const
 
 function gameWithMotion(motionAt) {
   return {
-    map: { isSolidAtPixel: () => false },
+    map: { isSolidAtPixel: () => false, isSolidPoint: () => false },
     env: { motionAt },
     particles: [],
   };

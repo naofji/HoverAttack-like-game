@@ -32,6 +32,8 @@ function makeTestGame({ env = null } = {}) {
     // 機体は形の点判定（collidesWithTerrain）と坂の問い合わせを使う
     isSolidPoint: () => false,
     hasShapedTileIn: () => false,
+    // グレネードは斜辺に触れたかを見る（段3）
+    slopeHitAlong: () => null,
     pixelToTile: (px, py) => ({ r: Math.floor(py / TILE_SIZE), c: Math.floor(px / TILE_SIZE) }),
     destroyArea: () => 0,
   };

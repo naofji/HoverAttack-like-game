@@ -76,8 +76,8 @@ export class Bullet {
             return;
         }
 
-        // 壁に当たったら消える。弾はブロックを壊さない
-        if (this.game.map.isSolidAtPixel(this.x, this.y)) {
+        // 壁に当たったら消える。弾はブロックを壊さない。5面の坂と面取りは形で当てる（削れた空中は素通り）
+        if (this.game.map.isSolidPoint(this.x, this.y)) {
             this.alive = false;
         }
     }
