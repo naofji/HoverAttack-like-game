@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection } from '../src/js/utils/surface.js';
 import { ICE_SLIDE, TILE_SIZE } from '../src/js/utils/Constants.js';
+import { makeMap } from './helpers/enemy-world.js';
 
 const SNOW_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
 const LAND_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: 0 }), sightScale: 1, kind: 'none' };
@@ -127,39 +128,36 @@ test('map が無い世界（デモ画面など）では null', () => {
   assert.equal(groundClearance(e, { map: null }, 32), null);
 });
 
-// --- groundSlopeDirection: 探した地面が階段(斜面)かどうか ----------------------
+// --- groundSlopeDirection: 探した地面が坂かどうか ------------------------------
 // ホバー中の雪煙を、平地では横に・斜面では斜辺に沿わせるための判定。
-// stairDirection(map, r, c) を「足元中心 x・地面の見つかった行」に当てはめるだけの薄いラッパ。
+// 足元中心の列で見つかった地面の、タイルの形（utils/tileShape.js）の上面の傾きを返す。
 
-/** 中心列(c=10)に右上がりの階段を1つ持つ最小マップ。stairDirection の条件どおりに立てる。 */
-function stairMap() {
-  return {
-    isSolid(r, c) {
-      if (r === 9 && c === 11) return true;   // rightUp: r-1, c+1
-      if (r === 10 && c === 9) return false;  // leftDown: r, c-1 (空いている)
-      if (r === 11 && c === 9) return true;   // leftDown: r+1, c-1
-      return false; // r-2,c+1 を含め、それ以外は空
-    },
-  };
-}
+// 右へ上る階段。5面と同じ形の規則では (3,2)(2,3)(1,4) が斜めのタイルの坂になる
+const STAIRS = ['......', '....##', '...###', '..####', '######'];
 
-test('階段の途中では stairDirection と同じ向きを返す', () => {
-  const e = entity({ x: 160 - 8, y: 0, height: 0 }); // 中心 x = 160 → c = 10
-  const d = groundSlopeDirection(e, { map: stairMap() }, 10 * TILE_SIZE); // groundY = 160 → r = 10
-  assert.equal(d, 1);
+test('坂の上では上面の傾き（+1 = 右へ上る）を返す。地面がタイルの上端で見つかっていても斜辺を探す', () => {
+  const map = makeMap(STAIRS, null, { tileShape: 'snowSlope' });
+  const e = entity({ x: 2 * TILE_SIZE + 4 - 8, y: 0, height: 0 }); // 中心 x = 2T+4（(3,2) の坂、斜辺は y = 3T+12）
+  assert.equal(groundSlopeDirection(e, { map }, 3 * TILE_SIZE), 1);       // タイルの上端（斜辺より上）
+  assert.equal(groundSlopeDirection(e, { map }, 3 * TILE_SIZE + 12), 1);  // 斜辺そのもの
 });
 
-test('平地（階段でない）では 0', () => {
-  const flat = { isSolid: () => false };
-  const e = entity({ x: 160 - 8, y: 0, height: 0 });
-  const d = groundSlopeDirection(e, { map: flat }, 10 * TILE_SIZE);
-  assert.equal(d, 0);
+test('平らな床では 0', () => {
+  const map = makeMap(STAIRS, null, { tileShape: 'snowSlope' });
+  const e = entity({ x: 4 - 8, y: 0, height: 0 }); // 中心 x = 4（列 0 の床、row 4）
+  assert.equal(groundSlopeDirection(e, { map }, 4 * TILE_SIZE), 0);
+});
+
+test('四角い形の規則の地図では、階段の並びでも 0（坂は形が持つ）', () => {
+  const map = makeMap(STAIRS);
+  const e = entity({ x: 2 * TILE_SIZE + 4 - 8, y: 0, height: 0 });
+  assert.equal(groundSlopeDirection(e, { map }, 3 * TILE_SIZE), 0);
 });
 
 test('地面が見つかっていない(clearance が null)なら 0', () => {
-  const e = entity({ x: 160 - 8, y: 0, height: 0 });
-  const d = groundSlopeDirection(e, { map: stairMap() }, null);
-  assert.equal(d, 0);
+  const map = makeMap(STAIRS, null, { tileShape: 'snowSlope' });
+  const e = entity({ x: 2 * TILE_SIZE + 4 - 8, y: 0, height: 0 });
+  assert.equal(groundSlopeDirection(e, { map }, null), 0);
 });
 
 test('map が無い世界では 0', () => {

@@ -50,7 +50,7 @@ function snowWorld() {
 
 // くの字の先端（板状の突出）: 列9が上下に貫く壁、行14・列10だけが右へ突き出した
 // 高さ1の板。上下(行13,15)は空洞、右(列11)も空洞、左(列9)だけが壁で繋がっている
-// → plateTipDirection は +1（右へ露出）。他はすべて空洞（宙に浮いた孤立タイル）
+// → 5面の形の規則で右の2角が面取りされる（右へ下る坂）。他はすべて空洞（宙に浮いた孤立タイル）
 function plateRows() {
   const rows = [];
   for (let r = 0; r < 20; r++) {
@@ -144,8 +144,7 @@ test('spawnSnowKick pushes count particles that rise then fall', () => {
 test('descending the staircase, the player is snapped down step by step instead of falling', () => {
   const game = snowWorld();
   game.input = inputWith(new Set(['KeyD'])); // 右 = 下り
-  // 階段の2段目（列 11、床 row 12）から。1段目は階段の端で、両側を要求する
-  // stairDirection が 0 を返す（設計どおり）ので、そこは吸着の対象外
+  // 階段の2段目（列 11、床 row 12）から。坂は斜めのタイルなので、下るあいだ斜辺に吸着する
   const p = new Player(game, 11 * TILE_SIZE, 12 * TILE_SIZE - 24);
   game.player = p;
 
@@ -222,7 +221,7 @@ test('SnowKickParticle is drawn with SNOW_KICK_COLOR', () => {
 });
 
 // 実機の指摘: くの字に削れた先端は元のブロックの1/4しか残っていないので不安定。
-// 45度の坂と同様、露出側へ滑り落ちるべき（当たり判定はいじらない＝タイルは今も正方形）
+// 45度の坂と同様、露出側へ滑り落ちるべき。今は先端が判定ごと面取りされた坂（5面の形の規則）
 test('standing still on a plate tip drifts toward the exposed side and eventually falls off', () => {
   const game = plateWorld();
   game.input = inputWith(new Set());

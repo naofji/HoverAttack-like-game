@@ -12,7 +12,6 @@
 // DOM もマップの中身も要らない純関数なので、単体で試せる。
 
 import { motionFor } from '../world/StageEnvironment.js';
-import { stairDirection } from './slope.js';
 import {
     TILE_SIZE,
     HOVER_WATER_MIST_MIN_ALT,
@@ -108,10 +107,14 @@ export function groundClearance(entity, game, maxPx) {
 }
 
 /**
- * `groundClearance` が見つけた地面が階段(斜面)かどうか。0=平地、±1=階段
- * （stairDirection と同じ符号）。ホバー中の雪煙を、平地では横に・斜面では
+ * `groundClearance` が見つけた地面が坂かどうか。0=平地、+1=右へ上る、-1=左へ上る
+ * （自機の slopeDir と同じ符号）。ホバー中の雪煙を、平地では横に・斜面では
  * 斜辺に沿わせて舞わせるために使う。地面が見つかっていない(clearance が
  * null)、または map が無ければ平地扱い(0)。
+ *
+ * 坂はタイルの形（utils/tileShape.js）が持つ。groundClearance はタイル単位で探すので、
+ * 坂の上では見つかった地面がタイルの上端（斜辺より上の空中）になる。そこから1タイル下まで
+ * 中心の列の本当の上面を探してから傾きを読む。
  *
  * @param {object} entity x, width, height を持つ
  * @param {object} game map を持つ（無ければ 0）
@@ -122,9 +125,9 @@ export function groundSlopeDirection(entity, game, clearance) {
     const map = game && game.map;
     if (!map || clearance === null || clearance === undefined) return 0;
     const groundY = entity.y + entity.height + clearance;
-    const r = Math.floor(groundY / TILE_SIZE);
-    const c = Math.floor((entity.x + entity.width / 2) / TILE_SIZE);
-    return stairDirection(map, r, c);
+    const cx = entity.x + entity.width / 2;
+    const surface = map.terrainTopY(cx, groundY - GROUND_CLEARANCE_STEP, groundY + TILE_SIZE);
+    return surface === null ? 0 : map.floorSlopeAt(cx, surface);
 }
 
 /**
