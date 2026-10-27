@@ -312,6 +312,8 @@ export class Map {
         // タイルの形。地形の生成（階段まで）が終わってから焼く。描画のキャッシュと町・植物の
         // 置き場所がこのあと形を読むので、その前に置く。乱数は使わない（週次の決定性）
         this._buildTileShapes();
+        // 湧き位置（Step 10）は形を焼く前にタイルの上端で決めているので、形の高さへ置き直す
+        this._seatSpawnsOnShapes();
 
         this._initTileCache();
         this._generateMiniMap();
@@ -1594,6 +1596,56 @@ export class Map {
      * 見ると、斜辺を通り越して下の満ちた象限に入り、平らな床として跳ね返ってしまうから。
      * 四角い地形と、線分の近くに形のあるタイルが無いときはたどらずに null（5面以外の軌跡を変えない）
      */
+    /**
+     * 幅 w の物の足の列（両端から 2px 内側と中央）を yFrom から1タイル下まで見て、一番高い床の y。
+     * どの列にも無ければ null。止まっている物を坂に乗せるとき、沈めずに一番高い所で支える
+     * （下り側が少し浮くが、岩にめり込むより自然。段4の計画の判断）
+     */
+    floorUnder(x, w, yFrom) {
+        let best = null;
+        for (const cx of [x + 2, x + w / 2, x + w - 2]) {
+            const top = this.terrainTopY(cx, yFrom, yFrom + TILE_SIZE);
+            if (top !== null && (best === null || top < best)) best = top;
+        }
+        return best;
+    }
+
+    /** floorUnder の天井版: 同じ3列を yFrom から1タイル上まで見て、一番低い天井の y。無ければ null */
+    ceilingOver(x, w, yFrom) {
+        let best = null;
+        for (const cx of [x + 2, x + w / 2, x + w - 2]) {
+            const bottom = this.terrainBottomY(cx, yFrom, yFrom - TILE_SIZE);
+            if (bottom !== null && (best === null || bottom > best)) best = bottom;
+        }
+        return best;
+    }
+
+    /**
+     * 床に乗る湧き位置（地雷・戦車・敵アタッカー・床の砲台）を一番高い床へ、天井の砲台を一番低い
+     * 天井へ置き直す（決定12）。坂の上では最大 16px、面取りの上では 8px 浮いていた。
+     * 下へ（天井は上へ）動かすだけで、すでに岩に掛かっている置き方（基地の台の砲台など）は変えない。
+     * 乱数は使わない（週次の決定性）。四角い地形では形がタイルと同じなので、何もしない
+     */
+    _seatSpawnsOnShapes() {
+        if (this.tileShapeRule === 'square') return;
+        const seatFloor = (list, w, h) => {
+            for (const p of list) {
+                if (p.isCeiling) continue;
+                const floor = this.floorUnder(p.x, w, p.y + h);
+                if (floor !== null && floor > p.y + h) p.y = floor - h;
+            }
+        };
+        seatFloor(this.landmineSpawns, LANDMINE_WIDTH, LANDMINE_HEIGHT);
+        seatFloor(this.enemyTankSpawns, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT);
+        seatFloor(this.enemyAttackerSpawns, PLAYER_WIDTH, PLAYER_HEIGHT);
+        seatFloor(this.enemyTurretSpawns, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT);
+        for (const p of this.enemyTurretSpawns) {
+            if (!p.isCeiling) continue;
+            const ceiling = this.ceilingOver(p.x, ENEMY_TURRET_WIDTH, p.y);
+            if (ceiling !== null && ceiling < p.y) p.y = ceiling;
+        }
+    }
+
     /**
      * 点 (x, y) が形の岩の中なら、真上へ1タイル以内で最初に空になる y（1px 刻み）。岩の外、
      * 1タイル上まで岩、四角い地形、近くに形のあるタイルが無いときは null。
