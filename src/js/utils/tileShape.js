@@ -182,3 +182,23 @@ export function shapeBottomY(code, lx) {
     const upper = quadBottom((code >> (3 * qx)) & 7, u);
     return upper > 0 ? upper : null;
 }
+
+/**
+ * 列 lx（[0, 16)）の上面の傾き。+1 = 右へ上る、-1 = 左へ上る、0 = 平ら（自機の slopeDir と同じ符号）。
+ * 上面がある象限（shapeTopY と同じ選び方）の三角の向きで決まる。坂の加速と、斜面に当たった
+ * ときに流す向きはここだけから読む（機体ごとに導出しない）
+ */
+export function shapeFloorSlope(code, lx) {
+    const qx = lx < QS ? 0 : 1, u = lx - qx * QS;
+    let q = (code >> (3 * qx)) & 7;
+    if (quadTop(q, u) >= QS) q = (code >> (3 * (2 + qx))) & 7;
+    return q === Q_TRI_NO_TL ? 1 : q === Q_TRI_NO_TR ? -1 : 0;
+}
+
+/** 列 lx の下面の傾き。+1 = 右へ下がる（右ほど天井が低い）、-1 = 左へ下がる、0 = 平ら */
+export function shapeCeilingSlope(code, lx) {
+    const qx = lx < QS ? 0 : 1, u = lx - qx * QS;
+    let q = (code >> (3 * (2 + qx))) & 7;
+    if (quadBottom(q, u) <= 0) q = (code >> (3 * qx)) & 7;
+    return q === Q_TRI_NO_BL ? 1 : q === Q_TRI_NO_BR ? -1 : 0;
+}

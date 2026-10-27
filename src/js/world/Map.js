@@ -55,6 +55,7 @@ import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
+    shapeFloorSlope, shapeCeilingSlope,
 } from '../utils/tileShape.js';
 
 
@@ -1550,6 +1551,39 @@ export class Map {
             return y >= yTo ? y : null;
         }
         return null;
+    }
+
+    /** 床の上面の点 (x, y)（terrainTopY の戻り値）の傾き。+1 = 右へ上る。上面は岩に含まれるので行は floor */
+    floorSlopeAt(x, y) {
+        const r = Math.floor(y / TILE_SIZE), c = Math.floor(x / TILE_SIZE);
+        return shapeFloorSlope(this.tileShapeAt(r, c), x - c * TILE_SIZE);
+    }
+
+    /**
+     * 天井の下面の点 (x, y)（terrainBottomY の戻り値）の傾き。+1 = 右へ下がる。
+     * 下面がタイル境目ちょうどのとき、その岩は上の行に属するので行は ceil − 1
+     */
+    ceilingSlopeAt(x, y) {
+        const r = Math.ceil(y / TILE_SIZE) - 1, c = Math.floor(x / TILE_SIZE);
+        return shapeCeilingSlope(this.tileShapeAt(r, c), x - c * TILE_SIZE);
+    }
+
+    /**
+     * 半開矩形に掛かるタイルに、満ちでも空でもない形が1枚でもあるか。機体はこれが偽のあいだ
+     * 今までのタイル単位の手順をそのまま通る（5面以外の軌跡を1フレームも変えないため。
+     * tests/terrain-shape-invariance.test.js）
+     */
+    hasShapedTileIn(x, y, w, h) {
+        if (this.tileShapeRule === 'square') return false;
+        const c0 = Math.floor(x / TILE_SIZE), c1 = Math.ceil((x + w) / TILE_SIZE) - 1;
+        const r0 = Math.floor(y / TILE_SIZE), r1 = Math.ceil((y + h) / TILE_SIZE) - 1;
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                const code = this.tileShapeAt(r, c);
+                if (code !== SHAPE_FULL && code !== 0) return true;
+            }
+        }
+        return false;
     }
 
     isWater(r, c) {
