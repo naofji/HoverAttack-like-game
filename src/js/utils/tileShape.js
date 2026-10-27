@@ -206,3 +206,24 @@ export function shapeCeilingSlope(code, lx) {
     if (q === Q_EMPTY) q = (code >> (3 * qx)) & 7;
     return q === Q_TRI_NO_BL ? 1 : q === Q_TRI_NO_BR ? -1 : 0;
 }
+
+/**
+ * 三角の象限の斜辺に、直前の点 (px, py) の側から触れたときの外向きの法線。符号の組 (±1, ±1) で返す
+ * （45度の斜辺しか無いので、正規化した √½ を持つより、反射を `vx' = −vy·sx·sy` のように整数の符号で
+ * 書ける方が反射ビームの速さが浮動小数の誤差でずれない）。
+ * (lx, ly) はタイル内の岩の点、(px, py) は同じタイル基準の直前の空の点。(lx, ly) が三角の象限に無いか、
+ * 直前の点が斜辺の直線の開いた側に無い（象限の垂直・水平な辺から入った）ときは null。
+ * 直線の延長で見るので、直前の点は象限の外でもよい。
+ */
+export function hypotenuseNormal(code, lx, ly, px, py) {
+    const qx = lx < QS ? 0 : 1, qy = ly < QS ? 0 : 1;
+    const q = (code >> (3 * (qy * 2 + qx))) & 7;
+    const u = px - qx * QS, v = py - qy * QS;
+    switch (q) {
+        case Q_TRI_NO_TL: return u + v < QS ? { sx: -1, sy: -1 } : null;
+        case Q_TRI_NO_BR: return u + v > QS ? { sx: 1, sy: 1 } : null;
+        case Q_TRI_NO_TR: return v < u ? { sx: 1, sy: -1 } : null;
+        case Q_TRI_NO_BL: return u < v ? { sx: -1, sy: 1 } : null;
+        default: return null;
+    }
+}

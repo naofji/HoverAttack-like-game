@@ -197,3 +197,57 @@ test('形の焼き込みは乱数を使わない（5面の地図を作ったあ�
         Map.prototype._buildTileShapes = orig;
     }
 });
+
+test('slopeHitAlong は斜辺へ真下に落ちる線分で、触れる直前の点と右へ上る坂の法線 (−1, −1) を返す', async () => {
+    const m = await fakeSnowMap(['......', '......', '..####', '######']);
+    // (2,2) の斜辺 y = 2T + 16 − lx。lx = 4 なら y = 2T + 12
+    const hit = m.slopeHitAlong(2 * T + 4, 2 * T + 5, 2 * T + 4, 2 * T + 14);
+    assert.ok(hit, '斜辺に触れていない');
+    assert.equal(hit.sx, -1);
+    assert.equal(hit.sy, -1);
+    assert.equal(hit.x, 2 * T + 4);
+    assert.ok(hit.y < 2 * T + 12 && hit.y >= 2 * T + 11, `触れる直前の点でない y=${hit.y - 2 * T}`);
+    assert.equal(m.isSolidPoint(hit.x, hit.y), false);
+});
+
+test('slopeHitAlong は斜辺を通り越して下の満ちた象限まで届く線分でも、斜辺で止まる', async () => {
+    const m = await fakeSnowMap(['......', '......', '..####', '######']);
+    // lx = 10 の斜辺は ly = 6。終点 (10, 9) は満ちた右下の象限
+    const hit = m.slopeHitAlong(2 * T + 10, 2 * T + 3, 2 * T + 10, 2 * T + 9);
+    assert.ok(hit, '斜辺に触れていない');
+    assert.deepEqual([hit.sx, hit.sy], [-1, -1]);
+    assert.ok(hit.y < 2 * T + 6, `斜辺より下 y=${hit.y - 2 * T}`);
+});
+
+test('slopeHitAlong は平らな床に当たる線分では null', async () => {
+    const m = await fakeSnowMap(['......', '......', '..####', '######']);
+    assert.equal(m.slopeHitAlong(4 * T + 8, 2 * T - 5, 4 * T + 8, 2 * T + 1), null);
+    // 始点が岩の中でも null
+    assert.equal(m.slopeHitAlong(2 * T + 12, 2 * T + 12, 2 * T + 12, 2 * T + 15), null);
+});
+
+test('四角い地形の slopeHitAlong はどの線分でも null', async () => {
+    const map = await buildMap(7, 0);
+    assert.equal(map.tileShapeRule, 'square');
+    let n = 0;
+    for (let y = 0; y < map.rows * T; y += 13) {
+        for (let x = 0; x < map.cols * T; x += 29) {
+            for (const [dx, dy] of [[5, 0], [0, 5], [4, 4], [-4, 3], [-6, -6]]) {
+                assert.equal(map.slopeHitAlong(x, y, x + dx, y + dy), null);
+                n++;
+            }
+        }
+    }
+    assert.ok(n > 1000);
+});
+
+test('ブロックが壊れて形が作り直されると、次の slopeHitAlong は新しい斜辺の法線を返す', async () => {
+    // (2,3) を壊すと (2,4) が斜め（packShape(E, TL, TL, F)）になる
+    const m = await fakeSnowMap(['......', '......', '...###', '######']);
+    assert.equal(m.slopeHitAlong(4 * T + 4, 2 * T - 4, 4 * T + 4, 2 * T + 14), null, '前提: 壊す前は平らな上面');
+    m.damageBlock(2, 3, 99);
+    const hit = m.slopeHitAlong(4 * T + 4, 2 * T - 4, 4 * T + 4, 2 * T + 14);
+    assert.ok(hit, '新しい斜辺に触れていない');
+    assert.deepEqual([hit.sx, hit.sy], [-1, -1]);
+    assert.ok(hit.y < 2 * T + 12 && hit.y >= 2 * T + 11);
+});

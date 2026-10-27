@@ -8,7 +8,7 @@ import { computeTileShape } from '../../src/js/utils/tileShape.js';
 // 通らないように。黙って isSolid に落とす作りにすると、テストが本番の判定を通らなくなる）
 const SHAPE_QUERIES = [
   'tileShapeAt', 'isSolidPoint', 'rectHitsTerrain', 'terrainTopY', 'terrainBottomY',
-  'floorSlopeAt', 'ceilingSlopeAt', 'hasShapedTileIn',
+  'floorSlopeAt', 'ceilingSlopeAt', 'hasShapedTileIn', 'slopeHitAlong',
 ];
 
 /**

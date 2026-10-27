@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     Q_EMPTY, Q_FULL, Q_TRI_NO_TL, Q_TRI_NO_TR, Q_TRI_NO_BL, Q_TRI_NO_BR,
     packShape, SHAPE_EMPTY, SHAPE_FULL, computeTileShape,
-    shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
+    shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY, hypotenuseNormal,
 } from '../src/js/utils/tileShape.js';
 
 const F = Q_FULL, E = Q_EMPTY, TL = Q_TRI_NO_TL, TR = Q_TRI_NO_TR, BL = Q_TRI_NO_BL, BR = Q_TRI_NO_BR;
@@ -129,4 +129,23 @@ test('総当たり: 点が岩なら、その点を含む小さな矩形も当た
             }
         }
     }
+});
+
+test('hypotenuseNormal は三角の象限の点と開いた側の点で外向きの法線を返す', () => {
+    // 左上の象限に三角を1つだけ置き、象限の中の岩の点と、斜辺の直線の開いた側の点を渡す
+    const at = (q) => packShape(q, F, F, F);
+    assert.deepEqual(hypotenuseNormal(at(TL), 6, 6, 2, 2), { sx: -1, sy: -1 }); // 斜辺 u+v=8、開いた側は左上
+    assert.deepEqual(hypotenuseNormal(at(TR), 2, 6, 6, 2), { sx: 1, sy: -1 });  // 斜辺 v=u、開いた側は右上
+    assert.deepEqual(hypotenuseNormal(at(BL), 6, 2, 2, 6), { sx: -1, sy: 1 });  // 開いた側は左下
+    assert.deepEqual(hypotenuseNormal(at(BR), 2, 2, 6, 6), { sx: 1, sy: 1 });   // 開いた側は右下
+    // 右下の象限（原点 (8, 8)）でも象限の中の座標で読む。直前の点は象限の外（直線の延長上）でもよい
+    assert.deepEqual(hypotenuseNormal(RAMP_UP_RIGHT, 12, 6, 12, 1), { sx: -1, sy: -1 });
+    assert.deepEqual(hypotenuseNormal(packShape(F, F, F, TL), 14, 14, 9, 7), { sx: -1, sy: -1 });
+});
+
+test('hypotenuseNormal は満ちた象限・開いた側に無い直前の点では null', () => {
+    assert.equal(hypotenuseNormal(RAMP_UP_RIGHT, 12, 12, 12, 7), null); // 満ちた右下の象限
+    assert.equal(hypotenuseNormal(SHAPE_FULL, 4, 4, 4, -1), null);
+    // 左上の三角へ、右の垂直な面の側（直線の岩の側）から入った
+    assert.equal(hypotenuseNormal(packShape(TL, E, F, F), 7, 4, 9, 4), null);
 });

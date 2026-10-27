@@ -55,7 +55,7 @@ import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
-    shapeFloorSlope, shapeCeilingSlope,
+    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal,
 } from '../utils/tileShape.js';
 
 
@@ -1584,6 +1584,34 @@ export class Map {
             }
         }
         return false;
+    }
+
+    /**
+     * (x0, y0) から (x1, y1) への1フレームの移動で最初に触れた岩が斜辺なら、触れる直前の空の点と
+     * 斜辺の外向きの法線の符号の組 `{ x, y, sx, sy }`。最初に触れたのが垂直・水平な面か、何にも
+     * 触れない、または始点が岩の中なら null（呼んだ側は今までの軸ごとの手順で解く）。
+     * 1px 刻みでたどるのは、グレネード（最大 6px/フレーム）や反射ビーム（5px）の移動先の点だけを
+     * 見ると、斜辺を通り越して下の満ちた象限に入り、平らな床として跳ね返ってしまうから。
+     * 四角い地形と、線分の近くに形のあるタイルが無いときはたどらずに null（5面以外の軌跡を変えない）
+     */
+    slopeHitAlong(x0, y0, x1, y1) {
+        if (this.tileShapeRule === 'square') return null;
+        const minX = Math.min(x0, x1), minY = Math.min(y0, y1);
+        if (!this.hasShapedTileIn(minX - 1, minY - 1, Math.abs(x1 - x0) + 2, Math.abs(y1 - y0) + 2)) return null;
+        if (this.isSolidPoint(x0, y0)) return null;
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+        let qx = x0, qy = y0;
+        for (let i = 1; i <= n; i++) {
+            const sx = x0 + (x1 - x0) * (i / n), sy = y0 + (y1 - y0) * (i / n);
+            if (this.isSolidPoint(sx, sy)) {
+                const r = Math.floor(sy / TILE_SIZE), c = Math.floor(sx / TILE_SIZE);
+                const tx = c * TILE_SIZE, ty = r * TILE_SIZE;
+                const normal = hypotenuseNormal(this.tileShapeAt(r, c), sx - tx, sy - ty, qx - tx, qy - ty);
+                return normal ? { x: qx, y: qy, sx: normal.sx, sy: normal.sy } : null;
+            }
+            qx = sx; qy = sy;
+        }
+        return null;
     }
 
     isWater(r, c) {
