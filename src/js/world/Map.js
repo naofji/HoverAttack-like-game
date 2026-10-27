@@ -53,6 +53,9 @@ import { generateSnowTrees } from './town/generateSnowTrees.js';
 import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
+import {
+    SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
+} from '../utils/tileShape.js';
 
 
 // --- Map generation constants ---
@@ -156,6 +159,9 @@ export class Map {
         this.envKind = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].kind;
         // 地形の生成規則。'fortress' なら洞窟を掘ったあとに要塞区画を埋め込む
         this.envTerrain = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].terrain;
+        // タイルの形の規則（utils/tileShape.js）。表に無い面は今までどおり四角
+        this.tileShapeRule = STAGE_ENVIRONMENTS[(missionLevel || 0) % STAGE_ENVIRONMENTS.length].tileShape || 'square';
+        this.tileShapes = null; // Uint16Array。地形が出来上がってから _buildTileShapes() が焼く
 
         this._generate();
     }
@@ -301,6 +307,10 @@ export class Map {
                 }
             }
         }
+
+        // タイルの形。地形の生成（階段まで）が終わってから焼く。描画のキャッシュと町・植物の
+        // 置き場所がこのあと形を読むので、その前に置く。乱数は使わない（週次の決定性）
+        this._buildTileShapes();
 
         this._initTileCache();
         this._generateMiniMap();
@@ -1139,6 +1149,9 @@ export class Map {
             // envKind を先に見てから呼ぶ: metal-block.test.js などが Map.prototype.damageBlock を
             // envKind の無いフェイクオブジェクトへ bind しているため、無条件呼び出しだと落ちる
             if (this.envKind === 'snow') this._snowDressExposedBelow(r, c);
+            // 形は描画のキャッシュより先に作り直す（描画が形を読むため）。tileShapes を見てから
+            // 呼ぶのは、metal-block.test.js などが damageBlock を形の無い偽オブジェクトへ bind しているため
+            if (this.tileShapes) this._rebuildTileShapesAround(r, c);
             this.invalidateTileRegion(r, c);
             const env = this.game && this.game.env;
             if (env && env.renderer && env.renderer.onBlockDestroyed) {
@@ -1427,6 +1440,114 @@ export class Map {
     isSolidAtPixel(x, y) {
         if (isNaN(x) || isNaN(y)) return true;
         return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));
+    }
+
+    // --- タイルの形（設計: docs/superpowers/specs/2026-10-27-tile-shape-collision-design.md） ---
+    // isSolid は「タイルのどこかに岩がある」の意味で残し、水・湧き位置・破片などはそちらを読む。
+    // 形で当てたいもの（地面を動く機体と飛び道具）だけが下の問い合わせを使う。5面以外は形が
+    // 満ちか空しか無いので、どの問い合わせも isSolid と同じ答えになる（tile-shape-map.test.js）
+
+    /** computeTileShape に渡すセルの種類。範囲外は外周と同じ磨き仕上げ（削らず、隣からは岩） */
+    _tileShapeCell(r, c) {
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return 'polished';
+        const b = this.grid[r][c];
+        if (b === BLOCK_EMPTY) return 'empty';
+        return (b === BLOCK_INDESTRUCTIBLE || b === BLOCK_METAL) ? 'polished' : 'rock';
+    }
+
+    _buildTileShapes() {
+        const cellAt = (r, c) => this._tileShapeCell(r, c);
+        this.tileShapes = new Uint16Array(this.rows * this.cols);
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                this.tileShapes[r * this.cols + c] = computeTileShape(cellAt, r, c, this.tileShapeRule);
+            }
+        }
+    }
+
+    /** 壊れたタイルとその8近傍の形を作り直す（形は隣と斜めの隣までしか見ない） */
+    _rebuildTileShapesAround(r, c) {
+        const cellAt = (rr, cc) => this._tileShapeCell(rr, cc);
+        for (let rr = r - 1; rr <= r + 1; rr++) {
+            if (rr < 0 || rr >= this.rows) continue;
+            for (let cc = c - 1; cc <= c + 1; cc++) {
+                if (cc < 0 || cc >= this.cols) continue;
+                this.tileShapes[rr * this.cols + cc] = computeTileShape(cellAt, rr, cc, this.tileShapeRule);
+            }
+        }
+    }
+
+    /** タイルの形。範囲外と NaN は isSolid と同じく岩（満ち） */
+    tileShapeAt(r, c) {
+        if (isNaN(r) || isNaN(c)) return SHAPE_FULL;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return SHAPE_FULL;
+        return this.tileShapes[r * this.cols + c];
+    }
+
+    /** ワールド座標の点が形の岩の中か */
+    isSolidPoint(x, y) {
+        if (isNaN(x) || isNaN(y)) return true;
+        const r = Math.floor(y / TILE_SIZE), c = Math.floor(x / TILE_SIZE);
+        const code = this.tileShapeAt(r, c);
+        if (code === SHAPE_FULL) return true;
+        if (code === 0) return false;
+        return shapeContainsPoint(code, x - c * TILE_SIZE, y - r * TILE_SIZE);
+    }
+
+    /** 半開矩形 [x, x+w) × [y, y+h) が形の岩に掛かるか。範囲外のタイルは岩 */
+    rectHitsTerrain(x, y, w, h) {
+        if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) return true;
+        const x1 = x + w, y1 = y + h;
+        const c0 = Math.floor(x / TILE_SIZE), c1 = Math.ceil(x1 / TILE_SIZE) - 1;
+        const r0 = Math.floor(y / TILE_SIZE), r1 = Math.ceil(y1 / TILE_SIZE) - 1;
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                const code = this.tileShapeAt(r, c);
+                if (code === SHAPE_FULL) return true;
+                if (code === 0) continue;
+                const tx = c * TILE_SIZE, ty = r * TILE_SIZE;
+                if (shapeOverlapsRect(code,
+                    Math.max(x - tx, 0), Math.max(y - ty, 0),
+                    Math.min(x1 - tx, TILE_SIZE), Math.min(y1 - ty, TILE_SIZE))) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 列 x を yFrom から下へ yTo まで見て、最初に岩が始まる y（床の高さ）。無ければ null。
+     * yFrom が岩の中なら yFrom を返す。
+     */
+    terrainTopY(x, yFrom, yTo) {
+        if (isNaN(x) || isNaN(yFrom)) return yFrom;
+        const c = Math.floor(x / TILE_SIZE), lx = x - c * TILE_SIZE;
+        for (let r = Math.floor(yFrom / TILE_SIZE), rEnd = Math.floor(yTo / TILE_SIZE); r <= rEnd; r++) {
+            const code = this.tileShapeAt(r, c);
+            const top = shapeTopY(code, lx);
+            if (top === null) continue;
+            if (r * TILE_SIZE + shapeBottomY(code, lx) < yFrom) continue; // 岩が始点より上で終わっている
+            const y = Math.max(r * TILE_SIZE + top, yFrom);
+            return y <= yTo ? y : null;
+        }
+        return null;
+    }
+
+    /**
+     * 列 x を yFrom から上へ yTo（≦ yFrom）まで見て、最初に岩が終わる y（天井の高さ）。無ければ null。
+     * yFrom が岩の中なら yFrom を返す。
+     */
+    terrainBottomY(x, yFrom, yTo) {
+        if (isNaN(x) || isNaN(yFrom)) return yFrom;
+        const c = Math.floor(x / TILE_SIZE), lx = x - c * TILE_SIZE;
+        for (let r = Math.floor(yFrom / TILE_SIZE), rEnd = Math.floor(yTo / TILE_SIZE); r >= rEnd; r--) {
+            const code = this.tileShapeAt(r, c);
+            const bottom = shapeBottomY(code, lx);
+            if (bottom === null) continue;
+            if (r * TILE_SIZE + shapeTopY(code, lx) > yFrom) continue; // 岩が始点より下から始まっている
+            const y = Math.min(r * TILE_SIZE + bottom, yFrom);
+            return y >= yTo ? y : null;
+        }
+        return null;
     }
 
     isWater(r, c) {
