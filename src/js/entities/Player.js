@@ -18,7 +18,7 @@ import {
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
-    SLOPE_DOWNHILL_ACCEL, SLOPE_UPHILL_SCALE, ICE_MAX_SLIDE_SPEED, SLOPE_CLIMB_MARGIN, SLOPE_DEFLECT,
+    SLOPE_UPHILL_SCALE,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
@@ -26,7 +26,7 @@ import {
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithTerrain } from '../utils/Physics.js';
-import { liftOutOfFloor, dropOutOfCeiling, floorBelow } from '../utils/slopeMotion.js';
+import { SlopeBody } from './slopeBody.js';
 import { groundSlide, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -275,27 +275,12 @@ export class Player {
      * onGround は前フレームの結果（_moveAndCollide が毎フレーム冒頭で倒す）。
      */
     _applySnowSlope(input) {
-        this.slopeDir = 0;
-        if (this.motion.slide === 0 || !this.onGround) return;
-        // 足の中心の列の床を探してから、その面の傾きを読む。坂では中心の列の床は一番高い足の
-        // 床より低いので、(中心, 足の下端) をそのまま読むと上の空のタイルを掴んで途切れる（実測）
-        const map = this.game.map;
-        const cx = this.x + this.width / 2, bottom = this.y + this.height;
-        const floorY = map.terrainTopY(cx, bottom - 1, bottom + TILE_SIZE / 2);
-        if (floorY === null) return;
-        this.slopeDir = map.floorSlopeAt(cx, floorY);
-        if (this.slopeDir === 0) return;
-        const downhill = -this.slopeDir;
         const held = (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) ? -1
             : (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) ? 1 : 0;
-        if (held === this.slopeDir) {
-            // 上り: 入力の最高速を落とす（_updateHorizontal が ±MAX にした直後）
-            this.vx = held * PLAYER_MAX_SPEED * SLOPE_UPHILL_SCALE;
-        }
+        // 上り: 入力の最高速を落とす（_updateHorizontal が ±MAX にした直後）。
         // しゃがみ中もここへ来る（_updateHorizontal が vx=0 にした後に加速が乗る）。
         // 雪の斜面では屈んだまま滑り降りるのが意図した挙動
-        this.vx += downhill * SLOPE_DOWNHILL_ACCEL;
-        this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
+        this._applySlope(held, PLAYER_MAX_SPEED * SLOPE_UPHILL_SCALE);
     }
 
     /** 雪の地上での粒。着地で多め、滑っているあいだは毎フレーム。 */
@@ -520,17 +505,8 @@ export class Player {
 
         let hitHMap = false;
         if (this._collidesWithMap()) {
-            // 坂（形のあるタイル）に当たったら、まず斜辺の外へ上下に押し出す。地上なら坂を上り、
-            // 空中なら上へ（天井の斜面なら下へ）逸れて、横の速さは保つ（設計の決定7・11）。
-            // 1フレームに動かしてよいのは横の移動量＋余裕まで。それを超える高さは壁として下の手順へ
-            const dx = this.vx * this.motion.speed;
-            if (this._touchesShapedTile(dx, 0)) {
-                const reach = Math.abs(dx) + SLOPE_CLIMB_MARGIN;
-                const lift = liftOutOfFloor(this.game.map, this, reach);
-                if (lift !== null) { this.y -= lift; return false; }
-                const drop = dropOutOfCeiling(this.game.map, this, reach);
-                if (drop !== null) { this.y += drop; return false; }
-            }
+            // 坂（形のあるタイル）なら、まず斜辺の外へ上下に押し出す（slopeBody.js）
+            if (this._slideAlongSlopeHorizontally()) return false;
             // STEP-UP LOGIC: Try stepping up 1 tile if on ground
             let steppedUp = false;
             if (this.onGround && Math.abs(this.vx) > 0) {
@@ -735,28 +711,8 @@ export class Player {
 
     _probeGroundBelowFeet() {
         const map = this.game.map;
-        // 坂を下るとき: 前のフレームに地形に立っていて、今フレームに横へ動いた分だけ床が下がって
-        // いたら、落下を待たずに斜辺へ下ろす（坂のあいだ空中に出ない）。下ろしてよいのは横の
-        // 移動量＋余裕までなので、面取りの先の垂直な落差（崖）には届かず、そこでは落ちる
-        if (!this.onGround && this.vy >= 0 && this._prevOnTerrain) {
-            const reach = Math.abs(this.vx * this.motion.speed) + SLOPE_CLIMB_MARGIN;
-            if (this._touchesShapedTile(reach, reach)) {
-                // 上から 1px 余分に探す: 重力で床へ 1px 未満沈んだ足の位置をそのまま「床」と読むと、
-                // 坂の下の平らな床で 0.3px ずつ沈んでいった（実測）
-                const floor = floorBelow(map, this, reach, undefined, 1);
-                if (floor !== null) {
-                    const prevY = this.y;
-                    this.y = floor - this.height;
-                    if (!this._collidesWithMap()) {
-                        this.onGround = true;
-                        this.onTerrain = true;
-                        this.vy = 0;
-                        return;
-                    }
-                    this.y = prevY;
-                }
-            }
-        }
+        // 坂を下るとき、落下を待たずに斜辺へ下ろす（slopeBody.js）
+        if (this._glueDownSlope(this._prevOnTerrain)) return;
         // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)
         // This prevents the "not grounded" flicker when standing on a surface,
         // but it must NOT trigger when moving upward (vy < 0) otherwise slow hover gets stuck to the ground.
@@ -768,13 +724,8 @@ export class Player {
                 this.onGround = true;
                 this.onTerrain = true;
                 this.vy = 0;
-                // Snap to surface。坂の上ではタイルの上端は床ではない（斜辺の上の空中）ので、
-                // 斜辺へ合わせる（重力で 1px 未満沈んだ足も戻す。戻さないと 0〜0.9px 沈んでは
-                // 着地し直すのを繰り返した）
-                if (this._touchesShapedTile(0, 1)) {
-                    const floor = floorBelow(map, this, 1, undefined, 1);
-                    if (floor !== null) this.y = floor - this.height;
-                } else {
+                // Snap to surface。坂の上ではタイルの上端は床ではないので斜辺へ合わせる（slopeBody.js）
+                if (!this._settleOnSlope()) {
                     this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
                 }
             } else {
@@ -796,48 +747,6 @@ export class Player {
 
     _collidesWithMap() {
         return collidesWithTerrain(this, this.game.map);
-    }
-
-    /**
-     * 体（と、この先 dx・dy 動く範囲）に形のあるタイルが掛かっているか。掛かっていないあいだは
-     * 坂の手順を通らず今までのタイル単位の手順だけを通る＝5面以外の軌跡は変わらない
-     * （tests/terrain-shape-invariance.test.js）
-     */
-    _touchesShapedTile(dx, dy) {
-        const ax = Math.abs(dx) + 1, ay = Math.abs(dy) + 1;
-        return this.game.map.hasShapedTileIn(this.x - ax, this.y - ay, this.width + 2 * ax, this.height + 2 * ay);
-    }
-
-    /**
-     * 落ちて坂（形のあるタイル）に着いたら、タイルの上端ではなく斜辺へ体を合わせる。
-     * 斜辺に当たった縦の速さの一部は下り向きの横の速さになる（SLOPE_DEFLECT）。
-     * @returns {boolean} 坂として処理したか（偽なら呼び出し側がタイルの上端へスナップする）
-     */
-    _landOnSlope() {
-        const dy = this.vy * this.motion.speed;
-        if (!this._touchesShapedTile(0, dy)) return false;
-        const lift = liftOutOfFloor(this.game.map, this, Math.abs(dy) + SLOPE_CLIMB_MARGIN);
-        if (lift === null) return false;
-        this.y -= lift;
-        const slope = this.game.map.floorSlopeAt(this.x + this.width / 2, this.y + this.height);
-        this.vx += -slope * this.vy * SLOPE_DEFLECT;
-        return true;
-    }
-
-    /**
-     * 上昇して天井の斜面に当たったら、斜辺の外へ下ろし、縦の速さの一部を天井の高い側
-     * （開いた側）への横の速さにする（決定11「天井の斜面に沿って流される」）。
-     * @returns {boolean} 斜面として処理したか
-     */
-    _hitCeilingSlope() {
-        const dy = this.vy * this.motion.speed;
-        if (!this._touchesShapedTile(0, dy)) return false;
-        const drop = dropOutOfCeiling(this.game.map, this, Math.abs(dy) + SLOPE_CLIMB_MARGIN);
-        if (drop === null) return false;
-        this.y += drop;
-        const slope = this.game.map.ceilingSlopeAt(this.x + this.width / 2, this.y - 0.01);
-        this.vx += -slope * Math.abs(this.vy) * SLOPE_DEFLECT;
-        return true;
     }
 
     takeDamage(amount) {
@@ -1432,3 +1341,6 @@ export class Player {
 // プロトタイプ側にも既定を置き、update() を一度も呼んでいない・constructor も
 // 通っていない経路でも motion が undefined にならないようにする。
 Player.prototype.motion = LAND_MOTION;
+
+// 坂を歩く・坂に当たる手順（敵アタッカーと共通）
+Object.assign(Player.prototype, SlopeBody);

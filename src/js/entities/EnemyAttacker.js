@@ -35,6 +35,7 @@ import { AttackerCollision } from './attacker/collision.js';
 import { AttackerCombat } from './attacker/combat.js';
 import { AttackerMovement } from './attacker/movement.js';
 import { AttackerAfterimage } from './attacker/afterimage.js';
+import { SlopeBody } from './slopeBody.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -221,6 +222,8 @@ export class EnemyAttacker {
             // AI が出した vx は「こう動きたい」。実際に出る速度は床が決める
             // （雪の地形の上では滑るので、止まるのにも曲がるのにも時間がかかる）
             this._applyGroundSlide(this.vx);
+            // 坂の上の加速（押せば上り、止まれば滑り落ちる。自機と同じ規則。attacker/collision.js）
+            this._applyAttackerSlope();
         }
 
         // --- Hover Fuel Recovery ---
@@ -435,10 +438,15 @@ export class EnemyAttacker {
 Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
-    AttackerAfterimage,
+    AttackerAfterimage, SlopeBody,
 );
 
 // プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で
 // constructor を通さずインスタンスを作る（emergency-wild-fire.test.js など）ため、
 // constructor 内の `this.motion = LAND_MOTION;` だけでは救えない（Player.js と同じ理由）。
 EnemyAttacker.prototype.motion = LAND_MOTION;
+// 坂で積み上がった下りの速さ（attacker/collision.js の _applyAttackerSlope）と坂の向き。
+// constructor を通らない経路でも 0 から始まるようにプロトタイプに置く
+EnemyAttacker.prototype.slopeVx = 0;
+EnemyAttacker.prototype.slopeDir = 0;
+EnemyAttacker.prototype._prevOnTerrain = false;

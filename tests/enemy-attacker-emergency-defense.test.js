@@ -8,7 +8,8 @@ import {
 import { spawnStateRng } from '../src/js/utils/spawnState.js';
 
 // Trivial map: nothing is solid, so units float freely (fine for state-machine tests).
-const AIR_MAP = { isSolidAtPixel: () => false, cols: 1000, rows: 1000 };
+// 機体は形の点判定（collidesWithTerrain）と坂の問い合わせも使う
+const AIR_MAP = { isSolidAtPixel: () => false, isSolidPoint: () => false, hasShapedTileIn: () => false, cols: 1000, rows: 1000 };
 
 function makeConfig(overrides = {}) {
   return {

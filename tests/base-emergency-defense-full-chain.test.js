@@ -36,7 +36,8 @@ const { Game } = await import('../src/js/main.js');
 // freely move attacker/drone/tank without getting stuck on terrain. Same
 // pattern used by tests/enemy-attacker-emergency-defense.test.js and
 // tests/enemy-drone-emergency-defense.test.js.
-const AIR_MAP = { isSolidAtPixel: () => false, isSolid: () => false, isWaterAtPixel: () => false, cols: 1000, rows: 1000 };
+// 機体は形の点判定（collidesWithTerrain）と坂の問い合わせも使う
+const AIR_MAP = { isSolidAtPixel: () => false, isSolidPoint: () => false, hasShapedTileIn: () => false, isSolid: () => false, isWaterAtPixel: () => false, cols: 1000, rows: 1000 };
 
 /**
  * AudioManager's real methods touch a Web Audio `AudioContext` that does not
