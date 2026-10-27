@@ -223,7 +223,7 @@ test('死んだら描かない', () => {
 // しまい、マップ外判定を踏めない。そこで地形が一切ない（常に非固体の）
 // マップにして、まっすぐ境界の外まで飛ばす
 test('マップ外に出ると消える', () => {
-  const map = { isSolidAtPixel: () => false, width: 100, height: 100 };
+  const map = { isSolidAtPixel: () => false, isSolidPoint: () => false, slopeHitAlong: () => null, width: 100, height: 100 };
   const game = { map, particles: [] };
   // 下向き(+y)に撃ち、y=90 から速度4で進めば数フレームで height=100 を超える
   const beam = new ReflectBeam(game, 40, 90, Math.PI / 2);
@@ -240,6 +240,8 @@ test('水面に当たると跳ね返り、波紋 (addRipple) が発生する', (
   const ripples = [];
   const map = {
     isSolidAtPixel: () => false,
+    isSolidPoint: () => false,
+    slopeHitAlong: () => null,
     isWaterAtPixel: (x, y) => y >= 64,
   };
   const game = {

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stepBeam, ageSegments } from '../src/js/utils/beamPath.js';
 import { makeMap } from './helpers/enemy-world.js';
+import { TILE_SIZE as T, REFLECT_BEAM_SPEED } from '../src/js/utils/Constants.js';
 
 // 地形はタイル。TILE_SIZE=16 なので、'#' 1つが 16px 四方
 //   0123456789
@@ -142,6 +143,8 @@ test('水面で vy が反転して跳ね返り、waterBounced が true になる
   // y < 32 は空気、y >= 32 は水
   const map = {
     isSolidAtPixel: () => false,
+    isSolidPoint: () => false,
+    slopeHitAlong: () => null,
     isWaterAtPixel: (x, y) => y >= 32,
   };
   // x=40, y=28 から右下 (vx=4, vy=4) へ向かうと (44, 32) は水中
@@ -158,6 +161,8 @@ test('水面で vy が反転して跳ね返り、waterBounced が true になる
 test('通常の固体壁での反射では waterBounced は false になる', () => {
   const map = {
     isSolidAtPixel: (x, y) => y >= 32,
+    isSolidPoint: (x, y) => y >= 32,
+    slopeHitAlong: () => null,
     isWaterAtPixel: () => false,
   };
   const r = stepBeam({ x: 40, y: 28, vx: 4, vy: 4 }, map);
@@ -165,3 +170,59 @@ test('通常の固体壁での反射では waterBounced は false になる', ()
   assert.equal(r.waterBounced, false);
 });
 
+
+// 5面と同じ形の地図。tests/player-slope.test.js と同じ坂（列 10〜19 が 45度で上る。上面 y = 30T − x）。
+// 坂の上は台地（row 10）、右端と天井は地図の外（岩）
+function rampRows() {
+  const rows = [];
+  for (let r = 0; r < 24; r++) {
+    let s = '';
+    for (let c = 0; c < 40; c++) {
+      let floor = 20;
+      if (c >= 10 && c <= 19) floor = 29 - c;
+      else if (c >= 20 && c <= 29) floor = 10;
+      s += r >= floor ? '#' : '.';
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+
+test('斜辺に真下から当たった反射ビームは横へ跳ね返る', () => {
+  const map = makeMap(rampRows(), null, { tileShape: 'snowSlope' });
+  const x = 15 * T + 4, surface = 30 * T - x;
+  const r = stepBeam({ x, y: surface - 3, vx: 0, vy: 5 }, map);
+  assert.equal(r.bounced, true);
+  assert.equal(r.waterBounced, false);
+  // 右へ上る坂の法線は左上。真下の光は左へ折れる
+  assert.equal(r.vx, -5);
+  assert.ok(r.vy === 0, `vy=${r.vy}`); // 成分の入れ替えで −0 になる（=== では 0 と同じ）
+  assert.equal(r.x, x - 5, '元の位置から新しい速度で動いていない');
+  assert.equal(r.y, surface - 3);
+});
+
+test('斜辺で跳ね返っても速さは REFLECT_BEAM_SPEED のまま変わらず、岩の中に入らない', () => {
+  const map = makeMap(rampRows(), null, { tileShape: 'snowSlope' });
+  let b = { x: 5 * T, y: 12 * T, vx: 3, vy: 4 };
+  assert.equal(Math.hypot(b.vx, b.vy), REFLECT_BEAM_SPEED, '前提');
+  let diagonal = 0;
+  for (let f = 0; f < 2000; f++) {
+    const prev = b;
+    b = stepBeam(b, map);
+    // 斜辺の反射は vx と vy が入れ替わる（軸の反射は符号だけが変わる）
+    if (b.bounced && Math.abs(b.vx) === Math.abs(prev.vy) && Math.abs(prev.vx) !== Math.abs(prev.vy)) diagonal++;
+    assert.equal(Math.hypot(b.vx, b.vy), REFLECT_BEAM_SPEED, `フレーム ${f} で速さが変わった`);
+    assert.equal(map.isSolidPoint(b.x, b.y), false, `フレーム ${f} で岩の中 (${b.x}, ${b.y})`);
+  }
+  assert.ok(diagonal > 0, '斜辺で一度も跳ね返っていない');
+});
+
+test('左へ上る斜辺（法線は右上）に真下から当たると、右へ跳ね返る', () => {
+  // rampRows() を左右反転した坂。列 c の上面は元の列 39 − c と同じ
+  const map = makeMap(rampRows().map((s) => s.split('').reverse().join('')), null, { tileShape: 'snowSlope' });
+  const x = 40 * T - (15 * T + 4), surface = 30 * T - (40 * T - x);
+  assert.equal(map.isSolidPoint(x, surface + 1), true, '前提: 斜辺の下は岩');
+  const r = stepBeam({ x, y: surface - 3, vx: 0, vy: 5 }, map);
+  assert.equal(r.vx, 5);
+  assert.ok(r.vy === 0, `vy=${r.vy}`);
+});
