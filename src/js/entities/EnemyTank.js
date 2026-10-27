@@ -135,6 +135,10 @@ export class EnemyTank {
 
     _moveAndCollide() {
         const map = this.game.map;
+        // 岩の中で詰まっていたら先に真上へ出す（slopeBody.js の _popOutOfRock。壊れて増えた岩が
+        // 足の1段上の行で体の下の角に掛かると、タイルの上端へのスナップでは同じ高さに戻るだけだった）
+        this._popOutOfRock();
+        const x0 = this.x, y0 = this.y;
 
         // --- Determine if on ground ---
         this.y += 1;
@@ -246,6 +250,20 @@ export class EnemyTank {
         // Vertical Entity Collision
         if (this.vy > 0) {
             checkVerticalEntityCollision(this, this._buildEntityList());
+        }
+
+        // 形のあるタイルの近くで、岩の外から始めたフレームを岩の中で終えたら、始めの位置へ戻す。
+        // 1段の乗り上げ（16px 持ち上げ）が浮いた菱形の下の1タイルの隙間へ体を入れ、真上も岩なので
+        // _popOutOfRock でも出られず、ずっと止まった（段4の最終レビュー。本物の5面で壊しながら走らせて）
+        if (this._touchesShapedTile(TILE_SIZE, TILE_SIZE) && this._collidesWithMap()) {
+            this.x = x0;
+            this.y = y0;
+            if (!this._collidesWithMap()) {
+                // 同じ乗り上げを繰り返さないよう、壁に当たったときと同じく引き返す
+                this.vx = 0;
+                this.vy = 0;
+                if (!isRecoiling(this)) this.patrolDir *= -1;
+            }
         }
     }
 
@@ -418,3 +436,4 @@ EnemyTank.prototype._slopePoints = (t) => [
 ];
 // 体の近くに形のあるタイルがあるか（自機・アタッカーと同じ判定）
 EnemyTank.prototype._touchesShapedTile = SlopeBody._touchesShapedTile;
+EnemyTank.prototype._popOutOfRock = SlopeBody._popOutOfRock;

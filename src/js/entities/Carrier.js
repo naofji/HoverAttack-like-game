@@ -205,6 +205,7 @@ export class Carrier {
 
         // --- Vertical ---
         const dy = this.vy * this.motion.speed;
+        const yBefore = this.y;
         this.y += dy;
         if (this._collidesWithMap()) {
             // 坂への着地は斜辺へ（タイルの上端ではない）。四角い床と同じく 0.01px 浮かせる
@@ -217,6 +218,11 @@ export class Carrier {
             } else if (this.vy > 0) {
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height - 0.01;
                 this._grounded = true;
+                // 形のあるタイルの近くで、四角いタイル用のスナップが船体を岩（上の浮いた板など）に
+                // 置いたら、動く前の高さへ戻す（自機の _undoSnapIntoRock と同じ）。船体の点のすき間に
+                // 浮いた板の先が入った状態で落ちると、床と思って 15px 持ち上げ、上の板に刺さって
+                // 動けなくなった（段4の最終レビュー。本物の5面で 177 回中 16 回）
+                this._undoSnapIntoRock('y', yBefore);
             } else if (this.vy < 0) {
                 this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
             }
@@ -439,3 +445,4 @@ Carrier.prototype._slopePoints = (c) => [
 ];
 // 体の近くに形のあるタイルがあるか（自機・アタッカー・戦車と同じ判定）
 Carrier.prototype._touchesShapedTile = SlopeBody._touchesShapedTile;
+Carrier.prototype._undoSnapIntoRock = SlopeBody._undoSnapIntoRock;
