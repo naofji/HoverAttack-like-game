@@ -10,12 +10,13 @@ import {
     ENEMY_TANK_MAX_FALLING_SPEED,
     
     ENEMY_RECOIL_PROFILES,
-    VIEW_CULL_MARGIN, SLOPE_DOWNHILL_ACCEL, ICE_MAX_SLIDE_SPEED,
+    VIEW_CULL_MARGIN, SLOPE_DOWNHILL_ACCEL, ICE_MAX_SLIDE_SPEED, SLOPE_CLIMB_MARGIN,
     ENEMY_TANK_SLIDE_SCALE,
     SNOW_KICK_WALK, SNOW_KICK_SLIDE
 } from '../utils/Constants.js';
-import { collidesWithMap, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
-import { stairDirection, supportColumn } from '../utils/slope.js';
+import { collidesWithTerrain, checkHorizontalEntityCollision, checkVerticalEntityCollision, withinSight } from '../utils/Physics.js';
+import { liftOutOfFloor, floorBelow } from '../utils/slopeMotion.js';
+import { SlopeBody } from './slopeBody.js';
 import { isInView } from '../utils/viewCull.js';
 import { groundSlide, approachVx } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
@@ -113,10 +114,12 @@ export class EnemyTank {
      * 粒は画面内の戦車だけ（画面外の 9 割で撒くと particles を食い潰す）。
      */
     _applySnowSlope() {
+        // 坂の向きは中心の列の床の形から読む（自機と同じ。slopeBody.js の _applySlope のコメント）。
+        // 戦車は床の 0.3〜0.9px 上を上下するので、足の下端から半タイル下まで探す
         const map = this.game.map;
-        const r = Math.floor((this.y + this.height + 1) / TILE_SIZE);
-        const c = supportColumn(map, r, this.x, this.x + this.width - 1, this.x + this.width / 2);
-        const dir = stairDirection(map, r, c);
+        const cx = this.x + this.width / 2, bottom = this.y + this.height;
+        const floorY = map.terrainTopY(cx, bottom - 1, bottom + TILE_SIZE / 2);
+        const dir = floorY === null ? 0 : map.floorSlopeAt(cx, floorY);
         if (dir !== 0) {
             this.vx += -dir * SLOPE_DOWNHILL_ACCEL;
             this.vx = Math.max(-ICE_MAX_SLIDE_SPEED, Math.min(ICE_MAX_SLIDE_SPEED, this.vx));
@@ -148,7 +151,12 @@ export class EnemyTank {
             || map.isSolidAtPixel(this.x + this.width - 2, probeY);
 
         // --- Predictive Navigation (User Rules) ---
-        if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
+        // 形のあるタイル（坂）の近くでは、前の床の高さを形で見て決める（_navigateOnSlope）。
+        // タイルの中心で見る下の判断のままだと、坂の1段ごとに 16px 持ち上げる瞬間移動になる
+        const onSlopeArea = this._touchesShapedTile(this.width + 2, TILE_SIZE);
+        if (grounded && !isRecoiling(this) && onSlopeArea) {
+            this._navigateOnSlope();
+        } else if (grounded && !isRecoiling(this)) { // Only decide path when firmly on the ground
             const frontX = this.patrolDir > 0 ? this.x + this.width + 1 : this.x - 1;
             const tx = Math.floor(frontX / TILE_SIZE);
             const ty = Math.floor((this.y + this.height - 1) / TILE_SIZE); // Tank body Y
@@ -187,6 +195,13 @@ export class EnemyTank {
         // --- Apply Horizontal Movement ---
         this.x += this.vx * this.motion.speed;
 
+        // 坂なら斜辺の外へ持ち上げて進む（1フレームに横の移動量＋余裕まで）
+        const dx = this.vx * this.motion.speed;
+        const lift = this._collidesWithMap() && this._touchesShapedTile(dx, 0)
+            ? liftOutOfFloor(map, this, Math.abs(dx) + SLOPE_CLIMB_MARGIN, this._slopePoints)
+            : null;
+        if (lift !== null) this.y -= lift;
+
         // Safety Fallback (in case of strange map overlaps)
         if (this._collidesWithMap()) {
             this.x -= this.vx * this.motion.speed;
@@ -198,9 +213,16 @@ export class EnemyTank {
         this._checkHorizontalEntities();
 
         // --- Vertical ---
-        this.y += this.vy * this.motion.speed;
+        const dy = this.vy * this.motion.speed;
+        this.y += dy;
         if (this._collidesWithMap()) {
-            if (this.vy > 0) {
+            // 坂への着地は斜辺へ（タイルの上端ではない）。四角い床と同じく 0.01px 浮かせる
+            const landLift = this.vy > 0 && this._touchesShapedTile(0, dy)
+                ? liftOutOfFloor(map, this, Math.abs(dy) + SLOPE_CLIMB_MARGIN, this._slopePoints)
+                : null;
+            if (landLift !== null) {
+                this.y -= landLift + 0.01;
+            } else if (this.vy > 0) {
                 // Landing
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height - 0.01;
             } else if (this.vy < 0) {
@@ -208,11 +230,39 @@ export class EnemyTank {
                 this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
             }
             this.vy = 0;
+        } else if (grounded && this.vy >= 0 && onSlopeArea) {
+            // 坂を下るとき: 横へ動いた分だけ床が下がっていたら、落下を待たずに斜辺へ下ろす
+            // （段を跳ねない）。下ろすのは横の移動量＋余裕までなので崖では落ちる
+            const reach = Math.abs(dx) + SLOPE_CLIMB_MARGIN;
+            const floor = floorBelow(map, this, reach, this._slopePoints, 1);
+            if (floor !== null) {
+                const prevY = this.y;
+                this.y = floor - this.height - 0.01;
+                if (this._collidesWithMap()) this.y = prevY;
+                else this.vy = 0;
+            }
         }
 
         // Vertical Entity Collision
         if (this.vy > 0) {
             checkVerticalEntityCollision(this, this._buildEntityList());
+        }
+    }
+
+    /**
+     * 坂（形のあるタイル）の近くの行き先の判断。前の床の上面を形で探し、1タイルより高い壁か
+     * 2タイルより深い崖なら引き返す（四角い地形の判断と同じ高さの基準）。それ以外はまっすぐ
+     * 進み、上りは横の移動の後の持ち上げ、下りは吸着が斜辺に沿わせる。
+     */
+    _navigateOnSlope() {
+        const map = this.game.map;
+        const frontX = this.patrolDir > 0 ? this.x + this.width + 1 : this.x - 1;
+        const bottom = this.y + this.height;
+        const yFrom = bottom - TILE_SIZE - 1;
+        const surf = map.terrainTopY(frontX, yFrom, bottom + 2 * TILE_SIZE);
+        if (surf === null || surf <= yFrom) {
+            this.patrolDir *= -1;
+            this.vx = this.patrolDir * ENEMY_TANK_SPEED;
         }
     }
 
@@ -231,15 +281,8 @@ export class EnemyTank {
     }
 
     _collidesWithMap() {
-        // EnemyTank uses 5 check points (4 corners + bottom center)
-        const points = [
-            { x: this.x + 1, y: this.y + 1 },
-            { x: this.x + this.width - 1, y: this.y + 1 },
-            { x: this.x + 1, y: this.y + this.height - 1 },
-            { x: this.x + this.width - 1, y: this.y + this.height - 1 },
-            { x: this.x + this.width / 2, y: this.y + this.height - 1 },
-        ];
-        return collidesWithMap(this, this.game.map, points);
+        // EnemyTank uses 5 check points (4 corners + bottom center)。点は _slopePoints（ファイル末尾）
+        return collidesWithTerrain(this, this.game.map, this._slopePoints(this));
     }
 
     // ------------------------------------------
@@ -365,3 +408,13 @@ export class EnemyTank {
 // constructor を通さずインスタンスを作る（sight-ellipse.test.js など）ため、
 // constructor 内の `this.motion = LAND_MOTION;` だけでは救えない（Player.js と同じ理由）。
 EnemyTank.prototype.motion = LAND_MOTION;
+// 地形の判定の5点（4隅＋足の中央）。坂の部品（slopeMotion.js）が足の列を探すときも同じ点を使う
+EnemyTank.prototype._slopePoints = (t) => [
+    { x: t.x + 1, y: t.y + 1 },
+    { x: t.x + t.width - 1, y: t.y + 1 },
+    { x: t.x + 1, y: t.y + t.height - 1 },
+    { x: t.x + t.width - 1, y: t.y + t.height - 1 },
+    { x: t.x + t.width / 2, y: t.y + t.height - 1 },
+];
+// 体の近くに形のあるタイルがあるか（自機・アタッカーと同じ判定）
+EnemyTank.prototype._touchesShapedTile = SlopeBody._touchesShapedTile;

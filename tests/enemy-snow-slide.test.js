@@ -121,7 +121,8 @@ function climbHeight(game) {
 test('戦車は雪の坂も陸上と同じように上れる（滑らない）', () => {
   const land = makeGame(makeMap(slopeRows()));
   land.spawnSnowKick = () => {};
-  const snow = makeGame(makeMap(slopeRows()));
+  // 雪は5面と同じ形の規則（階段は斜めのタイルの坂）。陸上は四角い階段を1段ずつ乗り上げる
+  const snow = makeGame(makeMap(slopeRows(), null, { tileShape: 'snowSlope' }));
   snow.env = SNOW;
   snow.spawnSnowKick = () => {};
 
