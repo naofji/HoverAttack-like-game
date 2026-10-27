@@ -148,7 +148,7 @@ test('Player: 滝の中では空気中より速く落ち、水中より明確に
     const makeGame = (motion) => ({
         settings: {},
         camera: { x: 0, y: 0 },
-        map: { isSolidAtPixel: () => false, isSolid: () => false },
+        map: { isSolidAtPixel: () => false, isSolidPoint: () => false, hasShapedTileIn: () => false, isSolid: () => false },
         enemies: [],
         particles: [],
         input: {

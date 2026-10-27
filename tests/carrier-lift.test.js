@@ -4,7 +4,8 @@ import { Player } from '../src/js/entities/Player.js';
 import { CARRIER_WIDTH, CARRIER_HEIGHT } from '../src/js/utils/Constants.js';
 
 function makeOpenMap() {
-  return { isSolidAtPixel: () => false };
+  // 自機は形の点判定（collidesWithTerrain）と坂の問い合わせを使う
+  return { isSolidAtPixel: () => false, isSolidPoint: () => false, hasShapedTileIn: () => false };
 }
 
 function makeCarrier(x, y) {

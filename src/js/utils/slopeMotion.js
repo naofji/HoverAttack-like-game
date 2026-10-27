@@ -72,12 +72,16 @@ export function dropOutOfCeiling(map, entity, maxDrop, pointsFn = getDefaultChec
     return collidesAt(map, entity, drop, pointsFn) ? null : drop;
 }
 
-/** 体の下端から maxDown px 下までに、足の列で一番高い床の上面の y。無ければ null */
-export function floorBelow(map, entity, maxDown, pointsFn = getDefaultCheckPoints) {
+/**
+ * 体の下端の maxUp px 上から maxDown px 下までに、足の列で一番高い床の上面の y。無ければ null。
+ * maxUp は、接地中に重力で 1px 未満沈んだ足を斜辺へ戻すときに使う（坂の上ではタイルの
+ * 上端へスナップできないため）
+ */
+export function floorBelow(map, entity, maxDown, pointsFn = getDefaultCheckPoints, maxUp = 0) {
     const bottom = entity.y + entity.height;
     let best = null;
     for (const p of footPoints(pointsFn(entity))) {
-        const top = map.terrainTopY(p.x, bottom, bottom + maxDown);
+        const top = map.terrainTopY(p.x, bottom - maxUp, bottom + maxDown);
         if (top !== null && (best === null || top < best)) best = top;
     }
     return best;

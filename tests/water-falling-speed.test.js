@@ -29,6 +29,9 @@ function makeTestGame({ env = null } = {}) {
     width: 200 * TILE_SIZE,
     height: 50 * TILE_SIZE,
     isSolidAtPixel: () => false,
+    // 機体は形の点判定（collidesWithTerrain）と坂の問い合わせを使う
+    isSolidPoint: () => false,
+    hasShapedTileIn: () => false,
     pixelToTile: (px, py) => ({ r: Math.floor(py / TILE_SIZE), c: Math.floor(px / TILE_SIZE) }),
     destroyArea: () => 0,
   };

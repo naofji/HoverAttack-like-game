@@ -38,8 +38,10 @@ function slopeRows() {
   return rows;
 }
 
+// 5面と同じ形の規則（'snowSlope'）。階段は斜めのタイルの坂、板の先は面取りになる
+// （タイル形状つき当たり判定。docs/superpowers/specs/2026-10-27-tile-shape-collision-design.md）
 function snowWorld() {
-  const game = makeGame(makeMap(slopeRows()));
+  const game = makeGame(makeMap(slopeRows(), null, { tileShape: 'snowSlope' }));
   game.env = SNOW;
   game.snowKicks = [];
   game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
@@ -62,7 +64,7 @@ function plateRows() {
 }
 
 function plateWorld() {
-  const game = makeGame(makeMap(plateRows()));
+  const game = makeGame(makeMap(plateRows(), null, { tileShape: 'snowSlope' }));
   game.env = SNOW;
   game.snowKicks = [];
   game.spawnSnowKick = (x, y, n) => game.snowKicks.push(n);
@@ -72,9 +74,10 @@ function plateWorld() {
 test('standing on a downhill staircase, the player accelerates downhill without input', () => {
   const game = snowWorld();
   game.input = inputWith(new Set());
-  // 列 13 の段（row 14）に立つ
+  // 列 13 の段（row 14）の上から落とす。段は斜めのタイルなので、斜辺に着くまで数フレーム掛かる
   const p = new Player(game, 13 * TILE_SIZE, 14 * TILE_SIZE - 24);
   game.player = p;
+  for (let i = 0; i < 10 && !p.onGround; i++) p.update();
   for (let i = 0; i < 3; i++) p.update();
   assert.ok(p.vx > 0, `expected downhill (right) drift, vx=${p.vx}`);
   assert.ok(p.slopeDir === -1, `slopeDir ${p.slopeDir}`); // 左へ上る＝右へ下る
@@ -86,12 +89,11 @@ test('respawn clears the slope state so the player does not snap to the old dire
   // 列 13 の段（row 14）に立ち、slopeDir を非0にしてから死んだことにする
   const p = new Player(game, 13 * TILE_SIZE, 14 * TILE_SIZE - 24);
   game.player = p;
+  for (let i = 0; i < 10 && !p.onGround; i++) p.update();
   for (let i = 0; i < 3; i++) p.update();
   assert.notEqual(p.slopeDir, 0, '前提: 階段の上で slopeDir が立っていること');
   p.respawn(3 * TILE_SIZE, 5 * TILE_SIZE);
   assert.equal(p.slopeDir, 0);
-  assert.equal(p.slopeCoyote, 0);
-  assert.equal(p.drawOffsetY, 0);
 });
 
 test('walking uphill on snow is slower than PLAYER_MAX_SPEED', () => {

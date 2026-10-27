@@ -25,7 +25,7 @@ function spyAudio(names) {
 
 function makeGame() {
     return {
-        map: { isSolidAtPixel: () => false, pixelToTile: () => ({ r: 0, c: 0 }) },
+        map: { isSolidAtPixel: () => false, isSolidPoint: () => false, hasShapedTileIn: () => false, pixelToTile: () => ({ r: 0, c: 0 }) },
         camera: { x: 0, y: 0 }, canvas: { width: 1024, height: 768 },
         input: {
             mouse: { x: 0, y: 0, left: false },
