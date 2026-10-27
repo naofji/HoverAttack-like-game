@@ -15,14 +15,15 @@
 import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
-    GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION, GRENADE_LIFETIME,
+    GRENADE_LIFETIME,
 } from '../utils/Constants.js';
 import { Missile } from '../entities/Missile.js';
 import { Grenade } from '../entities/Grenade.js';
 import { PlayerBullet } from '../entities/PlayerBullet.js';
 import { REPAIR_KIT_HEAL } from '../entities/RepairKit.js';
 import { audioManager } from '../audio/AudioManager.js';
-import { motionFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
+import { motionFor } from '../world/StageEnvironment.js';
+import { stepGrenade } from '../utils/grenadePhysics.js';
 
 export const CombatActions = {
     // ==========================================
@@ -214,7 +215,7 @@ export const CombatActions = {
     },
     /**
      * グレネードの物理軌道を事前シミュレーションして計算する。
-     * 物理法則は Grenade.js の update() と完全に一致させ、
+     * 物理は Grenade.update と同じ stepGrenade（utils/grenadePhysics.js）を通し、
      * motionFor による水中の減速・浮力やバリアの吸収も反映する。
      * @returns {{ points: {x,y}[], landX: number, landY: number }}
      */
@@ -227,31 +228,9 @@ export const CombatActions = {
         let landX = x, landY = y;
 
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
-            const motion = motionFor(this, x, y);
-
-            vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
-            const maxFall = GRENADE_MAX_FALLING_SPEED * fallSpeedScaleFor(motion);
-            if (vy > maxFall) vy = maxFall;
-
-            let nextX = x + vx * motion.speed;
-            let nextY = y + vy * motion.speed;
-
-            if (map.isSolidAtPixel(nextX, y)) {
-                vx *= -GRENADE_BOUNCE;
-                nextX = x + vx * motion.speed;
-            }
-            x = nextX;
-
-            if (map.isSolidAtPixel(x, nextY)) {
-                if (Math.abs(vy) > 0.5) {
-                    vy *= -GRENADE_BOUNCE;
-                } else {
-                    vy = 0;
-                    vx *= GRENADE_FRICTION;
-                }
-                nextY = y + vy * motion.speed;
-            }
-            y = nextY;
+            const g = { x, y, vx, vy };
+            stepGrenade(map, g, motionFor(this, x, y));
+            ({ x, y, vx, vy } = g);
 
             // バリア（電磁パルスバリア）があれば吸収されるためプレビューをそこで止める
             let absorbed = false;

@@ -3,7 +3,7 @@
 // ============================================
 
 import {
-    GRENADE_SPEED, GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
+    GRENADE_SPEED,
     GRENADE_BLAST_RADIUS, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE,
     GRENADE_BLOCK_DAMAGE, ENEMY_GRENADE_BLOCK_DAMAGE,
     GRENADE_KNOCKBACK_VY, GRENADE_KNOCKBACK_VX,
@@ -12,7 +12,8 @@ import {
 import { applyKnockback } from '../utils/Knockback.js';
 import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
-import { motionFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
+import { motionFor } from '../world/StageEnvironment.js';
+import { stepGrenade } from '../utils/grenadePhysics.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -33,39 +34,7 @@ export class Grenade {
         if (!this.alive) return;
 
         const map = this.game.map;
-        const motion = motionFor(this.game, this.x, this.y);
-
-        // Apply gravity & downforce
-        this.vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
-        const maxFall = GRENADE_MAX_FALLING_SPEED * fallSpeedScaleFor(motion);
-        if (this.vy > maxFall) this.vy = maxFall;
-
-        // Calculate next position
-        let nextX = this.x + this.vx * motion.speed;
-        let nextY = this.y + this.vy * motion.speed;
-
-        // --- Map collision (2D Bouncing) ---
-
-        // Horizontal Movement & Collision
-        if (map.isSolidAtPixel(nextX, this.y)) {
-            this.vx *= -GRENADE_BOUNCE;
-            nextX = this.x + this.vx * motion.speed;
-        }
-        this.x = nextX;
-
-        // Vertical Movement & Collision
-        if (map.isSolidAtPixel(this.x, nextY)) {
-            // Is it ground or ceiling?
-            if (Math.abs(this.vy) > 0.5) {
-                this.vy *= -GRENADE_BOUNCE;
-            } else {
-                // Grounded: stop bouncing and apply friction
-                this.vy = 0;
-                this.vx *= GRENADE_FRICTION;
-            }
-            nextY = this.y + this.vy * motion.speed;
-        }
-        this.y = nextY;
+        stepGrenade(map, this, motionFor(this.game, this.x, this.y));
 
         // Rotation based on speed
         this.rotation += this.vx * 0.1;
