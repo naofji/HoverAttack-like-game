@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { carveSnowStairs } from '../src/js/world/snowStairs.js';
-import { stairDirection } from '../src/js/utils/slope.js';
+import { computeTileShape, shapeFloorSlope } from '../src/js/utils/tileShape.js';
 
 // 30x20。row 15 が床、上は空洞。
 function world() {
@@ -14,22 +14,25 @@ function world() {
   return { grid, blockHP, rows: 20, cols: 30, rooms: [{ centerR: 8, centerC: 15 }] };
 }
 
-function mapOf(w) {
-  return { isSolid: (r, c) => r < 0 || c < 0 || r >= w.rows || c >= w.cols || w.grid[r][c] !== 0 };
+/** world の格子から、5面の規則で (r, c) の形を作る（範囲外は磨き仕上げ） */
+function shapeAt(w, r, c) {
+  const cellAt = (rr, cc) => (rr < 0 || cc < 0 || rr >= w.rows || cc >= w.cols) ? 'polished'
+    : (w.grid[rr][cc] !== 0 ? 'rock' : 'empty');
+  return computeTileShape(cellAt, r, c, 'snowSlope');
 }
 
-test('carves a staircase of at least lengthMin steps that stairDirection recognises in the middle', () => {
+test('盛った階段は、真ん中の段の形が s.dir の向きの 45度の坂になる', () => {
   const w = world();
   const stairs = carveSnowStairs({ ...w, rng: new SeededRNG(2), count: 1, lengthMin: 5, lengthRange: 0 });
   assert.equal(stairs.length, 1);
   const s = stairs[0];
   assert.equal(s.length, 5);
-  const map = mapOf(w);
-  // 真ん中の段に立ったときの向きが s.dir
+  // 真ん中の段。段が1つ上がるごとに行が1つ減る
   const midStep = 2;
-  const r = s.r - midStep;             // 段が1つ上がるごとに行が1つ減る
-  const c = s.c + s.dir * midStep;
-  assert.equal(stairDirection(map, r, c), s.dir);
+  const code = shapeAt(w, s.r - midStep, s.c + s.dir * midStep);
+  // タイルの左半分・右半分のどちらの列でも、上面が s.dir の向きに傾いている（タイル1枚ぶんの斜め）
+  assert.equal(shapeFloorSlope(code, 4), s.dir);
+  assert.equal(shapeFloorSlope(code, 12), s.dir);
 });
 
 test('same rng carves the same stairs', () => {

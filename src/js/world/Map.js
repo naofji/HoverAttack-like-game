@@ -52,7 +52,6 @@ import { generatePlants } from './town/generatePlants.js';
 import { generateSnowTrees } from './town/generateSnowTrees.js';
 import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
-import { stairDirection } from '../utils/slope.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
     shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts,
