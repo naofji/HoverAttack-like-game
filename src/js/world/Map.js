@@ -1539,7 +1539,9 @@ export class Map {
     terrainBottomY(x, yFrom, yTo) {
         if (isNaN(x) || isNaN(yFrom)) return yFrom;
         const c = Math.floor(x / TILE_SIZE), lx = x - c * TILE_SIZE;
-        for (let r = Math.floor(yFrom / TILE_SIZE), rEnd = Math.floor(yTo / TILE_SIZE); r >= rEnd; r--) {
+        // 終わりの行は ceil − 1: 下端がちょうど yTo（タイル境目）の岩は上の行に属するので、
+        // floor だとその行を見ずに「天井なし」と答えてしまう（床の terrainTopY は上端が下の行に属するので floor でよい）
+        for (let r = Math.floor(yFrom / TILE_SIZE), rEnd = Math.ceil(yTo / TILE_SIZE) - 1; r >= rEnd; r--) {
             const code = this.tileShapeAt(r, c);
             const bottom = shapeBottomY(code, lx);
             if (bottom === null) continue;

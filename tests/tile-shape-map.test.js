@@ -173,6 +173,16 @@ test('terrainTopY / terrainBottomY は斜辺の高さを返し、岩が無けれ
     assert.equal(c.terrainBottomY(x, 4 * T - 1, T + 5), null);
 });
 
+test('terrainBottomY / terrainTopY は、範囲の端ちょうどのタイル境目で終わる・始まる岩も見つける', async () => {
+    // 天井（行0〜1）の下端は y = 2T。上の行に属するので、そこまで走査に含める（最終レビューの指摘）
+    const m = await fakeSnowMap(['######', '######', '......', '......', '######']);
+    assert.equal(m.terrainBottomY(40, 3 * T + 12, 2 * T), 2 * T);
+    assert.equal(m.terrainBottomY(40, 3 * T + 12, 2 * T + 0.1), null);
+    // 床（行4）の上端は y = 4T。床は下の行に属するので floor のままで含まれる
+    assert.equal(m.terrainTopY(40, 2 * T + 4, 4 * T), 4 * T);
+    assert.equal(m.terrainTopY(40, 2 * T + 4, 4 * T - 0.1), null);
+});
+
 test('形の焼き込みは乱数を使わない（5面の地図を作ったあとの game.rng が同じ）', async () => {
     const { Map } = await import('../src/js/world/Map.js');
     const a = { rng: new SeededRNG(11) };
