@@ -55,11 +55,15 @@ export function ageSegments(segments) {
  * 積めばよい）。
  *
  * @param {{x:number,y:number,vx:number,vy:number}} beam 書き換えない
- * @param {{isSolidPoint:function, slopeHitAlong:function, isWaterAtPixel?:function}} map
+ * @param {{isSolidPoint:function, slopeHitAlong:function, popOutOfRock:function, isWaterAtPixel?:function}} map
  * @returns {{x:number,y:number,vx:number,vy:number,bounced:boolean,waterBounced:boolean}}
  */
 export function stepBeam(beam, map) {
-    const { x, y, vx, vy } = beam;
+    const { vx, vy } = beam;
+    // 壊れて形が作り直され、居る所が岩になったら、先に真上の空中へ出す（Map.popOutOfRock。
+    // 岩の中からは反転しても抜けられず、反射の回数が尽きるまでその場に留まった）
+    const popped = map.popOutOfRock(beam.x, beam.y);
+    const x = beam.x, y = popped !== null ? popped : beam.y;
     const nx = x + vx;
     const ny = y + vy;
 

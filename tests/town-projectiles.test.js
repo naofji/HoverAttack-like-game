@@ -33,7 +33,7 @@ function world() {
         width: 4000, height: 4000, rows: 250, cols: 250,
         isSolid: () => false, isSolidAtPixel: () => false,
         // 飛び道具は形の問い合わせで地形に当たる（段3）。この地図は空中だけ
-        isSolidPoint: () => false, slopeHitAlong: () => null, hasShapedTileIn: () => false,
+        isSolidPoint: () => false, slopeHitAlong: () => null, popOutOfRock: () => null, hasShapedTileIn: () => false,
         pixelToTile: (x, y) => ({ r: Math.floor(y / 16), c: Math.floor(x / 16) }),
         damageBlock: () => { throw new Error('岩は壊さない'); },
         destroyArea: () => 0,

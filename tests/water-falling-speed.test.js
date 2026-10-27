@@ -33,7 +33,7 @@ function makeTestGame({ env = null } = {}) {
     isSolidPoint: () => false,
     hasShapedTileIn: () => false,
     // グレネードは斜辺に触れたかを見る（段3）
-    slopeHitAlong: () => null,
+    slopeHitAlong: () => null, popOutOfRock: () => null,
     pixelToTile: (px, py) => ({ r: Math.floor(py / TILE_SIZE), c: Math.floor(px / TILE_SIZE) }),
     destroyArea: () => 0,
   };

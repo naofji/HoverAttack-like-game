@@ -144,7 +144,7 @@ test('水面で vy が反転して跳ね返り、waterBounced が true になる
   const map = {
     isSolidAtPixel: () => false,
     isSolidPoint: () => false,
-    slopeHitAlong: () => null,
+    slopeHitAlong: () => null, popOutOfRock: () => null,
     isWaterAtPixel: (x, y) => y >= 32,
   };
   // x=40, y=28 から右下 (vx=4, vy=4) へ向かうと (44, 32) は水中
@@ -162,7 +162,7 @@ test('通常の固体壁での反射では waterBounced は false になる', ()
   const map = {
     isSolidAtPixel: (x, y) => y >= 32,
     isSolidPoint: (x, y) => y >= 32,
-    slopeHitAlong: () => null,
+    slopeHitAlong: () => null, popOutOfRock: () => null,
     isWaterAtPixel: () => false,
   };
   const r = stepBeam({ x: 40, y: 28, vx: 4, vy: 4 }, map);
@@ -225,4 +225,12 @@ test('左へ上る斜辺（法線は右上）に真下から当たると、右�
   const r = stepBeam({ x, y: surface - 3, vx: 0, vy: 5 }, map);
   assert.equal(r.vx, 5);
   assert.ok(r.vy === 0, `vy=${r.vy}`);
+});
+
+test('壊れて形が作り直され、反射ビームの居る所が岩になっても、次のフレームで岩の外へ出る（最終レビュー I1）', () => {
+  const broken = makeMap(rampRows().map((s, r) => (r === 17 ? s.slice(0, 12) + '.' + s.slice(13) : s)), null, { tileShape: 'snowSlope' });
+  const x = 13 * T + 8, y = 30 * T - x - 0.5;
+  assert.equal(broken.isSolidPoint(x, y), true, '前提: 壊れた後はビームの位置が岩');
+  const r = stepBeam({ x, y, vx: 3, vy: 4 }, broken);
+  assert.equal(broken.isSolidPoint(r.x, r.y), false, `岩の中に残った (${r.x}, ${r.y})`);
 });

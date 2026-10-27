@@ -1594,6 +1594,23 @@ export class Map {
      * 見ると、斜辺を通り越して下の満ちた象限に入り、平らな床として跳ね返ってしまうから。
      * 四角い地形と、線分の近くに形のあるタイルが無いときはたどらずに null（5面以外の軌跡を変えない）
      */
+    /**
+     * 点 (x, y) が形の岩の中なら、真上へ1タイル以内で最初に空になる y（1px 刻み）。岩の外、
+     * 1タイル上まで岩、四角い地形、近くに形のあるタイルが無いときは null。
+     * 形の規則は岩を減らすだけではない: 坂の下の段や隣が壊れると、坂だったタイルが小さい面取りに戻り、
+     * 削れていた所が岩になる。そこにいたグレネード・反射ビームは、slopeHitAlong も軸ごとの判定も
+     * 岩の中からは解けず、動けなくなった（段3の最終レビュー I1）。5面以外では壊れて岩が増えないので通らない
+     */
+    popOutOfRock(x, y) {
+        if (this.tileShapeRule === 'square') return null;
+        if (!this.hasShapedTileIn(x - 1, y - TILE_SIZE, 2, TILE_SIZE + 1)) return null;
+        if (!this.isSolidPoint(x, y)) return null;
+        for (let k = 1; k <= TILE_SIZE; k++) {
+            if (!this.isSolidPoint(x, y - k)) return y - k;
+        }
+        return null;
+    }
+
     slopeHitAlong(x0, y0, x1, y1) {
         if (this.tileShapeRule === 'square') return null;
         const minX = Math.min(x0, x1), minY = Math.min(y0, y1);

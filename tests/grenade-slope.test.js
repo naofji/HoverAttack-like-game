@@ -134,3 +134,24 @@ test('坂を転がる速さは、摩擦で頭打ちになる', () => {
     // 釣り合う速さは 0.9 × 0.1 / 0.1 × √2 ≈ 1.27。摩擦が無いと 8 タイルで 3px/フレームを超える
     assert.ok(maxSpeed < 1.5, `坂で加速し続けた ${maxSpeed}`);
 });
+
+// 段3の最終レビュー I1: ブロックが壊れると周りの形が作り直され、坂だったタイルが小さい面取りに戻って
+// 岩が増えることがある（坂の下の段を壊すと、その上の坂の削れていた所が岩になる）。中にいた
+// グレネード・反射ビームは岩の中で動けなくなった。壊れた後の地図に差し替えて再現する
+function rampRowsWithout(r0, c0) {
+    return rampRows().map((s, r) => (r === r0 ? s.slice(0, c0) + '.' + s.slice(c0 + 1) : s));
+}
+
+test('転がっている坂の下の段が壊れて岩が増えても、グレネードは岩の外へ出て転がり続ける', () => {
+    const game = world(rampRows());
+    const x = 13 * T + 8;
+    const g = new Grenade(game, x, surface(x) - 0.5, 0, 0);
+    roll(game, g, 3);
+    // (17,12) を壊した地図。(16,13) は坂から面取りに戻り、グレネードのいる所が岩になる
+    const broken = world(rampRowsWithout(17, 12)).map;
+    assert.equal(broken.isSolidPoint(g.x, g.y), true, '前提: 壊れた後はグレネードの位置が岩');
+    game.map = broken;
+    const inRock = roll(game, g, 120);
+    assert.ok(inRock <= 1, `岩の中に ${inRock} フレーム残った`);
+    assert.equal(broken.isSolidPoint(g.x, g.y), false);
+});

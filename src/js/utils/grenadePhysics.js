@@ -18,11 +18,15 @@ const SLOPE_CONTACT_GAP = 0.01;
 
 /**
  * グレネードを1フレーム進める（重力・最大落下速度・地形での跳ね返りと接地の摩擦）。
- * @param {object} map isSolidPoint と slopeHitAlong を持つ
+ * @param {object} map isSolidPoint・slopeHitAlong・popOutOfRock を持つ
  * @param {{x:number,y:number,vx:number,vy:number}} g 書き換える
  * @param {object} motion motionFor の戻り値
  */
 export function stepGrenade(map, g, motion) {
+    // 壊れて形が作り直され、居る所が岩になったら、先に真上の空中へ出す（Map.popOutOfRock）
+    const popped = map.popOutOfRock(g.x, g.y);
+    if (popped !== null) g.y = popped;
+
     g.vy += GRENADE_GRAVITY * motion.gravity + (motion.downforce || 0);
     const maxFall = GRENADE_MAX_FALLING_SPEED * fallSpeedScaleFor(motion);
     if (g.vy > maxFall) g.vy = maxFall;

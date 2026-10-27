@@ -21,7 +21,7 @@ function makeTestGame({ env = null, barriers = [] } = {}) {
       return py >= 30 * TILE_SIZE;
     },
     isSolidPoint: (px, py) => py >= 30 * TILE_SIZE,
-    slopeHitAlong: () => null,
+    slopeHitAlong: () => null, popOutOfRock: () => null,
     pixelToTile: (px, py) => ({ r: Math.floor(py / TILE_SIZE), c: Math.floor(px / TILE_SIZE) }),
     destroyArea: () => 0,
   };
