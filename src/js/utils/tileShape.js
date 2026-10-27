@@ -208,6 +208,21 @@ export function shapeCeilingSlope(code, lx) {
 }
 
 /**
+ * 絵の輪郭で4つの角をどれだけ削るか（px）。0 = 削らない、8 = 小さい面取り、16 = タイル1枚ぶんの斜め。
+ * computeTileShape が作る形は、正方形の角をこの3通りで削ったものしか無いので、この4つの値だけで
+ * 輪郭の多角形が決まる（Map._drawRockyBlock の面取りの頂点列にそのまま入る）。
+ * 角の象限が空になるのはタイル1枚ぶんの斜めのときだけ（その角の向きの斜めは、隣の2象限も
+ * 同じ向きの三角にする）。角を向いた三角なら小さい面取り
+ */
+export function shapeCornerCuts(code) {
+    const cut = (quadIndex, cornerTri) => {
+        const q = (code >> (3 * quadIndex)) & 7;
+        return q === Q_EMPTY ? 2 * QS : q === cornerTri ? QS : 0;
+    };
+    return { tl: cut(0, Q_TRI_NO_TL), tr: cut(1, Q_TRI_NO_TR), bl: cut(2, Q_TRI_NO_BL), br: cut(3, Q_TRI_NO_BR) };
+}
+
+/**
  * 三角の象限の斜辺に、直前の点 (px, py) の側から触れたときの外向きの法線。符号の組 (±1, ±1) で返す
  * （45度の斜辺しか無いので、正規化した √½ を持つより、反射を `vx' = −vy·sx·sy` のように整数の符号で
  * 書ける方が反射ビームの速さが浮動小数の誤差でずれない）。

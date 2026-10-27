@@ -19,12 +19,18 @@ before(() => {
   };
 });
 
+/**
+ * 雪の帯。上面の輪郭（坂の斜辺・面取りの切り口・上辺）に沿う stroke として焼く（段5で fillRect から変更）。
+ * SNOW_CAP_COLOR の strokeStyle のもとで stroke された経路の頂点列を返す
+ */
 function capFills(ctx) {
   const out = [];
-  let cur = null;
+  let cur = null, path = [];
   for (const c of ctx.calls) {
-    if (c.name === 'set:fillStyle') cur = c.args[0];
-    if (c.name === 'fillRect' && cur === SNOW_CAP_COLOR) out.push(c.args);
+    if (c.name === 'set:strokeStyle') cur = c.args[0];
+    if (c.name === 'beginPath') path = [];
+    if (c.name === 'moveTo' || c.name === 'lineTo') path.push(c.args);
+    if (c.name === 'stroke' && cur === SNOW_CAP_COLOR) out.push(path);
   }
   return out;
 }
@@ -56,7 +62,8 @@ test('a top newly exposed by destruction gets a cap on stage 5', async () => {
   tileCtx.calls.length = 0;
   map.damageBlock(target.r - 1, target.c, 99);
   // 再描画された (target.r, target.c) は上が空いた＝新しく露出したので帯が乗る
-  const caps = capFills(tileCtx).filter(([x, y]) => x === target.c * TILE_SIZE && y === target.r * TILE_SIZE);
+  const x0 = target.c * TILE_SIZE, y0 = target.r * TILE_SIZE;
+  const caps = capFills(tileCtx).filter((path) => path.every(([x, y]) => x >= x0 && x <= x0 + TILE_SIZE && y >= y0 && y <= y0 + TILE_SIZE));
   assert.ok(caps.length > 0);
 });
 

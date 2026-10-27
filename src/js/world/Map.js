@@ -55,7 +55,7 @@ import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
-    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead,
+    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts,
 } from '../utils/tileShape.js';
 
 
@@ -1927,30 +1927,16 @@ export class Map {
         let cBR = (expBottom && expRight) ? (4 + Math.floor(rng(92) * 6)) : 0;
         let cBL = (expBottom && expLeft) ? (4 + Math.floor(rng(93) * 6)) : 0;
 
-        // 雪の面だけ形を変える（実機の指摘。当たり判定は階段のまま）:
-        // - 階段の段（上と片側が露出、下は岩、露出側の反対の斜め上が岩）は面取りを
-        //   対角線いっぱいまで伸ばし、階段全体を45度の坂に見せる。自機の描画オフセット
-        //   （utils/slope.js）はこの斜辺の上に足が乗るよう向きを合わせてある
-        // - 板状の突出（上下と片側が露出した高さ1の先端）は、岩に接している辺を底辺に、
-        //   タイルの中心を頂点にした三角にする。切り口の2本が接している側の角から
-        //   中心へ向かうので「上下から面取りして中心で交わるくの字」になり、板の先が尖る
-        //
-        // 坂にする段は `stairDirection`（utils/slope.js）と**同じ判定**を使う。
-        // 描く坂と自機の描画オフセットが同じ判定を使うことで、坂が描かれる段でだけ
-        // 足が斜辺に乗る（判定を緩くすると2段高い崖の角まで削られて、当たり判定と
-        // 絵がずれた — 実測で坂タイルの54%がそれだった）
-        let rampTL = false, rampTR = false, chevronL = false, chevronR = false;
-        if (this.envKind === 'snow') {
-            const dir = stairDirection(this, r, c);
-            if (dir === 1 && expTop && expLeft && !expBottom) { cTL = S; rampTL = true; }
-            else if (dir === -1 && expTop && expRight && !expBottom) { cTR = S; rampTR = true; }
-            else if (expTop && expBottom && expLeft && !expRight) chevronL = true; // 左が露出＝右辺で繋がっている
-            else if (expTop && expBottom && expRight && !expLeft) chevronR = true; // 鏡像
-            // 坂にした側の斜辺は上辺いっぱい（cTL または cTR が S）まで伸びるので、
-            // 反対側の角がその上でさらに面取りされていると多角形が自己交差する
-            // （上辺が S まで来た後に戻って進むことになる）。実測で8マップ中2タイル。
-            if (rampTL) cTR = 0;
-            if (rampTR) cTL = 0;
+        // 形の規則が四角でない面（5面）は、当たり判定と同じタイルの形（utils/tileShape.js）の
+        // 削り幅で輪郭を作る（設計 決定3「絵と判定は同じ形を共有する」）。坂はタイル1枚ぶんの斜め、
+        // 浮いた板の先は上下の小さい面取りで「<」、単独のタイルは菱形になる。
+        // 以前はここだけで階段を検出して坂・くの字を描き（判定は四角のまま）、自機の絵を描画
+        // オフセットで斜辺へ下げていたが、壊した後に絵と判定が食い違って見えた。
+        // 削り幅は形が決めるので、乱数の 4〜9px の面取りは5面では使わない（判定が 8px のため）
+        const shaped = this.tileShapes && this.tileShapeRule !== 'square';
+        if (shaped) {
+            const cuts = shapeCornerCuts(this.tileShapeAt(r, c));
+            cTL = cuts.tl; cTR = cuts.tr; cBR = cuts.br; cBL = cuts.bl;
         }
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
@@ -1962,22 +1948,17 @@ export class Map {
         // 1. 面取り多角形でベース塗り（時計回りで頂点列挙）
         ctx.save();
         ctx.beginPath();
-        if (chevronL || chevronR) {
-            // 板の先端だけは面取りの列挙では書けない（頂点が辺の上ではなく中心にある）。
-            // 接している辺を底辺にした三角を直接引く
-            if (chevronL) { ctx.moveTo(x + S, y); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S / 2, y + S / 2); }
-            else { ctx.moveTo(x, y); ctx.lineTo(x + S / 2, y + S / 2); ctx.lineTo(x, y + S); }
-        } else {
-            ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
-            ctx.lineTo(x + S - cTR, y);              // 上辺：右端
-            if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
-            ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
-            if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
-            ctx.lineTo(x + cBL, y + S);              // 下辺：左端
-            if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
-            ctx.lineTo(x, y + cTL);                  // 左辺：上端
-            if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
-        }
+        // 削り幅が 16（タイル1枚ぶんの斜め）でも同じ列挙で書ける。形の規則が、斜めにした角の
+        // 隣の2角を削らない（tileShape.js の computeTileShape）ので、辺が戻って自己交差しない
+        ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
+        ctx.lineTo(x + S - cTR, y);              // 上辺：右端
+        if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
+        ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
+        if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
+        ctx.lineTo(x + cBL, y + S);              // 下辺：左端
+        if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
+        ctx.lineTo(x, y + cTL);                  // 左辺：上端
+        if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
         ctx.closePath();
 
         ctx.fillStyle = style.fill;
@@ -2026,21 +2007,17 @@ export class Map {
 
             // 積雪の帯（5面）。生成時に露出していた上面にだけ。
             if (this.envKind === 'snow' && this.exposedAtGen && this.exposedAtGen[r * this.cols + c]) {
-                if (rampTL || rampTR) {
-                    // 坂の段には水平な上面が無いので、帯も斜辺に沿わせる。
-                    // 線幅を倍にして clip の内側に残る半分だけを積雪の厚みとして使う
-                    ctx.strokeStyle = SNOW_CAP_COLOR;
-                    ctx.lineWidth = SNOW_CAP_THICKNESS * 2;
-                    ctx.beginPath();
-                    if (rampTL) { ctx.moveTo(x, y + S); ctx.lineTo(x + S, y); }
-                    else { ctx.moveTo(x + S, y + S); ctx.lineTo(x, y); }
-                    ctx.stroke();
-                } else {
-                    // くの字のタイルでは clip がこの帯を接している角の楔形に削るが、
-                    // 板の付け根に雪が残るのはむしろ自然なので、そのままにしている
-                    ctx.fillStyle = SNOW_CAP_COLOR;
-                    ctx.fillRect(x, y, S, SNOW_CAP_THICKNESS);
-                }
+                // 帯は上面の輪郭（上の2角の切り口と上辺）に沿わせる。坂には水平な上面が無く、
+                // 面取りの角では水平の帯だけだと雪が切り口で途切れて見える。
+                // 線幅を倍にして clip の内側に残る半分だけを積雪の厚みとして使う
+                ctx.strokeStyle = SNOW_CAP_COLOR;
+                ctx.lineWidth = SNOW_CAP_THICKNESS * 2;
+                ctx.beginPath();
+                ctx.moveTo(x, y + cTL);
+                ctx.lineTo(x + cTL, y);
+                ctx.lineTo(x + S - cTR, y);
+                ctx.lineTo(x + S, y + cTR);
+                ctx.stroke();
             }
         }
 
