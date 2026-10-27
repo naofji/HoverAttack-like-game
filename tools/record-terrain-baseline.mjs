@@ -20,6 +20,8 @@ import { EnemyHomingMissile } from '../src/js/entities/EnemyHomingMissile.js';
 import { EnemyCruiseMissile } from '../src/js/entities/EnemyCruiseMissile.js';
 import { EnemyDrone } from '../src/js/entities/EnemyDrone.js';
 import { stepBeam } from '../src/js/utils/beamPath.js';
+import { MissileKit } from '../src/js/entities/MissileKit.js';
+import { Carrier } from '../src/js/entities/Carrier.js';
 import { TILE_SIZE, GRENADE_SPEED, REFLECT_BEAM_SPEED } from '../src/js/utils/Constants.js';
 
 // 幅50・高さ24。床 row 20。列 12 に高さ1の段、列 20〜21 に高さ2の段、列 30〜31 は幅2の穴
@@ -266,7 +268,67 @@ export function digestProjectiles(rec = recordProjectiles()) {
     return digest(rec);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--projectiles')) {
+// ---------------------------------------------------------------
+// 段4（地面に乗るもの。docs/superpowers/plans/2026-10-28-tile-shape-4-grounded.md）の基準線。
+// 本物の地図（5面を除く）の湧き位置と地図を作った後の乱数の状態、段の地図で落とすアイテムと
+// 自機を載せて走らせる母艦。段2・段3の出力は変えない。
+// ---------------------------------------------------------------
+
+/** @returns {{ spawns: string[], item: string[], carrier: string[] }} */
+export async function recordGrounded() {
+    const out = { spawns: [], item: [], carrier: [] };
+    if (!globalThis.document) {
+        const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
+        globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }) };
+    }
+    const { Map } = await import('../src/js/world/Map.js');
+    for (const level of [0, 1, 2, 3, 5, 6]) {
+        for (const seed of [1, 2, 3]) {
+            const game = { rng: new SeededRNG(seed) };
+            const map = new Map(game, level);
+            out.spawns.push(`level ${level} seed ${seed} rng ${game.rng.state}`);
+            for (const p of map.landmineSpawns) out.spawns.push(`mine ${r3(p.x)},${r3(p.y)}`);
+            for (const p of map.enemyTankSpawns) out.spawns.push(`tank ${r3(p.x)},${r3(p.y)}`);
+            for (const p of map.enemyAttackerSpawns) out.spawns.push(`attacker ${r3(p.x)},${r3(p.y)}`);
+            for (const p of map.enemyTurretSpawns) out.spawns.push(`turret ${r3(p.x)},${r3(p.y)},${p.isCeiling ? 1 : 0}`);
+        }
+    }
+
+    // アイテム: 床・段の上・穴の上・低い天井の下から落とす
+    for (const c of [5, 12, 20, 30, 40]) {
+        const game = world();
+        const it = new MissileKit(game, c * TILE_SIZE + 8, 8 * TILE_SIZE);
+        for (let f = 0; f < 200 && !it.onGround; f++) {
+            it._fall();
+            out.item.push(`${r3(it.x)},${r3(it.y)},${r3(it.vy)},${it.onGround ? 1 : 0}`);
+        }
+        out.item.push('end');
+    }
+
+    // 母艦: 自機を載せて右へ（段・穴・段2つ）、折り返して左へ
+    {
+        const game = world();
+        const held = new Set();
+        game.input = { isKeyDown: (k) => held.has(k) };
+        game.player = { x: 0, y: 0, width: 16, height: 24, alive: true, docked: true, onGround: true };
+        const cr = new Carrier(game, 3 * TILE_SIZE, 20 * TILE_SIZE - 32);
+        for (let f = 0; f < 600; f++) {
+            held.clear();
+            held.add(f < 400 ? 'KeyD' : 'KeyA');
+            cr.update();
+            out.carrier.push(`${r3(cr.x)},${r3(cr.y)},${r3(cr.vx)},${r3(cr.vy)}`);
+        }
+    }
+    return out;
+}
+
+export async function digestGrounded() {
+    return digest(await recordGrounded());
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--grounded')) {
+    digestGrounded().then((d) => console.log(JSON.stringify(d, null, 2)));
+} else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--projectiles')) {
     console.log(JSON.stringify(digestProjectiles(), null, 2));
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     console.log(JSON.stringify(digest(), null, 2));
