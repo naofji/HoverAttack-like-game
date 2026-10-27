@@ -8,6 +8,10 @@
 // 木は床だけに立てる（壁・天井は頼まれていない。天井のつららは別の機能として設計する）。
 // 返す設計図は Town にそのまま渡せる。soft: true は燃えず崩壊の演出を持たない印、flora: 'snow' は
 // 砕けた粒と穴の縁を雪の木の色にする印。
+//
+// 根元の高さは floorY（列 x の床の上端）で決める。5面の床の端は坂・面取り（utils/tileShape.js）で削れて
+// いるので、タイルの上端に立てると根元が最大 12.5px 浮いた（タイル形状つき当たり判定 段5の実測）。
+// 既定はタイルの上端（四角い地形の床）。
 
 import {
     TILE_SIZE as T, TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK,
@@ -21,13 +25,14 @@ import { buildFir, buildBareTree } from './snowTrees.js';
 
 export function generateSnowTrees({
     grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols),
+    rockAt = null,
+    floorY = (x, r) => r * T,
 }) {
     const sites = findSites(grid, rows, cols);
-    const { specs, add, freeUp } = makePlacer({ grid, rows, cols, excludeRects });
+    const { specs, add, freeUp } = makePlacer({ grid, rows, cols, excludeRects, rockAt });
     const fillAt = (c, r) => Math.min(1, villageFill(villages, c, r) * SNOWTREE_FILL_SCALE);
 
     for (const run of sites.floors) {
-        const groundY = run.r * T + TOWN_FOUNDATION_SINK;
         const xEnd = run.c1 * T;
         let x = run.c0 * T;   // 次の木の左端
         while (xEnd - x >= 8) {
@@ -39,6 +44,9 @@ export function generateSnowTrees({
             const b = rng.next() < SNOWTREE_BARE_SHARE ? buildBareTree(rng, { maxH }) : buildFir(rng, { maxH });
             // 根元（x + footX から右へ 4px）は床の上に立つ。枝や葉が張り出すのは構わないが、根元が縁の外では浮く
             if (!b || x + b.footX + 4 > xEnd) { x += 8; continue; }
+            // 根元の両端の列の床の**低い方**に立てる。高い方に合わせると低い側が浮く。高い側が岩に
+            // 埋まるのは、木を地形の奥に描くので見えない
+            const groundY = Math.max(floorY(x + b.footX + 0.5, run.r), floorY(x + b.footX + 3.5, run.r)) + TOWN_FOUNDATION_SINK;
             const placed = add({
                 site: 'floor', style: 'P', soft: true, flora: 'snow', kind: b.kind, footX: b.footX,
                 x, y: groundY - b.h, w: b.w, h: b.h, parts: b.parts,

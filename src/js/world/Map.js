@@ -393,6 +393,10 @@ export class Map {
             grid: this.grid, rows: this.rows, cols: this.cols,
             excludeRects: [this._reservedRects()[1]],
             rng: new SeededRNG((this.game.rng.state ^ 0x5E0A71) >>> 0),
+            // 根元は形の床の高さに立てる（坂・面取りの上で浮かないように）。床の行 r の上の空きから
+            // 下へ2タイルまで探す。坂の低い側の列は、形の上端が次の行の上端（r+1 の上端）まで下がる
+            rockAt: (x, y) => this.isSolidPoint(x, y),
+            floorY: (x, r) => this.terrainTopY(x, r * TILE_SIZE - 1, (r + 2) * TILE_SIZE) ?? r * TILE_SIZE,
         });
     }
 
@@ -406,6 +410,9 @@ export class Map {
             grid: this.grid, rows: this.rows, cols: this.cols,
             excludeRects: this._reservedRects(),
             rng: new SeededRNG((this.game.rng.state ^ 0x1C1CE5) >>> 0),
+            // 根元は形の天井の高さに吊るす（木の floorY と同じ理由）。天井の行 r の下の空きから上へ探す
+            rockAt: (x, y) => this.isSolidPoint(x, y),
+            ceilingY: (x, r) => this.terrainBottomY(x, (r + 1) * TILE_SIZE + TILE_SIZE / 2, (r - 1) * TILE_SIZE) ?? (r + 1) * TILE_SIZE,
         });
     }
 

@@ -188,7 +188,9 @@ test('形の焼き込みは乱数を使わない（5面の地図を作ったあ�
     const a = { rng: new SeededRNG(11) };
     new Map(a, 4);
     const orig = Map.prototype._buildTileShapes, origSeat = Map.prototype._seatSpawnsOnShapes;
-    Map.prototype._buildTileShapes = function () {};
+    // 形を計算しない表（全部満ち）で置き換える。雪の木・つららの置き方（段5）が形の表を読むので、
+    // 表そのものは要る
+    Map.prototype._buildTileShapes = function () { this.tileShapes = new Uint16Array(this.rows * this.cols).fill(SHAPE_FULL); };
     // 湧き位置の置き直し（段4）は形の表を読むので、形を焼かないときは一緒に外す
     Map.prototype._seatSpawnsOnShapes = function () {};
     try {

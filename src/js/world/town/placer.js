@@ -14,8 +14,12 @@ import { rasterizeParts } from './chunks.js';
 // 見える部分の半分以上が岩の中に入る植物は置かない（岩の奥に隠れて、絵も当たりも無いのと同じ）
 const MAX_BURIED_SHARE = 0.35;
 
-export function makePlacer({ grid, rows, cols, excludeRects = [] }) {
+export function makePlacer({ grid, rows, cols, excludeRects = [], rockAt = null }) {
     const solid = (r, c) => r < 0 || r >= rows || c < 0 || c >= cols || grid[r][c] !== BLOCK_EMPTY;
+    // 埋まり具合を見る点の判定。既定はタイル単位。5面は形の岩（Map.isSolidPoint）を渡す: 根元を坂・面取りの
+    // 高さへ下げた（上げた）木とつららは、削れた角の空中にかけらが入り、タイル単位だとそれを「埋まった」と
+    // 数えて、つららが 1 割強置けなくなった（段5の実測。seed 2 で 151 → 131）
+    const rockAtPoint = rockAt || ((px, py) => solid(Math.floor(py / T), Math.floor(px / T)));
     const specs = [];
     const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
         && !excludeRects.some((rc) => touchesRect(s, rc));
@@ -29,10 +33,10 @@ export function makePlacer({ grid, rows, cols, excludeRects = [] }) {
             if ((s.site === 'floor' && j === ch - 1) || (s.site === 'ceiling' && j === 0)) continue;
             for (let i = 0; i < cw; i++) {
                 if (!cells[j * cw + i]) continue;
-                const tc = Math.floor((s.x + i * CH + CH / 2) / T);
-                if (tc === wallCol) continue;   // 壁の植物の根元の列は、壁に埋めるもの
+                const px = s.x + i * CH + CH / 2;
+                if (Math.floor(px / T) === wallCol) continue;   // 壁の植物の根元の列は、壁に埋めるもの
                 all++;
-                if (solid(Math.floor((s.y + j * CH + CH / 2) / T), tc)) buried++;
+                if (rockAtPoint(px, s.y + j * CH + CH / 2)) buried++;
             }
         }
         return all === 0 ? 0 : buried / all;
