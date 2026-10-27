@@ -326,7 +326,60 @@ export async function digestGrounded() {
     return digest(await recordGrounded());
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--grounded')) {
+// ---------------------------------------------------------------
+// 段5（描画。docs/superpowers/plans/2026-10-28-tile-shape-5-drawing.md）の基準線。
+// 本物の地図（5面を除く）の地形のキャッシュに焼く呼び出しを全部、と、ブロックを壊した後の
+// 焼き直しの呼び出し。地図が大きいので、文字列を溜めずに SHA-256 へ流し込む。
+// ---------------------------------------------------------------
+
+/** 偽 ctx の呼び出しを1つずつハッシュへ流す。数値は丸めて浮動小数の表記の揺れを避ける */
+function hashCalls(hash, calls) {
+    for (const c of calls) {
+        hash.update(c.name);
+        for (const a of c.args) hash.update(`|${typeof a === 'number' ? r3(a) : String(a)}`);
+        hash.update('\n');
+    }
+}
+
+/** @returns {Promise<{ cache: string, damaged: string }>} */
+export async function digestDrawing() {
+    const { makeFakeCtx } = await import('../tests/helpers/fake-ctx.js');
+    const prevDocument = globalThis.document;
+    globalThis.document = {
+        createElement: () => { const ctx = makeFakeCtx(); return { width: 0, height: 0, getContext: () => ctx }; },
+    };
+    try {
+        const { Map } = await import('../src/js/world/Map.js');
+        const { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_METAL } = await import('../src/js/utils/Constants.js');
+        const cache = createHash('sha256'), damaged = createHash('sha256');
+        for (const level of [0, 1, 2, 3, 5, 6]) {
+            for (const seed of [1, 2]) {
+                const map = new Map({ rng: new SeededRNG(seed) }, level);
+                const calls = map.tileCacheCtx.calls;
+                hashCalls(cache, calls);
+                calls.length = 0;
+                // 壊すのは決まった刻みで拾った岩のタイル 20 個（外周・金属は壊れない）
+                let n = 0;
+                for (let r = 1; r < map.rows - 1 && n < 20; r += 3) {
+                    for (let c = 1; c < map.cols - 1 && n < 20; c += 7) {
+                        const b = map.grid[r][c];
+                        if (b === BLOCK_EMPTY || b === BLOCK_INDESTRUCTIBLE || b === BLOCK_METAL) continue;
+                        map.damageBlock(r, c, 99);
+                        n++;
+                    }
+                }
+                hashCalls(damaged, calls);
+            }
+        }
+        return { cache: cache.digest('hex'), damaged: damaged.digest('hex') };
+    } finally {
+        globalThis.document = prevDocument;
+    }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--drawing')) {
+    digestDrawing().then((d) => console.log(JSON.stringify(d, null, 2)));
+} else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--grounded')) {
     digestGrounded().then((d) => console.log(JSON.stringify(d, null, 2)));
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes('--projectiles')) {
     console.log(JSON.stringify(digestProjectiles(), null, 2));
