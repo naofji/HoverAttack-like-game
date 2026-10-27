@@ -1162,6 +1162,13 @@ export const SLOPE_DOWNHILL_ACCEL = 0.06;  // 斜面に立っているあいだ�
 export const PLATE_TIP_SLIDE_ACCEL = 0.10;
 export const SLOPE_UPHILL_SCALE = 0.6;     // 上り方向の入力の最高速の倍率
 export const SLOPE_SNAP_COYOTE = 6;        // 段を踏み外してから下りの吸着を諦めるまでのフレーム
+// タイル形状つき当たり判定（docs/superpowers/specs/2026-10-27-tile-shape-collision-design.md）の坂。
+// 坂を上る・下るとき、1フレームに体を上下へ動かしてよい量は「横の移動量 + この余裕」。45度の坂は
+// 横に動いた分だけ高さが変わるので、余裕 1px で坂には吸い付き、8px の面取りの先の垂直な落差には届かない
+export const SLOPE_CLIMB_MARGIN = 1;
+// 縦に動いていて斜辺に当たったとき、縦の速さのうち斜辺に沿った横の速さへ移す割合。
+// 45度の斜辺へ速度を射影すると縦の速さの半分が横に残るので 0.5（初期値。実機で調整する）
+export const SLOPE_DEFLECT = 0.5;
 // 霧で索敵の横半径に掛ける倍率（縦は SIGHT_ASPECT 経由で同じ比率で縮む）。自機の Auto Aim も同じ。
 export const FOG_SIGHT_SCALE = 0.5;
 

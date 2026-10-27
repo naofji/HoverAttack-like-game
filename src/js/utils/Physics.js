@@ -21,6 +21,19 @@ export function collidesWithMap(entity, map, customPoints) {
 }
 
 /**
+ * collidesWithMap と同じ点で、タイルの形（utils/tileShape.js）に当てる。坂の削れた部分の空中は
+ * 岩ではない。四角い地形（5面以外）では isSolidPoint が isSolidAtPixel と同じ答えを返すので、
+ * 同じ結果になる（tests/tile-shape-map.test.js）
+ */
+export function collidesWithTerrain(entity, map, customPoints) {
+    const points = customPoints || getDefaultCheckPoints(entity);
+    for (const p of points) {
+        if (map.isSolidPoint(p.x, p.y)) return true;
+    }
+    return false;
+}
+
+/**
  * Generate standard 8-point bounding box check points for an entity.
  * @param {object} entity - Must have x, y, width, height
  * @param {number} [inset=2] - Pixel inset from edges
