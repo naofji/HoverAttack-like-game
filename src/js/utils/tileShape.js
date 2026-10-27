@@ -78,3 +78,107 @@ export function computeTileShape(cellAt, r, c, rule) {
     }
     return packShape(q[0], q[1], q[2], q[3]);
 }
+
+// --------------------------------------------
+// 形の幾何。座標はタイル内のローカル px（0〜16）、象限の中は (u, v)（0〜8）。
+// 三角の象限は斜辺の上を岩とする（閉じている）。四角の判定 isSolidAtPixel と同じく、
+// 象限・タイルの右端と下端は隣のものに属する（半開区間）。
+// --------------------------------------------
+
+const QS = 8; // 象限の一辺（TILE_SIZE の半分）
+
+/** 象限の中の点が岩か */
+function quadContains(q, u, v) {
+    switch (q) {
+        case Q_FULL: return true;
+        case Q_TRI_NO_TL: return u + v >= QS;
+        case Q_TRI_NO_BR: return u + v <= QS;
+        case Q_TRI_NO_TR: return v >= u;
+        case Q_TRI_NO_BL: return u >= v;
+        default: return false;
+    }
+}
+
+/**
+ * 象限の中の半開矩形 [u0,u1)×[v0,v1)（u1>u0, v1>v0）に岩が掛かるか。
+ * 斜辺の式の値を矩形の上で最大（または最小）にする角だけを見ればよい。
+ * 開いた側の角（u1 や v1）は届かない値なので、そちらを使う式は厳密な不等号になる。
+ */
+function quadOverlaps(q, u0, v0, u1, v1) {
+    switch (q) {
+        case Q_FULL: return true;
+        case Q_TRI_NO_TL: return u1 + v1 > QS;
+        case Q_TRI_NO_BR: return u0 + v0 <= QS;
+        case Q_TRI_NO_TR: return v1 - u0 > 0;
+        case Q_TRI_NO_BL: return u1 - v0 > 0;
+        default: return false;
+    }
+}
+
+/** 象限の列 u で岩が始まる v（0〜8）。岩が無ければ QS */
+function quadTop(q, u) {
+    switch (q) {
+        case Q_FULL: case Q_TRI_NO_BL: case Q_TRI_NO_BR: return 0;
+        case Q_TRI_NO_TL: return QS - u;
+        case Q_TRI_NO_TR: return u;
+        default: return QS;
+    }
+}
+
+/** 象限の列 u で岩が終わる v（0〜8）。岩が無ければ（または点だけなら）0 */
+function quadBottom(q, u) {
+    switch (q) {
+        case Q_FULL: case Q_TRI_NO_TL: case Q_TRI_NO_TR: return QS;
+        case Q_TRI_NO_BL: return u;
+        case Q_TRI_NO_BR: return QS - u;
+        default: return 0;
+    }
+}
+
+/** @param {number} lx @param {number} ly いずれも [0, 16) */
+export function shapeContainsPoint(code, lx, ly) {
+    if (code === SHAPE_FULL) return true;
+    if (code === SHAPE_EMPTY) return false;
+    const qx = lx < QS ? 0 : 1, qy = ly < QS ? 0 : 1;
+    const q = (code >> (3 * (qy * 2 + qx))) & 7;
+    return quadContains(q, lx - qx * QS, ly - qy * QS);
+}
+
+/** 半開矩形 [x0,x1)×[y0,y1)（0 ≦ x0 < x1 ≦ 16）に岩が掛かるか。矩形を象限で切り分けて調べる */
+export function shapeOverlapsRect(code, x0, y0, x1, y1) {
+    if (code === SHAPE_FULL) return true;
+    if (code === SHAPE_EMPTY) return false;
+    for (let qy = 0; qy < 2; qy++) {
+        const v0 = Math.max(y0 - qy * QS, 0), v1 = Math.min(y1 - qy * QS, QS);
+        if (v1 <= v0) continue;
+        for (let qx = 0; qx < 2; qx++) {
+            const u0 = Math.max(x0 - qx * QS, 0), u1 = Math.min(x1 - qx * QS, QS);
+            if (u1 <= u0) continue;
+            const q = (code >> (3 * (qy * 2 + qx))) & 7;
+            if (quadOverlaps(q, u0, v0, u1, v1)) return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * 列 lx（[0, 16)）で岩が始まる y。岩が無ければ null。
+ * computeTileShape が作る形は正方形の角を削ったものなので、どの列も岩が1本につながっていて、
+ * 上端と下端の2つで列の岩を表せる。
+ */
+export function shapeTopY(code, lx) {
+    const qx = lx < QS ? 0 : 1, u = lx - qx * QS;
+    const top = quadTop((code >> (3 * qx)) & 7, u);
+    if (top < QS) return top;
+    const bottom = quadTop((code >> (3 * (2 + qx))) & 7, u);
+    return bottom < QS ? QS + bottom : null;
+}
+
+/** 列 lx（[0, 16)）で岩が終わる y。岩が無ければ null。満ちなら 16 */
+export function shapeBottomY(code, lx) {
+    const qx = lx < QS ? 0 : 1, u = lx - qx * QS;
+    const lower = quadBottom((code >> (3 * (2 + qx))) & 7, u);
+    if (lower > 0) return QS + lower;
+    const upper = quadBottom((code >> (3 * qx)) & 7, u);
+    return upper > 0 ? upper : null;
+}
