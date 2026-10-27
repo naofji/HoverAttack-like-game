@@ -102,7 +102,9 @@ test('陸上では床も機体も滑らない', () => {
 /** 足元 y (entity.y + height) から指定 px 下に地面がある世界。 */
 function worldWithGroundBelow(feetY, groundOffsetPx) {
   const groundY = feetY + groundOffsetPx;
-  return { map: { isSolidAtPixel: (x, y) => y >= groundY, cols: 100, rows: 100 } };
+  // 地面探しは形の問い合わせ（isSolidPoint）を読む。四角い地面なので isSolidAtPixel と同じ答え
+  const solid = (x, y) => y >= groundY;
+  return { map: { isSolidAtPixel: solid, isSolidPoint: solid, cols: 100, rows: 100 } };
 }
 
 test('足元のすぐ下（1ブロック未満）に地面があれば、その距離を返す', () => {

@@ -149,10 +149,11 @@ export class EnemyTank {
         // 床の 0.3px 上を上下していて、grounded は1フレームおきに途切れる
         // （実測: G / - / G / -）。途切れたフレームだけ陸上の摩擦に落ちて、
         // 氷の上でも即座に反転していた。足元に地形があるかを直接見る。
-        // 戦車は甲板にも敵の頭にも乗らないので、地形以外に乗ることはない
+        // 戦車は甲板にも敵の頭にも乗らないので、地形以外に乗ることはない。
+        // 地形はタイルの形で見る（isSolidPoint）。タイル単位だと5面の坂で斜辺から浮いていても接地になる
         const probeY = this.y + this.height + 1;
-        this.onTerrain = map.isSolidAtPixel(this.x + 2, probeY)
-            || map.isSolidAtPixel(this.x + this.width - 2, probeY);
+        this.onTerrain = map.isSolidPoint(this.x + 2, probeY)
+            || map.isSolidPoint(this.x + this.width - 2, probeY);
 
         // --- Predictive Navigation (User Rules) ---
         // 形のあるタイル（坂）の近くでは、前の床の高さを形で見て決める（_navigateOnSlope）。

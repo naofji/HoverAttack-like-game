@@ -90,6 +90,9 @@ const GROUND_CLEARANCE_STEP = 4;
  * ホバー中の「地表から何px上か」を知りたいだけの用途（例: 雪煙）向け。
  * `maxPx` 以内に地面が無ければ null（=「近くない」）。
  *
+ * 地面はタイルの形（utils/tileShape.js）で見る（isSolidPoint）。タイル単位だと5面の坂の削れた空中を
+ * 地面と取り違え、粉雪が斜辺より最大 16px 高い所に出た。四角い地形では isSolidAtPixel と同じ答え。
+ *
  * @param {object} entity x, y, width, height を持つ
  * @param {object} game map を持つ（無ければ null）
  * @param {number} maxPx 探索する最大距離
@@ -97,11 +100,11 @@ const GROUND_CLEARANCE_STEP = 4;
  */
 export function groundClearance(entity, game, maxPx) {
     const map = game && game.map;
-    if (!map || !map.isSolidAtPixel) return null;
+    if (!map) return null;
     const cx = entity.x + entity.width / 2;
     const feetY = entity.y + entity.height;
     for (let d = 0; d <= maxPx; d += GROUND_CLEARANCE_STEP) {
-        if (map.isSolidAtPixel(cx, feetY + d)) return d;
+        if (map.isSolidPoint(cx, feetY + d)) return d;
     }
     return null;
 }
@@ -112,9 +115,8 @@ export function groundClearance(entity, game, maxPx) {
  * 斜辺に沿わせて舞わせるために使う。地面が見つかっていない(clearance が
  * null)、または map が無ければ平地扱い(0)。
  *
- * 坂はタイルの形（utils/tileShape.js）が持つ。groundClearance はタイル単位で探すので、
- * 坂の上では見つかった地面がタイルの上端（斜辺より上の空中）になる。そこから1タイル下まで
- * 中心の列の本当の上面を探してから傾きを読む。
+ * 坂はタイルの形（utils/tileShape.js）が持つ。groundClearance は 4px 刻みで探すので、見つかった
+ * 点は上面から最大 4px 下の岩の中になる。その 4px 上から中心の列の本当の上面を探してから傾きを読む。
  *
  * @param {object} entity x, width, height を持つ
  * @param {object} game map を持つ（無ければ 0）
