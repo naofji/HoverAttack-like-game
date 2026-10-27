@@ -25,6 +25,7 @@ import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { TILE_SIZE as T, STAGE_ENVIRONMENTS, SNOW_CAP_COLOR, SNOW_CAP_THICKNESS } from '../src/js/utils/Constants.js';
 import { getCurrentWeek, stageSeed } from '../src/js/utils/WeekSeed.js';
 import { PixelCanvas, writePng } from './lib/pixel-canvas.mjs';
+import { shapeCornerCuts } from '../src/js/utils/tileShape.js';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
     if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]);
@@ -210,6 +211,18 @@ for (let r = Math.floor(Y / T); r <= Math.floor((Y + H) / T); r++) {
     for (let c = Math.floor(X / T); c <= Math.floor((X + W) / T); c++) {
         if (r < 0 || c < 0 || r >= map.rows || c >= map.cols || map.grid[r][c] === 0) continue;
         const st = map.blockStyles[map.grid[r][c]] || style;
+        const cut = shapeCornerCuts(map.tileShapeAt(r, c));
+        if (cut.tl || cut.tr || cut.bl || cut.br) {
+            // 5面の坂・面取り（タイル形状つき当たり判定 段5）。実機と同じ削り幅の輪郭で塗る。縁取りは省く
+            const x = c * T, y = r * T;
+            ctx.fillStyle = st.fill;
+            ctx.beginPath();
+            ctx.moveTo(x + cut.tl, y); ctx.lineTo(x + T - cut.tr, y); ctx.lineTo(x + T, y + cut.tr);
+            ctx.lineTo(x + T, y + T - cut.br); ctx.lineTo(x + T - cut.br, y + T); ctx.lineTo(x + cut.bl, y + T);
+            ctx.lineTo(x, y + T - cut.bl); ctx.lineTo(x, y + cut.tl);
+            ctx.fill();
+            continue;
+        }
         ctx.fillStyle = st.border; ctx.fillRect(c * T, r * T, T, T);
         ctx.fillStyle = st.fill; ctx.fillRect(c * T + 1, r * T + 1, T - 2, T - 2);
         // 5面: 上が空いている岩の上面に雪のふち（実機は面ごとの描き込みで、ここは同じ色の 5px の帯で近似）
