@@ -8,11 +8,13 @@ import {
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
     WATER_FALL_SPEED_SCALE,
-    GRAVITY, FRICTION,
+    GRAVITY, FRICTION, SLOPE_CLIMB_MARGIN,
     HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT,
     HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT, CARRIER_WATER_MIST_SCALE,
 } from '../utils/Constants.js';
-import { collidesWithMap } from '../utils/Physics.js';
+import { collidesWithTerrain } from '../utils/Physics.js';
+import { liftOutOfFloor, floorBelow } from '../utils/slopeMotion.js';
+import { SlopeBody } from './slopeBody.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
 import { groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
@@ -168,9 +170,21 @@ export class Carrier {
     // ------------------------------------------
 
     _moveAndCollide() {
+        const map = this.game.map;
+        const prevGrounded = this._grounded;
+        this._grounded = false;
+
         // --- Horizontal ---
-        this.x += this.vx * this.motion.speed;
-        if (this._collidesWithMap()) {
+        const dx = this.vx * this.motion.speed;
+        this.x += dx;
+        // 5面の坂と面取り: 斜辺の外へ持ち上げて進む（1フレームに横の移動量＋余裕まで。戦車と同じ）。
+        // 下の段差の手順（3px ずつ持ち上げる）のままだと、坂の1タイルごとに跳ねて斜辺から浮いた
+        const lift = this._collidesWithMap() && this._touchesShapedTile(dx, 0)
+            ? liftOutOfFloor(map, this, Math.abs(dx) + SLOPE_CLIMB_MARGIN, this._slopePoints)
+            : null;
+        if (lift !== null) {
+            this.y -= lift;
+        } else if (this._collidesWithMap()) {
             // Check if it's a 1-tile step
             this.y -= TILE_SIZE;
             const canClimb = !this._collidesWithMap();
@@ -190,14 +204,36 @@ export class Carrier {
         this._pushPlayer();
 
         // --- Vertical ---
-        this.y += this.vy * this.motion.speed;
+        const dy = this.vy * this.motion.speed;
+        this.y += dy;
         if (this._collidesWithMap()) {
-            if (this.vy > 0) {
+            // 坂への着地は斜辺へ（タイルの上端ではない）。四角い床と同じく 0.01px 浮かせる
+            const landLift = this.vy > 0 && this._touchesShapedTile(0, dy)
+                ? liftOutOfFloor(map, this, Math.abs(dy) + SLOPE_CLIMB_MARGIN, this._slopePoints)
+                : null;
+            if (landLift !== null) {
+                this.y -= landLift + 0.01;
+                this._grounded = true;
+            } else if (this.vy > 0) {
                 this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height - 0.01;
+                this._grounded = true;
             } else if (this.vy < 0) {
                 this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
             }
             this.vy = 0;
+        } else if (prevGrounded && this.vy >= 0) {
+            // 坂を下るとき: 横へ動いた分だけ床が下がっていたら、落下を待たずに斜辺へ下ろす（戦車と同じ）。
+            // 下ろすのは横の移動量＋余裕までなので、崖では落ちる
+            const reach = Math.abs(dx) + SLOPE_CLIMB_MARGIN;
+            if (this._touchesShapedTile(reach, reach)) {
+                const floor = floorBelow(map, this, reach, this._slopePoints, 1);
+                if (floor !== null) {
+                    const prevY = this.y;
+                    this.y = floor - this.height - 0.01;
+                    if (this._collidesWithMap()) this.y = prevY;
+                    else { this.vy = 0; this._grounded = true; }
+                }
+            }
         }
     }
 
@@ -248,18 +284,8 @@ export class Carrier {
     }
 
     _collidesWithMap() {
-        // Carrier uses extra bottom check points for its wider hull
-        const points = [
-            { x: this.x + 2, y: this.y + 2 },
-            { x: this.x + this.width - 2, y: this.y + 2 },
-            { x: this.x + 2, y: this.y + this.height - 1 },
-            { x: this.x + this.width - 2, y: this.y + this.height - 1 },
-            { x: this.x + this.width / 2, y: this.y + 2 },
-            { x: this.x + this.width / 2, y: this.y + this.height - 1 },
-            { x: this.x + this.width / 4, y: this.y + this.height - 1 },
-            { x: this.x + this.width * 3 / 4, y: this.y + this.height - 1 },
-        ];
-        return collidesWithMap(this, this.game.map, points);
+        // 点は _slopePoints（ファイル末尾）。5面の坂と面取りは形で当てる（点を渡すので点だけで見る）
+        return collidesWithTerrain(this, this.game.map, this._slopePoints(this));
     }
 
     // ------------------------------------------
@@ -398,3 +424,18 @@ export class Carrier {
         }
     }
 }
+
+// 地形の判定の8点。船体が広い（64px）ので底に4点ある。坂の部品（slopeMotion.js）が足の列を
+// 探すときも同じ点を使う
+Carrier.prototype._slopePoints = (c) => [
+    { x: c.x + 2, y: c.y + 2 },
+    { x: c.x + c.width - 2, y: c.y + 2 },
+    { x: c.x + 2, y: c.y + c.height - 1 },
+    { x: c.x + c.width - 2, y: c.y + c.height - 1 },
+    { x: c.x + c.width / 2, y: c.y + 2 },
+    { x: c.x + c.width / 2, y: c.y + c.height - 1 },
+    { x: c.x + c.width / 4, y: c.y + c.height - 1 },
+    { x: c.x + c.width * 3 / 4, y: c.y + c.height - 1 },
+];
+// 体の近くに形のあるタイルがあるか（自機・アタッカー・戦車と同じ判定）
+Carrier.prototype._touchesShapedTile = SlopeBody._touchesShapedTile;
