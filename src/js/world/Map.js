@@ -55,7 +55,7 @@ import { Town } from './town/Town.js';
 import { stairDirection } from '../utils/slope.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
-    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal,
+    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead,
 } from '../utils/tileShape.js';
 
 
@@ -1606,7 +1606,13 @@ export class Map {
             if (this.isSolidPoint(sx, sy)) {
                 const r = Math.floor(sy / TILE_SIZE), c = Math.floor(sx / TILE_SIZE);
                 const tx = c * TILE_SIZE, ty = r * TILE_SIZE;
-                const normal = hypotenuseNormal(this.tileShapeAt(r, c), sx - tx, sy - ty, qx - tx, qy - ty);
+                // 入った先のタイルの斜辺か、出てきた側のタイルの斜辺（坂のタイルの境目の列）か
+                let normal = hypotenuseNormal(this.tileShapeAt(r, c), sx - tx, sy - ty, qx - tx, qy - ty);
+                if (!normal) {
+                    const pr = Math.floor(qy / TILE_SIZE), pc = Math.floor(qx / TILE_SIZE);
+                    const ptx = pc * TILE_SIZE, pty = pr * TILE_SIZE;
+                    normal = hypotenuseAhead(this.tileShapeAt(pr, pc), qx - ptx, qy - pty, sx - ptx, sy - pty);
+                }
                 return normal ? { x: qx, y: qy, sx: normal.sx, sy: normal.sy } : null;
             }
             qx = sx; qy = sy;

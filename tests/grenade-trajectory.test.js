@@ -20,6 +20,8 @@ function makeTestGame({ env = null, barriers = [] } = {}) {
       // y >= 30 * TILE_SIZE を床とする
       return py >= 30 * TILE_SIZE;
     },
+    isSolidPoint: (px, py) => py >= 30 * TILE_SIZE,
+    slopeHitAlong: () => null,
     pixelToTile: (px, py) => ({ r: Math.floor(py / TILE_SIZE), c: Math.floor(px / TILE_SIZE) }),
     destroyArea: () => 0,
   };

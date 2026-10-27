@@ -251,3 +251,13 @@ test('ブロックが壊れて形が作り直されると、次の slopeHitAlong
     assert.deepEqual([hit.sx, hit.sy], [-1, -1]);
     assert.ok(hit.y < 2 * T + 12 && hit.y >= 2 * T + 11);
 });
+
+test('slopeHitAlong は坂のタイルの境目ちょうどの列（斜辺の端の点）でも斜辺の法線を返す', async () => {
+    // (2,2) と (3,1) の斜辺がつながる点 (2T, 3T)。真下に落ちると最初の岩は (3,2) の満ちた象限だが、
+    // 直前の点は (2,2) の三角の象限の削れた側にいて、その斜辺を越えた所へ入った
+    const m = await fakeSnowMap(['......', '......', '..####', '.#####', '######']);
+    assert.equal(m.tileShapeAt(3, 1), packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL), '前提: 下の段も斜め');
+    const hit = m.slopeHitAlong(2 * T, 3 * T - 0.8, 2 * T, 3 * T + 0.4);
+    assert.ok(hit, '斜辺に触れていない');
+    assert.deepEqual([hit.sx, hit.sy], [-1, -1]);
+});

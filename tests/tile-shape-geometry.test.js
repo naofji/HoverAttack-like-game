@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     Q_EMPTY, Q_FULL, Q_TRI_NO_TL, Q_TRI_NO_TR, Q_TRI_NO_BL, Q_TRI_NO_BR,
     packShape, SHAPE_EMPTY, SHAPE_FULL, computeTileShape,
-    shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY, hypotenuseNormal,
+    shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY, hypotenuseNormal, hypotenuseAhead,
 } from '../src/js/utils/tileShape.js';
 
 const F = Q_FULL, E = Q_EMPTY, TL = Q_TRI_NO_TL, TR = Q_TRI_NO_TR, BL = Q_TRI_NO_BL, BR = Q_TRI_NO_BR;
@@ -148,4 +148,12 @@ test('hypotenuseNormal は満ちた象限・開いた側に無い直前の点で
     assert.equal(hypotenuseNormal(SHAPE_FULL, 4, 4, 4, -1), null);
     // 左上の三角へ、右の垂直な面の側（直線の岩の側）から入った
     assert.equal(hypotenuseNormal(packShape(TL, E, F, F), 7, 4, 9, 4), null);
+});
+
+test('hypotenuseAhead は直前の点の三角の象限の斜辺を、次の点が越えたときに法線を返す', () => {
+    // 右へ上る段の左下の象限（NO_TL、斜辺 u+v=8）。直前の点は削れた側、次の点は象限の外でも直線を越えていれば当たり
+    assert.deepEqual(hypotenuseAhead(RAMP_UP_RIGHT, 0, 15.2, 0, 16.4), { sx: -1, sy: -1 });
+    assert.equal(hypotenuseAhead(RAMP_UP_RIGHT, 0, 15.2, 0, 15.6), null);   // まだ直線の手前
+    assert.equal(hypotenuseAhead(RAMP_UP_RIGHT, 2, 2, 2, 6), null);         // 直前の点は空の象限
+    assert.equal(hypotenuseAhead(RAMP_UP_RIGHT, 12, 12, 12, 13), null);     // 満ちた象限
 });

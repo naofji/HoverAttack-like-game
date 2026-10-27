@@ -227,3 +227,22 @@ export function hypotenuseNormal(code, lx, ly, px, py) {
         default: return null;
     }
 }
+
+/**
+ * hypotenuseNormal の裏から見たもの: 直前の空の点 (plx, ply) が三角の象限の削れた側にいて、次の点
+ * (slx, sly)（同じタイル基準。タイルの外でもよい）がその斜辺の直線を越えたら法線。坂のタイルの
+ * 境目ちょうどの列では、斜辺の端の点から真下に入ると最初の岩が隣（下）の満ちたタイルになり、
+ * 次の点の側からは斜辺と分からない（グレネードが坂の途中の境目で止まって転がらなかった。実測）
+ */
+export function hypotenuseAhead(code, plx, ply, slx, sly) {
+    const qx = plx < QS ? 0 : 1, qy = ply < QS ? 0 : 1;
+    const q = (code >> (3 * (qy * 2 + qx))) & 7;
+    if (q === Q_EMPTY || q === Q_FULL) return null;
+    if (!quadContains(q, slx - qx * QS, sly - qy * QS)) return null;
+    switch (q) {
+        case Q_TRI_NO_TL: return { sx: -1, sy: -1 };
+        case Q_TRI_NO_BR: return { sx: 1, sy: 1 };
+        case Q_TRI_NO_TR: return { sx: 1, sy: -1 };
+        default: return { sx: -1, sy: 1 };
+    }
+}
