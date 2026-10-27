@@ -970,6 +970,9 @@ export const STAGE_PALETTES = [
 // props = 地形の上に置く飾り（'town' は3面の壊せる町並み。設計:
 //  docs/superpowers/specs/2026-10-11-stage3-town-design.md。'ferns' は4面の苔とシダ、'snow' は5面の雪をかぶった木と
 //  天井のつらら。設計: docs/superpowers/specs/2026-10-11-stage5-snowtrees-design.md ・ 2026-10-11-stage5-icicles-design.md）。無ければ置かない。
+// tileShape = タイルの形を決める規則（utils/tileShape.js の computeTileShape）。'snowSlope' は5面の
+//  段を45度の坂に、角を面取りにする（絵と当たり判定が同じ形を共有する。設計:
+//  docs/superpowers/specs/2026-10-27-tile-shape-collision-design.md）。無ければ 'square'（今までどおり四角）。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
@@ -977,7 +980,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
-    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow', tileShape: 'snowSlope' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
 ];
