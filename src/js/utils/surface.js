@@ -147,6 +147,23 @@ export function groundSurfaceY(entity, game, clearance) {
 }
 
 /**
+ * ホバーの粉雪を出す y。地面の本当の上面（groundSurfaceY）で、読めなければ探索で見つけた点。
+ * 自機・敵アタッカー・キャリアが同じ所から出すよう、ここ1つで決める。上面から 0〜4px 下の岩の中から
+ * 出すと、浮いている高さによっては粒の大半が岩に当たってすぐ消えた（自機・敵アタッカーは浮く高さで
+ * 食い込みがばらつき、揺れずに止まるキャリアは毎回 4px 近く深かった）。平らな雪面の上で自機が 0〜44px の
+ * 高さから 1 回出した粒のうち、20 tick 後に残っているのは 8% → 62%
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ
+ * @param {number} clearance groundClearance の戻り値（null でないこと）
+ * @returns {number}
+ */
+export function snowMistOriginY(entity, game, clearance) {
+    const surface = groundSurfaceY(entity, game, clearance);
+    return surface !== null ? surface : entity.y + entity.height + clearance;
+}
+
+/**
  * 足元の中心から下方向に水面を探し、見つかるまでの距離(px)を返す。副作用なし。
  * `groundClearance` の水面版（ホバー中の水滴ミスト用）。
  *

@@ -27,7 +27,7 @@ import {
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { collidesWithTerrain } from '../utils/Physics.js';
 import { SlopeBody } from './slopeBody.js';
-import { groundSlide, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -311,7 +311,7 @@ export class Player {
         const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
         const fx = this.x + this.width / 2;
-        const fy = this.y + this.height + clearance;
+        const fy = snowMistOriginY(this, this.game, clearance);   // 岩の中から出さない（snowMistOriginY）
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
         if (burst) {
             // 飛び立つ瞬間は間引きを待たず、多めに 1 回。次のホバーの粉雪は INTERVAL 後

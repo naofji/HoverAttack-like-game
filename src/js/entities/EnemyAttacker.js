@@ -26,7 +26,7 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
@@ -306,7 +306,7 @@ export class EnemyAttacker {
         const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
-        const fx = this.x + this.width / 2, fy = this.y + this.height + clearance;
+        const fx = this.x + this.width / 2, fy = snowMistOriginY(this, this.game, clearance);   // 岩の中から出さない（snowMistOriginY）
         if (burst) {
             this._hoverMistTimer = 0;
             this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_BURST_COUNT, onSlope);
