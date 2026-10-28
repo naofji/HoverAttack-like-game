@@ -7,7 +7,7 @@
 // 段2の欠け・支えの崩れ、段3の火はこの表だけを読み書きする。
 // 1バイトに「材料（下位3ビット）」「厚い壁＝弾を止める」「焦げ」を詰める。
 
-import { TOWN_CHUNK, TILE_SIZE } from '../../utils/Constants.js';
+import { TOWN_CHUNK, TILE_SIZE, TOWN_SHAPE_SUPPORT_REACH } from '../../utils/Constants.js';
 import { ringBounds, ringTouchesRect } from './polygons.js';
 
 export const CHUNK = TOWN_CHUNK;
@@ -85,20 +85,33 @@ export function rasterizeParts(parts, w, h) {
  * 支えのかけら。中心が岩のタイルに入っているかけらは、そのタイルに支えられている。
  * 床に埋めた土台・壁に打ち込んだ梁・天井に結んだ綱が、どれもこの1つの規則で拾える。
  * 段2はこのタイルが壊れたときに支えを外す。
- * @returns {Array<{i:number, r:number, c:number}>} i はかけらの番号（j*cw+i）
+ * rockAt（ワールド座標の点が岩か）を渡すと、形の岩に触れているかけら（chunkTouchesRock）だけを拾う（5面の坂・
+ * 面取り。タイルが岩でも、削れた三角の中のかけらは宙に浮いている）。
+ * @returns {Array<{i:number, r:number, c:number, x:number, y:number}>} i はかけらの番号（j*cw+i）、x, y はかけらの中心
  */
-export function computeAnchors(cells, cw, ch, x, y, isSolidTile) {
+export function computeAnchors(cells, cw, ch, x, y, isSolidTile, rockAt = null) {
     const anchors = [];
     for (let j = 0; j < ch; j++) {
         for (let i = 0; i < cw; i++) {
             const k = j * cw + i;
             if (!cells[k]) continue;
-            const r = Math.floor((y + j * CHUNK + HALF) / TILE_SIZE);
-            const c = Math.floor((x + i * CHUNK + HALF) / TILE_SIZE);
-            if (isSolidTile(r, c)) anchors.push({ i: k, r, c });
+            const px = x + i * CHUNK + HALF, py = y + j * CHUNK + HALF;
+            const r = Math.floor(py / TILE_SIZE);
+            const c = Math.floor(px / TILE_SIZE);
+            if (isSolidTile(r, c) && (!rockAt || chunkTouchesRock(rockAt, px, py))) anchors.push({ i: k, r, c, x: px, y: py });
         }
     }
     return anchors;
+}
+
+/**
+ * 中心 (x, y) のかけらが形の岩に触れているか。真ん中と、四辺の中点から TOWN_SHAPE_SUPPORT_REACH だけ外へ出た点の
+ * どれかが岩なら触れている。かけらの中だけで見ると、45度の坂で根元の角が床から 0.5〜2px 離れただけの木
+ * （見た目は着いている）まで倒れた
+ */
+export function chunkTouchesRock(rockAt, x, y) {
+    const e = HALF + TOWN_SHAPE_SUPPORT_REACH;
+    return rockAt(x, y) || rockAt(x, y + e) || rockAt(x, y - e) || rockAt(x - e, y) || rockAt(x + e, y);
 }
 
 /**

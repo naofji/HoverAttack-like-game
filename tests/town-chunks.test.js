@@ -49,7 +49,7 @@ test('支え: 中心が岩のタイルに入っているかけらが、そのタ
     const parts = [{ x: 0, y: 0, w: 8, h: 8, color: null, mat: MAT_ADOBE, solid: true }];
     const { cells, cw, ch } = rasterizeParts(parts, 8, 8);
     const anchors = computeAnchors(cells, cw, ch, 14, 10, (r, c) => r === 1 && c === 1);
-    assert.deepEqual(anchors, [{ i: 2, r: 1, c: 1 }, { i: 3, r: 1, c: 1 }]);
+    assert.deepEqual(anchors, [{ i: 2, r: 1, c: 1, x: 16, y: 16 }, { i: 3, r: 1, c: 1, x: 20, y: 16 }]);
 });
 
 test('normalizeUp は上へ積んだ部品（y が負）を 0 から始まるように下げる', () => {

@@ -418,7 +418,10 @@ export class Map {
 
     /** 5面: 雪の木 ＋ 天井のつらら を 1 つの Town に載せる。木が先（建物の番号が変わらず、木の欠け方の乱数が変わらない） */
     _generateSnow() {
-        this.town = new Town([...this._buildSnowTreeSpecs(), ...this._buildIcicleSpecs()], { isSolidTile: (r, c) => this.isSolid(r, c) });
+        // 支えも形で見る（隣が壊れて根元の下が削れた木は倒れ、つららは落ちる。Town の rockAt）
+        this.town = new Town([...this._buildSnowTreeSpecs(), ...this._buildIcicleSpecs()], {
+            isSolidTile: (r, c) => this.isSolid(r, c), rockAt: (x, y) => this.isSolidPoint(x, y),
+        });
     }
 
     _generateTown() {

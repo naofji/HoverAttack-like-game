@@ -12,7 +12,7 @@
 // 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
 // 機体や弾は必ず建物より手前に出る。
 
-import { rasterizeParts, computeAnchors, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkTouchesRock, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
 import { paintParts } from './shapes.js';
 import {
     TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR, PLANT_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS,
@@ -60,11 +60,16 @@ function defaultCreateCanvas(w, h) {
 export class Town {
     /**
      * @param {Array<object>} specs generateTown() の設計図
-     * @param {{isSolidTile?: (r:number, c:number) => boolean, createCanvas?: (w:number, h:number) => object}} [opts]
+     * @param {{isSolidTile?: (r:number, c:number) => boolean, rockAt?: (x:number, y:number) => boolean,
+     *   createCanvas?: (w:number, h:number) => object}} [opts]
      */
-    constructor(specs, { isSolidTile = () => false, createCanvas = defaultCreateCanvas, random = Math.random,
+    constructor(specs, { isSolidTile = () => false, rockAt = null, createCanvas = defaultCreateCanvas, random = Math.random,
         smokeSprites = getSmokeSprites } = {}) {
         this.isSolidTile = isSolidTile;
+        // 5面だけ: ワールド座標の点がタイルの形の岩の中か（Map.isSolidPoint）。支えをタイルでなく形で見る。
+        // 隣のブロックが壊れると根元のタイルが坂・面取りに削れて、タイルは岩のままでも木の根元の下が宙になる
+        // （段5の実測で、木・つららの約1割が 8〜10px 浮いたまま立っていた）。null はタイル単位（3面・4面は今までどおり）
+        this.rockAt = rockAt;
         this.createCanvas = createCanvas;
         // 火のつき方・燃え広がりの乱数（spec 3章「乱数」: Math.random で構わない。テストは種つきを渡す）
         this.random = random;
@@ -104,7 +109,7 @@ export class Town {
                 shaken: false,
                 x: spec.x, y: spec.y, width: spec.w, height: spec.h,
                 cells, cw, ch,
-                anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile),
+                anchors: computeAnchors(cells, cw, ch, spec.x, spec.y, isSolidTile, rockAt),
                 canvas, ctx, total, remaining: total, collapsed: false,
                 // 火が焦がしたかけら（燃えているあいだ崩れの対象。fire.js）
                 burnt: new Set(),
@@ -282,9 +287,16 @@ export class Town {
         for (const heap of this.rubble.filter((h) => h.groundY === groundY && h.x < x1 && x0 < h.x + h.w)) {
             if (!this._fitRubble(heap)) this._dropRubble(heap);
         }
-        const set = this._anchorIndex.get(`${r},${c}`);
-        if (!set) return;
-        for (const b of set) this._settle(b);
+        // 形で支えを見るときは、形を作り直した 8 近傍（Map._rebuildTileShapesAround）のタイルに支えられた建物も
+        // 確かめ直す。壊れたタイルそのものに支えられていなくても、隣の削れで支えのかけらが宙に出る
+        const near = new Set();
+        for (let rr = r - 1; rr <= r + 1; rr++) {
+            for (let cc = c - 1; cc <= c + 1; cc++) {
+                if (!this.rockAt && (rr !== r || cc !== c)) continue;
+                for (const b of this._anchorIndex.get(`${rr},${cc}`) || []) near.add(b);
+            }
+        }
+        for (const b of [...near].sort((a, b) => a.id - b.id)) this._settle(b);
     }
 
     /**
@@ -776,7 +788,7 @@ export class Town {
 
     /** 岩がまだある支えのかけら */
     _liveAnchors(b) {
-        return b.anchors.filter((a) => b.cells[a.i] && this.isSolidTile(a.r, a.c)).map((a) => a.i);
+        return b.anchors.filter((a) => b.cells[a.i] && this.isSolidTile(a.r, a.c) && (!this.rockAt || chunkTouchesRock(this.rockAt, a.x, a.y))).map((a) => a.i);
     }
 
     /**
