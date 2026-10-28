@@ -16,7 +16,7 @@ import { collidesWithTerrain } from '../utils/Physics.js';
 import { liftOutOfFloor, floorBelow } from '../utils/slopeMotion.js';
 import { SlopeBody } from './slopeBody.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
-import { groundClearance, groundSlopeDirection, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { groundClearance, groundSlopeDirection, groundSurfaceY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 
@@ -135,7 +135,13 @@ export class Carrier {
         this[timerKey] = (this[timerKey] || 0) + 1;
         if (this[timerKey] % HOVER_SNOW_MIST_INTERVAL !== 0) return;
         const onSlope = groundSlopeDirection(footprint, this.game, clearance) !== 0;
-        this.game.spawnSnowMist(footprint.x + footprint.width / 2, footprint.y + footprint.height + clearance, HOVER_SNOW_MIST_COUNT, onSlope);
+        // 地面の本当の上面から出す（groundSurfaceY のコメント）。4px 刻みの探索で見つけた点は岩の中で、
+        // 揺れずに止まったキャリアの下では毎回 4px 近く深く、粒がほとんど岩に当たって消えた
+        // （本物の5面で止まっている間に見えている粒: 坂 22 → 118、平地 15 → 約 120。直す前の main は
+        // 着地のたびの 1px 弱の揺れで浅い所から出ることがあり 70・48）
+        const surface = groundSurfaceY(footprint, this.game, clearance);
+        const y = surface !== null ? surface : footprint.y + footprint.height + clearance;
+        this.game.spawnSnowMist(footprint.x + footprint.width / 2, y, HOVER_SNOW_MIST_COUNT, onSlope);
     }
 
     /**

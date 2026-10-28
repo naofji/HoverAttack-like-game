@@ -124,12 +124,26 @@ export function groundClearance(entity, game, maxPx) {
  * @returns {-1|0|1}
  */
 export function groundSlopeDirection(entity, game, clearance) {
+    const surface = groundSurfaceY(entity, game, clearance);
+    return surface === null ? 0 : game.map.floorSlopeAt(entity.x + entity.width / 2, surface);
+}
+
+/**
+ * `groundClearance` が見つけた地面の、中心の列の本当の上面の y（px）。見つかっていなければ null。
+ * groundClearance は 4px 刻みで探すので、見つかった点は上面から最大 4px 下の岩の中になる。
+ * 粉雪をそこから出すと、動き出した途端に岩に当たって消える（止まったキャリアの下で粉雪が見えなくなった。
+ * 実機の指摘）。
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ（無ければ null）
+ * @param {number|null} clearance groundClearance の戻り値
+ * @returns {number|null}
+ */
+export function groundSurfaceY(entity, game, clearance) {
     const map = game && game.map;
-    if (!map || clearance === null || clearance === undefined) return 0;
+    if (!map || clearance === null || clearance === undefined) return null;
     const groundY = entity.y + entity.height + clearance;
-    const cx = entity.x + entity.width / 2;
-    const surface = map.terrainTopY(cx, groundY - GROUND_CLEARANCE_STEP, groundY + TILE_SIZE);
-    return surface === null ? 0 : map.floorSlopeAt(cx, surface);
+    return map.terrainTopY(entity.x + entity.width / 2, groundY - GROUND_CLEARANCE_STEP, groundY + TILE_SIZE);
 }
 
 /**
