@@ -135,8 +135,9 @@ export class EnemyTank {
 
     _moveAndCollide() {
         const map = this.game.map;
-        // 岩の中で詰まっていたら先に真上へ出す（slopeBody.js の _popOutOfRock。壊れて増えた岩が
-        // 足の1段上の行で体の下の角に掛かると、タイルの上端へのスナップでは同じ高さに戻るだけだった）
+        // 岩の中で詰まっていたら先に真上へ出す（slopeBody.js の _popOutOfRock。決定13 の前は壊れて増えた岩が
+        // 足の1段上の行で体の下の角に掛かると、タイルの上端へのスナップでは同じ高さに戻るだけだった。
+        // 今は壊れて岩が増えないので、ほかの経路で岩に入ったときの備え）
         this._popOutOfRock();
         const x0 = this.x, y0 = this.y;
 
