@@ -135,3 +135,51 @@ for (const seed of [1, 2]) {
     assert.ok(ramps > 10 && chamfers > 10, `坂 ${ramps}・面取り ${chamfers}`);
   });
 }
+
+/**
+ * damageBlock が地形のキャッシュ（tileCacheCtx）へ描き直した呼び出しから、タイルごとのベース塗りの
+ * 多角形を取り出す。clearRect(x, y, S, S) のあと、次の clearRect までに最初に閉じた経路がそのタイルの輪郭
+ */
+function redrawnPolygons(calls) {
+  const out = [];
+  let cur = null, pts = null;
+  for (const c of calls) {
+    if (c.name === 'clearRect') { cur = { r: c.args[1] / S, c: c.args[0] / S, pts: null }; out.push(cur); pts = null; continue; }
+    if (!cur || cur.pts) continue;
+    if (c.name === 'beginPath') pts = [];
+    else if (pts && (c.name === 'moveTo' || c.name === 'lineTo')) pts.push(c.args);
+    else if (pts && c.name === 'closePath') cur.pts = pts;
+  }
+  return out.filter((t) => t.pts);
+}
+
+for (const seed of [1, 2]) {
+  test(`5面 seed ${seed}: 壊したときにキャッシュへ描き直した絵は、作り直した後の形と一致する（形→描き直しの順）`, async () => {
+    const map = await snowMap(seed);
+    const calls = map.tileCacheCtx.calls;
+    let n = 0, checked = 0;
+    const bad = [];
+    for (let r = 2; r < map.rows - 2 && n < 30; r += 2) {
+      for (let c = 2; c < map.cols - 2 && n < 30; c += 5) {
+        if (!isRock(map, r, c) || map.grid[r - 1][c] !== BLOCK_EMPTY) continue;
+        calls.length = 0;
+        map.damageBlock(r, c, 99);
+        n++;
+        for (const t of redrawnPolygons(calls)) {
+          if (!isRock(map, t.r, t.c)) continue;
+          checked++;
+          const code = map.tileShapeAt(t.r, t.c);
+          for (let ly = 0; ly < S; ly++) {
+            for (let lx = 0; lx < S; lx++) {
+              if (inside(t.pts, t.c * S + lx + 0.25, t.r * S + ly + 0.5) !== shapeContainsPoint(code, lx + 0.25, ly + 0.5)) {
+                bad.push(`${t.r},${t.c}`); ly = S; break;
+              }
+            }
+          }
+        }
+      }
+    }
+    assert.ok(checked > 40, `描き直したタイル ${checked}`);
+    assert.deepEqual(bad.slice(0, 10), [], `${bad.length} 枚が古い形で描かれた`);
+  });
+}
