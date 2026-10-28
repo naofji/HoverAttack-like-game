@@ -52,12 +52,14 @@ test('金属の描画色は面のテーマから作られ、面ごとに違う',
   assert.equal(seen.size, 7, '面ごとに違う金属色になっていない');
 });
 
-/** _drawPolishedBlock を偽 ctx に描かせ、fillStyle の代入列を返す。 */
+/** 金属のパネル（_drawPanelBlock）を偽 ctx に描かせ、fillStyle の代入列を返す。 */
 function paintMetal(map, hp) {
   const ctx = makeFakeCtx();
   map.grid = [[BLOCK_METAL]];
+  map.rows = 1;
+  map.cols = 1;
   map.blockHP = [[hp]];
-  map._drawPolishedBlock(ctx, 0, 0, 16, map.blockStyles[BLOCK_METAL], 0, 0);
+  map._drawPanelBlock(ctx, 0, 0, BLOCK_METAL);
   return ctx.calls.filter((c) => c.name === 'set:fillStyle').map((c) => c.args[0]);
 }
 
@@ -76,12 +78,6 @@ test('金属は被弾するほど焼けた赤茶に近づく（ひび割れな�
     assert.ok(dist(fills[i]) < dist(fills[i - 1]),
       `ダメージ ${i} で焼け色に近づいていない: ${fills[i - 1]} → ${fills[i]}`);
   }
-  // ひび割れの線は引かない（金属は割れない）
-  const ctx = makeFakeCtx();
-  m.grid = [[BLOCK_METAL]];
-  m.blockHP = [[1]];
-  m._drawPolishedBlock(ctx, 0, 0, 16, m.blockStyles[BLOCK_METAL], 0, 0);
-  assert.equal(ctx.calls.some((c) => c.name === 'stroke' && false), false);
 });
 
 test('焼けるほど鏡面ハイライトが弱くなる（艶が飛ぶ）', async () => {

@@ -341,8 +341,13 @@ function hashCalls(hash, calls) {
     }
 }
 
-/** @returns {Promise<{ cache: string, damaged: string }>} */
-export async function digestDrawing() {
+/**
+ * 既定の面は 7面（level 6）を含まない。要塞のパネルの絵（world/panelBlocks.js）を意図して変えたので、
+ * 7面を含む基準線は成り立たない。パネルの絵は tests/panel-blocks.test.js が縛る
+ * @param {number[]} levels
+ * @returns {Promise<{ cache: string, damaged: string }>}
+ */
+export async function digestDrawing(levels = [0, 1, 2, 3, 5]) {
     const { makeFakeCtx } = await import('../tests/helpers/fake-ctx.js');
     const prevDocument = globalThis.document;
     globalThis.document = {
@@ -352,7 +357,7 @@ export async function digestDrawing() {
         const { Map } = await import('../src/js/world/Map.js');
         const { BLOCK_EMPTY, BLOCK_INDESTRUCTIBLE, BLOCK_METAL } = await import('../src/js/utils/Constants.js');
         const cache = createHash('sha256'), damaged = createHash('sha256');
-        for (const level of [0, 1, 2, 3, 5, 6]) {
+        for (const level of levels) {
             for (const seed of [1, 2]) {
                 const map = new Map({ rng: new SeededRNG(seed) }, level);
                 const calls = map.tileCacheCtx.calls;

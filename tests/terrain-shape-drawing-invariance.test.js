@@ -2,13 +2,19 @@
 // 基準線は段5の計画のコミット（971c93d、描画の変更を入れる前）のコードで
 // `node tools/record-terrain-baseline.mjs --drawing` を走らせて記録した。
 // 実装から期待値を導かないため、段5の変更の後に記録し直さないこと。
+//
+// **7面（level 6）は含めない**（2026-10-29）。要塞のパネルの絵（world/panelBlocks.js）を意図して変えたため。
+// 面1〜4・6 の基準線は、その変更の前のコード（32af1c7）に「levels を引数に取る版の digestDrawing」を
+// 重ねて記録し直した。段5の前の基準線と違うのは7面を外したことだけで、記録し直した値は
+// 変更の後のコードでも一致している（面1〜4・6 の絵はパネルの変更で動いていない）。
+// 7面の絵の振り分けは tests/panel-blocks.test.js が縛る
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { digestDrawing } from '../tools/record-terrain-baseline.mjs';
 
 const BASELINE = {
-  cache: 'd04c001ced9dd4bdebd3e1e1ac3cbb941e028150fa130595877e139a9952a1da',
-  damaged: '2343e0b894dbad0374ffeaa097df6bcf953295d39184916e547ea040d8f50207',
+  cache: '0188f628f13b79388c75b37f272902a8ec743eb21eea35111b18312219d07399',
+  damaged: 'f362b81d67f83bfbf3fb3f71adfadc7cf72f55237c740c494b942047fc110d8c',
 };
 
 test('5面以外の面では、地形のキャッシュに焼く絵も、壊した後の焼き直しも段5の前と同じ', async () => {

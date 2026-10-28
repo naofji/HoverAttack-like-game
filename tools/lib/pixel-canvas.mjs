@@ -63,6 +63,18 @@ class PixelCtx {
             for (let px = x0; px < x0 + Math.ceil(w); px++) this.blend(px, py, col);
         }
     }
+    // 7面の要塞の金属パネル（Map._drawPolishedBlock）が使う。線幅1で .5 ずれた座標＝画素にぴったり載る線だけを想定し、
+    // 4辺をそれぞれ1画素の fillRect として塗る（本物の canvas では線は座標の両側に半分ずつ掛かる）
+    strokeRect(x, y, w, h) {
+        const f = this.fillStyle;
+        this.fillStyle = this.strokeStyle;
+        const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.floor(x + w), y1 = Math.floor(y + h);
+        this.fillRect(x0, y0, x1 - x0 + 1, 1);
+        this.fillRect(x0, y1, x1 - x0 + 1, 1);
+        this.fillRect(x0, y0 + 1, 1, y1 - y0 - 1);
+        this.fillRect(x1, y0 + 1, 1, y1 - y0 - 1);
+        this.fillStyle = f;
+    }
     // 多角形（4面の植物）。本物の canvas と同じく nonzero の規則で、縁はなめらか（4x4 の副標本で半透明にする）
     beginPath() { this.path = []; }
     moveTo(x, y) { this.path.push([[x, y]]); }

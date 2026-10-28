@@ -7,7 +7,7 @@ import {
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE, BLOCK_METAL,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER, HARD_BLOCK_TINT, HARD_BLOCK_DARKEN,
     COLOR_METAL_BLOCK, COLOR_METAL_BLOCK_BORDER, METAL_BLOCK_TINT, METAL_BLOCK_DARKEN,
-    METAL_BLOCK_HP, METAL_HEAT_COLOR, METAL_HEAT_GLOSS_LOSS,
+    METAL_BLOCK_HP, METAL_HEAT_COLOR,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
@@ -47,6 +47,7 @@ import {
 } from './waterQuery.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
+import { drawMetalPanel, drawArmorPanel, plateBreaksLeft, tileRng } from './panelBlocks.js';
 import { generateTown } from './town/generate.js';
 import { generatePlants } from './town/generatePlants.js';
 import { generateSnowTrees } from './town/generateSnowTrees.js';
@@ -1191,13 +1192,7 @@ export class Map {
         for (let r = startR; r <= endR; r++) {
             for (let c = startC; c <= endC; c++) {
                 this.tileCacheCtx.clearRect(c * S, r * S, S, S);
-                const block = this.grid[r][c];
-                if (block === BLOCK_EMPTY) continue;
-                if (block === BLOCK_INDESTRUCTIBLE || block === BLOCK_METAL) {
-                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S, this.blockStyles[block], r, c);
-                } else {
-                    this._drawRockyBlock(this.tileCacheCtx, r, c, block);
-                }
+                this._drawTile(this.tileCacheCtx, r, c);
             }
         }
 
@@ -1334,13 +1329,7 @@ export class Map {
         const S = TILE_SIZE;
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
-                const block = this.grid[r][c];
-                if (block === BLOCK_EMPTY) continue;
-                if (block === BLOCK_INDESTRUCTIBLE || block === BLOCK_METAL) {
-                    this._drawPolishedBlock(this.tileCacheCtx, c * S, r * S, S, this.blockStyles[block], r, c);
-                } else {
-                    this._drawRockyBlock(this.tileCacheCtx, r, c, block);
-                }
+                this._drawTile(this.tileCacheCtx, r, c);
             }
         }
     }
@@ -1914,6 +1903,41 @@ export class Map {
         );
     }
 
+    /**
+     * タイル (r, c) を ctx の (c*S, r*S) に描く。種類ごとの絵の振り分けはここ1か所
+     * （全面の描き直しと、壊れた周りの描き直しの両方がこれを呼ぶ）。
+     * 要塞のパネル（金属と、要塞の中の硬い岩）は岩と別の絵（world/panelBlocks.js）。
+     * 硬い岩は区画の外では普通の岩なので、区画の印（this.fortress）で振り分ける
+     */
+    _drawTile(ctx, r, c) {
+        const block = this.grid[r][c];
+        if (block === BLOCK_EMPTY) return;
+        if (block === BLOCK_INDESTRUCTIBLE) {
+            this._drawPolishedBlock(ctx, c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, this.blockStyles[block]);
+        } else if (block === BLOCK_METAL || (block === BLOCK_HARD && this.fortress && this.fortress[r * this.cols + c])) {
+            this._drawPanelBlock(ctx, r, c, block);
+        } else {
+            this._drawRockyBlock(ctx, r, c, block);
+        }
+    }
+
+    /** 要塞のパネル（金属・装甲板）。空洞への露出・焼け・ダメージを集めて panelBlocks に渡す */
+    _drawPanelBlock(ctx, r, c, block) {
+        const S = TILE_SIZE;
+        const empty = (rr, cc) => rr < 0 || cc < 0 || rr >= this.rows || cc >= this.cols || this.grid[rr][cc] === BLOCK_EMPTY;
+        const exp = { t: empty(r - 1, c), b: empty(r + 1, c), l: empty(r, c - 1), r: empty(r, c + 1) };
+        const rng = tileRng(r, c);
+        const style = this.blockStyles[block];
+        if (block === BLOCK_METAL) {
+            // 金属の焼け。0 = 無傷、1 = あと1発。色だけでなく艶も飛ばす（drawMetalPanel）
+            const heat = (METAL_BLOCK_HP - this.blockHP[r][c]) / METAL_BLOCK_HP;
+            const fill = heat > 0 ? lerpColor(style.fill, METAL_HEAT_COLOR, heat) : style.fill;
+            drawMetalPanel(ctx, c * S, r * S, S, { fill, exp, seamLeft: plateBreaksLeft(r, c), heat, rng });
+        } else {
+            drawArmorPanel(ctx, c * S, r * S, S, { fill: style.fill, exp, damage: HARD_BLOCK_HP - this.blockHP[r][c], rng });
+        }
+    }
+
     _drawRockyBlock(ctx, r, c, block) {
         const S = TILE_SIZE;
         const x = c * S;
@@ -2166,25 +2190,16 @@ export class Map {
     }
 
     /**
-     * 機械加工されたパネルの絵。壊せない装甲と、7面の要塞の金属が共有する。
-     *
-     * 金属は被弾しても**割れない**（金属がひび割れるのは絵としておかしい、という
-     * 実機の指摘）。代わりに熱で赤茶け、同時に鏡面ハイライトが落ちて艶が飛ぶ。
-     * 焼け具合は blockHP から出すので、r/c を受け取る。
+     * 壊せない装甲（地形の縁）の絵。1タイルごとに4辺へ面取りが付く磨かれた板。
+     * 要塞の金属は以前これを共有していたが、並べるとボタンの格子に見えたので
+     * world/panelBlocks.js の drawMetalPanel に分けた
      */
-    _drawPolishedBlock(ctx, x, y, S, style = this.blockStyles[BLOCK_INDESTRUCTIBLE], r = -1, c = -1) {
+    _drawPolishedBlock(ctx, x, y, S, style = this.blockStyles[BLOCK_INDESTRUCTIBLE]) {
         const B = 3; // ベベル幅
-
-        // 金属の焼け。0 = 無傷、1 = あと1発
-        let heat = 0;
-        if (r >= 0 && this.grid[r] && this.grid[r][c] === BLOCK_METAL) {
-            heat = (METAL_BLOCK_HP - this.blockHP[r][c]) / METAL_BLOCK_HP;
-        }
-        // 艶は焼けるほど飛ぶ。色だけ変えても「焼けた」に見えないので両方動かす
-        const gloss = 1 - heat * METAL_HEAT_GLOSS_LOSS;
+        const gloss = 1;
 
         // ベース塗り
-        ctx.fillStyle = heat > 0 ? lerpColor(style.fill, METAL_HEAT_COLOR, heat) : style.fill;
+        ctx.fillStyle = style.fill;
         ctx.fillRect(x, y, S, S);
 
         // 上面ハイライト（光が当たる面）
