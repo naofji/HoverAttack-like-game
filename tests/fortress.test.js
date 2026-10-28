@@ -532,19 +532,25 @@ test('お宝は一番下の階の、開口から一番遠い側に並ぶ', async
   }
 });
 
-test('バリアは階ごとに1本立ち、シャフトと重ならない', async () => {
+test('バリアは、室と室のあいだの廊下の中央に立つ（階ごとに最大1本。室の中・行き止まりには立たない）', async () => {
   const { Map } = await import('../src/js/world/Map.js');
-  for (const seed of [1, 2, 3]) {
+  for (const seed of [1, 2, 3, 4, 5]) {
     const m = new Map({ rng: new SeededRNG(seed) }, 6);
     for (const z of m.fortressZones) {
-      assert.equal(z.barriers.length, z.floors.length, '階の数だけバリアが要る');
+      assert.ok(z.barriers.length <= z.floors.length, '階の数より多い');
       for (const b of z.barriers) {
-        const floor = z.floors.find((f) => f.r0 === b.top && f.r1 === b.bottom);
-        assert.ok(floor, `バリア ${b.c} がどの階とも合っていない`);
-        // 上下のユニットが立つマスは、その階の天井と床に接している
+        const k = z.corridors.find((q) => q.between && q.top === b.top && q.bottom === b.bottom
+          && b.c >= q.c0 && b.c <= q.c1);
+        assert.ok(k, `バリア ${b.c} が室と室のあいだの廊下に無い`);
+        assert.equal(b.c, Math.floor((k.c0 + k.c1) / 2), 'バリアが廊下の中央でない');
+        // 上下のユニットが立つマスは、廊下の天井（梁）と床に接している
         assert.equal(m.grid[b.top][b.c], BLOCK_EMPTY, 'バリア上端が空洞でない');
         assert.equal(m.grid[b.bottom][b.c], BLOCK_EMPTY, 'バリア下端が空洞でない');
-        for (const s of z.shafts) {
+        assert.notEqual(m.grid[b.top - 1][b.c], BLOCK_EMPTY, 'バリア上端の上が空洞（天井に付いていない）');
+        assert.notEqual(m.grid[b.bottom + 1][b.c], BLOCK_EMPTY, 'バリア下端の下が空洞（床に付いていない）');
+        // その階に着地・出発するシャフトから離れている（別の階のシャフトは関係ない）
+        const fi = z.floors.findIndex((f) => f.r1 === b.bottom);
+        for (const s of [z.shafts[fi - 1], z.shafts[fi]].filter(Boolean)) {
           assert.ok(b.c < s.c - 1 || b.c > s.c + s.w, `バリア ${b.c} がシャフト ${s.c} と近すぎる`);
         }
       }
@@ -554,12 +560,15 @@ test('バリアは階ごとに1本立ち、シャフトと重ならない', asyn
 
 test('お宝はバリアより奥（右）にある', async () => {
   const { Map } = await import('../src/js/world/Map.js');
-  const m = new Map({ rng: new SeededRNG(1) }, 6);
-  for (const z of m.fortressZones) {
-    const bottom = z.floors[z.floors.length - 1];
-    const barrier = z.barriers.find((b) => b.top === bottom.r0);
-    const leftmost = Math.min(...z.treasures.map((t) => t.c));
-    assert.ok(barrier.c < leftmost, `バリア ${barrier.c} が宝 ${leftmost} より奥にある`);
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    for (const z of m.fortressZones) {
+      const bottom = z.floors[z.floors.length - 1];
+      const barrier = z.barriers.find((b) => b.bottom === bottom.r1);
+      assert.ok(barrier, `seed ${seed}: 最下階にバリアが無い（お宝が守られていない）`);
+      const leftmost = Math.min(...z.treasures.map((t) => t.c));
+      assert.ok(barrier.c < leftmost, `バリア ${barrier.c} が宝 ${leftmost} より奥にある`);
+    }
   }
 });
 
@@ -653,7 +662,8 @@ test('入り口は5ブロックで、上下にノーマルの砲台が立つ', a
     // 上端は天井付け、下端は床置き
     const ceiling = guards.find((g) => g.isCeiling);
     const floor = guards.find((g) => !g.isCeiling);
-    assert.equal(ceiling.r, left.r, '天井側の守衛が開口の上端に無い');
+    // 天井側は階の天井（開口は gateSize 行で、天井高より低いことがあるので、開口の上端ではない）
+    assert.equal(ceiling.r, z.floors[0].r0, '天井側の守衛が最上階の天井に無い');
     assert.equal(floor.r, left.r + left.w - 1, '床側の守衛が開口の下端に無い');
     // **ノーマルに固定**。7面はビームが混ざる面なので、門番がビームだと理不尽
     for (const g of guards) assert.equal(g.type, FORTRESS_GATE_GUARD_TYPE, '守衛がノーマルでない');

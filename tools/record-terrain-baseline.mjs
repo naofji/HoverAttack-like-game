@@ -274,15 +274,20 @@ export function digestProjectiles(rec = recordProjectiles()) {
 // 自機を載せて走らせる母艦。段2・段3の出力は変えない。
 // ---------------------------------------------------------------
 
-/** @returns {{ spawns: string[], item: string[], carrier: string[] }} */
-export async function recordGrounded() {
+/**
+ * 既定の面は 7面（level 6）を含まない。要塞の区画の作り（室・廊下・守備隊の置き方）を意図して変えたので、
+ * 7面を含む湧き位置の基準線は成り立たない。要塞の生成は tests/fortress.test.js が縛る
+ * @param {number[]} levels
+ * @returns {{ spawns: string[], item: string[], carrier: string[] }}
+ */
+export async function recordGrounded(levels = [0, 1, 2, 3, 5]) {
     const out = { spawns: [], item: [], carrier: [] };
     if (!globalThis.document) {
         const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
         globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }) };
     }
     const { Map } = await import('../src/js/world/Map.js');
-    for (const level of [0, 1, 2, 3, 5, 6]) {
+    for (const level of levels) {
         for (const seed of [1, 2, 3]) {
             const game = { rng: new SeededRNG(seed) };
             const map = new Map(game, level);
@@ -322,8 +327,8 @@ export async function recordGrounded() {
     return out;
 }
 
-export async function digestGrounded() {
-    return digest(await recordGrounded());
+export async function digestGrounded(levels) {
+    return digest(await recordGrounded(levels));
 }
 
 // ---------------------------------------------------------------

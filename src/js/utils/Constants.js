@@ -993,8 +993,10 @@ export const STAGE_ENVIRONMENTS = [
 export const FORTRESS_ZONE_COUNT = 4;      // 上限。置けなければ少なくてよい
 export const FORTRESS_ZONE_W_MIN = 26;
 export const FORTRESS_ZONE_W_RANGE = 9;    // 26〜35
-export const FORTRESS_ZONE_H_MIN = 18;
-export const FORTRESS_ZONE_H_RANGE = 7;    // 18〜25
+// 天井高を 6 にして階のピッチが 7 になったので、区画の高さ 18〜25（内側 14〜21）では 2階が大半になった
+// （3階に要る内側の高さは 20）。階が少ないと廊下の仕掛けを置く段が減るので、3階になる高さへ上げた
+export const FORTRESS_ZONE_H_MIN = 24;
+export const FORTRESS_ZONE_H_RANGE = 7;    // 24〜31
 export const FORTRESS_ZONE_MARGIN = 3;     // 盤面の縁からこれだけ離す（BORDER_THICKNESS=2 の外側）
 // 外壁の厚さ。上帯と左帯（自機が来る正面）は装甲＝掘れない、下帯と右帯（背面）は
 // 硬い岩＝時間をかければ抄える。「回り込めば抄えるが、正面は口を通るしかない」に
@@ -1005,12 +1007,21 @@ export const FORTRESS_WALL_THICKNESS = 2;
 // 縦に積み、シャフトでつなぐ建物の断面にする。
 // 自機は 16x24px = 1x1.5 タイル。天井高5（80px）は「幅3の廊下が若干窮屈」という
 // 実機の指摘を受けた値。区画の高さ 18〜25 から外壁2層を引くと 2〜3階になる
-export const FORTRESS_CEILING_H = 5;   // 天井高（タイル）
+export const FORTRESS_CEILING_H = 6;   // 室の天井高（タイル）。5 → 6: 廊下を4に下げたとき、室との差を1行でなく2行にするため
 // 床は**金属1層**（= METAL_BLOCK_HP = 6発）。硬い岩1層（3発）では掘るほうが速すぎて
 // シャフトの意味が薄く、金属2層（12発）にしたら重すぎた。6発が実機で決めた着地点で、
 // 「シャフトのほうが速いが、掘るのも現実的」という線に置いてある
 export const FORTRESS_FLOOR_H = 1;     // 床の厚さ。階のピッチは 5+1=6
 export const FORTRESS_SHAFT_W = 4;     // 階をつなぐ縦穴の幅
+// 階の中は「室 → 廊下 → 室」。設計書 §7 の元案（廊下の交点＝室）を、格子ではなく断面で実現する
+// （格子は真上から見た間取り図に見えた）。交点は、シャフトが階に着く・階から出る所、入り口、お宝の奥。
+// そこを天井高のまま残した「室」にして、室と室のあいだは天井に金属の梁を足して「廊下」にする。
+// 廊下の高さは自機（1.5タイル）に余裕のある 4。3 は「若干窮屈」と実機で言われた
+export const FORTRESS_CORRIDOR_H = 4;
+export const FORTRESS_ROOM_MARGIN = 2;     // シャフト・入り口の縦穴の左右に、室をこれだけ広げる
+export const FORTRESS_ROOM_W = 8;          // 入り口の室とお宝の室の幅（縦穴を持たないので幅で決める）
+// 室と室のあいだがこれより狭いと廊下ではなく切り欠きに見えるので、室を併合して1つの広間にする
+export const FORTRESS_CORRIDOR_MIN_W = 4;
 // バリアの列から左右にこれだけは敵を湧かせない。バリアの中に砲台が居ると、
 // 開ける前に一方的に撃たれるうえ、撃ち返した弾はバリアに吸われて届かない
 export const FORTRESS_BARRIER_CLEARANCE = 2;

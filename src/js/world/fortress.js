@@ -112,7 +112,7 @@ export function buildZoneWalls(grid, blockHP, zone, thickness) {
  * @returns {{floors:{r0:number,r1:number}[], shafts:{r:number,c:number,w:number}[]}}
  *   floors は各階の空間（上端・下端の行）。開口とバリアの置き場所に使う
  */
-export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng }) {
+export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng, firstShaftOffset = 0 }) {
     const T = thickness;
     const r0 = zone.r0 + T, r1 = zone.r1 - T;
     const c0 = zone.c0 + T, c1 = zone.c1 - T;
@@ -143,10 +143,14 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
     const innerW = c1 - c0 + 1;
     for (let i = 0; i + 1 < floors.length; i++) {
         // 左右を交互に寄せたうえで、帯の中で乱数を振る。交互にするのは、
-        // 乱数だけだと偶然真上に並ぶことがあるため
-        const leftHalf = i % 2 === 0;
+        // 乱数だけだと偶然真上に並ぶことがあるため。
+        // **最下階から数えて**割り当てる: 最下階への着地を必ず左にして、右奥のお宝までを廊下にする
+        // （上から数えると、2階建てのとき最上階で入り口と降り口が左で重なり、廊下が行き止まりの尾だけになる）
+        const leftHalf = (floors.length - 2 - i) % 2 === 0;
         const span = Math.max(1, Math.floor(innerW / 2) - shaftW);
-        const base = leftHalf ? c0 : c0 + Math.floor(innerW / 2);
+        // 最初の穴だけは左端から firstShaftOffset 離す: 左の入り口の守衛（床置きのタレット）の足元が
+        // 穴だと宙に浮く（20区画のうち1区画で起きていた）
+        const base = (leftHalf ? c0 : c0 + Math.floor(innerW / 2)) + (i === 0 ? firstShaftOffset : 0);
         const sc = Math.min(c1 - shaftW + 1, base + Math.floor(rng.next() * span));
         fillRect(grid, blockHP,
             { r0: floors[i].r1 + 1, r1: floors[i + 1].r0 - 1, c0: sc, c1: sc + shaftW - 1 }, BLOCK_EMPTY, 0);
@@ -154,6 +158,68 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
     }
 
     return { floors, shafts };
+}
+
+/**
+ * 階の中を「室 → 廊下 → 室」にする。開口（入り口）を開けたあとに呼ぶ。
+ *
+ * 室＝縦穴（シャフト・上の入り口）の着地点と出発点、左の入り口、お宝の奥。そこだけ天井高のまま残し、
+ * 室と室のあいだは天井へ金属の梁を足して高さ FORTRESS_CORRIDOR_H の廊下にする。
+ * 縦横の格子にすると真上から見た間取り図に見えるので、階の断面の中で「交点」と「通路」を作った。
+ * 乱数は使わない（位置は縦穴と階から決まる）。
+ *
+ * 廊下が FORTRESS_CORRIDOR_MIN_W より狭いときは室を併合する（切り欠きに見えるため）。
+ * 区画の端に接する廊下（行き止まりの尾）は通路ではないので、`between: false` で返す
+ * （バリア・扉・ダメージ床は、室と室のあいだの廊下にだけ置く）。
+ *
+ * @returns {{rooms:{floor:number,c0:number,c1:number}[],
+ *            corridors:{floor:number,c0:number,c1:number,top:number,bottom:number,between:boolean}[]}}
+ */
+export function shapeZoneRooms(grid, blockHP, zone, {
+    floors, shafts, openings, thickness, corridorH, roomW, roomMargin, corridorMinW,
+}) {
+    const T = thickness;
+    const c0 = zone.c0 + T, c1 = zone.c1 - T;
+    const rooms = [], corridors = [];
+    floors.forEach((floor, i) => {
+        const spans = [];
+        const add = (a, b) => spans.push([Math.max(c0, a), Math.min(c1, b)]);
+        const aroundShaft = (sh) => add(sh.c - roomMargin, sh.c + sh.w - 1 + roomMargin);
+        if (i === 0) {
+            add(c0, c0 + roomW - 1);                                  // 左の入り口の室
+            const top = openings.find((g) => g.side === 'top');
+            if (top) add(top.c - roomMargin, top.c + top.w - 1 + roomMargin);   // 上の縦穴の着地点
+        }
+        if (i > 0) aroundShaft(shafts[i - 1]);                        // 上から降りてきた着地点
+        if (i < floors.length - 1) aroundShaft(shafts[i]);            // 下へ降りる穴
+        if (i === floors.length - 1) add(c1 - roomW + 1, c1);         // お宝の室
+
+        spans.sort((x, y) => x[0] - y[0]);
+        const merged = [];
+        for (const sp of spans) {
+            const last = merged[merged.length - 1];
+            if (last && sp[0] - last[1] - 1 < corridorMinW) last[1] = Math.max(last[1], sp[1]);
+            else merged.push([...sp]);
+        }
+        // 区画の端の尾も、狭すぎれば室に取り込む（幅 corridorMinW 未満の梁の突き出しは切り欠きに見える）
+        if (merged[0][0] - c0 < corridorMinW) merged[0][0] = c0;
+        if (c1 - merged[merged.length - 1][1] < corridorMinW) merged[merged.length - 1][1] = c1;
+        // 最下階は端数を吸収して高くなっている（buildZoneInterior）ので、天井からでなく床から数える
+        const top = floor.r1 - corridorH + 1;
+        let cursor = c0;
+        const gap = (a, b, between) => {
+            if (b < a) return;
+            corridors.push({ floor: i, c0: a, c1: b, top, bottom: floor.r1, between });
+            fillRect(grid, blockHP, { r0: floor.r0, r1: top - 1, c0: a, c1: b }, BLOCK_METAL, METAL_BLOCK_HP);
+        };
+        merged.forEach(([a, b], k) => {
+            gap(cursor, a - 1, k > 0);            // 左端に接する最初の隙間だけ行き止まり
+            rooms.push({ floor: i, c0: a, c1: b });
+            cursor = b + 1;
+        });
+        gap(cursor, c1, false);                    // 右端の尾も行き止まり
+    });
+    return { rooms, corridors };
 }
 
 /**
@@ -165,7 +231,7 @@ export function buildZoneInterior(grid, blockHP, zone, { thickness, ceilingH, fl
  * 「壁が崩れている」ようにも見えた。上の開口は最上階へ落ちる縦穴。
  */
 export function openZoneGates(grid, blockHP, zone, {
-    thickness, floors, gateSize, rng, tunnelMax, rows, cols,
+    thickness, floors, gateSize, rng, tunnelMax, rows, cols, topGateOffset = 0,
 }) {
     const T = thickness;
     const gates = [];
@@ -184,7 +250,9 @@ export function openZoneGates(grid, blockHP, zone, {
         const innerW = (zone.c1 - T) - innerC0 + 1;
         // 左半分の中で振る。右端に出ると「左上の入り口」がぼやける
         const span = Math.max(1, Math.floor(innerW / 2) - gateSize);
-        const cc = innerC0 + Math.floor(rng.next() * span);
+        // topGateOffset: 左の入り口の守衛（天井付けのタレット）の真上に穴が来ないよう、左端から離す。
+        // 穴の下では天井が無く、タレットが宙に浮く（20区画のうち5区画で起きていた）
+        const cc = innerC0 + topGateOffset + Math.floor(rng.next() * span);
         fillRect(grid, blockHP,
             { r0: zone.r0, r1: zone.r0 + T - 1, c0: cc, c1: cc + gateSize - 1 }, BLOCK_EMPTY, 0);
         gates.push({ r: zone.r0, c: cc, side: 'top', w: gateSize });
@@ -221,6 +289,7 @@ export function carveFortressZones({
     grid, blockHP, rows, cols, rooms, excludeRects, rng,
     count, wMin, wRange, hMin, hRange, margin,
     thickness, ceilingH, floorH, shaftW, gateSize, tunnelMax,
+    corridorH, roomW, roomMargin, corridorMinW,
     treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
     guardType, guardInset,
 }) {
@@ -232,10 +301,15 @@ export function carveFortressZones({
     for (const zone of picked) {
         buildZoneWalls(grid, blockHP, zone, thickness);
         const { floors, shafts } = buildZoneInterior(
-            grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng },
+            grid, blockHP, zone, { thickness, ceilingH, floorH, shaftW, rng, firstShaftOffset: guardInset + 2 },
         );
         const openings = openZoneGates(grid, blockHP, zone, {
             thickness, floors, gateSize, rng, tunnelMax, rows, cols,
+            topGateOffset: guardInset + 2,
+        });
+        // 室と廊下。天井の梁を足すので、印を立てる前に呼ぶ
+        const { rooms, corridors } = shapeZoneRooms(grid, blockHP, zone, {
+            floors, shafts, openings, thickness, corridorH, roomW, roomMargin, corridorMinW,
         });
         // 印は区画の中の「空でない」タイルだけ。空洞には描くものが無い
         for (let r = zone.r0; r <= zone.r1; r++) {
@@ -243,11 +317,11 @@ export function carveFortressZones({
                 if (grid[r][c] !== BLOCK_EMPTY) marks[r * cols + c] = 1;
             }
         }
-        const contents = planZoneContents(zone, floors, shafts, openings, {
+        const contents = planZoneContents(zone, floors, shafts, openings, rooms, corridors, {
             thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
             guardType, guardInset, rng,
         });
-        zones.push({ ...zone, openings, floors, shafts, ...contents });
+        zones.push({ ...zone, openings, floors, shafts, rooms, corridors, ...contents });
     }
     return { zones, marks };
 }
@@ -255,13 +329,15 @@ export function carveFortressZones({
 /**
  * 区画の中身（お宝・バリアの置き場所・守備隊）を決める。地形は書き換えない。
  *
- * - **お宝**は最下階の右端に並べる。左上から来て右下の基地へ向かうので、
+ * - **お宝**は最下階の右端の室に並べる。左上から来て右下の基地へ向かうので、
  *   右奥が「一番遠い」＝踏み込んだご褒美になる
- * - **バリア**は階ごとに1本。上下のユニットを壊すと消える（実体は段C）。
- *   シャフトの真上／真下に置くと落ちてきた瞬間に接触するので、2タイル空ける
- * - **守備隊**は各階の床の上と天井に置く。既存の湧きに足すだけ
+ * - **バリア**は、室と室のあいだの廊下（`between`）の中央に1本。階ごとに最大1本で、
+ *   廊下が無い階（室が併合された広間・行き止まりの尾だけ）には立てない。
+ *   上のユニットは廊下の天井（梁の下）、下のユニットは床に付く
+ * - **守備隊**は室に置く（廊下は通り道）。天井の砲台は上に縦穴の無い列、床の砲台と戦車は
+ *   下に縦穴の無い列だけ（穴の縁に浮かない）
  */
-export function planZoneContents(zone, floors, shafts, openings, {
+export function planZoneContents(zone, floors, shafts, openings, rooms, corridors, {
     thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
     guardType, guardInset, rng,
 }) {
@@ -278,64 +354,63 @@ export function planZoneContents(zone, floors, shafts, openings, {
         treasures.push({ r: bottom.r1, c, kind: i === 0 ? 'overdrive' : 'repair' });
     }
 
-    // 入り口とその守衛が立つ列。バリアはここを避ける（入り口の真上にバリアが
-    // あると、入った瞬間に接触するうえ守衛がバリアに埋まる）
+    // 入り口とその守衛が立つ列（入り口の室の中）
     const left = openings.find((g) => g.side === 'left');
     const guardCol = left ? zone.c0 + T + guardInset : null;
 
-    // バリア: 階ごとに1本。シャフトと入り口から離す。
-    // 最下階だけは宝より手前（左）に置く（宝が「バリアの奥」になるように）
+    // バリア: 室と室のあいだの廊下の中央。階ごとに最も広い廊下を選ぶ（同じ広さなら左）
     const barriers = [];
-    for (const floor of floors) {
-        const isTreasureFloor = floor === bottom;
-        const limit = isTreasureFloor && treasures.length
-            ? Math.min(...treasures.map((t) => t.c)) - 2
-            : c1 - 1;
-        let c = -1;
-        for (let tries = 0; tries < 30 && c < 0; tries++) {
-            const cand = c0 + 1 + Math.floor(rng.next() * Math.max(1, limit - c0 - 1));
-            const nearShaft = shafts.some((s) => cand >= s.c - 1 && cand <= s.c + s.w);
-            const nearGate = guardCol != null && Math.abs(cand - guardCol) <= barrierClearance;
-            if (!nearShaft && !nearGate) c = cand;
-        }
-        // 逃げ道。置ける列が無ければ右端寄りへ（左端は入り口があるので避ける）
-        if (c < 0) c = Math.max(c0 + 1, limit - 1);
-        barriers.push({ c, top: floor.r0, bottom: floor.r1 });
-    }
+    floors.forEach((floor, i) => {
+        const between = corridors.filter((k) => k.floor === i && k.between);
+        if (between.length === 0) return;
+        const k = between.reduce((best, cur) => (cur.c1 - cur.c0 > best.c1 - best.c0 ? cur : best));
+        barriers.push({ c: Math.floor((k.c0 + k.c1) / 2), top: k.top, bottom: k.bottom });
+    });
 
-    // 守備隊: 階ごとに床と天井へ交互に置く。区画あたりの合計は定数で決める。
-    // **バリアの列とその左右は避ける** — バリアの中に砲台が居ると、開ける前に
-    // 一方的に撃たれるうえ、撃ち返した弾はバリアに吸われて届かない（実機の指摘）
-    const clearOfBarriers = (c) => !barriers.some(
-        (b) => Math.abs(b.c - c) <= barrierClearance,
-    );
-    const pickColumn = () => {
-        for (let tries = 0; tries < 20; tries++) {
-            const c = c0 + 2 + Math.floor(rng.next() * Math.max(1, c1 - c0 - 4));
-            if (clearOfBarriers(c)) return c;
+    // 守備隊: 階ごとの室の中。天井・床の砲台と戦車は、足場がある列だけ
+    const clearOfBarriers = (c) => !barriers.some((b) => Math.abs(b.c - c) <= barrierClearance);
+    const inShaft = (sh, c) => sh && c >= sh.c && c < sh.c + sh.w;
+    const topGate = openings.find((g) => g.side === 'top');
+    const pickColumn = (floorIdx, needsCeiling) => {
+        const cols = [];
+        for (const room of rooms.filter((rm) => rm.floor === floorIdx)) {
+            for (let c = room.c0 + 1; c <= room.c1 - 1; c++) {
+                // 天井の砲台は上の穴の下に、床置きは下の穴の上に置けない
+                const hole = needsCeiling ? inShaft(shafts[floorIdx - 1], c) : inShaft(shafts[floorIdx], c);
+                if (hole) continue;
+                // 最上階の天井は、上の入り口（縦穴）の下だけ空いている
+                if (needsCeiling && floorIdx === 0 && topGate && c >= topGate.c && c < topGate.c + topGate.w) continue;
+                if (guardCol != null && floorIdx === 0 && Math.abs(c - guardCol) <= 1) continue;
+                if (!clearOfBarriers(c)) continue;
+                cols.push(c);
+            }
         }
-        return null;   // 置ける列が無ければ諦める（無理に置くとバリアに埋まる）
+        if (cols.length === 0) return null;   // 置ける列が無ければ諦める
+        return cols[Math.floor(rng.next() * cols.length)];
     };
     const turrets = [];
     const tanks = [];
     for (let i = 0; i < garrisonTurrets; i++) {
-        const floor = floors[i % floors.length];
-        const c = pickColumn();
+        const fi = i % floors.length;
+        const isCeiling = i % 2 !== 0;
+        const c = pickColumn(fi, isCeiling);
         if (c == null) continue;
-        turrets.push({ r: i % 2 === 0 ? floor.r1 : floor.r0, c, isCeiling: i % 2 !== 0 });
+        turrets.push({ r: isCeiling ? floors[fi].r0 : floors[fi].r1, c, isCeiling });
     }
     for (let i = 0; i < garrisonTanks; i++) {
-        const floor = floors[(i + 1) % floors.length];
-        const c = pickColumn();
+        const fi = (i + 1) % floors.length;
+        const c = pickColumn(fi, false);
         if (c == null) continue;
-        tanks.push({ r: floor.r1, c });
+        tanks.push({ r: floors[fi].r1, c });
     }
 
     // 入り口の守衛。開口の上端（天井付け）と下端（床置き）に1基ずつ。
     // 5ブロックの開口は「壁が崩れている」ようにも見えるので、門番を置いて
     // 「守られた入り口」だと読ませる（実機の指摘）
+    // 天井の守衛は階の本当の天井（floors[0].r0）に付ける。開口は天井高ぶんではなく gateSize 行なので、
+    // 天井高が gateSize より高いと、開口の上端（left.r）の上は空洞で、そこでは宙に浮く
     if (left) {
-        turrets.push({ r: left.r, c: guardCol, isCeiling: true, type: guardType });
+        turrets.push({ r: floors[0].r0, c: guardCol, isCeiling: true, type: guardType });
         turrets.push({ r: left.r + left.w - 1, c: guardCol, isCeiling: false, type: guardType });
     }
 
