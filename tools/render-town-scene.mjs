@@ -25,7 +25,7 @@ import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { TILE_SIZE as T, STAGE_ENVIRONMENTS, SNOW_CAP_COLOR, SNOW_CAP_THICKNESS } from '../src/js/utils/Constants.js';
 import { getCurrentWeek, stageSeed } from '../src/js/utils/WeekSeed.js';
 import { PixelCanvas, writePng } from './lib/pixel-canvas.mjs';
-import { shapeCornerCuts } from '../src/js/utils/tileShape.js';
+import { shapeCornerCuts, shapeTriangle } from '../src/js/utils/tileShape.js';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
     if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]);
@@ -217,9 +217,15 @@ for (let r = Math.floor(Y / T); r <= Math.floor((Y + H) / T); r++) {
             const x = c * T, y = r * T;
             ctx.fillStyle = st.fill;
             ctx.beginPath();
-            ctx.moveTo(x + cut.tl, y); ctx.lineTo(x + T - cut.tr, y); ctx.lineTo(x + T, y + cut.tr);
-            ctx.lineTo(x + T, y + T - cut.br); ctx.lineTo(x + T - cut.br, y + T); ctx.lineTo(x + cut.bl, y + T);
-            ctx.lineTo(x, y + T - cut.bl); ctx.lineTo(x, y + cut.tl);
+            // 壊した後にだけ出る三角（^ v < >）は削り幅の列挙だと自己交差するので頂点で（Map._drawRockyBlock と同じ）
+            const tri = shapeTriangle(map.tileShapeAt(r, c));
+            if (tri) {
+                tri.poly.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(x + px, y + py) : ctx.lineTo(x + px, y + py)));
+            } else {
+                ctx.moveTo(x + cut.tl, y); ctx.lineTo(x + T - cut.tr, y); ctx.lineTo(x + T, y + cut.tr);
+                ctx.lineTo(x + T, y + T - cut.br); ctx.lineTo(x + T - cut.br, y + T); ctx.lineTo(x + cut.bl, y + T);
+                ctx.lineTo(x, y + T - cut.bl); ctx.lineTo(x, y + cut.tl);
+            }
             ctx.fill();
             continue;
         }

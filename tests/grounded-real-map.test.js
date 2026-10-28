@@ -107,6 +107,7 @@ test('本物の5面の地図で戦車の足元の周りのブロックをでた�
     } finally {
         Math.random = orig;
     }
-    assert.ok(buried > 20, `壊れて埋まった回数が少ない: ${buried}`);
+    // 壊した後の形は前の形より岩が増えない（設計 決定13）ので、壊れた直後に埋まることも無い（決定13 の前は 20 回超）
+    assert.equal(buried, 0, `壊れて埋まった: ${buried}`);
     assert.equal(stillBuried, 0, `30 フレーム後も埋まったまま: ${stillBuried}/${buried} ${JSON.stringify(examples)}`);
 });

@@ -108,17 +108,18 @@ test('段差の下の岩を壊すと、そこに新しい斜面ができる', as
     assert.equal(m.tileShapeAt(2, 4), packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL));
 });
 
-test('上の岩を壊すと下のタイルの角が、斜めの隣を壊すと坂が作り直される（3x3 すべて）', async () => {
+test('上の岩を壊すと下のタイルの角が作り直され、斜めの隣を壊しても坂は小さい面取りに戻らない（3x3 すべて）', async () => {
     // 2x2 の浮いた塊の左上を壊すと、その下 (2,1) の上が開いて左上の角が面取りになる
     const a = await fakeSnowMap(['....', '.##.', '.##.', '....']);
     assert.equal(a.tileShapeAt(2, 1), packShape(Q_FULL, Q_FULL, Q_TRI_NO_BL, Q_FULL));
     a.damageBlock(1, 1, 99);
     assert.equal(a.tileShapeAt(2, 1), packShape(Q_TRI_NO_TL, Q_FULL, Q_TRI_NO_BL, Q_FULL));
-    // 段 (1,2) の左下 (2,1) を壊すと段が続かなくなり、斜めから小さい面取りに戻る
+    // 段 (1,2) の左下 (2,1) を壊すと段が続かなくなる。規則どおりなら小さい面取りに戻って岩が増えるので、
+    // 前の斜めのまま残す（設計 決定13。崖の縁で途切れた坂になる）
     const b = await fakeSnowMap(['....', '..##', '####']);
     assert.equal(b.tileShapeAt(1, 2), packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL));
     b.damageBlock(2, 1, 99);
-    assert.equal(b.tileShapeAt(1, 2), packShape(Q_TRI_NO_TL, Q_FULL, Q_FULL, Q_FULL));
+    assert.equal(b.tileShapeAt(1, 2), packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL));
 });
 
 test('地図の端で壊しても例外を投げない。磨き仕上げの隣で壊しても磨きは満ちのまま', async () => {

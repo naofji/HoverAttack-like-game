@@ -2,6 +2,8 @@
 // 形の規則は岩を減らすだけではない: 坂の下の段 (17,12) が壊れると、その上の坂 (16,13) は小さい面取りに
 // 戻り、削れていた所が岩になる（段3の最終レビュー I1。グレネード・反射ビームは Map.popOutOfRock で直した）。
 // 壊れた後の地図に差し替えて再現する。坂の地図は tests/player-slope.test.js と同じ（上面 y = 30T − x）
+// 2026-10-28 から壊した後の形は前の形より岩が増えない（設計 決定13）ので、壊れて埋まることは本物の地図では
+// 起きない。岩の外へ出す仕組みは、ほかの経路で岩に入ったときの備えとして残し、ここでは差し替えた地図で縛る
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
@@ -124,7 +126,8 @@ test('本物の5面の地図で、自機の足元の周りのブロックをで�
                     const r = Math.floor((p.y + p.height) / T) + Math.floor(rng.next() * 3) - 1;
                     const c = Math.floor((p.x + p.width / 2) / T) + Math.floor(rng.next() * 3) - 1;
                     if (map.damageBlock(r, c, 99)) broke++;
-                    // 壊れた直後に体が岩の中になった（形の規則で岩が増えた）回数。0 だとこのテストは空振り
+                    // 壊れた直後に体が岩の中になった（形の規則で岩が増えた）回数。壊した後の形は前の形より岩が
+                    // 増えない（設計 決定13）ので 0。決定13 の前は 4 枚の地図で数十回あり、それを岩の外へ出していた
                     if (collidesWithTerrain(p, map)) buried++;
                 }
                 p.hoverFuel = Math.max(p.hoverFuel, 50);
@@ -139,6 +142,6 @@ test('本物の5面の地図で、自機の足元の周りのブロックをで�
     }
     assert.ok(frames > 50000, `フレームが少ない: ${frames}`);
     assert.ok(broke > 500, `壊れたブロックが少ない: ${broke}`);
-    assert.ok(buried > 10, `壊れて体が岩の中になった回数が少ない: ${buried}`);
+    assert.equal(buried, 0, `壊れて体が岩の中になった: ${buried}`);
     assert.equal(stuck, 0, `岩の中で終わったフレーム: ${stuck} ${JSON.stringify(examples)}`);
 });

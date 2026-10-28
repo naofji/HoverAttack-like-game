@@ -54,7 +54,7 @@ import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
 import {
     SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
-    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts,
+    shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts, shapeAfterBreak, shapeTriangle,
 } from '../utils/tileShape.js';
 
 
@@ -1477,14 +1477,19 @@ export class Map {
         }
     }
 
-    /** 壊れたタイルとその8近傍の形を作り直す（形は隣と斜めの隣までしか見ない） */
+    /**
+     * 壊れたタイルとその8近傍の形を作り直す（形は隣と斜めの隣までしか見ない）。
+     * 作り直した形は前の形と両方に収まる形にする（shapeAfterBreak。設計 決定13）。規則どおりだけだと、
+     * 坂の条件が崩れたタイルが小さい面取りに戻って、壊したのに岩が増えて見えた（実機で発見）
+     */
     _rebuildTileShapesAround(r, c) {
         const cellAt = (rr, cc) => this._tileShapeCell(rr, cc);
         for (let rr = r - 1; rr <= r + 1; rr++) {
             if (rr < 0 || rr >= this.rows) continue;
             for (let cc = c - 1; cc <= c + 1; cc++) {
                 if (cc < 0 || cc >= this.cols) continue;
-                this.tileShapes[rr * this.cols + cc] = computeTileShape(cellAt, rr, cc, this.tileShapeRule);
+                const i = rr * this.cols + cc;
+                this.tileShapes[i] = shapeAfterBreak(this.tileShapes[i], computeTileShape(cellAt, rr, cc, this.tileShapeRule));
             }
         }
     }
@@ -1943,9 +1948,14 @@ export class Map {
         // オフセットで斜辺へ下げていたが、壊した後に絵と判定が食い違って見えた。
         // 削り幅は形が決めるので、乱数の 4〜9px の面取りは5面では使わない（判定が 8px のため）
         const shaped = this.tileShapes && this.tileShapeRule !== 'square';
+        // 壊した後にだけ出る三角（^ v < >。設計 決定13）は、角の削り幅の列挙では辺が戻って自己交差するので、
+        // 輪郭と雪のふちを shapeTriangle の頂点で書く
+        let tri = null;
         if (shaped) {
-            const cuts = shapeCornerCuts(this.tileShapeAt(r, c));
+            const code = this.tileShapeAt(r, c);
+            const cuts = shapeCornerCuts(code);
             cTL = cuts.tl; cTR = cuts.tr; cBR = cuts.br; cBL = cuts.bl;
+            tri = shapeTriangle(code);
         }
 
         // 凹角：両隣は塞がっているが斜め方向が空洞 → 影ノッチ
@@ -1957,17 +1967,21 @@ export class Map {
         // 1. 面取り多角形でベース塗り（時計回りで頂点列挙）
         ctx.save();
         ctx.beginPath();
-        // 削り幅が 16（タイル1枚ぶんの斜め）でも同じ列挙で書ける。形の規則が、斜めにした角の
-        // 隣の2角を削らない（tileShape.js の computeTileShape）ので、辺が戻って自己交差しない
-        ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
-        ctx.lineTo(x + S - cTR, y);              // 上辺：右端
-        if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
-        ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
-        if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
-        ctx.lineTo(x + cBL, y + S);              // 下辺：左端
-        if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
-        ctx.lineTo(x, y + cTL);                  // 左辺：上端
-        if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
+        if (tri) {
+            tri.poly.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(x + px, y + py) : ctx.lineTo(x + px, y + py)));
+        } else {
+            // 削り幅が 16（タイル1枚ぶんの斜め）でも同じ列挙で書ける。形の規則が、斜めにした角の
+            // 隣の2角を削らない（tileShape.js の computeTileShape）ので、辺が戻って自己交差しない
+            ctx.moveTo(x + cTL, y);                  // 上辺：左端（TL面取り分だけ右へ）
+            ctx.lineTo(x + S - cTR, y);              // 上辺：右端
+            if (cTR) ctx.lineTo(x + S, y + cTR);     // TR面取り斜線
+            ctx.lineTo(x + S, y + S - cBR);          // 右辺：下端
+            if (cBR) ctx.lineTo(x + S - cBR, y + S); // BR面取り斜線
+            ctx.lineTo(x + cBL, y + S);              // 下辺：左端
+            if (cBL) ctx.lineTo(x, y + S - cBL);     // BL面取り斜線
+            ctx.lineTo(x, y + cTL);                  // 左辺：上端
+            if (cTL) ctx.lineTo(x + cTL, y);         // TL面取り斜線（→ closePath と一致）
+        }
         ctx.closePath();
 
         ctx.fillStyle = style.fill;
@@ -2022,10 +2036,14 @@ export class Map {
                 ctx.strokeStyle = SNOW_CAP_COLOR;
                 ctx.lineWidth = SNOW_CAP_THICKNESS * 2;
                 ctx.beginPath();
-                ctx.moveTo(x, y + cTL);
-                ctx.lineTo(x + cTL, y);
-                ctx.lineTo(x + S - cTR, y);
-                ctx.lineTo(x + S, y + cTR);
+                if (tri) {
+                    tri.top.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(x + px, y + py) : ctx.lineTo(x + px, y + py)));
+                } else {
+                    ctx.moveTo(x, y + cTL);
+                    ctx.lineTo(x + cTL, y);
+                    ctx.lineTo(x + S - cTR, y);
+                    ctx.lineTo(x + S, y + cTR);
+                }
                 ctx.stroke();
             }
         }
