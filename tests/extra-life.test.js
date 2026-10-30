@@ -81,7 +81,7 @@ test('スタートの部屋が無いとき（rooms が空）は何も入れ替�
 
 test('実際の7面: 残機はステージ全体で 1 個、区画の数だけオーバードライブが残り、リペアは 1 個減る', async () => {
   for (const m of await maps()) {
-    const kinds = m.treasureSpawns.map((t) => t.kind);
+    const kinds = m.storageTowerSpawns.map((t) => t.kind);
     const zones = m.fortressZones.length;
     assert.equal(kinds.filter((k) => k === 'life').length, 1, `残機が 1 個でない（${kinds}）`);
     assert.equal(kinds.filter((k) => k === 'overdrive').length, zones, 'オーバードライブが動いた');
@@ -103,13 +103,15 @@ test('実際の7面: 残機は、スタートの部屋から最も遠い区画�
 test('他の面（要塞なし）には残機が出ない', async () => {
   const { Map } = await import('../src/js/world/Map.js');
   const m = new Map({ rng: new SeededRNG(3) }, 0);
-  assert.deepEqual(m.treasureSpawns, []);
+  assert.deepEqual(m.storageTowerSpawns, []);
 });
 
-test('SpawnManager は残機の湧きから ExtraLifeKit を 1 個作り、lifeKits に入れる', async () => {
+test('残機の入った格納塔を壊すと ExtraLifeKit が 1 個出て、lifeKits に入る', async () => {
   const [m] = await maps();
-  const game = { map: m, repairKits: [], missileKits: [], lifeKits: [] };
-  new SpawnManager(game).spawnTreasures();
+  const game = { map: m, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [], particles: [], spawnExplosion() {} };
+  new SpawnManager(game).spawnStorageTowers();
+  assert.equal(game.lifeKits.length, 0, '壊す前から出ている');
+  for (const t of game.storageTowers.filter((t) => t.kind === 'life')) t.damage(999);
   assert.equal(game.lifeKits.length, 1);
   assert.ok(game.lifeKits[0] instanceof ExtraLifeKit);
 });
@@ -325,7 +327,7 @@ test('_drawWorld が lifeKits を描く', () => {
     carrier: null, player: null, flag: null, grenadeTrajectory: null,
     enemies: [], landmines: [], barriers: [], electricFloors: [],
     projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-    missileKits: [], lifeKits: [kit], enemyBullets: [], smokeScreens: [],
+    missileKits: [], lifeKits: [kit], enemyBullets: [], smokeScreens: [], storageTowers: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
     _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
   };
@@ -357,7 +359,7 @@ test('面を作り直すと前の面の lifeKits は消える', async () => {
       score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
       lifeKits: ['前の面の残機'],
       spawnManager: {
-        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnTreasures() { },
+        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { },
         spawnBarriers() { }, spawnElectricFloors() { }, spawnEnemies() { },
       },
       camera: { follow() { }, snapToTarget() { } },

@@ -9,7 +9,7 @@ import { EnemyAttacker } from '../entities/EnemyAttacker.js';
 import { EnemyDrone } from '../entities/EnemyDrone.js';
 import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
-import { spawnItem } from '../entities/itemKinds.js';
+import { StorageTower } from '../entities/StorageTower.js';
 import { FortressBarrier } from '../entities/FortressBarrier.js';
 import { ElectricFloor } from '../entities/ElectricFloor.js';
 
@@ -61,14 +61,15 @@ export class SpawnManager {
     }
 
     /**
-     * 要塞のお宝を置く（7面だけ。map.treasureSpawns が空なら何もしない）。
+     * 格納塔を立てる（map.storageTowerSpawns の数だけ。今は7面の要塞のお宝だけで、他の面は空振り）。
      *
-     * 敵の撃破ドロップと同じ配列に入れるので、拾得・更新・描画は既存のまま動く。
-     * どの配列に入るかは entities/itemKinds.js の表が決める。
+     * 面の種類では分岐しない。ほかの面に置くときは、その面の生成が一覧に足すだけで済む。
+     * 中身は塔を壊したときに出る（entities/itemKinds.js の表を通す）。
      */
-    spawnTreasures() {
-        for (const t of this.game.map.treasureSpawns || []) {
-            spawnItem(this.game, t.kind, t.x, t.y);
+    spawnStorageTowers() {
+        this.game.storageTowers = [];
+        for (const spec of this.game.map.storageTowerSpawns || []) {
+            this.game.storageTowers.push(new StorageTower(this.game, spec));
         }
     }
 

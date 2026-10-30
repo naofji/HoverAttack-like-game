@@ -15,7 +15,7 @@ function makeWorld(order, town) {
         map: { backdrop: { draw: () => order.push('backdrop') }, draw: () => order.push('map'), town },
         env: { update: noop, drawBehindTerrain: () => order.push('behind'), drawOverWorld: noop, drawOverlay: noop },
         carrier: null, player: null, flag: null, grenadeTrajectory: null,
-        enemies: [], landmines: [], barriers: [], electricFloors: [],
+        enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [],
         projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
         missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
         _applyRenderInterpolation: noop,
@@ -47,7 +47,7 @@ test('町は map.update() の直後に、Game を渡して更新する', () => {
     Object.assign(g, {
         _snapshotPrevPositions: noop, _updateCarrier: noop, _updatePlayer: noop, _updateDeathHold: noop,
         _updateCamera: noop, _updateAndPrune: (list) => { if (list === g.enemies) order.push('enemies'); },
-        _updateLandmines: noop, barriers: [], electricFloors: [], _updateBarrierSound: noop, _updateAutoAim: noop,
+        _updateLandmines: noop, barriers: [], electricFloors: [], storageTowers: [], _updateBarrierSound: noop, _updateAutoAim: noop,
         _updateOverdrive: noop, env: { update: noop }, _updateEnemyHoverSound: noop,
         _checkMissionClear: noop, collisionManager: { update: noop }, _updateProximityAlert: noop,
         projectiles: [], particles: [], smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], enemies: [],

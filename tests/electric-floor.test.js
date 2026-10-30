@@ -270,7 +270,7 @@ test('放電が始まったときだけ、画面の近くの床の音が鳴る',
     // 予兆の最後の1フレームまで進め、次の update で放電に入る状態にする
     for (const f of [near, far]) f.timer = ELECTRIC_FLOOR_WARN_FRAMES - 1;
     const fake = {
-      electricFloors: [near, far],
+      electricFloors: [near, far], storageTowers: [],
       _viewRect: () => ({ cx: near.x, cy: near.y, halfW: 683, halfH: 384 }),
     };
     Game._updateElectricFloors.call(fake);
@@ -297,7 +297,7 @@ test('電流の床は画面内だけ描く', () => {
     map: { backdrop: null, draw: noop },
     env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
     carrier: null, player: null, flag: null, grenadeTrajectory: null,
-    enemies: [], landmines: [], barriers: [], electricFloors: [inView, far],
+    enemies: [], landmines: [], barriers: [], electricFloors: [inView, far], storageTowers: [],
     projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
     missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,

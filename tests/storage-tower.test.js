@@ -3,6 +3,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnItem } from '../src/js/entities/itemKinds.js';
+import { Game } from '../src/js/main.js';
 import { RepairKit } from '../src/js/entities/RepairKit.js';
 import { OverdriveKit } from '../src/js/entities/OverdriveKit.js';
 import { ExtraLifeKit } from '../src/js/entities/ExtraLifeKit.js';
@@ -284,4 +285,157 @@ test('壊れた塔は何も描かない', () => {
   const ctx = makeFakeCtx();
   t.draw(ctx);
   assert.equal(ctx.calls.filter((c) => c.name === 'fillRect').length, 0);
+});
+
+// ---------- 置き場所の一覧とゲームへの組み込み ----------
+
+import { SeededRNG } from '../src/js/utils/SeededRNG.js';
+import { SpawnManager } from '../src/js/systems/SpawnManager.js';
+import { FORTRESS_TREASURE_COUNT, TILE_SIZE, BLOCK_EMPTY } from '../src/js/utils/Constants.js';
+
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+async function stage7Maps() {
+  const { Map } = await import('../src/js/world/Map.js');
+  return SEEDS.map((s) => new Map({ rng: new SeededRNG(s) }, 6));
+}
+
+function spawnGame(map) {
+  return { map, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [] };
+}
+
+test('実際の7面: お宝の位置ごとに塔が1本ずつ立ち、むき出しのアイテムは無い', async () => {
+  for (const m of await stage7Maps()) {
+    const game = spawnGame(m);
+    new SpawnManager(game).spawnStorageTowers();
+    assert.equal(game.storageTowers.length, m.fortressZones.length * FORTRESS_TREASURE_COUNT);
+    assert.ok(game.storageTowers.every((t) => t instanceof StorageTower));
+    assert.equal(game.repairKits.length + game.missileKits.length + game.lifeKits.length, 0,
+      'むき出しのアイテムが置かれた');
+    // 塔の位置はお宝の位置そのもの（中心x = お宝の列の中心、下端 = お宝の行の下）
+    const want = m.fortressZones.flatMap((z) => z.treasures.map((t) => `${t.c * TILE_SIZE + TILE_SIZE / 2},${(t.r + 1) * TILE_SIZE}`));
+    const got = game.storageTowers.map((t) => `${t.x + t.width / 2},${t.y + t.height}`);
+    assert.deepEqual(got.sort(), want.sort());
+  }
+});
+
+test('実際の7面: 塔の下は固い床で、塔の高さぶん（2タイル）は空洞', async () => {
+  for (const m of await stage7Maps()) {
+    for (const s of m.storageTowerSpawns) {
+      const c = Math.floor(s.x / TILE_SIZE);
+      const floorR = s.y / TILE_SIZE;
+      assert.ok(Number.isInteger(floorR), '下端がタイルの境目に無い');
+      assert.notEqual(m.grid[floorR][c], BLOCK_EMPTY, '塔の下が空洞（浮く）');
+      assert.equal(m.grid[floorR - 1][c], BLOCK_EMPTY, '塔が床に埋まる');
+      assert.equal(m.grid[floorR - 2][c], BLOCK_EMPTY, '塔の上半分が天井に埋まる');
+    }
+  }
+});
+
+test('実際の7面: 塔の中身の種類はお宝と同じ（残機 1・オーバードライブ 区画数・リペア 区画数×2−1）', async () => {
+  for (const m of await stage7Maps()) {
+    const kinds = m.storageTowerSpawns.map((s) => s.kind);
+    const zones = m.fortressZones.length;
+    assert.equal(kinds.filter((k) => k === 'life').length, 1);
+    assert.equal(kinds.filter((k) => k === 'overdrive').length, zones);
+    assert.equal(kinds.filter((k) => k === 'repair').length, zones * 2 - 1);
+  }
+});
+
+test('ほかの面には塔が無い', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  for (let lv = 0; lv < 6; lv++) {
+    const m = new Map({ rng: new SeededRNG(3) }, lv);
+    assert.deepEqual(m.storageTowerSpawns, [], `面${lv + 1}`);
+    const game = spawnGame(m);
+    new SpawnManager(game).spawnStorageTowers();
+    assert.equal(game.storageTowers.length, 0);
+  }
+});
+
+test('汎用: 置き場所の一覧に入れれば7面でなくても立ち、壊すとその中身が出る', () => {
+  const map = { storageTowerSpawns: [{ x: 120, y: 200, kind: 'overdrive' }] };
+  const game = { ...towerGame(), map };
+  new SpawnManager(game).spawnStorageTowers();
+  assert.equal(game.storageTowers.length, 1);
+  const t = game.storageTowers[0];
+  assert.equal(t.y + t.height, 200);
+  t.damage(999);
+  assert.equal(game.missileKits.length, 1);
+});
+
+test('spawnStorageTowers は前の塔を捨てて作り直す', () => {
+  const map = { storageTowerSpawns: [{ x: 120, y: 200, kind: 'repair' }] };
+  const game = { ...towerGame(), map, storageTowers: ['前の面の塔'] };
+  new SpawnManager(game).spawnStorageTowers();
+  assert.equal(game.storageTowers.length, 1);
+  assert.ok(game.storageTowers[0] instanceof StorageTower);
+});
+
+test('面を作り直すと前の面の塔は消え、spawnStorageTowers が呼ばれる', async () => {
+  const { GameStateManager } = await import('../src/js/systems/GameStateManager.js');
+  const stubCtx = new Proxy({}, {
+    get: (t, prop) => (prop in t ? t[prop] : (typeof prop === 'string' ? () => ({ addColorStop() { } }) : undefined)),
+    set: () => true,
+  });
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => stubCtx }) };
+  try {
+    let called = 0;
+    const game = {
+      score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
+      storageTowers: ['前の面の塔'],
+      spawnManager: {
+        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { called++; },
+        spawnBarriers() { }, spawnElectricFloors() { }, spawnEnemies() { },
+      },
+      camera: { follow() { }, snapToTarget() { } },
+    };
+    new GameStateManager(game).resetLevel(false);
+    assert.deepEqual(game.storageTowers, []);
+    assert.equal(called, 1);
+  } finally {
+    globalThis.document = originalDocument;
+  }
+});
+
+
+test('_simulationTick が格納塔を更新し、壊れた塔を外す（配線）', () => {
+  const noop = () => { };
+  const game = towerGame();
+  const t = addTower(game, 200, 300, 'repair');
+  shootAt(game, t, Missile, true);
+  // 塔の更新だけを本物にする（弾・アイテムの更新は地形を見るので、ここでは動かさない）
+  const fake = new Proxy(Object.assign(game, {
+    barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    env: { update: noop }, map: { ...game.map, update: noop }, collisionManager: { update: noop },
+  }), {
+    get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'
+      ? (list) => { if (list === game.storageTowers) Game._updateAndPrune(list); }
+      : noop)),
+  });
+  Game._simulationTick.call(fake);
+  assert.equal(t.alive, false, '1ティックで塔が更新されていない');
+  assert.equal(game.storageTowers.length, 0, '壊れた塔が残った');
+  assert.equal(game.repairKits.length, 1);
+});
+
+test('_drawWorld が格納塔を描く（配線）', () => {
+  const noop = () => { };
+  const drawn = [];
+  const tower = { alive: true, x: 10, y: 10, width: 16, height: 24, draw: () => drawn.push('tower') };
+  const world = {
+    gameState: 'playing', simAlpha: 1, canvas: { width: 1024, height: 768 },
+    camera: { x: 0, y: 0, renderX: () => 0, renderY: () => 0 },
+    map: { backdrop: null, draw: noop },
+    env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
+    carrier: null, player: null, flag: null, grenadeTrajectory: null,
+    enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [tower],
+    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
+    missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+    _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
+    _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
+  };
+  Game._drawWorld.call(world, makeFakeCtx());
+  assert.deepEqual(drawn, ['tower']);
 });

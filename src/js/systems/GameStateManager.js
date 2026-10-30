@@ -55,6 +55,7 @@ export class GameStateManager {
         game.missileKits = [];
         game.autoAimUnits = [];
         game.lifeKits = [];
+        game.storageTowers = [];   // 格納塔（お宝の入れ物）。前の面の塔を残さない
         game.autoAimTarget = null;
         game.autoAimLockedEnemy = null;
         game.base = null;
@@ -93,7 +94,7 @@ export class GameStateManager {
 
         // Recreate landmines and enemies
         game.spawnManager.spawnLandmines();
-        game.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
+        game.spawnManager.spawnStorageTowers();  // 格納塔（今は7面の要塞のお宝だけ。他の面は空振り）
         game.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
         game.spawnManager.spawnElectricFloors();   // 同、電流の床
         game.spawnManager.spawnEnemies();

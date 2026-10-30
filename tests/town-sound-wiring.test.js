@@ -161,7 +161,7 @@ test('面を作り直すとき（resetLevel）は炎のループを止める。�
     try {
         const game = {
             score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
-            spawnManager: { findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() {}, spawnTreasures() {}, spawnBarriers() {}, spawnElectricFloors() {}, spawnEnemies() {} },
+            spawnManager: { findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() {}, spawnStorageTowers() {}, spawnBarriers() {}, spawnElectricFloors() {}, spawnEnemies() {} },
             camera: { follow() {}, snapToTarget() {} },
         };
         new GameStateManager(game).resetLevel(false);

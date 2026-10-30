@@ -117,6 +117,7 @@ export const Game = {
     lifeKits: [],         // 要塞のお宝の残機アイテム（7面だけ）
     barriers: [],   // 7面の要塞の電磁パルスのバリア
     electricFloors: [],   // 同、廊下の電流の床
+    storageTowers: [],    // 格納塔（壊すとお宝が出る。今は7面の要塞の奥だけ）
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
@@ -226,8 +227,8 @@ export const Game = {
         this.player.docked = true;
 
         this.spawnManager.spawnLandmines();
-        this.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
-        this.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
+        this.spawnManager.spawnStorageTowers();  // 格納塔（今は7面の要塞のお宝だけ。他の面は空振り）
+        this.spawnManager.spawnBarriers();   // 7面の要塞の電磁パルスのバリア
         this.spawnManager.spawnElectricFloors();   // 同、電流の床
         this.spawnManager.spawnEnemies();
 
@@ -540,6 +541,9 @@ export const Game = {
         for (const barrier of this.barriers) barrier.update();
         this._updateBarrierSound();
         this._updateElectricFloors();
+        // 格納塔も弾を受けるので弾の更新のあと。壊れると中身を出すので、アイテムの更新より前に置く
+        // （出たその tick から落下・拾得が回る）。壊れた塔は配列から外す
+        this._updateAndPrune(this.storageTowers);
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
@@ -1060,6 +1064,13 @@ export const Game = {
         for (const floor of this.electricFloors) {
             if (!isInView(floor.rect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             floor.draw(ctx);
+        }
+        // 格納塔。アイテムより奥に描く（壊れた瞬間に出た中身が塔の陰に隠れない）。
+        // ダメージバーはバリアのユニットと同じく、削れたら出す（壊せる的だと分かるように）
+        for (const tower of this.storageTowers) {
+            if (!isInView(tower, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
+            tower.draw(ctx);
+            this._drawHpBarIfDamaged(ctx, tower);
         }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);

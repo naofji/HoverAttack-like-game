@@ -588,20 +588,20 @@ test('要塞区画に守備隊が追加されている', async () => {
     `区画内の戦車が ${tanks} しかない（最低 ${zones * FORTRESS_GARRISON_TANKS}）`);
 });
 
-test('お宝が実際にゲームへ置かれる（7面だけ）', async () => {
+test('お宝が格納塔に入って実際にゲームへ置かれる（7面だけ）', async () => {
   const { SpawnManager } = await import('../src/js/systems/SpawnManager.js');
   const { Map } = await import('../src/js/world/Map.js');
   for (const lv of [0, 6]) {
     const map = new Map({ rng: new SeededRNG(1) }, lv);
-    const game = { map, repairKits: [], missileKits: [], lifeKits: [] };
-    new SpawnManager(game).spawnTreasures();
-    const total = game.repairKits.length + game.missileKits.length + game.lifeKits.length;
+    const game = { map, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [] };
+    new SpawnManager(game).spawnStorageTowers();
+    const kinds = game.storageTowers.map((t) => t.kind);
     if (lv === 6) {
-      assert.equal(total, map.fortressZones.length * FORTRESS_TREASURE_COUNT, '7面の宝の数が合わない');
-      assert.ok(game.missileKits.length > 0, 'オーバードライブが置かれていない');
-      assert.ok(game.repairKits.length > 0, 'リペアキットが置かれていない');
+      assert.equal(kinds.length, map.fortressZones.length * FORTRESS_TREASURE_COUNT, '7面の宝の数が合わない');
+      assert.ok(kinds.includes('overdrive'), 'オーバードライブが置かれていない');
+      assert.ok(kinds.includes('repair'), 'リペアキットが置かれていない');
     } else {
-      assert.equal(total, 0, `面${lv + 1} に宝が置かれている`);
+      assert.equal(kinds.length, 0, `面${lv + 1} に宝が置かれている`);
     }
   }
 });

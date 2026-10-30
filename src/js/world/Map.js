@@ -300,7 +300,9 @@ export class Map {
         this.enemyTurretSpawns = this._findEnemyTurretPositions();
         this._addMainBaseDefenders(); // Force add defenders specifically around the base
         // 要塞の中身は「探索が終わったあと」に足す（先に足すとシャッフルで散る）
-        this.treasureSpawns = [];
+        // 格納塔の置き場所 {x: 中心, y: 下端＝床の上面, kind: 中身}。今は7面の要塞だけが足す。
+        // ほかの面に置くときは、その面の生成がここに足せば塔が立つ（塔の側は面を知らない）
+        this.storageTowerSpawns = [];
         if (this.envTerrain === 'fortress') this._placeFortressContents();
 
         // Step 11: Generate off-screen mini-map
@@ -505,7 +507,7 @@ export class Map {
     }
 
     /**
-     * 要塞のお宝と守備隊を、面全体の湧きの配列に足す。
+     * 要塞のお宝（を入れた格納塔）と守備隊を、面全体の湧きの配列に足す。
      *
      * **スポーン探索（Step 10）のあとに呼ぶ。** 先に足すとシャッフルで混ざって
      * 区画の外へ散ってしまう。既存の湧きに「足す」だけなので、面全体の上限
@@ -513,7 +515,7 @@ export class Map {
      */
     _placeFortressContents() {
         const S = TILE_SIZE;
-        this.treasureSpawns = [];
+        this.storageTowerSpawns = [];
 
         // まず、面全体の湧き（Step 10 で決まったもの）からバリアに重なるものを外す。
         // 守備隊はバリアを避けて置いているが、**元からある湧きは要塞を知らない**ので
@@ -545,7 +547,8 @@ export class Map {
         this.landmineSpawns = this.landmineSpawns.filter(clear);
         for (const zone of this.fortressZones) {
             for (const t of zone.treasures) {
-                this.treasureSpawns.push({ x: t.c * S + S / 2, y: t.r * S, kind: t.kind });
+                // お宝はむき出しにせず格納塔に入れる。t.r は床の1つ上の行なので、塔の下端は (r+1) 行目の上
+                this.storageTowerSpawns.push({ x: t.c * S + S / 2, y: (t.r + 1) * S, kind: t.kind });
             }
             for (const g of zone.garrison.turrets) {
                 // type を持つものは砲台の種類を固定する（入り口の守衛はノーマル）
