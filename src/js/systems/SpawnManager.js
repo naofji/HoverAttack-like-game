@@ -9,9 +9,7 @@ import { EnemyAttacker } from '../entities/EnemyAttacker.js';
 import { EnemyDrone } from '../entities/EnemyDrone.js';
 import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
-import { RepairKit } from '../entities/RepairKit.js';
-import { OverdriveKit } from '../entities/OverdriveKit.js';
-import { ExtraLifeKit } from '../entities/ExtraLifeKit.js';
+import { spawnItem } from '../entities/itemKinds.js';
 import { FortressBarrier } from '../entities/FortressBarrier.js';
 import { ElectricFloor } from '../entities/ElectricFloor.js';
 
@@ -66,18 +64,11 @@ export class SpawnManager {
      * 要塞のお宝を置く（7面だけ。map.treasureSpawns が空なら何もしない）。
      *
      * 敵の撃破ドロップと同じ配列に入れるので、拾得・更新・描画は既存のまま動く。
-     * オーバードライブキットは missileKits 側（OverdriveKit が MissileKit を
-     * 継承しているため）。
+     * どの配列に入るかは entities/itemKinds.js の表が決める。
      */
     spawnTreasures() {
         for (const t of this.game.map.treasureSpawns || []) {
-            if (t.kind === 'overdrive') {
-                this.game.missileKits.push(new OverdriveKit(this.game, t.x, t.y));
-            } else if (t.kind === 'life') {
-                this.game.lifeKits.push(new ExtraLifeKit(this.game, t.x, t.y));
-            } else {
-                this.game.repairKits.push(new RepairKit(this.game, t.x, t.y));
-            }
+            spawnItem(this.game, t.kind, t.x, t.y);
         }
     }
 
