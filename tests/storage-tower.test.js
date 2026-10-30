@@ -221,7 +221,7 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
   STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_STAND_COLOR,
   STORAGE_TOWER_STAND_H, STORAGE_TOWER_BLINK_PERIOD,
-  STORAGE_TOWER_STRIPE_EDGE_COLOR, STORAGE_TOWER_STRIPE_H,
+  STORAGE_TOWER_STRIPE_EDGE_COLOR, STORAGE_TOWER_STRIPE_H, STORAGE_TOWER_STRIPE_LIFT,
   STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX,
 } from '../src/js/utils/Constants.js';
 
@@ -516,8 +516,12 @@ test('オレンジの帯は 2px の1本（縞を何本も入れると、暗い�
   const stripes = fills(ctx).filter((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
   assert.equal(stripes.length, 1);
   assert.equal(stripes[0].h, STORAGE_TOWER_STRIPE_H);
-  // 円筒（ふたと足台のあいだ）の上下のまん中あたりに来る
+  // 円筒（ふたと足台のあいだ）のまん中から STRIPE_LIFT だけ上に来る（まん中では低く見えた。ユーザー判断）
+  assert.ok(STORAGE_TOWER_STRIPE_LIFT > 0);
   const bodyTop = t.y + 2, bodyBottom = t.y + t.height - STORAGE_TOWER_STAND_H;
   const mid = stripes[0].y + stripes[0].h / 2;
-  assert.ok(Math.abs(mid - (bodyTop + bodyBottom) / 2) <= 1, `帯が円筒のまん中に無い（${mid}）`);
+  const want = (bodyTop + bodyBottom) / 2 - STORAGE_TOWER_STRIPE_LIFT;
+  assert.ok(Math.abs(mid - want) <= 0.5, `帯の中心 ${mid}、期待 ${want}`);
+  // 上の暗い縁が円筒からはみ出さない
+  assert.ok(stripes[0].y - 1 >= bodyTop, '上げすぎてふたにかかった');
 });

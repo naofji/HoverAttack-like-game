@@ -1078,6 +1078,8 @@ export const STORAGE_TOWER_STRIPE_EDGE_COLOR = '#5C4A2A';
 // 汚く見えた（実機の指摘2回）。1本にして、暗い縁で挟む（ユーザー案）
 export const STORAGE_TOWER_STRIPE_COUNT = 1;
 export const STORAGE_TOWER_STRIPE_H = 2;                 // 帯の太さ（px）。4px は太すぎた（ユーザー判断）
+// 帯を円筒のまん中からこれだけ上げる（px）。まん中では低く見えた（ユーザー判断「もう少しだけ高めに」）
+export const STORAGE_TOWER_STRIPE_LIFT = 2;
 export const STORAGE_TOWER_BLINK_PERIOD = 60;            // 明滅の周期（フレーム、約1秒）
 export const STORAGE_TOWER_STRIPE_ALPHA_MIN = 0.25;      // 消え際でも縞が分かる程度に残す
 export const STORAGE_TOWER_STRIPE_ALPHA_MAX = 1.0;
