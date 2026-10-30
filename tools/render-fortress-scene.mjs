@@ -6,6 +6,7 @@
 //   node tools/render-fortress-scene.mjs --seed 3 --zone 2 --scale 2 --out a.png
 //   node tools/render-fortress-scene.mjs --zone 0 --damage "6,10,3;6,11,5"   # 「行,列,ダメージ」を ; 区切りで。金属の焼け・硬い岩のひびを見る
 //   node tools/render-fortress-scene.mjs --phase warn                        # 電流の床の段階（active=放電、warn=予兆、rest=休み。既定は放電）
+//   node tools/render-fortress-scene.mjs --facility 0                       # 区画ではなく施設エリア（メタルパネルと金属の斜面）
 //   node tools/render-fortress-scene.mjs --x 400 --y 300 --w 800 --h 500     # 区画ではなく座標で指定
 //
 // 実物の Map を生成し、タイルの絵は Map の描画関数（_drawTile）を PixelCanvas に流して描く。
@@ -42,6 +43,12 @@ for (const t of String(args.damage || '').split(';').filter(Boolean)) {
 let X, Y, W, H;
 if (args.x !== undefined) {
     X = Number(args.x); Y = Number(args.y ?? 0); W = Number(args.w ?? 800); H = Number(args.h ?? 500);
+} else if (args.facility !== undefined) {
+    const area = map.facilityAreas[Number(args.facility)];
+    if (!area) throw new Error(`施設エリア ${args.facility} が無い（施設エリアは ${map.facilityAreas.length} 個）`);
+    // 施設エリアに3タイルの余白（外の洞窟の岩と見比べる）
+    X = (area.c0 - 3) * T; Y = (area.r0 - 3) * T;
+    W = (area.c1 - area.c0 + 7) * T; H = (area.r1 - area.r0 + 7) * T;
 } else {
     const zone = map.fortressZones[Number(args.zone ?? 0)];
     if (!zone) throw new Error(`区画 ${args.zone ?? 0} が無い（区画は ${map.fortressZones.length} 個）`);
@@ -63,7 +70,8 @@ for (let r = Math.floor(Y / T); r <= Math.floor((Y + H) / T); r++) {
         if (r < 0 || c < 0 || r >= map.rows || c >= map.cols || map.grid[r][c] === BLOCK_EMPTY) continue;
         const block = map.grid[r][c];
         const marked = map.fortress[r * map.cols + c] === 1;
-        if (marked && (block === BLOCK_METAL || block === BLOCK_HARD) && map._drawTile) {
+        const facility = map.facility[r * map.cols + c] === 1;
+        if ((facility || (marked && (block === BLOCK_METAL || block === BLOCK_HARD))) && map._drawTile) {
             map._drawTile(ctx, r, c);
         } else if (block === BLOCK_METAL) {
             map._drawPolishedBlock(ctx, c * T, r * T, T, map.blockStyles[block], r, c);

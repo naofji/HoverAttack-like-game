@@ -11,6 +11,63 @@
 // ============================================
 
 import { METAL_HEAT_GLOSS_LOSS } from '../utils/Constants.js';
+import { SHAPE_FULL, shapeContainsPoint } from '../utils/tileShape.js';
+
+/**
+ * 7面の施設エリアの斜面（タイルの形）で描くための ctx の包み。fillRect を画素の行ごとに、形の中の区間だけへ
+ * 切り詰めて渡す。clip を使わないのは PixelCanvas（tools/render-fortress-scene.mjs）でも同じ絵にするため。
+ * 斜辺は45度なので、画素の中心で形に入るかを見れば判定（shapeContainsPoint）と1画素以内で一致する。
+ * 塗り終えたら edgeLight() で斜辺の縁（すぐ上が形の外の画素）に明るい線を引く（光は左上から）
+ */
+function shapedCtx(ctx, x, y, S, code) {
+    // 行ごとの [列の始まり, 終わり) の区間。45度の三角の組み合わせなので、1行に区間は高々2つ
+    const spans = [];
+    for (let ly = 0; ly < S; ly++) {
+        const row = [];
+        let start = -1;
+        for (let lx = 0; lx <= S; lx++) {
+            const inside = lx < S && shapeContainsPoint(code, lx + 0.5, ly + 0.5);
+            if (inside && start < 0) start = lx;
+            if (!inside && start >= 0) { row.push([start, lx]); start = -1; }
+        }
+        spans.push(row);
+    }
+    return {
+        get fillStyle() { return ctx.fillStyle; },
+        set fillStyle(v) { ctx.fillStyle = v; },
+        fillRect(rx, ry, w, h) {
+            const y0 = Math.max(0, Math.floor(ry - y)), y1 = Math.min(S, Math.floor(ry - y) + Math.ceil(h));
+            const x0 = Math.floor(rx - x), x1 = x0 + Math.ceil(w);
+            for (let ly = y0; ly < y1; ly++) {
+                for (const [a, b] of spans[ly]) {
+                    const s = Math.max(a, x0), e = Math.min(b, x1);
+                    if (e > s) ctx.fillRect(x + s, y + ly, e - s, 1);
+                }
+            }
+        },
+        /** 斜辺の縁。上が形の外なら明るく、下が形の外なら暗く（今のパネルの面取りと同じ向きの光） */
+        edgeLight(alpha) {
+            const inside = (lx, ly) => ly >= 0 && ly < S && spans[ly].some(([a, b]) => lx >= a && lx < b);
+            for (let ly = 0; ly < S; ly++) {
+                for (const [a, b] of spans[ly]) {
+                    for (let lx = a; lx < b; lx++) {
+                        if (ly > 0 && !inside(lx, ly - 1)) {
+                            ctx.fillStyle = `rgba(255,255,255,${a3(alpha)})`; ctx.fillRect(x + lx, y + ly, 1, 1);
+                        } else if (ly < S - 1 && !inside(lx, ly + 1)) {
+                            ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x + lx, y + ly, 1, 1);
+                        }
+                    }
+                }
+            }
+        },
+    };
+}
+const a3 = (alpha) => alpha.toFixed(3);
+
+/** shape が斜面なら形で切り詰める ctx を、四角ならそのままの ctx を返す */
+function forShape(ctx, x, y, S, shape) {
+    return shape !== undefined && shape !== SHAPE_FULL ? shapedCtx(ctx, x, y, S, shape) : null;
+}
 
 // 板の長さ（タイル数）。継ぎ目は横方向だけ、この間隔で段違いに入れる（レンガ積み）。
 // 縦方向はタイルの境ごとに必ず入れる。壁が2枚幅でも床が1枚高でも「板の寸法」がタイルより細かくならず、
@@ -39,7 +96,9 @@ const a = (alpha) => alpha.toFixed(3);
  * exp: 空洞に面している辺 {t, b, l, r}。seamLeft: 左隣と板が分かれる継ぎ目を引くか
  * （左隣が空洞のときは exp.l の面取りになるので引かない）
  */
-export function drawMetalPanel(ctx, x, y, S, { fill, exp, seamLeft, heat, rng }) {
+export function drawMetalPanel(ctx0, x, y, S, { fill, exp, seamLeft, heat, rng, shape }) {
+    const shaped = forShape(ctx0, x, y, S, shape);
+    const ctx = shaped || ctx0;
     const gloss = 1 - heat * METAL_HEAT_GLOSS_LOSS;
 
     ctx.fillStyle = fill;
@@ -90,6 +149,7 @@ export function drawMetalPanel(ctx, x, y, S, { fill, exp, seamLeft, heat, rng })
     const rivetY = y + (exp.b ? S - 5 : S - 4);
     rivet(ctx, rivetX, rivetY, gloss);
     if (seamLeft && !exp.l) rivet(ctx, x + 3, rivetY, gloss);
+    if (shaped) shaped.edgeLight(0.55 * gloss);
 }
 
 /** 1画素の頭に、右下へ落ちる影を付けたリベット */
@@ -103,7 +163,9 @@ function rivet(ctx, rx, ry, gloss) {
  * 四隅にボルトを打つ。被弾はひび割れ（光沢の無い鋳造・コンクリートの装甲はひびで割れる）。
  * damage: 受けたダメージ（0 = 無傷）。ひびは1回につき2本、最大4本
  */
-export function drawArmorPanel(ctx, x, y, S, { fill, exp, damage, rng }) {
+export function drawArmorPanel(ctx0, x, y, S, { fill, exp, damage, rng, shape }) {
+    const shaped = forShape(ctx0, x, y, S, shape);
+    const ctx = shaped || ctx0;
     ctx.fillStyle = fill;
     ctx.fillRect(x, y, S, S);
 
@@ -149,4 +211,47 @@ export function drawArmorPanel(ctx, x, y, S, { fill, exp, damage, rng }) {
             if (s % 2 === 0) cx += dx;
         }
     }
+    if (shaped) shaped.edgeLight(0.30);
+}
+
+/**
+ * 薄い板（7面の施設エリアの通常の岩。1発で壊れる）。本物の金属（6発）と撃つ前に見分けられるよう、
+ * **艶を出さない**: 圧延の筋（光る素材の決め手）とリベットを描かず、面取りのハイライトも弱くする。
+ * 代わりに縞鋼板の滑り止めの点を斜めに並べ、「床に貼った板」に見せる。継ぎ目は金属と同じ規則
+ */
+export function drawPlatePanel(ctx0, x, y, S, { fill, exp, rng, shape }) {
+    const shaped = forShape(ctx0, x, y, S, shape);
+    const ctx = shaped || ctx0;
+
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, S, S);
+
+    const v = rng(1);
+    ctx.fillStyle = v < 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0)';
+    ctx.fillRect(x, y, S, S);
+
+    // 滑り止めの点（4px おき、行ごとに半分ずらす）。明暗の対で浮き出た粒に見せる
+    for (let py = 2; py < S - 1; py += 4) {
+        const off = (py / 4) % 2 === 0 ? 1 : 3;
+        for (let px = off; px < S - 1; px += 4) {
+            ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x + px, y + py, 1, 1);
+            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + px + 1, y + py + 1, 1, 1);
+        }
+    }
+
+    // 継ぎ目（金属より浅い溝）
+    if (!exp.t) {
+        ctx.fillStyle = 'rgba(0,0,0,0.40)'; ctx.fillRect(x, y, S, 1);
+    }
+    if (!exp.l && plateBreaksLeft(Math.floor(y / S), Math.floor(x / S))) {
+        ctx.fillStyle = 'rgba(0,0,0,0.40)'; ctx.fillRect(x, y, 1, S);
+    }
+
+    // 空洞に面した辺（ハイライトは金属の半分以下＝艶が無い）
+    if (exp.t) { ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(x, y, S, 1); }
+    if (exp.l) { ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x, y, 1, S); }
+    if (exp.b) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y + S - 1, S, 1); }
+    if (exp.r) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + S - 1, y, 1, S); }
+
+    if (shaped) shaped.edgeLight(0.30);
 }

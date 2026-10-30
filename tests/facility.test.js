@@ -11,6 +11,9 @@ import {
 import { Player } from '../src/js/entities/Player.js';
 import { Grenade } from '../src/js/entities/Grenade.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
+import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { drawMetalPanel, drawArmorPanel, drawPlatePanel, tileRng } from '../src/js/world/panelBlocks.js';
+import { shapeContainsPoint } from '../src/js/utils/tileShape.js';
 import {
   BLOCK_EMPTY as E, BLOCK_NORMAL as N, BLOCK_HARD as H, BLOCK_METAL as M, BLOCK_INDESTRUCTIBLE as X,
   METAL_BLOCK_HP, FORTRESS_ZONE_MARGIN, TILE_SIZE as T,
@@ -353,4 +356,163 @@ test('実際の7面: 金属の段を壊し切るとそのタイルは空にな�
   assert.equal(m.tileShapeAt(target.r, target.c), SHAPE_EMPTY);
   // 下が空いて斜面の条件は崩れるが、作り直しは前の形と両方に収まる形にするので、四角（岩が増える）に戻らない
   assert.equal(m.tileShapes[above], beforeAbove);
+});
+
+// ---------- 描画 ----------
+
+/** _drawTile がどの絵で描いたかを記録する（panelBlocks の関数は Map が import しているので、Map のメソッドで見る） */
+function drawnKinds(m, cells) {
+  const seen = [];
+  const orig = { panel: m._drawPanelBlock, rocky: m._drawRockyBlock };
+  m._drawPanelBlock = (ctx, r, c, block) => seen.push(['panel', r, c, block]);
+  m._drawRockyBlock = (ctx, r, c, block) => seen.push(['rock', r, c, block]);
+  try {
+    for (const [r, c] of cells) m._drawTile(makeFakeCtx(), r, c);
+  } finally {
+    m._drawPanelBlock = orig.panel; m._drawRockyBlock = orig.rocky;
+  }
+  return seen;
+}
+
+function findCell(m, pred) {
+  for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) if (pred(r, c)) return [r, c];
+  return null;
+}
+
+test('施設エリアの通常の岩・硬い岩・金属はパネルで描き、エリアの外の通常の岩・硬い岩は岩で描く', async () => {
+  const [m] = await maps();
+  const inF = (r, c) => m.facility[r * m.cols + c] === 1 && m.fortress[r * m.cols + c] !== 1;
+  const outF = (r, c) => m.facility[r * m.cols + c] === 0 && m.fortress[r * m.cols + c] !== 1;
+  const cells = [
+    findCell(m, (r, c) => inF(r, c) && m.grid[r][c] === N),
+    findCell(m, (r, c) => inF(r, c) && m.grid[r][c] === H),
+    findCell(m, (r, c) => inF(r, c) && m.grid[r][c] === M),
+    findCell(m, (r, c) => outF(r, c) && m.grid[r][c] === N),
+    findCell(m, (r, c) => outF(r, c) && m.grid[r][c] === H),
+  ];
+  assert.ok(cells.every(Boolean), '前提: 各種のタイルがある');
+  assert.deepEqual(drawnKinds(m, cells).map((x) => x[0]), ['panel', 'panel', 'panel', 'rock', 'rock']);
+});
+
+test('パネルの振り分け: 施設エリアの通常の岩は薄い板、硬い岩は装甲板、金属は金属パネル', async () => {
+  const [m] = await maps();
+  const calls = [];
+  const inF = (r, c) => m.facility[r * m.cols + c] === 1;
+  const which = (b) => findCell(m, (r, c) => inF(r, c) && m.grid[r][c] === b);
+  // 絵の関数を見分ける: 薄い板は筋（白い1px高の横線）が無く、金属は筋がある。装甲板は四隅のボルト（2x2）
+  for (const [b, expect] of [[N, 'plate'], [H, 'armor'], [M, 'metal']]) {
+    const [r, c] = which(b);
+    const ctx = makeFakeCtx();
+    m._drawPanelBlock(ctx, r, c, b);
+    calls.push([b, expect, kindOf(ctx)]);
+  }
+  for (const [b, expect, got] of calls) assert.equal(got, expect, `ブロック ${b}`);
+});
+
+/** fake ctx の記録から絵の種類を当てる */
+function kindOf(ctx) {
+  let style = '';
+  let rolled = 0, bolts = 0;
+  for (const call of ctx.calls) {
+    if (call.name === 'set:fillStyle') style = call.args[0];
+    if (call.name !== 'fillRect') continue;
+    const [, , w, h] = call.args;
+    if (h === 1 && w >= 10 && /^rgba\(255,255,255,0\.(0[5-9]|1[0-4])/.test(style)) rolled++;
+    if (w === 2 && h === 2 && style === 'rgba(255,255,255,0.16)') bolts++;
+  }
+  if (bolts >= 4) return 'armor';
+  return rolled > 0 ? 'metal' : 'plate';
+}
+
+test('薄い板は圧延の筋を描かず、金属パネルは描く（硬さの見分け）', () => {
+  const exp = { t: false, b: false, l: false, r: false };
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 6; c++) {
+      const plate = makeFakeCtx();
+      drawPlatePanel(plate, 0, 0, T, { fill: '#556070', exp, rng: tileRng(r, c) });
+      assert.equal(kindOf(plate), 'plate');
+      const metal = makeFakeCtx();
+      drawMetalPanel(metal, 0, 0, T, { fill: '#6B7A8C', exp, seamLeft: true, heat: 0, rng: tileRng(r, c) });
+      assert.equal(kindOf(metal), 'metal');
+    }
+  }
+});
+
+/** 記録された fillRect が覆う画素（タイル内のローカル座標）を全部返す */
+function paintedPixels(ctx, x0, y0) {
+  const px = [];
+  for (const call of ctx.calls) {
+    if (call.name !== 'fillRect') continue;
+    const [x, y, w, h] = call.args;
+    for (let yy = Math.floor(y); yy < Math.floor(y) + Math.ceil(h); yy++) {
+      for (let xx = Math.floor(x); xx < Math.floor(x) + Math.ceil(w); xx++) px.push([xx - x0, yy - y0]);
+    }
+  }
+  return px;
+}
+
+test('斜面のパネルは形の外へ塗らず、形の中は塗り残さない（3種とも）', () => {
+  const ramp = packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL);
+  const exp = { t: true, b: false, l: true, r: false };
+  const draws = [
+    (ctx) => drawMetalPanel(ctx, 32, 48, T, { fill: '#6B7A8C', exp, seamLeft: true, heat: 0, rng: tileRng(3, 2), shape: ramp }),
+    (ctx) => drawArmorPanel(ctx, 32, 48, T, { fill: '#555555', exp, damage: 1, rng: tileRng(3, 2), shape: ramp }),
+    (ctx) => drawPlatePanel(ctx, 32, 48, T, { fill: '#556070', exp, rng: tileRng(3, 2), shape: ramp }),
+  ];
+  for (const draw of draws) {
+    const ctx = makeFakeCtx();
+    draw(ctx);
+    const painted = paintedPixels(ctx, 32, 48);
+    assert.ok(painted.length > 0);
+    for (const [lx, ly] of painted) {
+      assert.ok(lx >= 0 && lx < T && ly >= 0 && ly < T, `タイルの外 (${lx},${ly})`);
+      assert.ok(shapeContainsPoint(ramp, lx + 0.5, ly + 0.5), `形の外を塗った (${lx},${ly})`);
+    }
+    const set = new Set(painted.map(([x, y]) => `${x},${y}`));
+    for (let ly = 0; ly < T; ly++) {
+      for (let lx = 0; lx < T; lx++) {
+        if (shapeContainsPoint(ramp, lx + 0.5, ly + 0.5)) assert.ok(set.has(`${lx},${ly}`), `塗り残し (${lx},${ly})`);
+      }
+    }
+  }
+});
+
+test('斜面のパネルは斜辺に沿って明るい縁を引く（光は左上から）', () => {
+  const ramp = packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL);
+  const exp = { t: true, b: false, l: true, r: false };
+  const ctx = makeFakeCtx();
+  drawMetalPanel(ctx, 0, 0, T, { fill: '#6B7A8C', exp, seamLeft: false, heat: 0, rng: tileRng(1, 1), shape: ramp });
+  // 斜辺の画素（形の中で、すぐ上の画素が形の外）に、白い塗りが掛かっていること
+  let style = '';
+  const lit = new Set();
+  for (const call of ctx.calls) {
+    if (call.name === 'set:fillStyle') style = call.args[0];
+    if (call.name === 'fillRect' && /^rgba\(255,255,255,0\.[3-9]/.test(style)) {
+      const [x, y, w, h] = call.args;
+      for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) lit.add(`${xx},${yy}`);
+    }
+  }
+  let edge = 0, hit = 0;
+  for (let ly = 1; ly < T; ly++) {
+    for (let lx = 0; lx < T; lx++) {
+      const inside = shapeContainsPoint(ramp, lx + 0.5, ly + 0.5);
+      if (inside && !shapeContainsPoint(ramp, lx + 0.5, ly - 0.5)) { edge++; if (lit.has(`${lx},${ly}`)) hit++; }
+    }
+  }
+  assert.ok(edge >= 8, `前提: 斜辺の画素 ${edge}`);
+  assert.ok(hit >= edge - 1, `斜辺の縁が明るくない（${hit}/${edge}）`);
+});
+
+test('_drawPanelBlock は斜面のタイルに形を渡し、四角のタイルには渡さない', async () => {
+  const [m] = await maps();
+  const slope = findCell(m, (r, c) => {
+    const k = m.tileShapeAt(r, c); return k !== SHAPE_FULL && k !== SHAPE_EMPTY;
+  });
+  assert.ok(slope);
+  const ctx = makeFakeCtx();
+  m._drawPanelBlock(ctx, slope[0], slope[1], m.grid[slope[0]][slope[1]]);
+  const code = m.tileShapeAt(slope[0], slope[1]);
+  for (const [lx, ly] of paintedPixels(ctx, slope[1] * T, slope[0] * T)) {
+    assert.ok(shapeContainsPoint(code, lx + 0.5, ly + 0.5), `斜面のタイルで形の外を塗った (${lx},${ly})`);
+  }
 });

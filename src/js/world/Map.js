@@ -7,7 +7,7 @@ import {
     BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_HARD, BLOCK_INDESTRUCTIBLE, BLOCK_METAL,
     COLOR_HARD_BLOCK, COLOR_HARD_BLOCK_BORDER, HARD_BLOCK_TINT, HARD_BLOCK_DARKEN,
     COLOR_METAL_BLOCK, COLOR_METAL_BLOCK_BORDER, METAL_BLOCK_TINT, METAL_BLOCK_DARKEN,
-    METAL_BLOCK_HP, METAL_HEAT_COLOR,
+    METAL_BLOCK_HP, METAL_HEAT_COLOR, FACILITY_PLATE_DARKEN,
     COLOR_INDESTRUCTIBLE_BLOCK, COLOR_INDESTRUCTIBLE_BLOCK_BORDER,
     PLAYER_WIDTH, PLAYER_HEIGHT,
     ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT,
@@ -52,7 +52,7 @@ import {
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
 import { pickFacilityAreas, metalizeFacilityBand } from './facility.js';
-import { drawMetalPanel, drawArmorPanel, plateBreaksLeft, tileRng } from './panelBlocks.js';
+import { drawMetalPanel, drawArmorPanel, drawPlatePanel, plateBreaksLeft, tileRng } from './panelBlocks.js';
 import { generateTown } from './town/generate.js';
 import { generatePlants } from './town/generatePlants.js';
 import { generateSnowTrees } from './town/generateSnowTrees.js';
@@ -1998,7 +1998,9 @@ export class Map {
         if (block === BLOCK_EMPTY) return;
         if (block === BLOCK_INDESTRUCTIBLE) {
             this._drawPolishedBlock(ctx, c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, this.blockStyles[block]);
-        } else if (block === BLOCK_METAL || (block === BLOCK_HARD && this.fortress && this.fortress[r * this.cols + c])) {
+        } else if (block === BLOCK_METAL || (block === BLOCK_HARD && this.fortress && this.fortress[r * this.cols + c])
+            || (this.facility && this.facility[r * this.cols + c] === 1)) {
+            // 7面の施設エリアは通常の岩もパネル（薄い板）で描く
             this._drawPanelBlock(ctx, r, c, block);
         } else {
             this._drawRockyBlock(ctx, r, c, block);
@@ -2012,13 +2014,21 @@ export class Map {
         const exp = { t: empty(r - 1, c), b: empty(r + 1, c), l: empty(r, c - 1), r: empty(r, c + 1) };
         const rng = tileRng(r, c);
         const style = this.blockStyles[block];
-        if (block === BLOCK_METAL) {
+        // 7面の施設エリアの斜面は形で描く（形の外は塗らない）。四角のタイルには渡さない
+        const code = this.tileShapeRule === 'metalSlope' ? this.tileShapeAt(r, c) : SHAPE_FULL;
+        const shape = code === SHAPE_FULL ? undefined : code;
+        if (block === BLOCK_NORMAL) {
+            // 薄い板の色は金属の色を暗くしたもの（同じ鋼の系統で、艶が無い）
+            const metal = this.blockStyles[BLOCK_METAL].fill;
+            const fill = withLuminance(metal, luminance(metal) * FACILITY_PLATE_DARKEN);
+            drawPlatePanel(ctx, c * S, r * S, S, { fill, exp, rng, shape });
+        } else if (block === BLOCK_METAL) {
             // 金属の焼け。0 = 無傷、1 = あと1発。色だけでなく艶も飛ばす（drawMetalPanel）
             const heat = (METAL_BLOCK_HP - this.blockHP[r][c]) / METAL_BLOCK_HP;
             const fill = heat > 0 ? lerpColor(style.fill, METAL_HEAT_COLOR, heat) : style.fill;
-            drawMetalPanel(ctx, c * S, r * S, S, { fill, exp, seamLeft: plateBreaksLeft(r, c), heat, rng });
+            drawMetalPanel(ctx, c * S, r * S, S, { fill, exp, seamLeft: plateBreaksLeft(r, c), heat, rng, shape });
         } else {
-            drawArmorPanel(ctx, c * S, r * S, S, { fill: style.fill, exp, damage: HARD_BLOCK_HP - this.blockHP[r][c], rng });
+            drawArmorPanel(ctx, c * S, r * S, S, { fill: style.fill, exp, damage: HARD_BLOCK_HP - this.blockHP[r][c], rng, shape });
         }
     }
 

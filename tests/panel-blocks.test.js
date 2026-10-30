@@ -77,10 +77,10 @@ test('硬い岩は要塞の区画の中（印あり）だけ装甲板、区画�
   assert.deepEqual(routeOf(map, BLOCK_HARD, false), ['rocky'], '6面などの硬い岩まで装甲板になっている');
 });
 
-test('実際の7面で、金属は全部パネル・区画内の硬い岩は全部装甲板・それ以外は岩になる（全面の描き直しの経路）', async () => {
+test('実際の7面で、金属は全部パネル・区画内の硬い岩は全部装甲板・施設エリアの岩はパネル・それ以外は岩になる（全面の描き直しの経路）', async () => {
   const map = await realMap();
   const seen = { panel: 0, rocky: 0, polished: 0 };
-  let metalTiles = 0, armorTiles = 0, rockTiles = 0;
+  let metalTiles = 0, armorTiles = 0, rockTiles = 0, facilityTiles = 0;
   map._drawPanelBlock = () => { seen.panel++; };
   map._drawRockyBlock = () => { seen.rocky++; };
   map._drawPolishedBlock = () => { seen.polished++; };
@@ -90,12 +90,15 @@ test('実際の7面で、金属は全部パネル・区画内の硬い岩は全�
       if (b === BLOCK_EMPTY) continue;
       if (b === BLOCK_METAL) metalTiles++;
       else if (b === BLOCK_HARD && map.fortress[r * map.cols + c]) armorTiles++;
+      // 施設エリア（2026-10-31）の通常の岩・硬い岩は、薄い板・装甲板のパネルで描く
+      else if (b !== BLOCK_INDESTRUCTIBLE && map.facility[r * map.cols + c] === 1) facilityTiles++;
       else if (b !== BLOCK_INDESTRUCTIBLE) rockTiles++;
     }
   }
   map._renderAllToCache();
   assert.ok(metalTiles > 0 && armorTiles > 0, '7面に要塞が無い');
-  assert.equal(seen.panel, metalTiles + armorTiles);
+  assert.ok(facilityTiles > 0, '7面に施設エリアの岩が無い');
+  assert.equal(seen.panel, metalTiles + armorTiles + facilityTiles);
   assert.equal(seen.rocky, rockTiles);
 });
 

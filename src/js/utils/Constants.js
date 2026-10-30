@@ -1582,6 +1582,9 @@ export const METAL_BLOCK_DARKEN = 0.85; // 硬い岩(0.62)ほど暗くしない�
 export const METAL_BLOCK_HP = 6;
 export const METAL_HEAT_COLOR = '#8C3A1E';   // 焼けた赤茶
 export const METAL_HEAT_GLOSS_LOSS = 0.85;   // 満身創痍でハイライトをこの割合まで削る
+// 7面の施設エリアの薄い板（中身は通常の岩、1発）。金属の色の輝度をこの割合にする。
+// 同じ鋼の系統のまま暗くして、艶のある本物の金属（6発）と見分ける
+export const FACILITY_PLATE_DARKEN = 0.72;
 export const COLOR_CAVE_BG = '#1a0a00';
 
 // --- Mini-map (実際の地形を縮小して焼く。tile cache を drawImage で縮小するだけなので
