@@ -25,7 +25,7 @@ import {
 } from '../utils/Constants.js';
 import { Missile } from './Missile.js';
 import { PlayerBullet } from './PlayerBullet.js';
-import { ITEM_SIZE } from './PickupItem.js';
+import { ITEM_SIZE, fallToGround, hasGroundBelow } from './PickupItem.js';
 import { spawnItem } from './itemKinds.js';
 import { playBlast } from './destruction.js';
 
@@ -50,6 +50,9 @@ export class StorageTower {
         this.maxHp = STORAGE_TOWER_HP;
         this.alive = true;
         this.timer = 0;
+        // 立っている床が撃ち抜かれたら落ちる（ユーザー指定）。落ち方はアイテムと同じ（fallToGround）
+        this.vy = 0;
+        this.onGround = true;
     }
 
     /**
@@ -60,6 +63,10 @@ export class StorageTower {
     update() {
         if (!this.alive) return;
         this.timer++;
+        // 足場が無くなったら落ちる。宙に浮いたまま残ると、床を撃ち抜いた手応えが無い
+        // （最終レビューの指摘・ユーザー指定）。毎フレーム見るのは、床は横から・下からも壊れるため
+        if (this.onGround && this.game.map && !hasGroundBelow(this)) this.onGround = false;
+        fallToGround(this);
         for (const proj of this.game.projectiles || []) {
             // 壊れた後の弾は素通り。同じフレームの2発目まで吸うと、弾が何も無い所で消える
             if (!this.alive) break;

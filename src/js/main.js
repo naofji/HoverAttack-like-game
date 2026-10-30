@@ -541,9 +541,6 @@ export const Game = {
         for (const barrier of this.barriers) barrier.update();
         this._updateBarrierSound();
         this._updateElectricFloors();
-        // 格納塔も弾を受けるので弾の更新のあと。壊れると中身を出すので、アイテムの更新より前に置く
-        // （出たその tick から落下・拾得が回る）。壊れた塔は配列から外す
-        this._updateAndPrune(this.storageTowers);
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
@@ -558,6 +555,10 @@ export const Game = {
         this._updateEnemyHoverSound();
         this._checkMissionClear();
         this.collisionManager.update();
+        // 格納塔は敵との当たり判定（collisionManager）の後に弾を見る。敵と重なっているとき、
+        // 手前に描かれる敵に先に当てる（ユーザー指定）。敵に当たった弾は exploded / alive が落ちて塔には届かない。
+        // 壊れて出た中身は次の tick から落下・拾得が回る。壊れた塔は配列から外す
+        this._updateAndPrune(this.storageTowers);
         this._updateProximityAlert();
     },
 
@@ -574,6 +575,8 @@ export const Game = {
         for (const u of this.autoAimUnits) fn(u);
         for (const k of this.missileKits) fn(k);
         for (const k of this.lifeKits) fn(k);
+        // 格納塔。ふだんは動かないが、足場の床を撃ち抜かれると落ちる
+        for (const t of this.storageTowers) fn(t);
         // 3面の町の落ちる破片。補間しないと、カメラに対してかくついて落ちる
         if (this.map && this.map.town) for (const p of this.map.town.falling) fn(p);
     },

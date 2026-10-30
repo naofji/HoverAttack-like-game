@@ -67,6 +67,7 @@ function towerGame() {
       width: 10000, height: 10000,
       pixelToTile: (x, y) => ({ r: Math.floor(y / 16), c: Math.floor(x / 16) }),
       destroyArea: () => [],
+      isSolidPoint: () => true,   // どこも床の上（塔は落ちない）
     },
   };
   return game;
@@ -524,4 +525,102 @@ test('オレンジの帯は 2px の1本（縞を何本も入れると、暗い�
   assert.ok(Math.abs(mid - want) <= 0.5, `帯の中心 ${mid}、期待 ${want}`);
   // 上の暗い縁が円筒からはみ出さない
   assert.ok(stripes[0].y - 1 >= bodyTop, '上げすぎてふたにかかった');
+});
+
+// ---------- 手前の敵に先に当たる・足場が抜けたら落ちる（実機のあとのユーザー指定） ----------
+
+import { makeMap } from './helpers/enemy-world.js';
+import { METAL_BLOCK_HP } from '../src/js/utils/Constants.js';
+
+test('敵と塔が重なっていると、弾は手前の敵に先に当たり、塔は削れない', () => {
+  const noop = () => { };
+  const game = towerGame();
+  const t = addTower(game, 200, 300, 'repair');
+  const m = shootAt(game, t, Missile, true);
+  const order = [];
+  // 敵との当たり判定（CollisionManager）が、塔の前に立つ敵でこのミサイルを消費した場面
+  const collisionManager = { update() { order.push('collision'); m.exploded = true; m.alive = false; } };
+  const fake = new Proxy(Object.assign(game, {
+    barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    env: { update: noop }, map: { ...game.map, update: noop }, collisionManager,
+  }), {
+    get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'
+      ? (list) => { if (list === game.storageTowers) { order.push('tower'); Game._updateAndPrune(list); } }
+      : noop)),
+  });
+  Game._simulationTick.call(fake);
+  assert.deepEqual(order, ['collision', 'tower'], '塔が敵より先に弾を見た');
+  assert.equal(t.hp, t.maxHp, '敵に当たった弾で塔も削れた');
+  assert.equal(game.repairKits.length, 0);
+});
+
+/** 床（行 10）の列 10〜13 に穴があり、その下の行 20 に床がある地図 */
+function holeMap() {
+  const rows = [];
+  for (let r = 0; r < 10; r++) rows.push('.'.repeat(24));
+  rows.push('#'.repeat(10) + '....' + '#'.repeat(10));
+  for (let r = 11; r < 20; r++) rows.push('.'.repeat(24));
+  for (let r = 20; r < 24; r++) rows.push('#'.repeat(24));
+  const map = makeMap(rows);
+  map.width = 24 * TILE_SIZE; map.height = 24 * TILE_SIZE;
+  return map;
+}
+
+function fallGame(map) {
+  return { ...towerGame(), map };
+}
+
+test('床の上に立つ塔は動かない', () => {
+  const game = fallGame(holeMap());
+  const t = addTower(game, 3 * TILE_SIZE + TILE_SIZE / 2, 10 * TILE_SIZE);
+  for (let i = 0; i < 120; i++) t.update();
+  assert.equal(t.y + t.height, 10 * TILE_SIZE);
+});
+
+test('足元の床が無い塔は落ちて、下の床に着地する', () => {
+  const game = fallGame(holeMap());
+  const t = addTower(game, 11 * TILE_SIZE + TILE_SIZE / 2, 10 * TILE_SIZE);
+  t.update();
+  assert.ok(t.y + t.height > 10 * TILE_SIZE, '1フレーム目から落ち始めない');
+  for (let i = 0; i < 300; i++) t.update();
+  assert.equal(t.y + t.height, 20 * TILE_SIZE, '下の床に着地していない');
+  const yLanded = t.y;
+  for (let i = 0; i < 60; i++) t.update();
+  assert.equal(t.y, yLanded, '着地のあとも動く');
+});
+
+test('落ちた先で壊すと、中身は着地した床の上に出る', () => {
+  const game = fallGame(holeMap());
+  const t = addTower(game, 11 * TILE_SIZE + TILE_SIZE / 2, 10 * TILE_SIZE, 'repair');
+  for (let i = 0; i < 300; i++) t.update();
+  t.damage(999);
+  assert.equal(game.repairKits[0].y + ITEM_SIZE, 20 * TILE_SIZE);
+});
+
+test('実際の7面: 塔の下の床を撃ち抜くと塔が落ち、下の地形に着地する', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  const game = fallGame(m);
+  new SpawnManager(game).spawnStorageTowers();
+  const t = game.storageTowers[0];
+  const c = Math.floor((t.x + t.width / 2) / TILE_SIZE);
+  const floorR = (t.y + t.height) / TILE_SIZE;
+  // 下から6発（金属1層）で床が抜ける
+  for (let i = 0; i < METAL_BLOCK_HP; i++) m.damageBlock(floorR, c, 1);
+  assert.equal(m.grid[floorR][c], BLOCK_EMPTY, '前提: 床が抜けた');
+  for (let i = 0; i < 600; i++) t.update();
+  const feet = t.y + t.height;
+  assert.ok(feet > floorR * TILE_SIZE, '落ちていない');
+  assert.ok(m.isSolidPoint(t.x + 3, feet + 1) || m.isSolidPoint(t.x + t.width - 3, feet + 1), '宙で止まった');
+});
+
+test('補間の対象に塔が入る（落ちるときにカメラに対してかくつかない）', () => {
+  const tower = { id: 't' };
+  const seen = [];
+  const fake = {
+    player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
+    repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [tower], map: {},
+  };
+  Game._forEachMovingEntity.call(fake, (e) => seen.push(e));
+  assert.deepEqual(seen, [tower]);
 });

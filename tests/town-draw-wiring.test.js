@@ -62,7 +62,7 @@ test('落ちる破片も描画補間に載る', () => {
     const seen = [];
     const g = {
         player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-        repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [],
+        repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [],
         map: { town: { falling: [piece] } },
     };
     Game._forEachMovingEntity.call(g, (e) => seen.push(e));

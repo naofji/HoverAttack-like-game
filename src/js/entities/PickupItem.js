@@ -19,6 +19,67 @@ const MAX_FALL_SPEED = 10;
 const GROUND_PROBE_INSET = 3;
 
 /**
+ * 接地するまで1フレームぶん落とし、床に着いたらその上に吸着させる。
+ * アイテムと格納塔（足場の床が撃ち抜かれたとき）が同じ落ち方をするので、ここに1つだけ置く。
+ * body は game, x, y, width, height, vy, onGround を持つもの。onGround なら何もしない。
+ */
+export function fallToGround(body) {
+    if (body.onGround) return;
+
+    // アイテムは _moveAndCollide のような専用メソッドを持たないので、
+    // ここで中心座標の係数をその場で引く（Player/EnemyTank と同じ考え方）。
+    const motion = motionFor(body.game, body.x + body.width / 2, body.y + body.height / 2);
+    body.vy += GRAVITY * motion.gravity;
+    if (body.vy > MAX_FALL_SPEED) body.vy = MAX_FALL_SPEED;
+    const dy = body.vy * motion.speed;
+    body.y += dy;
+
+    const map = body.game.map;
+    const feetY = body.y + body.height;
+    if (map.hasShapedTileIn(body.x, feetY - TILE_SIZE, body.width, TILE_SIZE + 1)) {
+        landOnShape(body, feetY - dy, feetY);
+        return;
+    }
+    if (map.isSolidAtPixel(body.x + GROUND_PROBE_INSET, feetY) ||
+        map.isSolidAtPixel(body.x + body.width - GROUND_PROBE_INSET, feetY)) {
+        body.y = Math.floor(feetY / TILE_SIZE) * TILE_SIZE - body.height;
+        body.vy = 0;
+        body.onGround = true;
+    }
+}
+
+/**
+ * 5面の坂と面取りの近くでは、足の2列を形で当て、当たった列の床の高さ（このフレームに
+ * 動いた範囲で一番高いもの）へ合わせる（決定12）。タイルの上端へ寄せると、坂では最大 16px、
+ * 面取りでは 8px 浮いて止まった
+ * @param {number} prevFeet このフレームに動く前の足の y
+ * @param {number} feetY 動いた後の足の y
+ */
+function landOnShape(body, prevFeet, feetY) {
+    const map = body.game.map;
+    let floor = null;
+    for (const px of [body.x + GROUND_PROBE_INSET, body.x + body.width - GROUND_PROBE_INSET]) {
+        if (!map.isSolidPoint(px, feetY)) continue;
+        const top = map.terrainTopY(px, prevFeet, feetY);
+        if (top !== null && (floor === null || top < floor)) floor = top;
+    }
+    if (floor === null) return;
+    body.y = floor - body.height;
+    body.vy = 0;
+    body.onGround = true;
+}
+
+/**
+ * 足の2列の真下（1px 下）に地形があるか。格納塔が、立っている床が撃ち抜かれたかを見る。
+ */
+export function hasGroundBelow(body) {
+    const map = body.game.map;
+    const feetY = body.y + body.height + 1;
+    return map.isSolidPoint(body.x + GROUND_PROBE_INSET, feetY)
+        || map.isSolidPoint(body.x + body.width - GROUND_PROBE_INSET, feetY);
+}
+
+/**
  * 敵が落とす拾い物の土台。
  *
  * リペアキット・ミサイル補給・Auto Aim ユニットの3種は、落下も接地も
@@ -58,51 +119,9 @@ export class PickupItem {
         this._checkPickup();
     }
 
-    /** 接地するまで落ちる。床に着いたらタイルの上端に吸着させる。 */
+    /** 接地するまで落ちる。床に着いたらタイルの上端に吸着させる（fallToGround）。 */
     _fall() {
-        if (this.onGround) return;
-
-        // アイテムは _moveAndCollide のような専用メソッドを持たないので、
-        // ここで中心座標の係数をその場で引く（Player/EnemyTank と同じ考え方）。
-        const motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
-        this.vy += GRAVITY * motion.gravity;
-        if (this.vy > MAX_FALL_SPEED) this.vy = MAX_FALL_SPEED;
-        const dy = this.vy * motion.speed;
-        this.y += dy;
-
-        const map = this.game.map;
-        const feetY = this.y + this.height;
-        if (map.hasShapedTileIn(this.x, feetY - TILE_SIZE, this.width, TILE_SIZE + 1)) {
-            this._landOnShape(feetY - dy, feetY);
-            return;
-        }
-        if (map.isSolidAtPixel(this.x + GROUND_PROBE_INSET, feetY) ||
-            map.isSolidAtPixel(this.x + this.width - GROUND_PROBE_INSET, feetY)) {
-            this.y = Math.floor(feetY / TILE_SIZE) * TILE_SIZE - this.height;
-            this.vy = 0;
-            this.onGround = true;
-        }
-    }
-
-    /**
-     * 5面の坂と面取りの近くでは、足の2列を形で当て、当たった列の床の高さ（このフレームに
-     * 動いた範囲で一番高いもの）へ合わせる（決定12）。タイルの上端へ寄せると、坂では最大 16px、
-     * 面取りでは 8px 浮いて止まった
-     * @param {number} prevFeet このフレームに動く前の足の y
-     * @param {number} feetY 動いた後の足の y
-     */
-    _landOnShape(prevFeet, feetY) {
-        const map = this.game.map;
-        let floor = null;
-        for (const px of [this.x + GROUND_PROBE_INSET, this.x + this.width - GROUND_PROBE_INSET]) {
-            if (!map.isSolidPoint(px, feetY)) continue;
-            const top = map.terrainTopY(px, prevFeet, feetY);
-            if (top !== null && (floor === null || top < floor)) floor = top;
-        }
-        if (floor === null) return;
-        this.y = floor - this.height;
-        this.vy = 0;
-        this.onGround = true;
+        fallToGround(this);
     }
 
     /** 自機が重なったら拾う。ドッキング中は拾えない。 */

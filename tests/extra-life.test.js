@@ -340,7 +340,7 @@ test('補間の対象に lifeKits が入る（落下中にカメラに対して�
   const kit = { id: 'k' };
   const fake = {
     player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-    repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [kit], map: {},
+    repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [kit], storageTowers: [], map: {},
   };
   Game._forEachMovingEntity.call(fake, (e) => seen.push(e));
   assert.deepEqual(seen, [kit]);
