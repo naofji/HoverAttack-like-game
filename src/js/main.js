@@ -59,7 +59,7 @@ import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { predictLeadPoint, AimLeadTracker } from './utils/aimLead.js';
 import { centerOf } from './utils/Physics.js';
-import { nearestHoveringEnemy, nearestActiveBarrier } from './utils/audioFalloff.js';
+import { nearestHoveringEnemy, nearestActiveBarrier, positionalVolume } from './utils/audioFalloff.js';
 import { isEnemyConcealed } from './utils/concealment.js';
 import { MODES } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
@@ -115,6 +115,7 @@ export const Game = {
     autoAimUnits: [],
     missileKits: [],
     barriers: [],   // 7面の要塞の電磁パルスのバリア
+    electricFloors: [],   // 同、廊下の電流の床
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
@@ -226,6 +227,7 @@ export const Game = {
         this.spawnManager.spawnLandmines();
         this.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
         this.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
+        this.spawnManager.spawnElectricFloors();   // 同、電流の床
         this.spawnManager.spawnEnemies();
 
         this.camera.follow(this.player);
@@ -536,6 +538,7 @@ export const Game = {
         // バリアは弾の吸収を伴うので、弾の更新のあと・アイテムの前に置く
         for (const barrier of this.barriers) barrier.update();
         this._updateBarrierSound();
+        this._updateElectricFloors();
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
@@ -664,6 +667,21 @@ export const Game = {
     _updateBarrierSound() {
         const nearest = nearestActiveBarrier(this.barriers, this._viewRect());
         audioManager.setBarrierHum(nearest ? nearest.volume : 0, nearest ? nearest.x : null);
+    },
+
+    /**
+     * 電流の床。放電が始まる瞬間にだけ音を出す（連続音にすると床の本数ぶん騒がしくなる）。
+     * 7面には十数本あるので、画面から1画面以上離れたもの（音量 0）は鳴らさない。
+     */
+    _updateElectricFloors() {
+        if (this.electricFloors.length === 0) return;
+        const view = this._viewRect();
+        for (const floor of this.electricFloors) {
+            floor.update();
+            if (!floor.justFired) continue;
+            const volume = positionalVolume(floor.x + floor.width / 2, floor.y, view);
+            if (volume > 0) floor.playZap(volume);
+        }
     },
 
     /**
@@ -1035,6 +1053,10 @@ export const Game = {
             // 1つのオブジェクトで持っているので、敵と同じ関数がそのまま使える
             this._drawHpBarIfDamaged(ctx, barrier.units.top);
             this._drawHpBarIfDamaged(ctx, barrier.units.bottom);
+        }
+        for (const floor of this.electricFloors) {
+            if (!isInView(floor.rect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
+            floor.draw(ctx);
         }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);

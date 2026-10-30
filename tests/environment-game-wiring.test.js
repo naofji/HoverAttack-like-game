@@ -23,9 +23,9 @@ test('simulation tick advances the environment', () => {
     env,
     _snapshotPrevPositions() {}, _updateCarrier() {}, _updatePlayer() {}, _updateDeathHold() {},
     _updateCamera() {}, _updateAndPrune() {}, _updateLandmines() {}, _updateAutoAim() {},
-    _updateOverdrive() {}, map: { update() {} }, _updateEnemyHoverSound() {}, _updateBarrierSound() {}, _checkMissionClear() {},
+    _updateOverdrive() {}, map: { update() {} }, _updateEnemyHoverSound() {}, _updateBarrierSound() {}, _updateElectricFloors() {}, _checkMissionClear() {},
     collisionManager: { update() {} }, _updateProximityAlert() {},
-    projectiles: [], particles: [], smokeScreens: [], barriers: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
+    projectiles: [], particles: [], smokeScreens: [], barriers: [], electricFloors: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
   };
   Game._simulationTick.call(fake);
   assert.equal(env.n.update, 1);
@@ -56,7 +56,7 @@ test('world pass draws snow behind the terrain: backdrop → env.behind → map'
     _applyRenderInterpolation() {}, _restoreRenderInterpolation() {},
     map: { backdrop: { draw() { order.push('backdrop'); } }, draw() { order.push('map'); } },
     env: { drawBehindTerrain() { order.push('behind'); }, drawOverWorld() { order.push('over'); }, drawOverlay() {} },
-    carrier: null, player: null, projectiles: [], particles: [], landmines: [], barriers: [], repairKits: [], autoAimUnits: [], missileKits: [],
+    carrier: null, player: null, projectiles: [], particles: [], landmines: [], barriers: [], electricFloors: [], repairKits: [], autoAimUnits: [], missileKits: [],
     grenadeTrajectory: null, _drawHpBarIfDamaged() {}, enemies: [], enemyBullets: [], flag: null, smokeScreens: [],
   };
   Game._drawWorld.call(fake, makeFakeCtx());

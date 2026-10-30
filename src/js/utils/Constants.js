@@ -1116,6 +1116,35 @@ export const BARRIER_SUCK_SIZE = 2;
 // だから長さは毎フレーム地形から測り直す（固定にすると穴を開けても伸びない）
 export const BARRIER_EXTEND_MAX = 40;        // 伸びる上限（タイル）。暴走の歯止め
 
+// --- 要塞の電流の床（廊下の床を走る放電。設計 2026-10-29-stage7-fortress-hazards-design.md）---
+// 置き場所: 各階の廊下は1本ずつで、そこにはもうバリアが立っている（実測で全階）。別の廊下を探すと
+// 置ける所が無いので、**バリアのある廊下の、長いほうの側の床**に敷く。
+// 8シード（99階）で試した置き方の比較: バリアから3列離し端も1列空けると20本（5シードにしか無い）、
+// 2列離して端を空けないと53本（全シードに有、1シード平均6.6本、長さ平均4.2タイル）。後者にした。
+// 2列離す = バリアの支柱（幅12px）の両隣に1タイルの空きが残るので、放電と支柱が重ならない。
+export const ELECTRIC_FLOOR_BARRIER_GAP = 2;   // バリアの列から、床の一番近いタイルまでの列数
+export const ELECTRIC_FLOOR_MIN_LEN = 3;       // これより短い床は敷かない（1〜2タイルでは「踏まない」だけで罠にならない）
+// 周期は 予兆 → 放電 → 休み。予兆は火花だけでダメージは無く、「次に来る」を読ませる。
+// 休みを放電より長く取り、通り抜けるタイミングを待てるようにする（低い所を這う必要が出ないように）
+export const ELECTRIC_FLOOR_WARN_FRAMES = 30;
+export const ELECTRIC_FLOOR_ACTIVE_FRAMES = 50;
+export const ELECTRIC_FLOOR_REST_FRAMES = 70;
+export const ELECTRIC_FLOOR_H = 20;            // 放電の高さ（px）。自機（24px）が床に降りていれば必ず触れ、
+                                               // 廊下の高さ 64px の3割なので、上を飛べば避けられる
+export const ELECTRIC_FLOOR_TOUCH_DAMAGE = 5;  // 1回あたり。バリアの毎フレーム6と違い、離れなくても刻みで入る
+export const ELECTRIC_FLOOR_HIT_INTERVAL = 15; // 同じ相手に入る間隔（フレーム）。放電50フレームの中で最大4回=20
+export const ELECTRIC_FLOOR_KICK_VY = -3;      // 触れたときに上へ弾く速さ。居座りづらくする（バリアの押し戻しの床版）
+export const ELECTRIC_FLOOR_COLOR = '#FFE066';       // 放電の芯。バリアの水色と取り違えない黄
+export const ELECTRIC_FLOOR_CORE_COLOR = '#FFFBE0';       // 放電の芯（ほぼ白）
+export const ELECTRIC_FLOOR_GLOW_COLOR = 'rgba(255, 210, 80, 0.28)';
+export const ELECTRIC_FLOOR_ELECTRODE_COLOR = '#6B7686';   // 床に埋めた電極の頭
+export const ELECTRIC_FLOOR_ELECTRODE_LAMP = '#FFB000';    // 予兆・放電中に点く
+export const ELECTRIC_FLOOR_ELECTRODE_LAMP_OFF = '#3A4553';
+// 放電が始まる瞬間の「バチッ」。バリアの吸収音（ジッ）と区別できるよう高めの帯域・長めの減衰
+export const ELECTRIC_ZAP_FILTER = 3400;
+export const ELECTRIC_ZAP_DECAY = 0.14;
+export const ELECTRIC_ZAP_GAIN = 0.2;           // A特性で -42.0dB。吸収音（-43.7dB）より 1.7dB 上げて、床の放電が聞き分けられるように
+
 // --- 面ごとの硬い岩（BLOCK_HARD。灰色・HARD_BLOCK_HP 発で壊れる）の割合 ---
 // _placeHardBlocks() が破壊可能タイル1つごとに引く確率。STAGE_ENVIRONMENTS と同じ7行で、
 // missionLevel は剰余で丸める（debugStartMission で面数を超えた値が来るため）。

@@ -5,6 +5,7 @@
 //   node tools/render-fortress-scene.mjs --out fortress.png                  # 今週の7面、1つ目の区画
 //   node tools/render-fortress-scene.mjs --seed 3 --zone 2 --scale 2 --out a.png
 //   node tools/render-fortress-scene.mjs --zone 0 --damage "6,10,3;6,11,5"   # 「行,列,ダメージ」を ; 区切りで。金属の焼け・硬い岩のひびを見る
+//   node tools/render-fortress-scene.mjs --phase warn                        # 電流の床の段階（active=放電、warn=予兆、rest=休み。既定は放電）
 //   node tools/render-fortress-scene.mjs --x 400 --y 300 --w 800 --h 500     # 区画ではなく座標で指定
 //
 // 実物の Map を生成し、タイルの絵は Map の描画関数（_drawTile）を PixelCanvas に流して描く。
@@ -71,6 +72,24 @@ for (let r = Math.floor(Y / T); r <= Math.floor((Y + H) / T); r++) {
             ctx.fillStyle = st.border; ctx.fillRect(c * T, r * T, T, T);
             ctx.fillStyle = st.fill; ctx.fillRect(c * T + 1, r * T + 1, T - 2, T - 2);
         }
+    }
+}
+
+// バリア（位置関係の確認用。ユニットとバリアの帯だけで、被弾の演出は出さない）
+const { FortressBarrier } = await import('../src/js/entities/FortressBarrier.js');
+for (const zone of map.fortressZones) {
+    for (const spec of zone.barriers) new FortressBarrier({ map }, spec).draw(ctx);
+}
+
+// 電流の床。ゲームと同じ ElectricFloor.draw を、段階を固定して描く（既定は一番目立つ放電）
+const { ElectricFloor, electricPhase } = await import('../src/js/entities/ElectricFloor.js');
+const wantPhase = args.phase || 'active';
+for (const zone of map.fortressZones) {
+    for (const spec of zone.electricFloors) {
+        const floor = new ElectricFloor({ map }, spec);
+        while (electricPhase(floor.timer) !== wantPhase) floor.timer++;
+        floor.timer += 3;   // 段階の頭ではなく少し進んだ所（火花・放電の形が出ている）
+        floor.draw(ctx);
     }
 }
 

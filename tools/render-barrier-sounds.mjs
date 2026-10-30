@@ -16,6 +16,7 @@ import {
     BARRIER_ABSORB_FILTER, BARRIER_ABSORB_DECAY, BARRIER_ABSORB_GAIN,
     BARRIER_DOWN_FREQ_FROM, BARRIER_DOWN_FREQ_TO, BARRIER_DOWN_TIME,
     BARRIER_DOWN_GAIN,
+    ELECTRIC_ZAP_FILTER, ELECTRIC_ZAP_DECAY, ELECTRIC_ZAP_GAIN,
     REPAIR_HUM_FREQ_TO, REPAIR_HUM_GAIN,
 } from '../src/js/utils/Constants.js';
 import {
@@ -82,6 +83,18 @@ export function absorbGen() {
     };
 }
 
+/** 電流の床の放電開始: 吸収と同じ作りで、帯域を上げ減衰を長くしたノイズ。 */
+export function zapGen() {
+    const n = whiteNoise(Math.ceil(ELECTRIC_ZAP_DECAY * SAMPLE_RATE) + 1, 11);
+    const bp = biquad('bandpass', ELECTRIC_ZAP_FILTER, 2.2);
+    return (i) => {
+        const t = i / SAMPLE_RATE;
+        if (t > ELECTRIC_ZAP_DECAY) return 0;
+        const env = ELECTRIC_ZAP_GAIN * Math.pow(0.001 / ELECTRIC_ZAP_GAIN, t / ELECTRIC_ZAP_DECAY);
+        return bp(n[i] ?? 0) * env;
+    };
+}
+
 /** 落下: ノコギリを指数で下降させながら減衰。 */
 export function downGen() {
     let phase = 0;
@@ -107,6 +120,7 @@ const items = [
     ['barrier-hum', humGen(), 2.0],
     ['barrier-absorb', absorbGen(), 0.2],
     ['barrier-down', downGen(), 0.6],
+    ['electric-zap', zapGen(), 0.2],
 ];
 for (const [name, gen, sec] of items) {
     writeFileSync(new URL(`${name}.wav`, OUT_DIR), toWav(render(gen, sec)));
@@ -121,5 +135,6 @@ console.log('--- A特性の実測 ---');
 console.log(`バリアの唸り   ${db(hum).toFixed(1)} dB`);
 console.log(`回復ハム(比較) ${db(repair).toFixed(1)} dB   → 差 ${db(hum / repair).toFixed(1)} dB`);
 console.log(`吸収           ${db(absorb).toFixed(1)} dB`);
+console.log(`放電開始       ${db(transientLevel(zapGen(), ELECTRIC_ZAP_DECAY)).toFixed(1)} dB   → 吸収との差 ${db(transientLevel(zapGen(), ELECTRIC_ZAP_DECAY) / absorb).toFixed(1)} dB`);
 console.log(`落下           ${db(down).toFixed(1)} dB   → 吸収との差 ${db(down / absorb).toFixed(1)} dB`);
 console.log(`\n書き出し: ${OUT_DIR.pathname}`);

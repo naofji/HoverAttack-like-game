@@ -45,6 +45,7 @@ export class GameStateManager {
         game.smokeScreens = [];   // 前ステージの煙が残ると開幕から視界が塞がる
         game.landmines = [];
         game.barriers = [];   // 7面の要塞のバリア
+        game.electricFloors = [];   // 同、電流の床
         game.enemies = [];
         game.enemyBullets = [];
         game.repairKits = [];
@@ -93,6 +94,7 @@ export class GameStateManager {
         game.spawnManager.spawnLandmines();
         game.spawnManager.spawnTreasures();  // 7面の要塞のお宝（他の面は空振り）
         game.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
+        game.spawnManager.spawnElectricFloors();   // 同、電流の床
         game.spawnManager.spawnEnemies();
 
         // Remember the furthest stage reached locally (gates the ranking attract screen).

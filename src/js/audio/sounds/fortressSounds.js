@@ -1,5 +1,5 @@
 // ============================================
-// AudioManager - 要塞の音（電磁パルスのバリア）
+// AudioManager - 要塞の音（電磁パルスのバリアと、電流の床）
 // ============================================
 //
 // バリアは「近づくと唸っていて、弾を吸うとジッと鳴り、2基目を壊すと電源が
@@ -18,6 +18,7 @@ import {
     BARRIER_ABSORB_FILTER, BARRIER_ABSORB_DECAY, BARRIER_ABSORB_GAIN,
     BARRIER_DOWN_FREQ_FROM, BARRIER_DOWN_FREQ_TO, BARRIER_DOWN_TIME,
     BARRIER_DOWN_GAIN,
+    ELECTRIC_ZAP_FILTER, ELECTRIC_ZAP_DECAY, ELECTRIC_ZAP_GAIN,
 } from '../../utils/Constants.js';
 
 export const AudioFortressSounds = {
@@ -131,5 +132,31 @@ export const AudioFortressSounds = {
         g.gain.exponentialRampToValueAtTime(0.001, t + BARRIER_DOWN_TIME);
         osc.connect(g); g.connect(this._panned(x));
         osc.start(t); osc.stop(t + BARRIER_DOWN_TIME);
+    },
+
+    /**
+     * 電流の床が放電を始める瞬間の「バチッ」。吸収音（ジッ）と同じノイズのバーストだが、
+     * 帯域を上げて減衰を長くし、「弾を吸った」と取り違えない音にする。
+     * 床は同時に何本も放電するので、呼び側が画面内（に近い）ものだけに絞り volume で音量を渡す。
+     *
+     * @param {number} [x] 音源のワールドX
+     * @param {number} [volume] 0〜1。距離から求めた音量
+     */
+    playElectricZap(x = null, volume = 1) {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = ELECTRIC_ZAP_FILTER;
+        bp.Q.value = 2.2;
+        const gain = ELECTRIC_ZAP_GAIN * volume;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(gain, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + ELECTRIC_ZAP_DECAY);
+        noise.connect(bp); bp.connect(g); g.connect(this._panned(x));
+        noise.start(t); noise.stop(t + ELECTRIC_ZAP_DECAY);
     },
 };

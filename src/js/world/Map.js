@@ -27,7 +27,8 @@ import {
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_GATE_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
     FORTRESS_TREASURE_COUNT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
-    FORTRESS_BARRIER_CLEARANCE, FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
+    FORTRESS_BARRIER_CLEARANCE, ELECTRIC_FLOOR_MIN_LEN, ELECTRIC_FLOOR_BARRIER_GAP, ELECTRIC_FLOOR_H,
+    FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
     FORTRESS_CORRIDOR_H, FORTRESS_ROOM_MARGIN, FORTRESS_ROOM_W, FORTRESS_CORRIDOR_MIN_W,
     HARD_BLOCK_CHANCE_BY_STAGE, HARD_BLOCK_HP,
     MAX_WATER_MASS, MIN_WATER_MASS,
@@ -448,7 +449,7 @@ export class Map {
             treasureCount: FORTRESS_TREASURE_COUNT,
             garrisonTurrets: FORTRESS_GARRISON_TURRETS,
             garrisonTanks: FORTRESS_GARRISON_TANKS,
-            barrierClearance: FORTRESS_BARRIER_CLEARANCE,
+            barrierClearance: FORTRESS_BARRIER_CLEARANCE, electricMinLen: ELECTRIC_FLOOR_MIN_LEN, electricGap: ELECTRIC_FLOOR_BARRIER_GAP,
             guardType: FORTRESS_GATE_GUARD_TYPE, guardInset: FORTRESS_GATE_GUARD_INSET,
         });
         this.fortressZones = result.zones;
@@ -478,11 +479,22 @@ export class Map {
                     && r >= b.top && r <= b.bottom,
             ));
         };
-        this.enemyTurretSpawns = this.enemyTurretSpawns.filter((p) => !onBarrier(p));
-        this.enemyTankSpawns = this.enemyTankSpawns.filter((p) => !onBarrier(p));
-        this.enemyDroneSpawns = this.enemyDroneSpawns.filter((p) => !onBarrier(p));
-        this.enemyAttackerSpawns = this.enemyAttackerSpawns.filter((p) => !onBarrier(p));
-        this.landmineSpawns = this.landmineSpawns.filter((p) => !onBarrier(p));
+        // 電流の床の上にも立たせない。敵は電流を受けないが、床に置く砲台や地雷に放電が重なって見えるのは
+        // 何の仕掛けか読めなくなる。放電の高さ（ELECTRIC_FLOOR_H）ぶんの行と、その左右1列を空ける
+        const electricRows = Math.ceil(ELECTRIC_FLOOR_H / S);
+        const onElectricFloor = (pos) => {
+            const r = Math.floor(pos.y / S);
+            const c = Math.floor(pos.x / S);
+            return this.fortressZones.some((zone) => zone.electricFloors.some(
+                (f) => c >= f.c0 - 1 && c <= f.c1 + 1 && r > f.r - electricRows && r <= f.r,
+            ));
+        };
+        const clear = (p) => !onBarrier(p) && !onElectricFloor(p);
+        this.enemyTurretSpawns = this.enemyTurretSpawns.filter(clear);
+        this.enemyTankSpawns = this.enemyTankSpawns.filter(clear);
+        this.enemyDroneSpawns = this.enemyDroneSpawns.filter(clear);
+        this.enemyAttackerSpawns = this.enemyAttackerSpawns.filter(clear);
+        this.landmineSpawns = this.landmineSpawns.filter(clear);
         for (const zone of this.fortressZones) {
             for (const t of zone.treasures) {
                 this.treasureSpawns.push({ x: t.c * S + S / 2, y: t.r * S, kind: t.kind });

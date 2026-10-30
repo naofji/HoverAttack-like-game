@@ -291,7 +291,7 @@ export function carveFortressZones({
     thickness, ceilingH, floorH, shaftW, gateSize, tunnelMax,
     corridorH, roomW, roomMargin, corridorMinW,
     treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
-    guardType, guardInset,
+    guardType, guardInset, electricMinLen, electricGap,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -319,7 +319,7 @@ export function carveFortressZones({
         }
         const contents = planZoneContents(zone, floors, shafts, openings, rooms, corridors, {
             thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
-            guardType, guardInset, rng,
+            guardType, guardInset, electricMinLen, electricGap, rng,
         });
         zones.push({ ...zone, openings, floors, shafts, rooms, corridors, ...contents });
     }
@@ -327,7 +327,7 @@ export function carveFortressZones({
 }
 
 /**
- * 区画の中身（お宝・バリアの置き場所・守備隊）を決める。地形は書き換えない。
+ * 区画の中身（お宝・バリアと電流の床の置き場所・守備隊）を決める。地形は書き換えない。
  *
  * - **お宝**は最下階の右端の室に並べる。左上から来て右下の基地へ向かうので、
  *   右奥が「一番遠い」＝踏み込んだご褒美になる
@@ -339,7 +339,7 @@ export function carveFortressZones({
  */
 export function planZoneContents(zone, floors, shafts, openings, rooms, corridors, {
     thickness, treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
-    guardType, guardInset, rng,
+    guardType, guardInset, electricMinLen, electricGap, rng,
 }) {
     const T = thickness;
     const c0 = zone.c0 + T, c1 = zone.c1 - T;
@@ -360,11 +360,22 @@ export function planZoneContents(zone, floors, shafts, openings, rooms, corridor
 
     // バリア: 室と室のあいだの廊下の中央。階ごとに最も広い廊下を選ぶ（同じ広さなら左）
     const barriers = [];
+    // 電流の床: バリアのある廊下の、長いほうの側の床。各階の「室に挟まれた廊下」は実測で1本ずつしか
+    // 無く、それをバリアが使うので、別の廊下に敷くと置き場所が無い。バリアの列から electricGap 離して敷き、
+    // 支柱と放電が重ならないようにする。長さが足りなければ敷かない
+    const electricFloors = [];
     floors.forEach((floor, i) => {
         const between = corridors.filter((k) => k.floor === i && k.between);
         if (between.length === 0) return;
         const k = between.reduce((best, cur) => (cur.c1 - cur.c0 > best.c1 - best.c0 ? cur : best));
-        barriers.push({ c: Math.floor((k.c0 + k.c1) / 2), top: k.top, bottom: k.bottom });
+        const c = Math.floor((k.c0 + k.c1) / 2);
+        barriers.push({ c, top: k.top, bottom: k.bottom });
+        const left = [k.c0, c - electricGap];
+        const right = [c + electricGap, k.c1];
+        const side = (right[1] - right[0] > left[1] - left[0]) ? right : left;
+        if (side[1] - side[0] + 1 >= electricMinLen) {
+            electricFloors.push({ r: k.bottom, c0: side[0], c1: side[1] });
+        }
     });
 
     // 守備隊: 階ごとの室の中。天井・床の砲台と戦車は、足場がある列だけ
@@ -414,5 +425,5 @@ export function planZoneContents(zone, floors, shafts, openings, rooms, corridor
         turrets.push({ r: left.r + left.w - 1, c: guardCol, isCeiling: false, type: guardType });
     }
 
-    return { treasures, barriers, garrison: { turrets, tanks } };
+    return { treasures, barriers, electricFloors, garrison: { turrets, tanks } };
 }

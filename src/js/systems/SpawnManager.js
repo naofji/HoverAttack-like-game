@@ -12,6 +12,7 @@ import { EnemyBase } from '../entities/EnemyBase.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { OverdriveKit } from '../entities/OverdriveKit.js';
 import { FortressBarrier } from '../entities/FortressBarrier.js';
+import { ElectricFloor } from '../entities/ElectricFloor.js';
 
 export class SpawnManager {
     constructor(game) {
@@ -88,6 +89,18 @@ export class SpawnManager {
         for (const zone of this.game.map.fortressZones || []) {
             for (const spec of zone.barriers) {
                 this.game.barriers.push(new FortressBarrier(this.game, spec));
+            }
+        }
+    }
+
+    /**
+     * 要塞の電流の床を敷く（7面だけ）。バリアと同じく敵の配列には入れない。
+     */
+    spawnElectricFloors() {
+        this.game.electricFloors = [];
+        for (const zone of this.game.map.fortressZones || []) {
+            for (const spec of zone.electricFloors) {
+                this.game.electricFloors.push(new ElectricFloor(this.game, spec));
             }
         }
     }
