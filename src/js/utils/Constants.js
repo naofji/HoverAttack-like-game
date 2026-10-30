@@ -1058,12 +1058,17 @@ export const FORTRESS_TREASURE_COUNT = 3;
 // --- 施設エリア（区画の外の地形をメタルパネルにする。設計 2026-10-31-stage7-facility-metal-design.md）---
 // 要塞の区画（最大4つ）の外は洞窟の岩のままで、基地らしさが薄かった。区画の外に矩形の「施設」を置き、
 // 中の岩を絵だけパネルにする（硬さはそのまま）。縁の1層の岩と金属の斜面だけ本物の金属（ユーザー判断）。
-// 個数・大きさは初期値（私の案）。実測で調整する
-export const FACILITY_AREA_COUNT = 8;      // 上限。置けなければ少なくてよい
-export const FACILITY_AREA_W_MIN = 10;
-export const FACILITY_AREA_W_RANGE = 10;   // 10〜20 タイル
-export const FACILITY_AREA_H_MIN = 8;
-export const FACILITY_AREA_H_RANGE = 6;    // 8〜14 タイル
+// 個数・大きさは実測で決めた（8シードの平均。割合は区画の外の空でないタイルのうち施設エリアに入ったもの）:
+//   8個・10〜20×8〜14 → 1.0%（部屋の空洞の中に収まって、壁も床もほとんど含まない。浮いた板と階段だけになった）
+//   8個・24〜40×16〜26 → 6.0% / 16個 → 10.8%（置けたのは 14.8 個）
+//   12個・32〜48×20〜30 → 14.5%（置けたのは 10.6 個）← 採用。部屋の周りの壁・床まで含み、洞窟の岩もまだ大半残る
+//   20個・同 → 14.8%（置ける場所が尽きて増えない）
+// 本物の金属になる縁の帯は 1 面あたり平均 617 タイル（1 エリア約 58）
+export const FACILITY_AREA_COUNT = 12;     // 上限。置けなければ少なくてよい
+export const FACILITY_AREA_W_MIN = 32;
+export const FACILITY_AREA_W_RANGE = 16;   // 32〜48 タイル
+export const FACILITY_AREA_H_MIN = 20;
+export const FACILITY_AREA_H_RANGE = 10;   // 20〜30 タイル
 // 施設エリアの中に盛る金属の階段。洞窟の地形には1段ずつの段がほとんど無く、盛らないと斜面が出ない。
 // 段は本物の金属（6発）なので、5面の雪の階段（5〜9段）より短くして、掘り進む重さを抑える
 export const FACILITY_STAIRS_COUNT = 8;
