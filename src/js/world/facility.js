@@ -19,7 +19,14 @@ import { pickFortressZones } from './fortress.js';
  * @returns {Array<{r0:number,r1:number,c0:number,c1:number}>}
  */
 export function pickFacilityAreas({ rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin }) {
-    return pickFortressZones({ rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin });
+    // 1タイルずつ広げた矩形で選んでから縮める。エリア同士が接すると、境目で両方の縁の帯が並んで
+    // 金属が2層になり、そこだけ掘るのに倍の弾が要った（最終レビューの指摘。8シードで12組が接していた）。
+    // 縮めた後の大きさの分布は wMin〜wMin+wRange のまま
+    const padded = pickFortressZones({
+        rows, cols, rooms, excludeRects, rng, count,
+        wMin: wMin + 2, wRange, hMin: hMin + 2, hRange, margin: margin - 1,
+    });
+    return padded.map((a) => ({ r0: a.r0 + 1, r1: a.r1 - 1, c0: a.c0 + 1, c1: a.c1 - 1 }));
 }
 
 /**

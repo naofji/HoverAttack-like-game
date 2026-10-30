@@ -1064,6 +1064,7 @@ export const FORTRESS_TREASURE_COUNT = 3;
 //   12個・32〜48×20〜30 → 14.5%（置けたのは 10.6 個）← 採用。部屋の周りの壁・床まで含み、洞窟の岩もまだ大半残る
 //   20個・同 → 14.8%（置ける場所が尽きて増えない）
 // 本物の金属になる縁の帯は 1 面あたり平均 617 タイル（1 エリア約 58）
+// → エリア同士を接しないようにした後（帯が2層にならない）: 置けたのは 9.1 個、割合 12.5%、帯 519 タイル、斜面 97 枚
 export const FACILITY_AREA_COUNT = 12;     // 上限。置けなければ少なくてよい
 export const FACILITY_AREA_W_MIN = 32;
 export const FACILITY_AREA_W_RANGE = 16;   // 32〜48 タイル

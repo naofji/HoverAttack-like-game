@@ -55,6 +55,20 @@ test('pickFacilityAreas は除外矩形と重ならず、互いにも重なら�
   }
 });
 
+/** 1タイル広げた矩形（接していれば重なる） */
+const grow = (a) => ({ r0: a.r0 - 1, r1: a.r1 + 1, c0: a.c0 - 1, c1: a.c1 + 1 });
+
+test('実際の7面: 施設エリア同士は接しない（接すると縁の金属の帯が2層になり、掘るのに倍の弾が要る）', async () => {
+  for (const m of await maps()) {
+    const as = m.facilityAreas;
+    for (let i = 0; i < as.length; i++) {
+      for (let j = i + 1; j < as.length; j++) {
+        assert.ok(!overlap(grow(as[i]), as[j]), `接している ${JSON.stringify(as[i])} ${JSON.stringify(as[j])}`);
+      }
+    }
+  }
+});
+
 test('metalizeFacilityBand は縁の岩だけを金属にし、空洞は空洞のまま、内側と壊せない岩は触らない', () => {
   const grid = [
     [N, N, E, N, N],
