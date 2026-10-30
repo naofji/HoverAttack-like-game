@@ -16,7 +16,11 @@
 // 設計: docs/superpowers/specs/2026-10-31-stage7-storage-towers-design.md
 
 import {
-    STORAGE_TOWER_W, STORAGE_TOWER_H, STORAGE_TOWER_HP,
+    TILE_SIZE, STORAGE_TOWER_W, STORAGE_TOWER_H, STORAGE_TOWER_HP,
+    STORAGE_TOWER_BODY_COLOR, STORAGE_TOWER_LIGHT_COLOR, STORAGE_TOWER_SHADE_COLOR,
+    STORAGE_TOWER_STAND_COLOR, STORAGE_TOWER_STAND_H, STORAGE_TOWER_STRIPE_COLOR,
+    STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_BLINK_PERIOD,
+    STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX, STORAGE_TOWER_PHASE_STEP,
     DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE,
 } from '../utils/Constants.js';
 import { Missile } from './Missile.js';
@@ -90,6 +94,56 @@ export class StorageTower {
         // 落ちる間に床の穴や水へ流れて取れなくなることがある
         spawnItem(this.game, this.kind, cx, this.y + this.height - ITEM_SIZE);
         return true;
+    }
+
+    /**
+     * 今の横縞の明るさ。MIN と MAX の間を余弦でなめらかに往復する（ぱっと点滅すると警告灯に見える）。
+     * 位相は位置からずらす。お宝は2タイルおきに並ぶので、3本が同時に光らず林立して見える
+     */
+    stripeAlpha() {
+        const phase = this.timer / STORAGE_TOWER_BLINK_PERIOD
+            + (this.x / TILE_SIZE) * STORAGE_TOWER_PHASE_STEP;
+        const k = 0.5 - 0.5 * Math.cos(2 * Math.PI * phase);
+        return STORAGE_TOWER_STRIPE_ALPHA_MIN
+            + (STORAGE_TOWER_STRIPE_ALPHA_MAX - STORAGE_TOWER_STRIPE_ALPHA_MIN) * k;
+    }
+
+    /**
+     * 足台の上の黄白色の円筒と、オレンジの横縞。fillRect だけで描く
+     * （tools/render-fortress-scene.mjs の PixelCanvas でも同じ絵が出るように）。
+     * 3本とも同じ絵で、中身の手がかりは出さない。
+     */
+    draw(ctx) {
+        if (!this.alive) return;
+        const x = Math.round(this.x), y = Math.round(this.y);
+        const w = this.width, h = this.height;
+        const sh = STORAGE_TOWER_STAND_H;
+        const bodyTop = y + 2, bodyH = h - 2 - sh;
+
+        // 足台: 横板と2本の脚
+        ctx.fillStyle = STORAGE_TOWER_STAND_COLOR;
+        ctx.fillRect(x + 1, y + h - sh, w - 2, 2);
+        ctx.fillRect(x + 2, y + h - sh + 2, 2, sh - 2);
+        ctx.fillRect(x + w - 4, y + h - sh + 2, 2, sh - 2);
+
+        // 円筒: 地 → 左右の端を暗く → 中央寄りに照り。ふたは少し細く
+        ctx.fillStyle = STORAGE_TOWER_BODY_COLOR;
+        ctx.fillRect(x + 1, bodyTop, w - 2, bodyH);
+        ctx.fillStyle = STORAGE_TOWER_SHADE_COLOR;
+        ctx.fillRect(x + 1, bodyTop, 2, bodyH);
+        ctx.fillRect(x + w - 3, bodyTop, 2, bodyH);
+        ctx.fillRect(x + 3, y, w - 6, 2);
+        ctx.fillStyle = STORAGE_TOWER_LIGHT_COLOR;
+        ctx.fillRect(x + 5, bodyTop, 3, bodyH);
+
+        // 横縞の光。円筒の高さを等分した位置に2pxずつ
+        ctx.fillStyle = STORAGE_TOWER_STRIPE_COLOR;
+        ctx.globalAlpha = this.stripeAlpha();
+        const gap = bodyH / (STORAGE_TOWER_STRIPE_COUNT + 1);
+        for (let i = 1; i <= STORAGE_TOWER_STRIPE_COUNT; i++) {
+            ctx.fillRect(x + 1, Math.round(bodyTop + gap * i - 1), w - 2, 2);
+        }
+        ctx.globalAlpha = 1;
     }
 }
 

@@ -1063,6 +1063,21 @@ export const STORAGE_TOWER_H = 24;
 // ミサイル（DAMAGE_PLAYER_MISSILE 15）ちょうど1発（ユーザー指定「ミサイル1発程度」）。
 // 機関砲（PLAYER_MG_DAMAGE 3）なら5発、グレネード（80）なら爆風の内側で1発
 export const STORAGE_TOWER_HP = 15;
+// 絵（ユーザー指定「黄白色っぽい円筒形のタンクが足台の上に載った形、オレンジの横縞の光が明滅」）。
+// 色は面ごとに変えない: ほかの面（雪・水・霧）に置いても目立つように
+export const STORAGE_TOWER_BODY_COLOR = '#E8DFB0';       // 円筒の地（黄白色）
+export const STORAGE_TOWER_LIGHT_COLOR = '#FAF4D8';      // 円筒の中央寄りの照り（丸みを出す）
+export const STORAGE_TOWER_SHADE_COLOR = '#A89E74';      // 円筒の左右の端・ふた（暗い黄土色）
+export const STORAGE_TOWER_STAND_COLOR = '#4A4E56';      // 足台（暗い金属。要塞のパネルと同じ系統）
+export const STORAGE_TOWER_STAND_H = 5;                  // 足台の高さ（px）。下の数 px を脚と横板にする
+export const STORAGE_TOWER_STRIPE_COLOR = '#FF8A1E';     // 横縞の光（オレンジ）
+export const STORAGE_TOWER_STRIPE_COUNT = 3;
+export const STORAGE_TOWER_BLINK_PERIOD = 60;            // 明滅の周期（フレーム、約1秒）
+export const STORAGE_TOWER_STRIPE_ALPHA_MIN = 0.25;      // 消え際でも縞が分かる程度に残す
+export const STORAGE_TOWER_STRIPE_ALPHA_MAX = 1.0;
+// 位相を1タイルあたりこれだけずらす（周期に対する割合）。お宝は2タイルおきなので隣とは 0.34 周ずれ、
+// 3本が同時に点滅せず林立して見える。位置から決めるので乱数を使わない
+export const STORAGE_TOWER_PHASE_STEP = 0.17;
 
 // --- 施設エリア（区画の外の地形をメタルパネルにする。設計 2026-10-31-stage7-facility-metal-design.md）---
 // 要塞の区画（最大4つ）の外は洞窟の岩のままで、基地らしさが薄かった。区画の外に矩形の「施設」を置き、

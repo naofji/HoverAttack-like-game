@@ -213,3 +213,75 @@ test('damage を壊れた後に呼んでも2個目は出ない（呼び出し側
   assert.equal(t.damage(999), false);
   assert.equal(game.repairKits.length, 1);
 });
+
+// ---------- 絵（黄白色の円筒・足台・オレンジの横縞の明滅） ----------
+
+import { makeFakeCtx } from './helpers/fake-ctx.js';
+import {
+  STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_STAND_COLOR,
+  STORAGE_TOWER_STAND_H, STORAGE_TOWER_BLINK_PERIOD,
+  STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX,
+} from '../src/js/utils/Constants.js';
+
+/** fillRect ごとに、その時の fillStyle と globalAlpha を付けて返す */
+function fills(ctx) {
+  let style = '', alpha = 1;
+  const out = [];
+  for (const c of ctx.calls) {
+    if (c.name === 'set:fillStyle') style = c.args[0];
+    else if (c.name === 'set:globalAlpha') alpha = c.args[0];
+    else if (c.name === 'fillRect') out.push({ style, alpha, x: c.args[0], y: c.args[1], w: c.args[2], h: c.args[3] });
+  }
+  return out;
+}
+
+test('横縞の明るさは時間で MIN と MAX の間をなめらかに往復する', () => {
+  const t = addTower(towerGame(), 200, 300);
+  const seen = [];
+  for (let i = 0; i < STORAGE_TOWER_BLINK_PERIOD; i++) { t.timer = i; seen.push(t.stripeAlpha()); }
+  const lo = Math.min(...seen), hi = Math.max(...seen);
+  assert.ok(Math.abs(lo - STORAGE_TOWER_STRIPE_ALPHA_MIN) < 0.02, `最小 ${lo}`);
+  assert.ok(Math.abs(hi - STORAGE_TOWER_STRIPE_ALPHA_MAX) < 0.02, `最大 ${hi}`);
+  // なめらか: 1フレームでの変化は振幅の 1/5 より小さい（ぱっと点いたり消えたりしない）
+  for (let i = 1; i < seen.length; i++) {
+    assert.ok(Math.abs(seen[i] - seen[i - 1]) < (hi - lo) / 5, `${i} フレーム目で跳んだ`);
+  }
+});
+
+test('隣の塔（2タイル隣）とは同じ時刻でも明るさが違う', () => {
+  const game = towerGame();
+  const a = addTower(game, 200, 300);
+  const b = addTower(game, 232, 300);
+  a.timer = b.timer = 10;
+  assert.notEqual(a.stripeAlpha(), b.stripeAlpha());
+});
+
+test('draw は足台・円筒・横縞を塔の矩形の中に描く', () => {
+  const t = addTower(towerGame(), 200, 300);
+  t.timer = 7;
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+  const f = fills(ctx);
+  assert.ok(f.length > 0);
+  for (const r of f) {
+    assert.ok(r.x >= t.x && r.y >= t.y && r.x + r.w <= t.x + t.width && r.y + r.h <= t.y + t.height,
+      `矩形の外に塗った: ${JSON.stringify(r)}`);
+  }
+  const stripes = f.filter((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
+  assert.equal(stripes.length, STORAGE_TOWER_STRIPE_COUNT, '横縞の本数');
+  for (const s of stripes) {
+    assert.ok(Math.abs(s.alpha - t.stripeAlpha()) < 1e-9, '横縞の明るさが明滅の値になっていない');
+    assert.ok(s.y + s.h <= t.y + t.height - STORAGE_TOWER_STAND_H, '横縞が足台にかかった');
+  }
+  const stand = f.filter((r) => r.style === STORAGE_TOWER_STAND_COLOR);
+  assert.ok(stand.length > 0, '足台が無い');
+  for (const s of stand) assert.ok(s.y >= t.y + t.height - STORAGE_TOWER_STAND_H, '足台が円筒にかかった');
+});
+
+test('壊れた塔は何も描かない', () => {
+  const t = addTower(towerGame());
+  t.damage(999);
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+  assert.equal(ctx.calls.filter((c) => c.name === 'fillRect').length, 0);
+});

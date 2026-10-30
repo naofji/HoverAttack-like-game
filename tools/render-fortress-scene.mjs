@@ -89,6 +89,16 @@ for (const zone of map.fortressZones) {
     for (const spec of zone.barriers) new FortressBarrier({ map }, spec).draw(ctx);
 }
 
+// 格納塔（お宝の入れ物）。ゲームと同じ StorageTower.draw。--tick で明滅の時刻を選べる
+const { StorageTower } = await import('../src/js/entities/StorageTower.js');
+for (const zone of map.fortressZones) {
+    for (const t of zone.treasures) {
+        const tower = new StorageTower({ map }, { x: t.c * T + T / 2, y: (t.r + 1) * T, kind: t.kind });
+        tower.timer = Number(args.tick ?? 0);
+        tower.draw(ctx);
+    }
+}
+
 // 電流の床。ゲームと同じ ElectricFloor.draw を、段階を固定して描く（既定は一番目立つ放電）
 const { ElectricFloor, electricPhase } = await import('../src/js/entities/ElectricFloor.js');
 const wantPhase = args.phase || 'active';
