@@ -1064,6 +1064,11 @@ export const FACILITY_AREA_W_MIN = 10;
 export const FACILITY_AREA_W_RANGE = 10;   // 10〜20 タイル
 export const FACILITY_AREA_H_MIN = 8;
 export const FACILITY_AREA_H_RANGE = 6;    // 8〜14 タイル
+// 施設エリアの中に盛る金属の階段。洞窟の地形には1段ずつの段がほとんど無く、盛らないと斜面が出ない。
+// 段は本物の金属（6発）なので、5面の雪の階段（5〜9段）より短くして、掘り進む重さを抑える
+export const FACILITY_STAIRS_COUNT = 8;
+export const FACILITY_STAIRS_LENGTH_MIN = 3;
+export const FACILITY_STAIRS_LENGTH_RANGE = 3;  // 3〜6段
 // 区画に追加で湧かせる守備隊。実機で「敵がもう少しいてもいい」と出た指摘への対応で、
 // 7面だけに効く。既存の湧きに足す形なので、面全体の上限（maxTurrets など）は触らない
 export const FORTRESS_GARRISON_TURRETS = 2;

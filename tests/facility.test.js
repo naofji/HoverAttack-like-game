@@ -4,6 +4,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { pickFacilityAreas, metalizeFacilityBand } from '../src/js/world/facility.js';
+import { carveSnowStairs } from '../src/js/world/snowStairs.js';
 import {
   BLOCK_EMPTY as E, BLOCK_NORMAL as N, BLOCK_HARD as H, BLOCK_METAL as M, BLOCK_INDESTRUCTIBLE as X,
   METAL_BLOCK_HP, FORTRESS_ZONE_MARGIN,
@@ -127,16 +128,96 @@ test('7面の Map を2回作っても同じ施設エリア（週次の決定性�
 });
 
 test('施設エリアの生成は game.rng を消費しない（消費すると敵の構成が変わる）', async () => {
+  // 地形が変われば後の湧き探しの乱数の使い方も変わるので、生成の前後の state を直接比べる
   const { Map } = await import('../src/js/world/Map.js');
-  const withFacility = { rng: new SeededRNG(9) };
-  new Map(withFacility, 6);
   const orig = Map.prototype._generateFacility;
-  Map.prototype._generateFacility = function () { };
+  const seen = [];
+  Map.prototype._generateFacility = function () {
+    const before = this.game.rng.state;
+    orig.call(this);
+    seen.push([before, this.game.rng.state, this.facilityAreas.length]);
+  };
   try {
-    const without = { rng: new SeededRNG(9) };
-    new Map(without, 6);
-    assert.equal(withFacility.rng.state, without.rng.state);
+    new Map({ rng: new SeededRNG(9) }, 6);
   } finally {
     Map.prototype._generateFacility = orig;
   }
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0][2] > 0, '施設エリアが置かれていない（見本にならない）');
+  assert.equal(seen[0][1], seen[0][0]);
+});
+
+// ---------- 金属の階段 ----------
+
+/** 床が行 30 の大きな空洞（周りは岩）と、その中の部屋 */
+function cave() {
+  const rows = 40, cols = 60;
+  const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => (
+    r >= 5 && r < 30 && c >= 5 && c < 55 ? E : N)));
+  const blockHP = grid.map((row) => row.map((b) => (b === E ? 0 : 1)));
+  const rooms = [{ centerR: 20, centerC: 20 }, { centerR: 20, centerC: 40 }];
+  return { grid, blockHP, rows, cols, rooms };
+}
+const stairArgs = (w, seed) => ({ ...w, rng: new SeededRNG(seed), count: 4, lengthMin: 3, lengthRange: 3 });
+
+test('carveSnowStairs: block/hp/withinRects を省いた呼び出しと、既定値を明示した呼び出しは同じ階段を盛る', () => {
+  for (const seed of [1, 2, 3, 4]) {
+    const a = cave(), b = cave();
+    const ra = carveSnowStairs(stairArgs(a, seed));
+    const rb = carveSnowStairs({ ...stairArgs(b, seed), block: N, hp: 1, withinRects: null });
+    assert.ok(ra.length > 0);
+    assert.deepEqual(rb, ra);
+    assert.deepEqual(b.grid, a.grid);
+  }
+});
+
+test('carveSnowStairs: block/hp を渡すと、盛った段がそのブロック・HP になる', () => {
+  const w = cave();
+  const before = w.grid.map((row) => row.slice());
+  const stairs = carveSnowStairs({ ...stairArgs(w, 2), block: M, hp: METAL_BLOCK_HP });
+  assert.ok(stairs.length > 0);
+  let added = 0;
+  for (let r = 0; r < w.rows; r++) {
+    for (let c = 0; c < w.cols; c++) {
+      if (before[r][c] !== w.grid[r][c]) {
+        added++;
+        assert.equal(w.grid[r][c], M);
+        assert.equal(w.blockHP[r][c], METAL_BLOCK_HP);
+      }
+    }
+  }
+  assert.ok(added > 0);
+});
+
+test('carveSnowStairs: withinRects を渡すと、段のセルは全部その矩形の中', () => {
+  const within = [{ r0: 10, r1: 29, c0: 12, c1: 28 }];
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const w = cave();
+    const before = w.grid.map((row) => row.slice());
+    carveSnowStairs({ ...stairArgs(w, seed), withinRects: within });
+    for (let r = 0; r < w.rows; r++) {
+      for (let c = 0; c < w.cols; c++) {
+        if (before[r][c] === w.grid[r][c]) continue;
+        assert.ok(r >= 10 && r <= 29 && c >= 12 && c <= 28, `矩形の外に段 (${r},${c})`);
+      }
+    }
+  }
+});
+
+test('実際の7面: 金属の階段がある（SEEDS 合計 1 本以上）。段は全部 BLOCK_METAL で施設エリアの中', async () => {
+  let total = 0;
+  for (const m of await maps()) {
+    for (const st of m.metalStairs) {
+      total++;
+      for (let i = 0; i < st.length; i++) {
+        const c = st.c + st.dir * i;
+        for (let k = 0; k <= i; k++) {
+          const r = st.r - k;
+          assert.equal(m.grid[r][c], M, `段 (${r},${c}) が金属でない`);
+          assert.equal(m.facility[r * m.cols + c], 1, `段 (${r},${c}) が施設エリアの外`);
+        }
+      }
+    }
+  }
+  assert.ok(total >= 1, '金属の階段が1本も無い');
 });

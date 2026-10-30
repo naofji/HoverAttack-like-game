@@ -26,6 +26,7 @@ import {
     FORTRESS_ZONE_H_MIN, FORTRESS_ZONE_H_RANGE, FORTRESS_ZONE_MARGIN,
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_GATE_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
+    FACILITY_STAIRS_COUNT, FACILITY_STAIRS_LENGTH_MIN, FACILITY_STAIRS_LENGTH_RANGE,
     FACILITY_AREA_COUNT, FACILITY_AREA_W_MIN, FACILITY_AREA_W_RANGE, FACILITY_AREA_H_MIN, FACILITY_AREA_H_RANGE,
     FORTRESS_TREASURE_COUNT, FORTRESS_EXTRA_LIFE_COUNT, FORTRESS_EXTRA_LIFE_SLOT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
     FORTRESS_BARRIER_CLEARANCE, ELECTRIC_FLOOR_MIN_LEN, ELECTRIC_FLOOR_BARRIER_GAP, ELECTRIC_FLOOR_H,
@@ -271,6 +272,7 @@ export class Map {
         // 区画が先に場所を取るので、区画のあとに置く。他の面でも空で持つ（描画と形が読む）
         this.facility = new Uint8Array(this.rows * this.cols);
         this.facilityAreas = [];
+        this.metalStairs = [];
         if (this.envTerrain === 'fortress') this._generateFacility();
 
         // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
@@ -462,6 +464,17 @@ export class Map {
                 for (let c = a.c0; c <= a.c1; c++) this.facility[r * this.cols + c] = 1;
             }
         }
+        // 金属の階段。段は形の規則（'metalSlope'）で45度の金属の斜面になる
+        const inArea = (room) => this.facilityAreas.some((a) =>
+            room.centerR >= a.r0 && room.centerR <= a.r1 && room.centerC >= a.c0 && room.centerC <= a.c1);
+        this.metalStairs = carveSnowStairs({
+            grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols,
+            rooms: this.rooms.filter(inArea), excludeRects,
+            rng: new SeededRNG((this.game.rng.state ^ 0xFAC57A) >>> 0),
+            count: FACILITY_STAIRS_COUNT,
+            lengthMin: FACILITY_STAIRS_LENGTH_MIN, lengthRange: FACILITY_STAIRS_LENGTH_RANGE,
+            block: BLOCK_METAL, hp: METAL_BLOCK_HP, withinRects: this.facilityAreas,
+        });
     }
 
     _generateFortress() {
