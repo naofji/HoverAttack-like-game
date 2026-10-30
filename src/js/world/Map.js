@@ -26,6 +26,7 @@ import {
     FORTRESS_ZONE_H_MIN, FORTRESS_ZONE_H_RANGE, FORTRESS_ZONE_MARGIN,
     FORTRESS_WALL_THICKNESS, FORTRESS_CEILING_H, FORTRESS_FLOOR_H,
     FORTRESS_SHAFT_W, FORTRESS_GATE_SIZE, FORTRESS_OPENING_TUNNEL_MAX,
+    FACILITY_AREA_COUNT, FACILITY_AREA_W_MIN, FACILITY_AREA_W_RANGE, FACILITY_AREA_H_MIN, FACILITY_AREA_H_RANGE,
     FORTRESS_TREASURE_COUNT, FORTRESS_EXTRA_LIFE_COUNT, FORTRESS_EXTRA_LIFE_SLOT, FORTRESS_GARRISON_TURRETS, FORTRESS_GARRISON_TANKS,
     FORTRESS_BARRIER_CLEARANCE, ELECTRIC_FLOOR_MIN_LEN, ELECTRIC_FLOOR_BARRIER_GAP, ELECTRIC_FLOOR_H,
     FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET,
@@ -49,6 +50,7 @@ import {
 } from './waterQuery.js';
 import { carveSnowStairs } from './snowStairs.js';
 import { carveFortressZones } from './fortress.js';
+import { pickFacilityAreas, metalizeFacilityBand } from './facility.js';
 import { drawMetalPanel, drawArmorPanel, plateBreaksLeft, tileRng } from './panelBlocks.js';
 import { generateTown } from './town/generate.js';
 import { generatePlants } from './town/generatePlants.js';
@@ -265,6 +267,12 @@ export class Map {
         this.fortressZones = [];
         if (this.envTerrain === 'fortress') this._generateFortress();
 
+        // Step 9a2: 7面の施設エリア（区画の外の地形をメタルパネルに。派生ストリーム）。
+        // 区画が先に場所を取るので、区画のあとに置く。他の面でも空で持つ（描画と形が読む）
+        this.facility = new Uint8Array(this.rows * this.cols);
+        this.facilityAreas = [];
+        if (this.envTerrain === 'fortress') this._generateFacility();
+
         // Step 9b: 地底湖（4面だけ）。派生ストリームなので game.rng は動かない。
         // 開始の部屋（左上 3,3 から 20x16）と基地の部屋は除外
         if (this.envKind === 'water') this._generateWater();
@@ -429,6 +437,31 @@ export class Map {
 
     _generateTown() {
         this.town = new Town(this._buildTownSpecs(), { isSolidTile: (r, c) => this.isSolid(r, c) });
+    }
+
+    /** 施設エリアを置き、縁の岩を金属にし、印（this.facility）を立てる */
+    _generateFacility() {
+        const M = FORTRESS_ZONE_MARGIN;
+        const excludeRects = [
+            ...this._reservedRects(),
+            // 区画の外壁のすぐ外にパネルが貼り付くと、区画の輪郭が読めなくなるので余白を空ける
+            ...this.fortressZones.map((z) => ({ r0: z.r0 - M, r1: z.r1 + M, c0: z.c0 - M, c1: z.c1 + M })),
+        ];
+        this.facilityAreas = pickFacilityAreas({
+            rows: this.rows, cols: this.cols, rooms: this.rooms, excludeRects,
+            // 派生ストリーム。game.rng を消費すると敵の構成が変わり、週の決定性が壊れる
+            rng: new SeededRNG((this.game.rng.state ^ 0xFAC17E) >>> 0),
+            count: FACILITY_AREA_COUNT,
+            wMin: FACILITY_AREA_W_MIN, wRange: FACILITY_AREA_W_RANGE,
+            hMin: FACILITY_AREA_H_MIN, hRange: FACILITY_AREA_H_RANGE,
+            margin: M,
+        });
+        for (const a of this.facilityAreas) {
+            metalizeFacilityBand(this.grid, this.blockHP, a);
+            for (let r = a.r0; r <= a.r1; r++) {
+                for (let c = a.c0; c <= a.c1; c++) this.facility[r * this.cols + c] = 1;
+            }
+        }
     }
 
     _generateFortress() {

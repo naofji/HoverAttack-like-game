@@ -1054,6 +1054,16 @@ export const FORTRESS_OPENING_TUNNEL_MAX = 24;
 // 区画の奥（最下階の右端）に置くお宝。オーバードライブキットは今までアタッカーの
 // 撃破ドロップでしか出ない稀少品なので、要塞の奥という置き場所が意味を持つ
 export const FORTRESS_TREASURE_COUNT = 3;
+
+// --- 施設エリア（区画の外の地形をメタルパネルにする。設計 2026-10-31-stage7-facility-metal-design.md）---
+// 要塞の区画（最大4つ）の外は洞窟の岩のままで、基地らしさが薄かった。区画の外に矩形の「施設」を置き、
+// 中の岩を絵だけパネルにする（硬さはそのまま）。縁の1層の岩と金属の斜面だけ本物の金属（ユーザー判断）。
+// 個数・大きさは初期値（私の案）。実測で調整する
+export const FACILITY_AREA_COUNT = 8;      // 上限。置けなければ少なくてよい
+export const FACILITY_AREA_W_MIN = 10;
+export const FACILITY_AREA_W_RANGE = 10;   // 10〜20 タイル
+export const FACILITY_AREA_H_MIN = 8;
+export const FACILITY_AREA_H_RANGE = 6;    // 8〜14 タイル
 // 区画に追加で湧かせる守備隊。実機で「敵がもう少しいてもいい」と出た指摘への対応で、
 // 7面だけに効く。既存の湧きに足す形なので、面全体の上限（maxTurrets など）は触らない
 export const FORTRESS_GARRISON_TURRETS = 2;
