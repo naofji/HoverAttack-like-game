@@ -1055,6 +1055,15 @@ export const FORTRESS_OPENING_TUNNEL_MAX = 24;
 // 撃破ドロップでしか出ない稀少品なので、要塞の奥という置き場所が意味を持つ
 export const FORTRESS_TREASURE_COUNT = 3;
 
+// --- 格納塔（お宝を入れておく塔。設計 2026-10-31-stage7-storage-towers-design.md）---
+// むき出しのお宝は着いた時点で中身が全部見えた。塔に入れて「何かあるのは分かるが中身は分からない」にする。
+// 大きさは自機（PLAYER_WIDTH × PLAYER_HEIGHT）と同じ（ユーザー指定）
+export const STORAGE_TOWER_W = 16;
+export const STORAGE_TOWER_H = 24;
+// ミサイル（DAMAGE_PLAYER_MISSILE 15）ちょうど1発（ユーザー指定「ミサイル1発程度」）。
+// 機関砲（PLAYER_MG_DAMAGE 3）なら5発、グレネード（80）なら爆風の内側で1発
+export const STORAGE_TOWER_HP = 15;
+
 // --- 施設エリア（区画の外の地形をメタルパネルにする。設計 2026-10-31-stage7-facility-metal-design.md）---
 // 要塞の区画（最大4つ）の外は洞窟の岩のままで、基地らしさが薄かった。区画の外に矩形の「施設」を置き、
 // 中の岩を絵だけパネルにする（硬さはそのまま）。縁の1層の岩と金属の斜面だけ本物の金属（ユーザー判断）。

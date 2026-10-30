@@ -14,6 +14,7 @@ import { playBlast } from './destruction.js';
 import { recordHit } from '../utils/hitPoint.js';
 import { motionFor } from '../world/StageEnvironment.js';
 import { stepGrenade } from '../utils/grenadePhysics.js';
+import { damageTowersInRadius } from './StorageTower.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -96,6 +97,8 @@ export class Grenade {
                     enemy.takeDamage(GRENADE_DAMAGE, this.x);
                 }
             }
+            // 格納塔（敵ではないので上の一覧に入っていない）。敵のグレネードでは壊れない
+            damageTowersInRadius(this.game, this.x, this.y, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE);
         } else {
             // Enemy grenade: Damages player and carrier only (No friendly fire for enemies)
             const player = this.game.player;
