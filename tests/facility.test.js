@@ -368,7 +368,7 @@ test('実際の7面: 金属の段を壊し切るとそのタイルは空にな�
   for (let i = 0; i < METAL_BLOCK_HP; i++) m.damageBlock(target.r, target.c, 1);
   assert.equal(m.grid[target.r][target.c], E);
   assert.equal(m.tileShapeAt(target.r, target.c), SHAPE_EMPTY);
-  // 下が空いて斜面の条件は崩れるが、作り直しは前の形と両方に収まる形にするので、四角（岩が増える）に戻らない
+  // 下が空いて斜面の条件は崩れるが、7面は壊れても隣の形を作り直さないので、四角（岩が増える）に戻らない
   assert.equal(m.tileShapes[above], beforeAbove);
 });
 
@@ -529,4 +529,34 @@ test('_drawPanelBlock は斜面のタイルに形を渡し、四角のタイル�
   for (const [lx, ly] of paintedPixels(ctx, slope[1] * T, slope[0] * T)) {
     assert.ok(shapeContainsPoint(code, lx + 0.5, ly + 0.5), `斜面のタイルで形の外を塗った (${lx},${ly})`);
   }
+});
+
+test('実際の7面: 壊しても隣のタイルの形は作り直さない（雪の面のような「^」への整形は無い。ユーザー指定）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  let broken = 0, wouldReshape = 0;
+  for (const seed of [1, 2, 3]) {
+    const m = new Map({ rng: new SeededRNG(seed) }, 6);
+    // 施設エリアの中で、空洞に面した壊せるタイルを順に壊す
+    for (const a of m.facilityAreas) {
+      for (let r = a.r0 + 1; r < a.r1; r++) {
+        for (let c = a.c0 + 1; c < a.c1; c++) {
+          if (m.grid[r][c] === E || !(m.blockHP[r][c] > 0) || m.blockHP[r][c] === Infinity) continue;
+          if (![[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dr, dc]) => m.grid[r + dr][c + dc] === E)) continue;
+          const around = [];
+          for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+            if (dr || dc) around.push([r + dr, c + dc, m.tileShapes[(r + dr) * m.cols + c + dc]]);
+          }
+          m.damageBlock(r, c, m.blockHP[r][c]);
+          if (m.grid[r][c] !== E) continue;
+          broken++;
+          assert.equal(m.tileShapeAt(r, c), SHAPE_EMPTY, '壊したタイル自身は空になる');
+          for (const [rr, cc, before] of around) {
+            if (m.tileShapes[rr * m.cols + cc] !== before) wouldReshape++;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(broken > 50, `前提: 十分な数を壊した（${broken}）`);
+  assert.equal(wouldReshape, 0, `壊した後に隣の形が ${wouldReshape} 枚変わった`);
 });

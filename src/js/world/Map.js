@@ -1571,6 +1571,13 @@ export class Map {
      */
     _rebuildTileShapesAround(r, c) {
         const cellAt = (rr, cc) => this._tileShapeCell(rr, cc);
+        // 7面（'metalSlope'）は加工された金属なので、壊れても隣の形は作り直さない（ユーザー指定）。
+        // 雪の面は崩れた所が「^」の山に削れていくが、金属の斜面は生成時の形のまま残す。
+        // 壊れたタイル自身だけ空にする
+        if (this.tileShapeRule === 'metalSlope') {
+            this.tileShapes[r * this.cols + c] = computeTileShape(cellAt, r, c, this.tileShapeRule);
+            return;
+        }
         for (let rr = r - 1; rr <= r + 1; rr++) {
             if (rr < 0 || rr >= this.rows) continue;
             for (let cc = c - 1; cc <= c + 1; cc++) {
