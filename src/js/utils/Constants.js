@@ -996,7 +996,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
     { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow', tileShape: 'snowSlope' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
-    { kind: 'none',  backdrop: 'machine', terrain: 'fortress' }, // 7: 洞窟を改造した要塞
+    { kind: 'none',  backdrop: 'machine', terrain: 'fortress', tileShape: 'metalSlope' }, // 7: 洞窟を改造した要塞（施設エリアの金属の斜面）
 ];
 
 // --- 7面の要塞区画（terrain: 'fortress'）---

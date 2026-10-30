@@ -6,8 +6,14 @@ import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { pickFacilityAreas, metalizeFacilityBand } from '../src/js/world/facility.js';
 import { carveSnowStairs } from '../src/js/world/snowStairs.js';
 import {
+  computeTileShape, packShape, SHAPE_FULL, SHAPE_EMPTY, Q_EMPTY, Q_FULL, Q_TRI_NO_TL,
+} from '../src/js/utils/tileShape.js';
+import { Player } from '../src/js/entities/Player.js';
+import { Grenade } from '../src/js/entities/Grenade.js';
+import { makeMap, makeGame } from './helpers/enemy-world.js';
+import {
   BLOCK_EMPTY as E, BLOCK_NORMAL as N, BLOCK_HARD as H, BLOCK_METAL as M, BLOCK_INDESTRUCTIBLE as X,
-  METAL_BLOCK_HP, FORTRESS_ZONE_MARGIN,
+  METAL_BLOCK_HP, FORTRESS_ZONE_MARGIN, TILE_SIZE as T,
 } from '../src/js/utils/Constants.js';
 
 before(() => {
@@ -220,4 +226,131 @@ test('実際の7面: 金属の階段がある（SEEDS 合計 1 本以上）。�
     }
   }
   assert.ok(total >= 1, '金属の階段が1本も無い');
+});
+
+// ---------- 形の規則 'metalSlope' ----------
+
+const asciiCell = (rows) => (r, c) => {
+  if (r < 0 || c < 0 || r >= rows.length || c >= rows[0].length) return 'polished';
+  return { '.': 'empty', '#': 'rock', 'P': 'polished' }[rows[r][c]];
+};
+
+test('metalSlope: 1段ずつの階段の段は、タイル1枚ぶんの45度の斜面になる', () => {
+  const rows = ['.....', '..###', '.####', '#####'];
+  // (1,2) は上と左が空、右と下と左下が岩 → 左上が開いた斜面
+  assert.equal(computeTileShape(asciiCell(rows), 1, 2, 'metalSlope'),
+    packShape(Q_EMPTY, Q_TRI_NO_TL, Q_TRI_NO_TL, Q_FULL));
+});
+
+test('metalSlope: 床の縁・浮いた板の先は削らない（雪の規則なら 8px の面取りになる配置）', () => {
+  const plate = ['.....', '###..', '.....'];
+  assert.notEqual(computeTileShape(asciiCell(plate), 1, 2, 'snowSlope'), SHAPE_FULL, '前提: 雪なら面取り');
+  assert.equal(computeTileShape(asciiCell(plate), 1, 2, 'metalSlope'), SHAPE_FULL);
+  const edge = ['.....', '###..', '#####'];
+  // (1,2) は右と上が空、下と右下が岩 → 斜面の条件（右下が岩）を満たすので斜面。(1,1) の上の角は凹角で削らない
+  assert.equal(computeTileShape(asciiCell(edge), 1, 1, 'metalSlope'), SHAPE_FULL);
+});
+
+test('metalSlope: 磨き仕上げ（polished）は削らない', () => {
+  const rows = ['.....', '..PPP', '.PPPP', 'PPPPP'];
+  assert.equal(computeTileShape(asciiCell(rows), 1, 2, 'metalSlope'), SHAPE_FULL);
+});
+
+test('実際の7面: 削れたタイルは全部施設エリアの中の金属で、斜面は SEEDS 合計 1 枚以上', async () => {
+  let slopes = 0;
+  for (const m of await maps()) {
+    assert.equal(m.tileShapeRule, 'metalSlope');
+    for (let r = 0; r < m.rows; r++) {
+      for (let c = 0; c < m.cols; c++) {
+        const code = m.tileShapeAt(r, c);
+        if (code === SHAPE_FULL || code === SHAPE_EMPTY) continue;
+        slopes++;
+        assert.equal(m.facility[r * m.cols + c], 1, `施設エリアの外が削れた (${r},${c})`);
+        assert.equal(m.grid[r][c], M, `斜面 (${r},${c}) が金属でない`);
+        assert.equal(m.blockHP[r][c], METAL_BLOCK_HP);
+      }
+    }
+  }
+  assert.ok(slopes >= 1, '斜面が1枚も無い');
+});
+
+test('5面の形は従来どおり（雪の規則で各タイルを直接計算した結果と同じ）', async () => {
+  for (const m of await maps(4)) {
+    assert.equal(m.tileShapeRule, 'snowSlope');
+    const cellAt = (r, c) => {
+      if (r < 0 || r >= m.rows || c < 0 || c >= m.cols) return 'polished';
+      const b = m.grid[r][c];
+      if (b === E) return 'empty';
+      return b === X || b === M ? 'polished' : 'rock';
+    };
+    for (let r = 0; r < m.rows; r++) {
+      for (let c = 0; c < m.cols; c++) {
+        assert.equal(m.tileShapes[r * m.cols + c], computeTileShape(cellAt, r, c, 'snowSlope'), `(${r},${c})`);
+      }
+    }
+  }
+});
+
+// 左半分は床 row 11、列 10..19 が右へ下る階段（列 10 が row 11、列 19 が row 20）。tests/environment-snow-motion.test.js と同じ
+function slopeRows() {
+  const rows = [];
+  for (let r = 0; r < 24; r++) {
+    let s = '';
+    for (let c = 0; c < 30; c++) {
+      let floor = 20;
+      if (c >= 10 && c < 20) floor = 11 + (c - 10);
+      if (c < 10) floor = 11;
+      s += r >= floor ? '#' : '.';
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+const idle = () => ({
+  keys: {}, isKeyDown: () => false, isKeyPressed: () => false, isCharPressed: () => false,
+  mouse: { left: false, right: false }, isLeftClickPressed: () => false, isRightClickPressed: () => false,
+  rightHoldFrames: 0, crosshairLocked: false,
+  getMouseWorld: () => ({ x: 0, y: 0 }), getTargetWorld: () => ({ x: 0, y: 0 }),
+});
+
+test('金属の斜面の上で、入力なしの自機は滑らない（7面は雪の環境ではない）', () => {
+  const game = makeGame(makeMap(slopeRows(), null, { tileShape: 'metalSlope' }));
+  game.input = idle();
+  const p = new Player(game, 13 * T, 14 * T - 24);
+  game.player = p;
+  for (let i = 0; i < 20 && !p.onGround; i++) p.update();
+  assert.ok(p.onGround, '前提: 斜面に着地すること');
+  const x0 = p.x;
+  for (let i = 0; i < 60; i++) p.update();
+  assert.ok(Math.abs(p.x - x0) < 0.5, `滑った: ${x0} → ${p.x}`);
+});
+
+test('金属の斜面で、グレネードは下へ転がり落ちる', () => {
+  const map = makeMap(slopeRows(), null, { tileShape: 'metalSlope' });
+  map.width = map.cols * T; map.height = map.rows * T;
+  map.destroyArea = () => [];
+  const game = makeGame(map);
+  // 列 12 の段の少し上から、横の速さ 0 で落とす。斜面は右へ下る
+  const g = new Grenade(game, 12 * T + 8, 12 * T, Math.PI / 2, 0);
+  const x0 = g.x, y0 = g.y;
+  for (let f = 0; f < 200; f++) { g.lifetime = 1e9; g.update(); }
+  assert.ok(g.x - x0 >= T, `転がっていない: x ${x0} → ${g.x}`);
+  assert.ok(g.y > y0 + T, `下っていない: y ${y0} → ${g.y}`);
+});
+
+test('実際の7面: 金属の段を壊し切るとそのタイルは空になり、上の段の斜面は残る（壊しても岩が増えない＝決定13）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const m = new Map({ rng: new SeededRNG(1) }, 6);
+  // 段 i=1 の列は2タイル（下 st.r、上 st.r-1）。上が斜面
+  const st = m.metalStairs.find((x) => x.length >= 2);
+  assert.ok(st, '前提: 2段以上の階段がある');
+  const target = { r: st.r, c: st.c + st.dir };
+  const above = (target.r - 1) * m.cols + target.c;
+  const beforeAbove = m.tileShapes[above];
+  assert.ok(beforeAbove !== SHAPE_FULL && beforeAbove !== SHAPE_EMPTY, '前提: 上の段が斜面');
+  for (let i = 0; i < METAL_BLOCK_HP; i++) m.damageBlock(target.r, target.c, 1);
+  assert.equal(m.grid[target.r][target.c], E);
+  assert.equal(m.tileShapeAt(target.r, target.c), SHAPE_EMPTY);
+  // 下が空いて斜面の条件は崩れるが、作り直しは前の形と両方に収まる形にするので、四角（岩が増える）に戻らない
+  assert.equal(m.tileShapes[above], beforeAbove);
 });

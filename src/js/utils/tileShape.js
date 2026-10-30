@@ -48,13 +48,17 @@ export const SHAPE_FULL = packShape(Q_FULL, Q_FULL, Q_FULL, Q_FULL);
  *
  * 磨き仕上げ（外周・基地の金属）は人工物なので削らない。隣から見れば岩として数える。
  *
+ * 'metalSlope'（7面の施設エリア）: 'snowSlope' の斜め（タイル1枚ぶん）だけを作り、8px の小さい面取りは
+ * 入れない。加工された金属の斜面に見せるため（設計 2026-10-31-stage7-facility-metal-design.md）。
+ * どのタイルを削ってよいかは cellAt が決める（Map は施設エリアの外を 'polished' として渡す）。
+ *
  * @param {(r: number, c: number) => 'empty'|'rock'|'polished'} cellAt 範囲外は 'polished' を返すこと
- * @param {'square'|'snowSlope'|undefined} rule 面の規則。undefined は 'square'
+ * @param {'square'|'snowSlope'|'metalSlope'|undefined} rule 面の規則。undefined は 'square'
  */
 export function computeTileShape(cellAt, r, c, rule) {
     const self = cellAt(r, c);
     if (self === 'empty') return SHAPE_EMPTY;
-    if (self === 'polished' || rule !== 'snowSlope') return SHAPE_FULL;
+    if (self === 'polished' || (rule !== 'snowSlope' && rule !== 'metalSlope')) return SHAPE_FULL;
 
     const open = (rr, cc) => cellAt(rr, cc) === 'empty';
     const top = open(r - 1, c), bottom = open(r + 1, c);
@@ -63,10 +67,12 @@ export function computeTileShape(cellAt, r, c, rule) {
 
     // 斜めは隣の2象限にも掛かるので、先に小さい面取りを入れ、斜めがあればそれで上書きする
     // （斜めの条件は残りの2辺が閉じていることなので、上書きで消える面取りは無い）
-    if (top && left) q[0] = Q_TRI_NO_TL;
-    if (top && right) q[1] = Q_TRI_NO_TR;
-    if (bottom && left) q[2] = Q_TRI_NO_BL;
-    if (bottom && right) q[3] = Q_TRI_NO_BR;
+    if (rule === 'snowSlope') {
+        if (top && left) q[0] = Q_TRI_NO_TL;
+        if (top && right) q[1] = Q_TRI_NO_TR;
+        if (bottom && left) q[2] = Q_TRI_NO_BL;
+        if (bottom && right) q[3] = Q_TRI_NO_BR;
+    }
 
     if (top && left && !right && !bottom && !open(r + 1, c - 1)) {
         q[0] = Q_EMPTY; q[1] = Q_TRI_NO_TL; q[2] = Q_TRI_NO_TL;

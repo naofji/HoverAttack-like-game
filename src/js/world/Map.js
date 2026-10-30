@@ -59,7 +59,7 @@ import { generateSnowTrees } from './town/generateSnowTrees.js';
 import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
 import {
-    SHAPE_FULL, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
+    SHAPE_FULL, SHAPE_EMPTY, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
     shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts, shapeAfterBreak, shapeTriangle,
 } from '../utils/tileShape.js';
 
@@ -324,6 +324,7 @@ export class Map {
         // タイルの形。地形の生成（階段まで）が終わってから焼く。描画のキャッシュと町・植物の
         // 置き場所がこのあと形を読むので、その前に置く。乱数は使わない（週次の決定性）
         this._buildTileShapes();
+        if (this.envTerrain === 'fortress') this._metalizeFacilitySlopes();
         // 湧き位置（Step 10）は形を焼く前にタイルの上端で決めているので、形の高さへ置き直す
         this._seatSpawnsOnShapes();
 
@@ -1515,7 +1516,28 @@ export class Map {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return 'polished';
         const b = this.grid[r][c];
         if (b === BLOCK_EMPTY) return 'empty';
+        // 7面は施設エリアの中だけ斜面にする（金属も削る）。外の洞窟の岩・要塞の区画は四角のまま
+        if (this.tileShapeRule === 'metalSlope') {
+            return this.facility && this.facility[r * this.cols + c] === 1 ? 'rock' : 'polished';
+        }
         return (b === BLOCK_INDESTRUCTIBLE || b === BLOCK_METAL) ? 'polished' : 'rock';
+    }
+
+    /**
+     * 7面の施設エリアの斜面を本物の金属にする（ユーザー判断「斜面は本物の金属」）。
+     * 施設エリアの中は金属も 'rock' として形を作るので、ここで材質を変えても形は変わらない
+     */
+    _metalizeFacilitySlopes() {
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                const i = r * this.cols + c;
+                if (this.facility[i] !== 1) continue;
+                const code = this.tileShapes[i];
+                if (code === SHAPE_FULL || code === SHAPE_EMPTY) continue;
+                this.grid[r][c] = BLOCK_METAL;
+                this.blockHP[r][c] = METAL_BLOCK_HP;
+            }
+        }
     }
 
     _buildTileShapes() {
@@ -2034,7 +2056,9 @@ export class Map {
         // 以前はここだけで階段を検出して坂・くの字を描き（判定は四角のまま）、自機の絵を描画
         // オフセットで斜辺へ下げていたが、壊した後に絵と判定が食い違って見えた。
         // 削り幅は形が決めるので、乱数の 4〜9px の面取りは5面では使わない（判定が 8px のため）
-        const shaped = this.tileShapes && this.tileShapeRule !== 'square';
+        // 7面（'metalSlope'）で削れるのは施設エリアの中だけで、そこはパネルの絵で描く（_drawTile）。
+        // 岩の絵の面取りは今までどおり乱数の 4〜9px にする（形の削り幅 0 を読むと四角になる）
+        const shaped = this.tileShapes && this.tileShapeRule === 'snowSlope';
         // 壊した後にだけ出る三角（^ v < >。設計 決定13）は、角の削り幅の列挙では辺が戻って自己交差するので、
         // 輪郭と雪のふちを shapeTriangle の頂点で書く
         let tri = null;
