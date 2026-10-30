@@ -1043,6 +1043,14 @@ export const Game = {
         }
 
         this.map.draw(ctx);
+        // 格納塔は地形の直後・自機より奥に描く。自機は塔を通り抜けられるので、手前に描くと重なっている間
+        // 自機が塔の陰に隠れる（最終レビューの指摘）。中身のアイテムもこれより後に描くので隠れない。
+        // ダメージバーはバリアのユニットと同じく、削れたら出す（壊せる的だと分かるように）
+        for (const tower of this.storageTowers) {
+            if (!isInView(tower, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
+            tower.draw(ctx);
+            this._drawHpBarIfDamaged(ctx, tower);
+        }
         if (this.carrier) this.carrier.draw(ctx);
         if (this.player) this.player.draw(ctx);
 
@@ -1064,13 +1072,6 @@ export const Game = {
         for (const floor of this.electricFloors) {
             if (!isInView(floor.rect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             floor.draw(ctx);
-        }
-        // 格納塔。アイテムより奥に描く（壊れた瞬間に出た中身が塔の陰に隠れない）。
-        // ダメージバーはバリアのユニットと同じく、削れたら出す（壊せる的だと分かるように）
-        for (const tower of this.storageTowers) {
-            if (!isInView(tower, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
-            tower.draw(ctx);
-            this._drawHpBarIfDamaged(ctx, tower);
         }
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);

@@ -439,3 +439,49 @@ test('_drawWorld が格納塔を描く（配線）', () => {
   Game._drawWorld.call(world, makeFakeCtx());
   assert.deepEqual(drawn, ['tower']);
 });
+
+// ---------- 最終レビューの指摘 ----------
+
+import { Landmine } from '../src/js/entities/Landmine.js';
+
+test('実際の7面: 塔の足元に地雷が埋まらない（塔の陰で見えず、拾いに降りると踏む）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  let checked = 0;
+  for (let s = 1; s <= 60; s++) {
+    const m = new Map({ rng: new SeededRNG(s) }, 6);
+    const game = { map: m };
+    const towers = m.storageTowerSpawns.map((spec) => new StorageTower(game, spec));
+    for (const pos of m.landmineSpawns) {
+      const mine = new Landmine(game, pos.x, pos.y);
+      for (const t of towers) {
+        const hit = mine.x < t.x + t.width && mine.x + mine.width > t.x
+          && mine.y < t.y + t.height && mine.y + mine.height > t.y;
+        assert.ok(!hit, `seed ${s}: 塔 (${t.x},${t.y}) の足元に地雷 (${mine.x},${mine.y})`);
+      }
+    }
+    checked += towers.length;
+  }
+  assert.ok(checked > 0);
+});
+
+test('塔は自機より奥に描く（通り抜けたとき自機が塔の陰に隠れない）', () => {
+  const noop = () => { };
+  const order = [];
+  const tower = { alive: true, x: 10, y: 10, width: 16, height: 24, draw: () => order.push('tower') };
+  const world = {
+    gameState: 'playing', simAlpha: 1, canvas: { width: 1024, height: 768 },
+    camera: { x: 0, y: 0, renderX: () => 0, renderY: () => 0 },
+    map: { backdrop: null, draw: noop },
+    env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
+    carrier: { draw: () => order.push('carrier') }, player: { draw: () => order.push('player') },
+    flag: null, grenadeTrajectory: null,
+    enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [tower],
+    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
+    missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+    _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
+    _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
+  };
+  Game._drawWorld.call(world, makeFakeCtx());
+  assert.ok(order.indexOf('tower') < order.indexOf('player'), `描く順: ${order}`);
+  assert.ok(order.indexOf('tower') < order.indexOf('carrier'), `描く順: ${order}`);
+});

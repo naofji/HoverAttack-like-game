@@ -544,7 +544,18 @@ export class Map {
         this.enemyTankSpawns = this.enemyTankSpawns.filter(clear);
         this.enemyDroneSpawns = this.enemyDroneSpawns.filter(clear);
         this.enemyAttackerSpawns = this.enemyAttackerSpawns.filter(clear);
-        this.landmineSpawns = this.landmineSpawns.filter(clear);
+        // 地雷は格納塔（お宝）の足元にも埋めない。塔の陰に隠れて見えず、壊して出た中身を拾いに降りると
+        // 踏む。塔の下端を狙った弾も先に地雷を起爆して消える（最終レビューの指摘。200シードの 22% で起きた）。
+        // 塔はお宝の列 c の中心に幅1タイル、行 r とその上の行に立つ。地雷の幅を見込んで左右1列も空ける。
+        // 外すだけで乱数を使わないので、週次の決定性は保たれる
+        const onTreasure = (pos) => {
+            const r = Math.floor(pos.y / S);
+            const c = Math.floor(pos.x / S);
+            return this.fortressZones.some((zone) => zone.treasures.some(
+                (t) => Math.abs(t.c - c) <= 1 && r >= t.r - 1 && r <= t.r,
+            ));
+        };
+        this.landmineSpawns = this.landmineSpawns.filter((p) => clear(p) && !onTreasure(p));
         for (const zone of this.fortressZones) {
             for (const t of zone.treasures) {
                 // お宝はむき出しにせず格納塔に入れる。t.r は床の1つ上の行なので、塔の下端は (r+1) 行目の上
