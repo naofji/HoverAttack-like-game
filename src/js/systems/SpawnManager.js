@@ -11,6 +11,7 @@ import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
 import { RepairKit } from '../entities/RepairKit.js';
 import { OverdriveKit } from '../entities/OverdriveKit.js';
+import { ExtraLifeKit } from '../entities/ExtraLifeKit.js';
 import { FortressBarrier } from '../entities/FortressBarrier.js';
 import { ElectricFloor } from '../entities/ElectricFloor.js';
 
@@ -72,6 +73,8 @@ export class SpawnManager {
         for (const t of this.game.map.treasureSpawns || []) {
             if (t.kind === 'overdrive') {
                 this.game.missileKits.push(new OverdriveKit(this.game, t.x, t.y));
+            } else if (t.kind === 'life') {
+                this.game.lifeKits.push(new ExtraLifeKit(this.game, t.x, t.y));
             } else {
                 this.game.repairKits.push(new RepairKit(this.game, t.x, t.y));
             }

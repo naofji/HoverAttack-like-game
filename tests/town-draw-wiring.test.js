@@ -17,7 +17,7 @@ function makeWorld(order, town) {
         carrier: null, player: null, flag: null, grenadeTrajectory: null,
         enemies: [], landmines: [], barriers: [], electricFloors: [],
         projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-        missileKits: [], enemyBullets: [], smokeScreens: [],
+        missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
         _applyRenderInterpolation: noop,
         _restoreRenderInterpolation: noop,
         _drawHpBarIfDamaged: noop,
@@ -50,7 +50,7 @@ test('町は map.update() の直後に、Game を渡して更新する', () => {
         _updateLandmines: noop, barriers: [], electricFloors: [], _updateBarrierSound: noop, _updateAutoAim: noop,
         _updateOverdrive: noop, env: { update: noop }, _updateEnemyHoverSound: noop,
         _checkMissionClear: noop, collisionManager: { update: noop }, _updateProximityAlert: noop,
-        projectiles: [], particles: [], smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
+        projectiles: [], particles: [], smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], enemies: [],
         map: { update: () => order.push('map'), town: { update: (game) => order.push(game === g ? 'town' : 'town(違う game)') } },
     });
     Game._simulationTick.call(g);
@@ -62,7 +62,7 @@ test('落ちる破片も描画補間に載る', () => {
     const seen = [];
     const g = {
         player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-        repairKits: [], autoAimUnits: [], missileKits: [],
+        repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [],
         map: { town: { falling: [piece] } },
     };
     Game._forEachMovingEntity.call(g, (e) => seen.push(e));

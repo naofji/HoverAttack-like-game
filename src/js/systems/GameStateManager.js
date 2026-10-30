@@ -54,6 +54,7 @@ export class GameStateManager {
         // 7面の要塞のお宝をこの配列に入れるので、ここで直しておく
         game.missileKits = [];
         game.autoAimUnits = [];
+        game.lifeKits = [];
         game.autoAimTarget = null;
         game.autoAimLockedEnemy = null;
         game.base = null;

@@ -715,7 +715,9 @@ export class HUD {
         ctx.fillStyle = HUD_LABEL_INK;
         ctx.fillText(label, zoneX + UNIT_COLS.label, y);
         ctx.font = 'bold 18px "Space Mono", monospace';
-        ctx.fillStyle = '#FFFFFF';
+        // 残機を拾った直後は数字を金色に点滅させる（lifeUpTimer を持つのは自機だけ）
+        const lifeUp = unit && unit.lifeUpTimer > 0 && Math.floor(unit.lifeUpTimer / 6) % 2 === 0;
+        ctx.fillStyle = lifeUp ? '#FFE066' : '#FFFFFF';
         ctx.fillText(String(unit ? unit.lives : 0), zoneX + UNIT_COLS.lives, y);
         ctx.font = HUD_FONT;
 

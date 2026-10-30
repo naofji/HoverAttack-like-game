@@ -11,7 +11,7 @@ import {
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
     HOVER_COOLDOWN_AFTER_BURST,
-    PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES,
+    PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES, EXTRA_LIFE_FLASH_FRAMES,
     
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     COLOR_HOVER_EXHAUST,
@@ -100,6 +100,7 @@ export class Player {
         this.hp = PLAYER_MAX_HP;
         this.maxHp = this.hp;
         this.lives = PLAYER_INITIAL_LIVES;
+        this.lifeUpTimer = 0;   // 残機を拾った直後の「1UP」表示の残りフレーム
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
         this.hoverFuel = HOVER_MAX_FUEL;
@@ -202,6 +203,7 @@ export class Player {
     /** Decrement all per-frame timers (runs even while docked). */
     _updateTimers() {
         if (this.invincibleTimer > 0) this.invincibleTimer--;
+        if (this.lifeUpTimer > 0) this.lifeUpTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
         if (this.mgFireTimer > 0) this.mgFireTimer--;
         if (this.mgReloadTimer > 0) {
@@ -811,6 +813,12 @@ export class Player {
         this.grenades = Math.max(0, Math.floor(this.grenades) - n);
     }
 
+    /** 残機を 1 増やす（残機アイテムが呼ぶ）。「1UP」の表示も始める */
+    gainLife() {
+        this.lives++;
+        this.lifeUpTimer = EXTRA_LIFE_FLASH_FRAMES;
+    }
+
     die() {
         this.alive = false;
         playDestruction(this.game, this, 'player');
@@ -841,6 +849,7 @@ export class Player {
         this.autoAimPaused = false;
         this.overdriveTimer = 0;
         this.overdriveMaxTimer = 0;
+        this.lifeUpTimer = 0;
         this.alive = true;
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
@@ -1009,6 +1018,26 @@ export class Player {
             }
         }
         this._drawHoverExhaust(ctx);
+        ctx.restore();
+        this._drawLifeUp(ctx);
+    }
+
+    /**
+     * 残機を拾った直後に頭の上へ出す「1UP」。上へ昇りながら、後半で薄れる。
+     * HUD の数字の点滅（HUD.js）だけだと、視線を下へ外さないと拾ったことが読めない。
+     */
+    _drawLifeUp(ctx) {
+        if (this.lifeUpTimer <= 0) return;
+        const t = 1 - this.lifeUpTimer / EXTRA_LIFE_FLASH_FRAMES;   // 0 → 1
+        const alpha = Math.min(1, (1 - t) / 0.4);                    // 最後の 40% で薄れる
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = 'bold 12px "Space Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#00CCFF';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText('1UP', Math.round(this.x + this.width / 2), Math.round(this.y - 4 - t * 18));
         ctx.restore();
     }
 

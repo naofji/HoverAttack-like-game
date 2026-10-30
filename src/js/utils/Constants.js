@@ -329,6 +329,17 @@ export const CARRIER_ARROW_ALPHA = 0.7;
 //   もっと上げたいなら 45 まで。50 以上は母艦の量も一緒に見直すこと
 export const REPAIR_KIT_PLAYER_HEAL = 40;
 
+// --- 残機アイテム（7面の要塞のお宝。拾った瞬間に自機の残機が 1 増える）---
+// 自機の残機を増やす手段は今まで無かった（初期 3 機のみ）。要塞は難しいので、その救済として
+// お宝に混ぜる。**全区画に置くと最大 +4 機（初期の倍以上）になる**ので、ステージ全体で 1 個にする
+// （ユーザー判断 2026-10-31）。置く区画は、スタートの部屋から最も遠い区画。
+export const FORTRESS_EXTRA_LIFE_COUNT = 1;
+// 区画のお宝は右端から 2 タイルおきに [オーバードライブ, リペア, リペア]。その 2 番目（リペア）を
+// 残機に入れ替える（ユーザー判断）。0 番目の稀少なオーバードライブは動かさない
+export const FORTRESS_EXTRA_LIFE_SLOT = 1;
+// 拾った直後に「1UP」を出す長さ。HUD の残機の数字が小さく、拾ったのに気づけないのを避ける
+export const EXTRA_LIFE_FLASH_FRAMES = 120;
+
 // --- Docking Resupply (gradual replenishment per frame while docked) ---
 // HP: 100 / 60 ≈ 1.67/frame → full heal in ~3.6 seconds (at 60fps)
 export const DOCK_HP_RATE = 100 / 216; // ~0.46 HP/frame → full in ~3.6s

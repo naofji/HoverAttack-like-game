@@ -74,6 +74,30 @@ export const AudioPlayerSounds = {
         });
     },
 
+    /**
+     * 残機を拾った音。上がって降りて駆け上がる6音（E5 G5 E6 C6 D6 G6 の並びは、
+     * 「増えた」ことが一聴で分かる定番のメロディの形）。共通の拾得音 playPickup は鳴らさない。
+     * 音量は playPickup の1音の頂点（0.07）に揃え、6音ぶん長いぶん耳に残るので上げない。
+     */
+    playExtraLife() {
+        if (!this._prepare()) return;
+        const t = this.ctx.currentTime;
+        const notes = [659.25, 783.99, 1318.51, 1046.5, 1174.66, 1567.98];
+        notes.forEach((freq, i) => {
+            const at = t + i * 0.075;
+            const last = i === notes.length - 1;
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, at);
+            g.gain.exponentialRampToValueAtTime(0.07, at + 0.008);
+            g.gain.exponentialRampToValueAtTime(0.0001, at + (last ? 0.28 : 0.09));
+            osc.connect(g); g.connect(this._seDest());
+            osc.start(at); osc.stop(at + (last ? 0.3 : 0.1));
+        });
+    },
+
     /** アイテム取得。短く明るい上昇音。 */
     playPickup() {
         if (!this._prepare()) return;

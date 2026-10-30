@@ -118,9 +118,12 @@ export class PickupItem {
 
         this.onPickup(player);
         this.game.addScore(ITEM_PICKUP_SCORE);
-        audioManager.playPickup();
+        this.playPickupSound();
         this.alive = false;
     }
+
+    /** 拾った音。既定は共通の拾得音で、残機のように専用の音を持つ派生クラスが差し替える */
+    playPickupSound() { audioManager.playPickup(); }
 
     /**
      * 拾われたときの効果。派生クラスが実装する。

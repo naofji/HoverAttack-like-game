@@ -593,9 +593,9 @@ test('お宝が実際にゲームへ置かれる（7面だけ）', async () => {
   const { Map } = await import('../src/js/world/Map.js');
   for (const lv of [0, 6]) {
     const map = new Map({ rng: new SeededRNG(1) }, lv);
-    const game = { map, repairKits: [], missileKits: [] };
+    const game = { map, repairKits: [], missileKits: [], lifeKits: [] };
     new SpawnManager(game).spawnTreasures();
-    const total = game.repairKits.length + game.missileKits.length;
+    const total = game.repairKits.length + game.missileKits.length + game.lifeKits.length;
     if (lv === 6) {
       assert.equal(total, map.fortressZones.length * FORTRESS_TREASURE_COUNT, '7面の宝の数が合わない');
       assert.ok(game.missileKits.length > 0, 'オーバードライブが置かれていない');

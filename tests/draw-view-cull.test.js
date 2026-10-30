@@ -43,7 +43,7 @@ function makeWorld({ enemies = [], landmines = [], barriers = [] } = {}) {
         barriers,
         electricFloors: [],
         projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-        missileKits: [], enemyBullets: [], smokeScreens: [],
+        missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
         _applyRenderInterpolation: noop,
         _restoreRenderInterpolation: noop,
         _drawHpBarIfDamaged: noop,

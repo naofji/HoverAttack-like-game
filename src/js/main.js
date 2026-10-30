@@ -114,6 +114,7 @@ export const Game = {
     repairKits: [],
     autoAimUnits: [],
     missileKits: [],
+    lifeKits: [],         // 要塞のお宝の残機アイテム（7面だけ）
     barriers: [],   // 7面の要塞の電磁パルスのバリア
     electricFloors: [],   // 同、廊下の電流の床
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
@@ -542,6 +543,7 @@ export const Game = {
         this._updateAndPrune(this.repairKits);
         this._updateAndPrune(this.autoAimUnits);
         this._updateAndPrune(this.missileKits);
+        this._updateAndPrune(this.lifeKits);
         this._updateAutoAim();
         this._updateOverdrive();
         this.env.update();
@@ -567,6 +569,7 @@ export const Game = {
         for (const k of this.repairKits) fn(k);
         for (const u of this.autoAimUnits) fn(u);
         for (const k of this.missileKits) fn(k);
+        for (const k of this.lifeKits) fn(k);
         // 3面の町の落ちる破片。補間しないと、カメラに対してかくついて落ちる
         if (this.map && this.map.town) for (const p of this.map.town.falling) fn(p);
     },
@@ -1061,6 +1064,7 @@ export const Game = {
         for (const kit of this.repairKits) kit.draw(ctx);
         for (const unit of this.autoAimUnits) unit.draw(ctx);
         for (const kit of this.missileKits) kit.draw(ctx);
+        for (const kit of this.lifeKits) kit.draw(ctx);
 
         // グレネード軌道プレビュー描画（長押し中）
         if (this.grenadeTrajectory) {

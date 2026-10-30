@@ -291,7 +291,7 @@ export function carveFortressZones({
     thickness, ceilingH, floorH, shaftW, gateSize, tunnelMax,
     corridorH, roomW, roomMargin, corridorMinW,
     treasureCount, garrisonTurrets, garrisonTanks, barrierClearance,
-    guardType, guardInset, electricMinLen, electricGap,
+    guardType, guardInset, electricMinLen, electricGap, extraLifeCount = 0, extraLifeSlot = 1,
 }) {
     const picked = pickFortressZones({
         rows, cols, rooms, excludeRects, rng, count, wMin, wRange, hMin, hRange, margin,
@@ -323,7 +323,37 @@ export function carveFortressZones({
         });
         zones.push({ ...zone, openings, floors, shafts, rooms, corridors, ...contents });
     }
+    // 先頭の部屋（rooms は Map が渡すもの。ループの中の rooms は区画の室で別物）がスタート
+    assignExtraLives(zones, rooms[0], { count: extraLifeCount, slot: extraLifeSlot });
     return { zones, marks };
+}
+
+/**
+ * お宝の 1 つを残機に入れ替える。スタートの部屋から**最も遠い区画**から順に count 個。
+ *
+ * 全区画に置くと最大 +4 機になるので、ステージ全体で 1 個にしている（ユーザー判断）。
+ * 乱数は使わない（週次の決定性を保つ。距離が同じなら区画の順で決まる）。
+ * 狭い区画ではお宝の列が短く、slot 番目が無いことがある。その区画は飛ばして次に遠い区画へ回す。
+ *
+ * @param {Array} zones 区画（treasures を持つ）。treasures[slot].kind を 'life' に書き換える
+ * @param {{centerR:number,centerC:number}|undefined} start スタートの部屋
+ */
+export function assignExtraLives(zones, start, { count, slot }) {
+    if (!start || count <= 0) return;
+    const dist = (z) => {
+        const r = (z.r0 + z.r1) / 2 - start.centerR;
+        const c = (z.c0 + z.c1) / 2 - start.centerC;
+        return r * r + c * c;
+    };
+    // 安定ソート: 距離が同じなら区画の並び順が先
+    const farthest = zones.map((z, i) => ({ z, i })).sort((a, b) => dist(b.z) - dist(a.z) || a.i - b.i);
+    let left = count;
+    for (const { z } of farthest) {
+        if (left <= 0) break;
+        if (!z.treasures[slot]) continue;
+        z.treasures[slot].kind = 'life';
+        left--;
+    }
 }
 
 /**
