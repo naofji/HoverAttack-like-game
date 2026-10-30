@@ -221,6 +221,7 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
   STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_STAND_COLOR,
   STORAGE_TOWER_STAND_H, STORAGE_TOWER_BLINK_PERIOD,
+  STORAGE_TOWER_STRIPE_EDGE_COLOR,
   STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX,
 } from '../src/js/utils/Constants.js';
 
@@ -484,4 +485,24 @@ test('塔は自機より奥に描く（通り抜けたとき自機が塔の陰�
   Game._drawWorld.call(world, makeFakeCtx());
   assert.ok(order.indexOf('tower') < order.indexOf('player'), `描く順: ${order}`);
   assert.ok(order.indexOf('tower') < order.indexOf('carrier'), `描く順: ${order}`);
+});
+
+test('オレンジの帯の上下に、明滅しない暗い帯が接している（明滅のコントラストを出す。ユーザー案）', () => {
+  const t = addTower(towerGame(), 200, 300);
+  t.timer = 7;
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+  const f = fills(ctx);
+  const stripes = f.filter((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
+  const edges = f.filter((r) => r.style === STORAGE_TOWER_STRIPE_EDGE_COLOR);
+  assert.equal(edges.length, STORAGE_TOWER_STRIPE_COUNT * 2, '暗い帯の本数');
+  for (const e of edges) assert.equal(e.alpha, 1, '暗い帯まで明滅している');
+  for (const s of stripes) {
+    assert.ok(edges.some((e) => e.y + e.h === s.y && e.x === s.x && e.w === s.w), `帯 y=${s.y} の上に暗い帯が無い`);
+    assert.ok(edges.some((e) => e.y === s.y + s.h && e.x === s.x && e.w === s.w), `帯 y=${s.y} の下に暗い帯が無い`);
+  }
+  // 暗い帯はオレンジより後に描いて上書きしない（帯の幅が欠ける）
+  const lastEdge = Math.max(...f.map((r, i) => (r.style === STORAGE_TOWER_STRIPE_EDGE_COLOR ? i : -1)));
+  const firstStripe = f.findIndex((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
+  assert.ok(lastEdge < firstStripe, '暗い帯がオレンジの帯の上に描かれた');
 });

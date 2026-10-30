@@ -1071,6 +1071,9 @@ export const STORAGE_TOWER_SHADE_COLOR = '#A89E74';      // 円筒の左右の�
 export const STORAGE_TOWER_STAND_COLOR = '#4A4E56';      // 足台（暗い金属。要塞のパネルと同じ系統）
 export const STORAGE_TOWER_STAND_H = 5;                  // 足台の高さ（px）。下の数 px を脚と横板にする
 export const STORAGE_TOWER_STRIPE_COLOR = '#FF8A1E';     // 横縞の光（オレンジ）
+// 横縞の上下に1pxずつ接する暗い帯（明滅しない）。黄白色の地の上ではオレンジが沈んで明滅が分かりにくかった
+// （実機の指摘）。暗い縁で挟むと、消え際でも帯の位置が読め、光ったときの差がはっきりする（ユーザー案）
+export const STORAGE_TOWER_STRIPE_EDGE_COLOR = '#5C4A2A';
 export const STORAGE_TOWER_STRIPE_COUNT = 3;
 export const STORAGE_TOWER_BLINK_PERIOD = 60;            // 明滅の周期（フレーム、約1秒）
 export const STORAGE_TOWER_STRIPE_ALPHA_MIN = 0.25;      // 消え際でも縞が分かる程度に残す
