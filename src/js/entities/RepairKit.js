@@ -2,7 +2,7 @@ import { PickupItem } from './PickupItem.js';
 import { REPAIR_KIT_PLAYER_HEAL } from '../utils/Constants.js';
 
 export const REPAIR_KIT_HEAL = 50; // carrier HP restored per kit
-// 自機側の回復量は Constants.js の REPAIR_KIT_PLAYER_HEAL(=30)。
+// 自機側の回復量は Constants.js の REPAIR_KIT_PLAYER_HEAL(=40)。
 // 母艦側のこの値だけが歴史的にここへ直書きされている
 
 /**

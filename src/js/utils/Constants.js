@@ -324,7 +324,10 @@ export const CARRIER_ARROW_ALPHA = 0.7;
 // 母艦側の量は例外的に RepairKit.js の REPAIR_KIT_HEAL(=50) に直書きされている。
 // 30 にしてあるのは、母艦へ帰る必要を残しつつ「もうひとしのぎ」を作るため。
 // rival は必ず落とすので、rival を1体倒すたびに +30 効く
-export const REPAIR_KIT_PLAYER_HEAL = 30;
+// → 2026-10-31 に 40 へ上げた（ユーザー判断「回復率を高めたい」。数値調整だけで済む最小の一歩）。
+//   母艦側 REPAIR_KIT_HEAL(=50) を下回る関係は保つ（超えると持ち帰る意味が薄れる）。
+//   もっと上げたいなら 45 まで。50 以上は母艦の量も一緒に見直すこと
+export const REPAIR_KIT_PLAYER_HEAL = 40;
 
 // --- Docking Resupply (gradual replenishment per frame while docked) ---
 // HP: 100 / 60 ≈ 1.67/frame → full heal in ~3.6 seconds (at 60fps)

@@ -29,7 +29,7 @@ function makePlayer(hp) {
 }
 
 test('自機の回復量は控えめ（母艦の回復量より小さい）', () => {
-  assert.equal(REPAIR_KIT_PLAYER_HEAL, 30);
+  assert.equal(REPAIR_KIT_PLAYER_HEAL, 40);
   assert.ok(REPAIR_KIT_PLAYER_HEAL < REPAIR_KIT_HEAL,
     '自機の回復が母艦以上だと、持ち帰る意味が薄れる');
 });
