@@ -1074,7 +1074,10 @@ export const STORAGE_TOWER_STRIPE_COLOR = '#FF8A1E';     // 横縞の光（オ�
 // 横縞の上下に1pxずつ接する暗い帯（明滅しない）。黄白色の地の上ではオレンジが沈んで明滅が分かりにくかった
 // （実機の指摘）。暗い縁で挟むと、消え際でも帯の位置が読め、光ったときの差がはっきりする（ユーザー案）
 export const STORAGE_TOWER_STRIPE_EDGE_COLOR = '#5C4A2A';
-export const STORAGE_TOWER_STRIPE_COUNT = 3;
+// 帯は太い1本。2px の細い縞3本では明滅が分かりにくく、上下に暗い縁を足すとしましまが多すぎて
+// 汚く見えた（実機の指摘2回）。1本にして、暗い縁で挟む（ユーザー案）
+export const STORAGE_TOWER_STRIPE_COUNT = 1;
+export const STORAGE_TOWER_STRIPE_H = 2;                 // 帯の太さ（px）。4px は太すぎた（ユーザー判断）
 export const STORAGE_TOWER_BLINK_PERIOD = 60;            // 明滅の周期（フレーム、約1秒）
 export const STORAGE_TOWER_STRIPE_ALPHA_MIN = 0.25;      // 消え際でも縞が分かる程度に残す
 export const STORAGE_TOWER_STRIPE_ALPHA_MAX = 1.0;

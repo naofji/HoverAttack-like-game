@@ -221,7 +221,7 @@ import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
   STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_STAND_COLOR,
   STORAGE_TOWER_STAND_H, STORAGE_TOWER_BLINK_PERIOD,
-  STORAGE_TOWER_STRIPE_EDGE_COLOR,
+  STORAGE_TOWER_STRIPE_EDGE_COLOR, STORAGE_TOWER_STRIPE_H,
   STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX,
 } from '../src/js/utils/Constants.js';
 
@@ -505,4 +505,19 @@ test('オレンジの帯の上下に、明滅しない暗い帯が接してい�
   const lastEdge = Math.max(...f.map((r, i) => (r.style === STORAGE_TOWER_STRIPE_EDGE_COLOR ? i : -1)));
   const firstStripe = f.findIndex((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
   assert.ok(lastEdge < firstStripe, '暗い帯がオレンジの帯の上に描かれた');
+});
+
+test('オレンジの帯は 2px の1本（縞を何本も入れると、暗い縁と合わせてしましまが汚く見えた。4px は太すぎた。ユーザー判断）', () => {
+  assert.equal(STORAGE_TOWER_STRIPE_COUNT, 1);
+  assert.equal(STORAGE_TOWER_STRIPE_H, 2);
+  const t = addTower(towerGame(), 200, 300);
+  const ctx = makeFakeCtx();
+  t.draw(ctx);
+  const stripes = fills(ctx).filter((r) => r.style === STORAGE_TOWER_STRIPE_COLOR);
+  assert.equal(stripes.length, 1);
+  assert.equal(stripes[0].h, STORAGE_TOWER_STRIPE_H);
+  // 円筒（ふたと足台のあいだ）の上下のまん中あたりに来る
+  const bodyTop = t.y + 2, bodyBottom = t.y + t.height - STORAGE_TOWER_STAND_H;
+  const mid = stripes[0].y + stripes[0].h / 2;
+  assert.ok(Math.abs(mid - (bodyTop + bodyBottom) / 2) <= 1, `帯が円筒のまん中に無い（${mid}）`);
 });

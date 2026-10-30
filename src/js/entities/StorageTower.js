@@ -18,7 +18,7 @@
 import {
     TILE_SIZE, STORAGE_TOWER_W, STORAGE_TOWER_H, STORAGE_TOWER_HP,
     STORAGE_TOWER_BODY_COLOR, STORAGE_TOWER_LIGHT_COLOR, STORAGE_TOWER_SHADE_COLOR,
-    STORAGE_TOWER_STAND_COLOR, STORAGE_TOWER_STAND_H, STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_EDGE_COLOR,
+    STORAGE_TOWER_STAND_COLOR, STORAGE_TOWER_STAND_H, STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_EDGE_COLOR, STORAGE_TOWER_STRIPE_H,
     STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_BLINK_PERIOD,
     STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX, STORAGE_TOWER_PHASE_STEP,
     DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE,
@@ -136,19 +136,21 @@ export class StorageTower {
         ctx.fillStyle = STORAGE_TOWER_LIGHT_COLOR;
         ctx.fillRect(x + 5, bodyTop, 3, bodyH);
 
-        // 横縞の光。円筒の高さを等分した位置に2pxずつ。先に上下1pxの暗い帯（明滅しない）を引き、
+        // 横縞の光。円筒の高さを等分した位置に STRIPE_H ずつ。先に上下1pxの暗い帯（明滅しない）を引き、
         // その間にオレンジを明滅させる。暗い帯を後に描くと、オレンジの帯の端を上書きして細く見える
         const gap = bodyH / (STORAGE_TOWER_STRIPE_COUNT + 1);
         const stripeYs = [];
-        for (let i = 1; i <= STORAGE_TOWER_STRIPE_COUNT; i++) stripeYs.push(Math.round(bodyTop + gap * i - 1));
+        for (let i = 1; i <= STORAGE_TOWER_STRIPE_COUNT; i++) {
+            stripeYs.push(Math.round(bodyTop + gap * i - STORAGE_TOWER_STRIPE_H / 2));
+        }
         ctx.fillStyle = STORAGE_TOWER_STRIPE_EDGE_COLOR;
         for (const sy of stripeYs) {
             ctx.fillRect(x + 1, sy - 1, w - 2, 1);
-            ctx.fillRect(x + 1, sy + 2, w - 2, 1);
+            ctx.fillRect(x + 1, sy + STORAGE_TOWER_STRIPE_H, w - 2, 1);
         }
         ctx.fillStyle = STORAGE_TOWER_STRIPE_COLOR;
         ctx.globalAlpha = this.stripeAlpha();
-        for (const sy of stripeYs) ctx.fillRect(x + 1, sy, w - 2, 2);
+        for (const sy of stripeYs) ctx.fillRect(x + 1, sy, w - 2, STORAGE_TOWER_STRIPE_H);
         ctx.globalAlpha = 1;
     }
 }
