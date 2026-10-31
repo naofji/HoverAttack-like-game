@@ -292,6 +292,11 @@ export class Map {
             });
         }
 
+        // Step 9d: 基地の砲台の箱に掛かる岩を空ける。浮き足場(Step 8)や硬い岩(Step 9)は基地の部屋にも
+        // 乱数で置かれるので、天井の砲台に刺さることがあった。湧き探索(Step 10)の前に空けておけば、
+        // ほかの湧きがその岩を足場に選ぶことも無い。乱数は使わない
+        this._clearBaseTurretBoxes();
+
         // Step 10: Determine entity spawn positions
         this.landmineSpawns = this._findLandminePositions();
         this.enemyTankSpawns = this._findEnemyTankPositions();
@@ -563,8 +568,13 @@ export class Map {
             }
             for (const g of zone.garrison.turrets) {
                 // type を持つものは砲台の種類を固定する（入り口の守衛はノーマル）
+                // g.r は空洞の端の行（天井付けは一番上・床置きは一番下）。タイルの中央に寄せ、付け根を
+                // その行の外の面に合わせる。以前は左上をタイルの角に置いていて、床置きの土台が床に
+                // 8px 沈んでいた（砲台は 24px でタイルより大きい）
                 this.enemyTurretSpawns.push({
-                    x: g.c * S, y: g.r * S, isCeiling: g.isCeiling, type: g.type,
+                    x: g.c * S + (S - ENEMY_TURRET_WIDTH) / 2,
+                    y: g.isCeiling ? g.r * S : (g.r + 1) * S - ENEMY_TURRET_HEIGHT,
+                    isCeiling: g.isCeiling, type: g.type,
                 });
             }
             for (const g of zone.garrison.tanks) {
@@ -1065,46 +1075,48 @@ export class Map {
         this.enemyBaseCenter = { r: centerR, c: centerC, floorR: floorR };
     }
 
+    /**
+     * 基地の砲台の置き場所。台にしている1タイルの中央に、付け根（天井付けは上・床置きは下）を
+     * 台の面に合わせる。砲台は 24px 角でタイル(16px)より大きいので、左上をタイルの角に合わせると
+     * 右へ 8px はみ出し、床置きは土台が台に 8px 沈んで見えた（実機の指摘「壁に埋まっている」）
+     */
+    _baseTurretSpots() {
+        if (!this.enemyBaseCenter) return [];
+        const S = TILE_SIZE;
+        const { r, c } = this.enemyBaseCenter;
+        const x = (col) => col * S + (S - ENEMY_TURRET_WIDTH) / 2;
+        // 天井の台は (r - 4) 行、床の台は真ん中が (r + 2) 行・左右が (r + 4) 行（_carveMainBaseRoom）
+        const ceiling = (col) => ({ x: x(col), y: (r - 4 + 1) * S, isCeiling: true });
+        const floor = (row, col) => ({ x: x(col), y: row * S - ENEMY_TURRET_HEIGHT, isCeiling: false });
+        const spots = [ceiling(c - 6), ceiling(c + 6)];         // Always 2
+        if (this.missionLevel === 2) spots.push(floor(r + 2, c)); // Mission 3 only
+        if (this.missionLevel >= 3) spots.push(floor(r + 4, c - 4), floor(r + 4, c + 4)); // Mission 4+
+        return spots;
+    }
+
+    /** 基地の砲台の箱に掛かる壊せる岩を空にする（台そのものは不壊なので残る）。Step 9d */
+    _clearBaseTurretBoxes() {
+        const S = TILE_SIZE;
+        for (const p of this._baseTurretSpots()) {
+            const c0 = Math.floor(p.x / S), c1 = Math.ceil((p.x + ENEMY_TURRET_WIDTH) / S) - 1;
+            const r0 = Math.floor(p.y / S), r1 = Math.ceil((p.y + ENEMY_TURRET_HEIGHT) / S) - 1;
+            for (let rr = r0; rr <= r1; rr++) {
+                for (let cc = c0; cc <= c1; cc++) {
+                    if (this.grid[rr][cc] === BLOCK_INDESTRUCTIBLE) continue;
+                    this.grid[rr][cc] = BLOCK_EMPTY;
+                    this.blockHP[rr][cc] = 0;
+                }
+            }
+        }
+    }
+
     _addMainBaseDefenders() {
         if (!this.enemyBaseCenter) return;
 
         const { r, c, floorR } = this.enemyBaseCenter;
 
         // Add Turrets on the indestructible spots we created - Staggered by MissionLevel
-        // Ceiling turrets (Always 2)
-        this.enemyTurretSpawns.push({
-            x: (c - 6) * TILE_SIZE,
-            y: (r - 4 + 1) * TILE_SIZE,
-            isCeiling: true
-        });
-        this.enemyTurretSpawns.push({
-            x: (c + 6) * TILE_SIZE,
-            y: (r - 4 + 1) * TILE_SIZE,
-            isCeiling: true
-        });
-
-        // Floor turret on the middle platform (Mission 3 only)
-        if (this.missionLevel === 2) {
-            this.enemyTurretSpawns.push({
-                x: c * TILE_SIZE,
-                y: (r + 2 - 1) * TILE_SIZE,
-                isCeiling: false
-            });
-        }
-
-        // Floor turrets on side platforms (Mission 4+)
-        if (this.missionLevel >= 3) {
-            this.enemyTurretSpawns.push({
-                x: (c - 4) * TILE_SIZE,
-                y: (r + 4 - 1) * TILE_SIZE,
-                isCeiling: false
-            });
-            this.enemyTurretSpawns.push({
-                x: (c + 4) * TILE_SIZE,
-                y: (r + 4 - 1) * TILE_SIZE,
-                isCeiling: false
-            });
-        }
+        this.enemyTurretSpawns.push(...this._baseTurretSpots());
 
         // Add a few tanks
         this.enemyTankSpawns.push({
@@ -1164,6 +1176,11 @@ export class Map {
 
         const spawns = [];
         const count = Math.min(this.targetTurretCount, allCandidates.length);
+        // 砲台は 24px でタイルより 8px 高いので、付け根と反対側の隣の行（床置きは上・天井付けは下）にも
+        // 8px はみ出す。候補の条件は自分の行しか見ていないので、そこに岩があると刺さって見えた。
+        // **候補から外すのではなく、選ぶときに飛ばす** — 候補の数を変えると下のシャッフルが消費する
+        // 乱数の数が変わり、以降の敵の構成が全部ずれる（週次の決定性）
+        const overhangClear = (t) => this._isAreaEmpty(t.isCeiling ? t.r + 1 : t.r - 1, t.c - 1, 1, 3);
 
         // Shuffle candidates
         for (let i = allCandidates.length - 1; i > 0; i--) {
@@ -1171,8 +1188,9 @@ export class Map {
             [allCandidates[i], allCandidates[j]] = [allCandidates[j], allCandidates[i]];
         }
 
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < allCandidates.length && spawns.length < count; i++) {
             const tile = allCandidates[i];
+            if (!overhangClear(tile)) continue;
             let yPos = tile.r * TILE_SIZE;
 
             // Adjust Y based on mounting

@@ -8,12 +8,15 @@
 // 重ねて記録し直した。段5の前の基準線と違うのは7面を外したことだけで、記録し直した値は
 // 変更の後のコードでも一致している（面1〜4・6 の絵はパネルの変更で動いていない）。
 // 7面の絵の振り分けは tests/panel-blocks.test.js が縛る
+//
+// **cache は 2026-10-31 に記録し直した**（砲台が壁に埋まる修正で、基地の砲台の箱に掛かる岩を空けるように
+// したため。基地の部屋の浮き足場が欠けたマップの絵が変わる）。damaged は元の値のまま一致している
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { digestDrawing } from '../tools/record-terrain-baseline.mjs';
 
 const BASELINE = {
-  cache: '0188f628f13b79388c75b37f272902a8ec743eb21eea35111b18312219d07399',
+  cache: '3ae26e2255505a6e185505067e871d30a35ab251abb82e33dbf3c7264493f073',
   damaged: 'f362b81d67f83bfbf3fb3f71adfadc7cf72f55237c740c494b942047fc110d8c',
 };
 
