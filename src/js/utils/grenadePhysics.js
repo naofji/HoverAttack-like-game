@@ -69,20 +69,72 @@ export function stepGrenade(map, g, motion) {
 
     // 横 → 縦の順に、軸ごとに跳ね返す
     if (map.isSolidPoint(nextX, g.y)) {
-        g.vx *= -GRENADE_BOUNCE;
+        bounceX(g);
         nextX = g.x + g.vx * motion.speed;
     }
     g.x = nextX;
 
     if (map.isSolidPoint(g.x, nextY)) {
-        // 床か天井。速ければ跳ね返り、遅ければ接地して転がりに摩擦をかける
-        if (Math.abs(g.vy) > 0.5) {
-            g.vy *= -GRENADE_BOUNCE;
-        } else {
-            g.vy = 0;
-            g.vx *= GRENADE_FRICTION;
-        }
+        bounceY(g);
         nextY = g.y + g.vy * motion.speed;
     }
     g.y = nextY;
+}
+
+/** 横の壁での跳ね返り（速度を反転して減衰） */
+function bounceX(g) {
+    g.vx *= -GRENADE_BOUNCE;
+}
+
+/** 床か天井での跳ね返り。速ければ跳ね返り、遅ければ接地して転がりに摩擦をかける */
+function bounceY(g) {
+    if (Math.abs(g.vy) > 0.5) {
+        g.vy *= -GRENADE_BOUNCE;
+    } else {
+        g.vy = 0;
+        g.vx *= GRENADE_FRICTION;
+    }
+}
+
+/**
+ * 法線 (nx, ny)（外向きの単位ベクトル）の面での跳ね返り。stepGrenade の斜面の枝と同じ式:
+ * 法線の向きの速さが 0.5 を超えれば GRENADE_BOUNCE 倍で反転、遅ければ法線の成分を消して
+ * 面に沿わせ、GRENADE_FRICTION をかける（斜面を転がり落ちる）。面から離れる向きの速度には何もしない。
+ * 平らな面（法線が軸に沿う）では、横・縦だけの跳ね返り（bounceX / bounceY）と同じ結果になる。
+ * @param {{vx:number, vy:number}} g 書き換える
+ */
+export function bounceOffSurface(g, nx, ny) {
+    const vn = g.vx * nx + g.vy * ny;
+    if (vn >= 0) return;
+    if (-vn > 0.5) {
+        g.vx -= (1 + GRENADE_BOUNCE) * vn * nx;
+        g.vy -= (1 + GRENADE_BOUNCE) * vn * ny;
+    } else {
+        g.vx = (g.vx - vn * nx) * GRENADE_FRICTION;
+        g.vy = (g.vy - vn * ny) * GRENADE_FRICTION;
+    }
+}
+
+/**
+ * 町の建物・木・植物（Town.sweepProjectile）に当たったときの跳ね返り。地形と同じ式を通すので、
+ * 岩に当たっても建物に当たっても同じ弾み方になる。
+ * normal（かけらの並びから推定した面の向き。surfaceNormal）が使えるときはそれで反射する:
+ * 木の三角形の斜めの面は、縦横の軸だけでは不自然に跳ねる（ユーザー指摘）。
+ * 推定できない・面から離れる向きのとき（薄い壁の真ん中など）は、動いた軸で側面か上面かを見て反射する。
+ * @param {{vx:number, vy:number}} g 書き換える
+ * @param {boolean} hitX 横の動きで壁に入った（側面）
+ * @param {boolean} hitY 縦の動きで壁に入った（上面・下面）。両方偽なら角なので両方とみなす
+ * @param {[number, number] | null} normal 推定した外向きの法線
+ */
+export function bounceOffTown(g, hitX, hitY, normal = null) {
+    if (normal && g.vx * normal[0] + g.vy * normal[1] < 0) {
+        bounceOffSurface(g, normal[0], normal[1]);
+        return;
+    }
+    if (!hitX && !hitY) { hitX = true; hitY = true; }
+    const ax = hitX ? -Math.sign(g.vx) : 0;
+    const ay = hitY ? -Math.sign(g.vy) : 0;
+    const len = Math.hypot(ax, ay);
+    if (len === 0) return;
+    bounceOffSurface(g, ax / len, ay / len);
 }

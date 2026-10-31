@@ -69,17 +69,25 @@ test('マシンガンの弾は植物に止まり、当たった所が欠ける�
     assert.ok(b.remaining < before, '欠けなかった');
 });
 
-test('ミサイルとグレネードも植物に当たって止まる（爆発は弾の側）', () => {
-    for (const kind of ['missile', 'grenade']) {
+test('ミサイルは植物に当たって止まる（爆発は弾の側）。グレネードは跳ね返る', () => {
+    for (const [kind, stops] of [['missile', true], ['grenade', false]]) {
         const town = makeTown();
         const b = town.buildings[0];
         const y = b.y + b.height - 12;
         const row = Math.floor((y - b.y) / 4);
         const hit = b.cells.findIndex((v, k) => v && Math.floor(k / b.cw) === row);
         const x = b.x + (hit % b.cw) * 4 + 2;
+        const before = b.remaining;
         const p = bullet(b.x - 10, y, x + 1, y, kind);
         town.sweepProjectile(p);
-        assert.ok(p.stopped, `${kind} が止まらなかった`);
+        assert.equal(!!p.stopped, stops, `${kind} の止まり方が違う`);
+        // グレネードは止まらず（爆発せず）跳ね返る。欠かさない（欠けるのは爆風で）
+        if (!stops) {
+            assert.equal(p.alive, true);
+            assert.ok(p.vx < 0, '跳ね返っていない');
+            assert.ok(p.x < x, '壁の中に入った');
+            assert.equal(b.remaining, before);
+        }
     }
 });
 

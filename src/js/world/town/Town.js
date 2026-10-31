@@ -27,6 +27,8 @@ import { IcicleFall } from './IcicleFall.js';
 import { impactTargets, applyImpact } from '../../utils/impactDamage.js';
 import { FireSystem } from './fire.js';
 import { ExplosiveSystem } from './explosives.js';
+import { bounceOffTown } from '../../utils/grenadePhysics.js';
+import { surfaceNormal } from './surfaceNormal.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import { audioManager } from '../../audio/AudioManager.js';
 import {
@@ -34,7 +36,7 @@ import {
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
     TOWN_FALL_CHIP_RADIUS, TOWN_SHATTER_PARTICLES, TOWN_RUBBLE_MAX_H,
-    TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
+    TOWN_PROJECTILE_IMPACT, TOWN_SWEEP_STEP, TOWN_BOUNCE_NORMAL_RADIUS, PLANT_LEAF_PARTICLES_HIT, PLANT_LEAF_PARTICLES_FALL,
     SNOWTREE_TOPPLE_MIN_CELLS, SNOWTREE_TOPPLE_LIE_TICKS, SNOWTREE_TOPPLE_PUFFS, SNOWTREE_TOPPLE_PUFF_PARTICLES, SNOWTREE_TOPPLE_LEAN_DEADZONE,
     SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_TRICKLE_EVERY, SNOWTREE_FLURRY_TRICKLE,
     SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES, SNOWTREE_FLURRY_SPREAD,
@@ -325,6 +327,12 @@ export class Town {
             this._projState.set(p, st);
         }
         const n = Math.max(1, Math.ceil(Math.hypot(p.x - x0, p.y - y0) / TOWN_SWEEP_STEP));
+        // 跳ね返す弾（グレネード）が側面か上面かを見るための、止まる壁の判定。ignore・exposed は本体の判定と同じ
+        const wallAt = (x, y) => this.buildingsAt(x, y).some((b) => {
+            if (st.ignore.has(b.id) || exposed.has(b.id)) return false;
+            const k = this.cellAt(b, x, y);
+            return k >= 0 && b.cells[k] && (b.cells[k] & SOLID);
+        });
         for (let s = 1; s <= n; s++) {
             const px = x0 + ((p.x - x0) * s) / n;
             const py = y0 + ((p.y - y0) * s) / n;
@@ -333,6 +341,18 @@ export class Town {
                 const k = this.cellAt(b, px, py);
                 if (k < 0 || !b.cells[k]) continue;
                 if (b.cells[k] & SOLID) {
+                    if (spec.bounce) {
+                        // 壁に入る一歩手前の点まで戻し、動いた軸で側面（横）か上面（縦）かを見て跳ね返す。
+                        // 欠かさず火もつけない。その tick の残りの距離は動かさない（次の tick から新しい速度で進む）
+                        const qx = x0 + ((p.x - x0) * (s - 1)) / n;
+                        const qy = y0 + ((p.y - y0) * (s - 1)) / n;
+                        // 面の向きはかけらの並びから推定する（木の斜めの面を縦横の軸に丸めない）。
+                        // 推定できないとき（薄い壁など）だけ、動いた軸で側面か上面かを見る
+                        bounceOffTown(p, wallAt(px, qy), wallAt(qx, py), surfaceNormal(wallAt, px, py, TOWN_BOUNCE_NORMAL_RADIUS));
+                        p.x = qx;
+                        p.y = qy;
+                        return;
+                    }
                     if (spec.chip > 0) this.chip(b, px, py, spec.chip);
                     if (spec.ignite) this.fire.igniteByBullet(b, px, py);
                     p.onTownWall(px, py);

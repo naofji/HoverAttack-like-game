@@ -15,7 +15,7 @@
 import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
-    GRENADE_LIFETIME,
+    GRENADE_LIFETIME, TOWN_PROJECTILE_IMPACT,
 } from '../utils/Constants.js';
 import { Missile } from '../entities/Missile.js';
 import { Grenade } from '../entities/Grenade.js';
@@ -227,9 +227,23 @@ export const CombatActions = {
         let vy = Math.sin(angle) * speed;
         let landX = x, landY = y;
 
+        // 町（3〜5面の建物・木・植物）での跳ね返り。本物のグレネードと同じ Town.sweepProjectile を、
+        // 予測用の弾（1発を最後まで使い回す）に通す。使い回すのは、発射位置に重なる建物を無視する記録
+        // （Town の _projState）が弾ごとに1回だけ作られるため。毎回作ると、壁の中の点が「発射位置」になって素通りする。
+        // 跳ね返す弾（spec.bounce）だけ通す: そうでない表の行は欠け・火という副作用が出るので予測では呼ばない
+        const town = map.town;
+        const townSpec = TOWN_PROJECTILE_IMPACT.grenade;
+        const virtual = town && townSpec && townSpec.bounce
+            ? { x, y, vx, vy, alive: true, townKind: 'grenade' } : null;
+        // 敵が重なっている建物は本物も止めない。予測中は敵が動かないので1回だけ集める
+        const exposed = virtual ? town.buildingsUnder(this.enemies.filter((e) => e.alive)) : null;
+
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
-            const g = { x, y, vx, vy };
+            const g = virtual || { x, y, vx, vy };
+            // 本物は tick の頭の位置を記録してから動かし、町はそこからの線分を調べる（renderInterp の _prevX）
+            if (virtual) { g._prevX = x; g._prevY = y; }
             stepGrenade(map, g, motionFor(this, x, y));
+            if (virtual) town.sweepProjectile(g, exposed);
             ({ x, y, vx, vy } = g);
 
             // バリア（電磁パルスバリア）があれば吸収されるためプレビューをそこで止める

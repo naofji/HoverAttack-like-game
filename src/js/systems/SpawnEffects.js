@@ -27,7 +27,7 @@ import { audioManager } from '../audio/AudioManager.js';
 
 export const SpawnEffects = {
     /** Spawn explosion particles and chain-detonate nearby landmines */
-    spawnExplosion(x, y, size, opts, { detonatesMines = true } = {}) {
+    spawnExplosion(x, y, size, opts, { fromEnemy = false } = {}) {
         this.particles.push(...createExplosion(x, y, size, opts));
         audioManager.playExplosion(size > 10, x);
 
@@ -42,14 +42,15 @@ export const SpawnEffects = {
             this.spawnBubbles(x, y, 'blast', Math.min(BLAST_BUBBLES_MAX, Math.round(size * BLAST_BUBBLES_PER_PARTICLE)));
         }
 
-        // 敵の弾の爆発は誘爆させない（playBlast の detonatesMines。敵機の巻き添え防止）
-        for (const mine of detonatesMines ? this.landmines : []) {
+        // 敵の弾の爆発は誘爆させない（playBlast の fromEnemy。敵機の巻き添え防止）
+        for (const mine of fromEnemy ? [] : this.landmines) {
             if (!mine.alive) continue;
             const dx = (mine.x + mine.width / 2) - x;
             const dy = (mine.y + mine.height / 2) - y;
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
         }
 
+        // 町は敵の爆発でも欠かせる・誘爆させる（町は敵の所有物ではなく中立。地雷だけが敵の爆発に反応しない）。
         // 3面の町（map.town）。ミサイル・グレネード・機体の破壊・地雷・基地の爆発が全部ここを通る。
         // 町自身の崩壊の粒はここを通さない（通すと崩壊が隣を崩す連鎖が止まらなくなる）
         const town = this.map && this.map.town;

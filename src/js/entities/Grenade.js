@@ -53,13 +53,6 @@ export class Grenade {
         }
     }
 
-    /** 町の厚い壁に当たった。跳ね返らず、その場で爆発する（spec 2章） */
-    onTownWall(x, y) {
-        this.x = x;
-        this.y = y;
-        this._explode();
-    }
-
     _explode() {
         this.alive = false;
         const map = this.game.map;
@@ -74,7 +67,7 @@ export class Grenade {
             this.isPlayerOwned ? GRENADE_BLOCK_DAMAGE : ENEMY_GRENADE_BLOCK_DAMAGE,
         );
         // 敵のグレネードは地雷を誘爆させない（敵どうしの巻き添え無効。誘爆した地雷の爆風は敵機にも当たる）
-        playBlast(this.game, this.x, this.y, 'grenade', undefined, { detonatesMines: this.isPlayerOwned });
+        playBlast(this.game, this.x, this.y, 'grenade', undefined, { fromEnemy: !this.isPlayerOwned });
 
         // Score for map blocks
         // 持ち主を見ずに加点していたので、**敵が壊した地形でプレイヤーに点が入っていた**

@@ -139,16 +139,47 @@ test('巡航ミサイルも厚い壁で爆発する', () => {
     assert.ok(game.blasts.length >= 1);
 });
 
-test('グレネードは厚い壁に当たった所で爆発し、細い部品はすり抜ける（欠けもしない）', () => {
+test('グレネードは町の厚い壁で跳ね返り（爆発も欠けもしない）、細い部品はすり抜ける', () => {
+    // 地形と同じく跳ね返す（ユーザー指定 2026-10-31。以前は厚い壁で爆発した）
     const game = world(); const t = town();
     const g = new Grenade(game, 60, 100, 0, 12);
     g.lifetime = 9999;
     const rail = t.buildings[1];
-    for (let i = 0; i < 80 && g.alive; i++) tick(t, g);
+    const wall = t.buildings[0];
+    const wallBefore = wall.remaining;
+    let maxX = -Infinity, bounced = false;
+    for (let i = 0; i < 40 && g.alive; i++) {
+        tick(t, g);
+        maxX = Math.max(maxX, g.x);
+        if (g.vx < 0) bounced = true;
+    }
     assert.equal(rail.remaining, rail.total, '手すりは欠けない');
-    assert.equal(g.alive, false);
-    assert.ok(g.x >= 200 && g.x < 212, `${g.x}`);
-    assert.ok(game.blasts.length >= 1);
+    assert.equal(wall.remaining, wallBefore, '厚い壁は、当たっただけでは欠けない');
+    assert.equal(g.alive, true, '町の壁で爆発した');
+    assert.ok(maxX < 200, `壁の中に入った: ${maxX}`);
+    assert.ok(bounced, '跳ね返っていない（横向きの速度が反転しない）');
+    assert.ok(g.x < 200, `壁の向こうへ抜けた: ${g.x}`);
+    assert.equal(game.blasts.length, 0);
+});
+
+test('グレネードの爆風は、今までどおり町を欠かせる', () => {
+    const game = world(); const t = town();
+    const wall = t.buildings[0];
+    const before = wall.remaining;
+    t.blast(wall.x + 4, wall.y + 4, 150);   // 爆発は spawnExplosion → town.blast（半径約 40px）
+    assert.ok(wall.remaining < before);
+});
+
+test('グレネードは斜めに当たっても壁の中に入らず、横向きの速度が反転する', () => {
+    const game = world(); const t = town();
+    const wall = t.buildings[0];
+    const g = new Grenade(game, 190, 150, 0, 0);
+    g.vx = 3; g.vy = 6;   // 右下へ。壁の左面 x=200 に当たる
+    g.lifetime = 9999;
+    for (let i = 0; i < 10; i++) tick(t, g);
+    assert.ok(g.x < 200, `壁の中に入った: ${g.x}`);
+    assert.ok(g.vx < 0, '横が反転していない');
+    assert.ok(wall.remaining === wall.total);
 });
 
 test('town.update は自機側の弾（game.projectiles）を見る', () => {
@@ -279,4 +310,20 @@ test('CollisionManager: 自機・母艦が重なっている建物は、敵の�
     };
     new CollisionManager(game)._updateEnemyBullets();
     assert.deepEqual(seen, [[0]], '塔（0番）が自機の下にあるので無視する');
+});
+
+test('グレネードは屋根（上面）に落ちると縦だけ跳ね返り、横の速度は保つ', () => {
+    // 軸の取り違え（側面と上面の見分け）を検出する。高さ 100 から立つ厚い壁の上へ、右下に落とす
+    const game = world();
+    const t = new Town([block(200, 100, 32, 100)], { createCanvas: fakeCanvas });
+    const wall = t.buildings[0];
+    const g = new Grenade(game, 210, 96, 0, 0);
+    g.vx = 1; g.vy = 6;   // 上面 y=100 へ。x は壁の幅の中なので側面には触れない
+    g.lifetime = 9999;
+    tick(t, g);
+    assert.ok(g.y <= 100, `屋根の中に入った: ${g.y}`);
+    assert.ok(g.vy < 0, '縦が反転していない（屋根で跳ねない）');
+    assert.equal(g.vx, 1, '横まで反転した（側面と取り違えている）');
+    assert.equal(wall.remaining, wall.total, '欠かしてはいけない');
+    assert.equal(game.blasts.length, 0);
 });

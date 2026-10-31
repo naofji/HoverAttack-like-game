@@ -2177,16 +2177,26 @@ export const TOWN_RUBBLE_MAX_H = 10;
 //   chip:   当たった所を欠かせる半径（px）。ミサイル・グレネードの欠けは、爆発（blast）の側で大きく開く
 //   thin:   細い部品（厚い壁の印の無いかけら）に当たったら 'chip'＝1棟1回欠かせて飛び続ける / 'pass'＝すり抜ける
 //   pierce: 厚い壁も貫通する（反射ビーム）
+//   bounce: 厚い壁（建物・木・植物・つらら）で止まらず、地形と同じ式で跳ね返る（グレネード。
+//           grenadePhysics.bounceOffTown）。面の向きはかけらの並びから推定する（surfaceNormal。
+//           三角形の木の斜面を縦横の軸に丸めない）。欠かさず爆発もしない。欠けるのは爆風（town.blast）で、
+//           爆発するのは寿命が尽きたときと、岩や地形に当たって爆発する条件のときだけ
+//           （ユーザー指定 2026-10-31。素通り→跳ね返りに考え直した。以前は厚い壁で爆発した）
 //   ignite: 当たった所に、かけらの材料の bulletIgnite の確率で火をつける（段3）
 // 厚い壁で止まったときの反応は、弾ごとの onTownWall(x, y)（岩に当たったときと同じ。岩は壊さない）
 export const TOWN_PROJECTILE_IMPACT = {
     bullet: { chip: 4, thin: 'chip', ignite: true },
     missile: { chip: 4, thin: 'chip', ignite: true },
-    grenade: { chip: 0, thin: 'pass' },
+    grenade: { chip: 0, thin: 'pass', bounce: true },
     beam: { chip: 6, thin: 'chip', pierce: true },
 };
 // 弾の通り道を調べる刻み（px）。かけら 4px と同じにして、速い弾が薄い壁をすり抜けないように
 export const TOWN_SWEEP_STEP = 4;
+// グレネードが町の厚い壁で跳ね返るときの、面の向き（法線）を推定する半径（px）。かけら 2 つぶん。
+// 実測（円錐の針葉樹に真上から落とし、法線の傾きを見た）: 8px だと左右の斜面が約 ±56〜67° で対称、
+// 頂点の近くは真上（約 6°）。12px 以上だと頂点が ±40〜50° にぼやけ、16px では根元の端で
+// 下向き（約 100°）にずれた。小さすぎる（4px）と階段の段差に引きずられる
+export const TOWN_BOUNCE_NORMAL_RADIUS = 8;
 
 // --- 3面の町並み 段3（火）---
 // 燃え進みを計算する間隔（フレーム）。燃料・確率はこの1回ごとに数える（spec 3章）

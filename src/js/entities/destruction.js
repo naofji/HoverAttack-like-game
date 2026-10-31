@@ -199,11 +199,12 @@ export const BLAST_PROFILES = {
  * @param {number} y
  * @param {string} kind BLAST_PROFILES のキー
  * @param {number} [countOverride] 粒子数を上書きする（基地の連続爆発など）
- * @param {{detonatesMines?: boolean}} [options] detonatesMines を偽にすると、この爆発では近くの地雷を
- *   誘爆させない。敵（ドローン・アタッカー・敵ミサイル）の爆発に使う: 地雷の爆風は敵機にも当たるので、
- *   敵の流れ弾が地雷を起こすと敵が敵を巻き込む（friendly fire）。既定は誘爆させる（自機側の爆発）
+ * @param {{fromEnemy?: boolean}} [options] fromEnemy が真なら、この爆発は近くの地雷を誘爆させない。
+ *   敵（ドローン・アタッカー・敵ミサイル）の爆発に使う: 地雷の爆風は敵機にも当たるので、敵の流れ弾が
+ *   起こすと敵が敵を巻き込む（friendly fire）。既定は誘爆させる（自機側の爆発）。
+ *   町（建物・爆発物）は敵の所有物ではなく中立なので、敵の爆発でも欠ける・誘爆する（ここでは見ない）
  */
-export function playBlast(game, x, y, kind, countOverride, { detonatesMines = true } = {}) {
+export function playBlast(game, x, y, kind, countOverride, { fromEnemy = false } = {}) {
     const profile = BLAST_PROFILES[kind];
     if (!profile) return;
 
@@ -218,5 +219,5 @@ export function playBlast(game, x, y, kind, countOverride, { detonatesMines = tr
         ));
     }
 
-    game.spawnExplosion(x, y, countOverride ?? profile.blast.count, undefined, { detonatesMines });
+    game.spawnExplosion(x, y, countOverride ?? profile.blast.count, undefined, { fromEnemy });
 }
