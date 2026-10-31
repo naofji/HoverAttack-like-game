@@ -10,7 +10,7 @@
 
 import { TILE_SIZE, SLOPE_UPHILL_SCALE } from '../../utils/Constants.js';
 import {
-    collidesWithTerrain, checkHorizontalEntityCollision, checkVerticalEntityCollision,
+    collidesWithTerrain, checkHorizontalEntityCollision, checkVerticalEntityCollision, wallSnapX,
 } from '../../utils/Physics.js';
 
 export const AttackerCollision = {
@@ -43,12 +43,9 @@ export const AttackerCollision = {
 
             if (!steppedUp) {
                 hitHMap = true;
-                this.x -= this.vx * this.motion.speed;
-                if (this.vx > 0) {
-                    this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
-                } else if (this.vx < 0) {
-                    this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
-                }
+                // 壁の面へ吸着（動く前の位置から求めると、2px/フレームより速いと1タイル離れる。utils/Physics.js）
+                if (this.vx !== 0) this.x = wallSnapX(this.x, this.width, this.vx);
+                else this.x -= this.vx * this.motion.speed;
                 this._undoSnapIntoRock('x', xBefore);
                 this.vx = 0;
 
@@ -158,11 +155,11 @@ export const AttackerCollision = {
     _checkHorizontalEntities() {
         checkHorizontalEntityCollision(this, this._buildEntityList(), () => {
             if (this.aiState === 'patrol') this.patrolDir *= -1;
-        });
+        }, () => this._collidesWithMap());
     },
 
     _checkVerticalEntities() {
-        if (checkVerticalEntityCollision(this, this._buildEntityList())) {
+        if (checkVerticalEntityCollision(this, this._buildEntityList(), () => this._collidesWithMap())) {
             this.onGround = true;
         }
     },

@@ -41,6 +41,24 @@ export function collidesWithTerrain(entity, map, customPoints) {
 }
 
 /**
+ * 横に動いて壁に当たった体を、壁の面に吸着させる x。`xMoved` は動いた後（壁に入った）の x。
+ *
+ * 以前は動く前の x から境目を切り上げ（右へ動くときは右の縁を切り捨て）で求めていた。点は縁から
+ * inset 内側にあるので、inset(2px)/フレームより速く当たると動く前の縁がすでに境目の向こうにあり、
+ * **壁から1タイル離れた所へ吸着していた**。狭い所ではそこが反対側の岩の中になる（実機の指摘
+ * 「ノックバックでめり込む」。rival の反動 2.6・ドローン 3.0 で、本物の3面で4件）。
+ * 壁に入った縁の点のタイルから決めれば、速さによらず壁の面になる。inset 以下の速さでは前と同じ値
+ */
+export function wallSnapX(xMoved, width, vx, inset = 2) {
+    if (vx > 0) {
+        const wallLeft = Math.floor((xMoved + width - inset) / TILE_SIZE) * TILE_SIZE;
+        return wallLeft - width - 0.02;
+    }
+    const wallRight = (Math.floor((xMoved + inset) / TILE_SIZE) + 1) * TILE_SIZE;
+    return wallRight + 0.02;
+}
+
+/**
  * Generate standard 8-point bounding box check points for an entity.
  * @param {object} entity - Must have x, y, width, height
  * @param {number} [inset=2] - Pixel inset from edges
@@ -64,9 +82,15 @@ export function getDefaultCheckPoints(entity, inset = 2) {
  * Pushes the entity out if overlapping and optionally calls a callback.
  * @param {object} self - The entity that moved horizontally (must have x, y, width, height, vx, alive)
  * @param {Array} entities - Array of entities to check against
- * @param {function} [onCollide] - Optional callback(self, other) called on collision
+ * @param {function|null} onCollide - callback(self, other) called on collision
+ * @param {function} blocked - () => self の今の位置が地形に掛かるか（機体ごとの `_collidesWithMap`）
+ *
+ * 押し出した先が岩の中なら、押し出す前の位置へ戻す。相手の向こう側の縁へ置き直すので、ノックバックで
+ * 深く重なると相手の向こうの壁に入った（実機の指摘）。押し出す前の位置は地形の解決を通った後なので
+ * 岩の外。重なりは残るが、次のフレーム以降に離れる。**blocked は省略させない** — 黙って押し出すだけの
+ * 作りに落ちると、渡し忘れた機体だけがまためり込む
  */
-export function checkHorizontalEntityCollision(self, entities, onCollide) {
+export function checkHorizontalEntityCollision(self, entities, onCollide, blocked) {
     for (const entity of entities) {
         if (entity === self || !entity.alive) continue;
 
@@ -75,6 +99,7 @@ export function checkHorizontalEntityCollision(self, entities, onCollide) {
             self.y < entity.y + entity.height &&
             self.y + self.height > entity.y) {
 
+            const xBefore = self.x;
             if (self.vx > 0) {
                 self.x = entity.x - self.width;
                 self.vx = 0;
@@ -82,6 +107,7 @@ export function checkHorizontalEntityCollision(self, entities, onCollide) {
                 self.x = entity.x + entity.width;
                 self.vx = 0;
             }
+            if (self.x !== xBefore && blocked()) self.x = xBefore;
 
             if (onCollide) onCollide(self, entity);
         }
@@ -92,9 +118,11 @@ export function checkHorizontalEntityCollision(self, entities, onCollide) {
  * Check vertical collision (landing on top of entities) for a falling entity.
  * @param {object} self - The falling entity (must have x, y, width, height, vy, alive)
  * @param {Array} entities - Array of entities to check against
+ * @param {function} blocked - () => self の今の位置が地形に掛かるか。乗った先で頭が天井に入るなら
+ *   乗らない（checkHorizontalEntityCollision と同じ理由）
  * @returns {boolean} True if landed on something
  */
-export function checkVerticalEntityCollision(self, entities) {
+export function checkVerticalEntityCollision(self, entities, blocked) {
     for (const entity of entities) {
         if (entity === self || !entity.alive) continue;
 
@@ -104,9 +132,15 @@ export function checkVerticalEntityCollision(self, entities) {
 
         if (self.x + self.width > entity.x && self.x < entity.x + entity.width) {
             if (myPrevBottom <= eTop + 4 && myBottom >= eTop) {
+                const xBefore = self.x, yBefore = self.y;
                 self.y = eTop - self.height;
-                self.vy = 0;
                 self.x += entity.vx || 0;
+                if (blocked()) {
+                    self.x = xBefore;
+                    self.y = yBefore;
+                    continue;
+                }
+                self.vy = 0;
                 return true;
             }
         }

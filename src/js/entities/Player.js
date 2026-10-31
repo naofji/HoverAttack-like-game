@@ -25,7 +25,7 @@ import {
     HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
-import { collidesWithTerrain } from '../utils/Physics.js';
+import { collidesWithTerrain, wallSnapX } from '../utils/Physics.js';
 import { SlopeBody } from './slopeBody.js';
 import { groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
@@ -526,12 +526,9 @@ export class Player {
 
             if (!steppedUp) {
                 hitHMap = true;
-                this.x -= this.vx * this.motion.speed;
-                if (this.vx > 0) {
-                    this.x = Math.floor((this.x + this.width) / TILE_SIZE) * TILE_SIZE - this.width - 0.02;
-                } else if (this.vx < 0) {
-                    this.x = Math.ceil(this.x / TILE_SIZE) * TILE_SIZE + 0.02;
-                }
+                // 壁の面へ吸着（動く前の位置から求めると、2px/フレームより速いと1タイル離れる。utils/Physics.js）
+                if (this.vx !== 0) this.x = wallSnapX(this.x, this.width, this.vx);
+                else this.x -= this.vx * this.motion.speed;
                 this._undoSnapIntoRock('x', xBefore);
                 this.vx = 0;
             }
@@ -573,7 +570,13 @@ export class Player {
     }
 
 
-    /** 横方向。敵の側面に当たったら押し出される。 */
+    /**
+     * 横方向。敵の側面に当たったら押し出される。押し出した先が岩の中なら、このフレームの横の移動を
+     * 取り消す（敵に阻まれて止まる）。敵の向こう側の縁へ置くので、ノックバックで深く重なると向こうの
+     * 壁に入った（実機の指摘）。押し出す前の位置へ戻すだけだと、自機は敵と重なったまま歩き続けて
+     * すり抜けた（段の脇の戦車で。tests/environment-land-invariance.test.js の台本）。
+     * 動く前の位置も岩に掛かるとき（乗り上げで y が変わった）は押し出す前の位置へ戻す
+     */
     _pushOutOfEnemiesHorizontally() {
         for (const enemy of this.game.enemies) {
             if (!enemy.alive) continue;
@@ -583,12 +586,17 @@ export class Player {
                 this.y < enemy.y + enemy.height &&
                 this.y + this.height > enemy.y) {
 
+                const xBefore = this.x;
                 if (this.vx > 0) { // Moving right into enemy
                     this.x = enemy.x - this.width;
                     this.vx = 0;
                 } else if (this.vx < 0) { // Moving left into enemy
                     this.x = enemy.x + enemy.width;
                     this.vx = 0;
+                }
+                if (this.x !== xBefore && this._collidesWithMap()) {
+                    this.x = this._frameStartX;
+                    if (this._collidesWithMap()) this.x = xBefore;
                 }
             }
         }
@@ -703,12 +711,19 @@ export class Player {
                 if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width) {
                     // Falling onto the enemy
                     if (pPrevBottom <= eTop + 4 && pBottom >= eTop) {
+                        // 乗った先で頭が天井に入るなら乗らない（横の押し出しと同じ理由）
+                        const xBefore = this.x, yBefore = this.y;
                         this.y = eTop - this.height;
+                        // Move with enemy horizontally if standing on it
+                        this.x += enemy.vx || 0;
+                        if (this._collidesWithMap()) {
+                            this.x = xBefore;
+                            this.y = yBefore;
+                            continue;
+                        }
                         this.onGround = true;
                         this.walkFrame = 2;
                         this.vy = 0;
-                        // Move with enemy horizontally if standing on it
-                        this.x += enemy.vx || 0;
                         break; // Landed on one enemy, no need to check others
                     }
                 }

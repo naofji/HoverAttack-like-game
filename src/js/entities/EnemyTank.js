@@ -251,7 +251,7 @@ export class EnemyTank {
 
         // Vertical Entity Collision
         if (this.vy > 0) {
-            checkVerticalEntityCollision(this, this._buildEntityList());
+            checkVerticalEntityCollision(this, this._buildEntityList(), () => this._collidesWithMap());
         }
 
         // 形のあるタイルの近くで、岩の外から始めたフレームを岩の中で終えたら、始めの位置へ戻す。
@@ -289,7 +289,7 @@ export class EnemyTank {
     _checkHorizontalEntities() {
         checkHorizontalEntityCollision(this, this._buildEntityList(), () => {
             this.patrolDir *= -1;
-        });
+        }, () => this._collidesWithMap());
     }
 
     /** Build collideable entity list (enemies + active player). */
