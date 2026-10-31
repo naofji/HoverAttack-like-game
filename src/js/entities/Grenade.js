@@ -73,7 +73,8 @@ export class Grenade {
             tile.r, tile.c, GRENADE_BLAST_RADIUS,
             this.isPlayerOwned ? GRENADE_BLOCK_DAMAGE : ENEMY_GRENADE_BLOCK_DAMAGE,
         );
-        playBlast(this.game, this.x, this.y, 'grenade');
+        // 敵のグレネードは地雷を誘爆させない（敵どうしの巻き添え無効。誘爆した地雷の爆風は敵機にも当たる）
+        playBlast(this.game, this.x, this.y, 'grenade', undefined, { detonatesMines: this.isPlayerOwned });
 
         // Score for map blocks
         // 持ち主を見ずに加点していたので、**敵が壊した地形でプレイヤーに点が入っていた**

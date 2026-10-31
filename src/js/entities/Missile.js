@@ -51,7 +51,7 @@ export class Missile {
         // 5面の坂と面取りは形で当てる。削れた空中で爆発すると、何も無い所で足場が壊れて見える
         if (map.isSolidPoint(this.x, this.y)) {
             map.damageBlock(tile.r, tile.c, 1);
-            playBlast(this.game, this.x, this.y, 'missileTerrain');
+            playBlast(this.game, this.x, this.y, 'missileTerrain', undefined, { detonatesMines: this.isPlayerOwned });
             this.exploded = true;
             this.alive = false;
 
@@ -71,7 +71,7 @@ export class Missile {
     onTownWall(x, y) {
         this.x = x;
         this.y = y;
-        playBlast(this.game, x, y, 'missileTerrain');
+        playBlast(this.game, x, y, 'missileTerrain', undefined, { detonatesMines: this.isPlayerOwned });
         this.exploded = true;
         this.alive = false;
     }

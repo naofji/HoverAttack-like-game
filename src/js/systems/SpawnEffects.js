@@ -27,7 +27,7 @@ import { audioManager } from '../audio/AudioManager.js';
 
 export const SpawnEffects = {
     /** Spawn explosion particles and chain-detonate nearby landmines */
-    spawnExplosion(x, y, size, opts) {
+    spawnExplosion(x, y, size, opts, { detonatesMines = true } = {}) {
         this.particles.push(...createExplosion(x, y, size, opts));
         audioManager.playExplosion(size > 10, x);
 
@@ -42,7 +42,8 @@ export const SpawnEffects = {
             this.spawnBubbles(x, y, 'blast', Math.min(BLAST_BUBBLES_MAX, Math.round(size * BLAST_BUBBLES_PER_PARTICLE)));
         }
 
-        for (const mine of this.landmines) {
+        // 敵の弾の爆発は誘爆させない（playBlast の detonatesMines。敵機の巻き添え防止）
+        for (const mine of detonatesMines ? this.landmines : []) {
             if (!mine.alive) continue;
             const dx = (mine.x + mine.width / 2) - x;
             const dy = (mine.y + mine.height / 2) - y;

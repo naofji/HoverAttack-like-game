@@ -65,7 +65,7 @@ export class EnemyHomingMissile {
         // 形で当てる（Missile と同じ）。5面の足場を削るのは主に敵のミサイル
         if (map.isSolidPoint(this.x, this.y)) {
             map.damageBlock(tile.r, tile.c, 1);
-            playBlast(this.game, this.x, this.y, 'missileTerrain');
+            playBlast(this.game, this.x, this.y, 'missileTerrain', undefined, { detonatesMines: false });
             this.exploded = true;
             this.alive    = false;
             return;
@@ -165,7 +165,7 @@ export class EnemyHomingMissile {
     onTownWall(x, y) {
         this.x = x;
         this.y = y;
-        playBlast(this.game, x, y, 'missileTerrain');
+        playBlast(this.game, x, y, 'missileTerrain', undefined, { detonatesMines: false });
         this.exploded = true;
         this.alive = false;
     }

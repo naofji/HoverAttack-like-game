@@ -159,7 +159,7 @@ export class CollisionManager {
             bullet._explode();
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = DAMAGE_HOMING_MISSILE;
-            playBlast(game, bullet.x, bullet.y, 'homingHit');
+            playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { detonatesMines: false });
         }
 
         recordHit(target, hx, hy);
@@ -186,7 +186,7 @@ export class CollisionManager {
                     bullet.exploded = true;
                     proj.alive = false;
                     if (proj instanceof Missile) proj.exploded = true;
-                    playBlast(game, bullet.x, bullet.y, 'homingHit');
+                    playBlast(game, bullet.x, bullet.y, 'homingHit');   // 自機が撃ち落とした爆発は誘爆させてよい
                     game.addScore(SCORE_HOMING_INTERCEPT);
                     return true;
                 }
@@ -298,7 +298,7 @@ export class CollisionManager {
             player.takeDamage(DAMAGE_ENEMY_MISSILE_PLAYER * damageMultiplier);
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
-            playBlast(game, proj.x, proj.y, 'enemyMissileHit');
+            playBlast(game, proj.x, proj.y, 'enemyMissileHit', undefined, { detonatesMines: false });
             proj.alive = false;
             proj.exploded = true;
             return;
@@ -307,7 +307,7 @@ export class CollisionManager {
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
             recordHit(carrier, proj.x, proj.y);
             carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
-            playBlast(game, proj.x, proj.y, 'enemyMissileHit');
+            playBlast(game, proj.x, proj.y, 'enemyMissileHit', undefined, { detonatesMines: false });
             proj.alive = false;
             proj.exploded = true;
         }

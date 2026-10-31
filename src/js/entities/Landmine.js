@@ -10,6 +10,7 @@ import {
 } from '../utils/Constants.js';
 import { applyBlastDamage } from '../utils/blastDamage.js';
 import { playBlast } from './destruction.js';
+import { fallToGround, hasGroundBelow } from './PickupItem.js';
 
 export class Landmine {
     constructor(game, x, y) {
@@ -20,11 +21,57 @@ export class Landmine {
         this.height = LANDMINE_HEIGHT;
         this.alive = true;
         this.blinkTimer = Math.floor(Math.random() * LANDMINE_BLINK_INTERVAL);
+        // 足場のブロックが壊れたら落ちる（ユーザー指定。格納塔・アイテムと同じ fallToGround）
+        this.vy = 0;
+        this.onGround = true;
     }
 
     update() {
         if (!this.alive) return;
         this.blinkTimer++;
+        this._fallIfUnsupported();
+    }
+
+    /**
+     * 足場が無くなったら落ちる。毎フレーム見るのは、足場は横から・下からも壊れるため（格納塔と同じ）。
+     * map の無い偽ゲームのテストが多いので、map が無ければ何もしない。
+     * 地図の外周は固い岩なので、落ちた先が無くて落ち続けることはない。
+     */
+    _fallIfUnsupported() {
+        const map = this.game && this.game.map;
+        if (!map || !map.isSolidPoint) return;
+        if (this.onGround && !hasGroundBelow(this)) this.onGround = false;
+        if (this.onGround) return;
+        fallToGround(this);
+        // 落下中だけ見る。町は地雷の隣にも建つので、床に置いてあるだけで起爆してはいけない
+        if (this._touchesStructure()) this.detonate();
+    }
+
+    /**
+     * 敵以外の構造物（格納塔・町の建物）に触れているか（ユーザー指定）。
+     * 敵機は見ない: 敵が敵の地雷で壊れるのは friendly fire で、この変更の趣旨に反する。
+     * 町は、かけらのある所だけを当たりにする（建物の外接矩形では、屋根の下の空きや
+     * 欠けた穴に触れただけで爆発してしまう）。地雷の四隅と中心の5点で見る
+     */
+    _touchesStructure() {
+        const g = this.game;
+        for (const t of g.storageTowers || []) {
+            if (t.alive && this.x < t.x + t.width && this.x + this.width > t.x &&
+                this.y < t.y + t.height && this.y + this.height > t.y) return true;
+        }
+        const town = g.map && g.map.town;
+        if (!town) return false;
+        const xs = [this.x, this.x + this.width - 1, this.x + this.width / 2];
+        const ys = [this.y, this.y + this.height - 1, this.y + this.height / 2];
+        for (const px of xs) {
+            for (const py of ys) {
+                for (const b of town.buildingsAt(px, py)) {
+                    const k = town.cellAt(b, px, py);
+                    if (k >= 0 && b.cells[k]) return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
