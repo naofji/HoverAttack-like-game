@@ -24,6 +24,7 @@ import { playRicochet } from '../entities/ricochet.js';
 import { createSparks, ImpactFlash } from '../entities/Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { recordHit } from '../utils/hitPoint.js';
+import { sweepProjectileAgainstOrbs } from './orbInteractions.js';
 
 export class CollisionManager {
     constructor(game) {
@@ -54,6 +55,8 @@ export class CollisionManager {
             bullet.update();
             // 自機・母艦との当たりより先に見る（壁で止まった弾は当たらない）
             if (town && bullet.alive) town.sweepProjectile(bullet, vulnerable);
+            // 2面の Orb。町と同じく、自機・母艦との当たりより先に見る（Orb は盾になる）
+            if (bullet.alive) sweepProjectileAgainstOrbs(game, bullet);
 
             if (bullet.alive) {
                 const playerVulnerable = game.player && game.player.alive

@@ -81,3 +81,35 @@ export function circleBoxContact(cx, cy, r, box) {
     if (m === top) return { nx: 0, ny: -1, depth: r + top };
     return { nx: 0, ny: 1, depth: r + bottom };
 }
+
+/**
+ * 線分 (x0,y0)→(x1,y1) が円に最初に入る点と、その線分上の位置 t（0〜1）。当たらない・始点が円の中なら null。
+ * 始点が中のときに当てないのは、Orb に重なって撃った弾がその場で消えないため
+ */
+export function segmentCircleHit(x0, y0, x1, y1, cx, cy, r) {
+    const fx = x0 - cx, fy = y0 - cy;
+    const c = fx * fx + fy * fy - r * r;
+    if (c <= 0) return null;
+    const dx = x1 - x0, dy = y1 - y0;
+    const a = dx * dx + dy * dy;
+    if (a === 0) return null;
+    const b = 2 * (fx * dx + fy * dy);
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    if (t < 0 || t > 1) return null;
+    return { x: x0 + dx * t, y: y0 + dy * t, t };
+}
+
+/** 弾の速度。vx/vy を持つ弾はそのまま、角度で飛ぶ弾（追尾・巡航ミサイル）は angle + driftAngle と speed から */
+export function projectileVelocity(p) {
+    if (p.vx !== undefined) return { vx: p.vx, vy: p.vy };
+    const a = p.angle + (p.driftAngle || 0);
+    return { vx: Math.cos(a) * p.speed, vy: Math.sin(a) * p.speed };
+}
+
+/** 弾の速度を書き換える。角度で飛ぶ弾は向きだけを変える（速さは speed のまま） */
+export function setProjectileVelocity(p, vx, vy) {
+    if (p.vx !== undefined) { p.vx = vx; p.vy = vy; return; }
+    p.angle = Math.atan2(vy, vx) - (p.driftAngle || 0);
+}

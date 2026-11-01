@@ -12,6 +12,7 @@
 // settingsFlow.js と同じく **Object.assign で Game に混ぜる前提**の
 // オブジェクトリテラルで、`this` は Game を指す。
 
+import { sweepProjectileAgainstOrbs } from './orbInteractions.js';
 import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
     MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
@@ -233,7 +234,10 @@ export const CombatActions = {
         // 跳ね返す弾（spec.bounce）だけ通す: そうでない表の行は欠け・火という副作用が出るので予測では呼ばない
         const town = map.town;
         const townSpec = TOWN_PROJECTILE_IMPACT.grenade;
-        const virtual = town && townSpec && townSpec.bounce
+        const sweepTown = !!(town && townSpec && townSpec.bounce);
+        // 2面の Orb でも跳ね返る（本物と同じ sweepProjectileAgainstOrbs。予測のあいだ Orb は止まっているものとして扱う）
+        const sweepOrbs = !!(this.orbs && this.orbs.length > 0);
+        const virtual = sweepTown || sweepOrbs
             ? { x, y, vx, vy, alive: true, townKind: 'grenade', isPlayerOwned: true } : null;
 
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
@@ -241,7 +245,8 @@ export const CombatActions = {
             // 本物は tick の頭の位置を記録してから動かし、町はそこからの線分を調べる（renderInterp の _prevX）
             if (virtual) { g._prevX = x; g._prevY = y; }
             stepGrenade(map, g, motionFor(this, x, y));
-            if (virtual) town.sweepProjectile(g);
+            if (sweepTown) town.sweepProjectile(g);
+            if (sweepOrbs) sweepProjectileAgainstOrbs(this, g);
             ({ x, y, vx, vy } = g);
 
             // バリア（電磁パルスバリア）があれば吸収されるためプレビューをそこで止める

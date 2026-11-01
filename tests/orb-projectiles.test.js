@@ -1,0 +1,167 @@
+// Orb と弾（設計 決定7・8、4.6）。弾は Orb で止まる（盾）。マシンガン・ミサイルは、跳ね返りで向きが 90度より
+// 大きく変わる＝面の法線から 45度より正面寄りに当たると壊れ（マシンガンは消える・ミサイルは爆発）、浅いと跳ね返る。
+// グレネードと反射ビームは角度に関係なく跳ね返る。跳ね返った弾は持ち主の陣営のまま
+import { test, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { Orb } from '../src/js/entities/Orb.js';
+import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
+import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
+import { Missile } from '../src/js/entities/Missile.js';
+import { EnemyHomingMissile } from '../src/js/entities/EnemyHomingMissile.js';
+import { Grenade } from '../src/js/entities/Grenade.js';
+import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
+import { CombatActions } from '../src/js/systems/CombatActions.js';
+import { CollisionManager } from '../src/js/systems/CollisionManager.js';
+import { sweepProjectileAgainstOrbs } from '../src/js/systems/orbInteractions.js';
+import { segmentCircleHit, projectileVelocity } from '../src/js/utils/orbPhysics.js';
+
+before(() => {
+  const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }) };
+});
+
+const CX = 500, CY = 500;
+
+/** 岩の無い広い空間に Orb（small、中心 CX, CY）が1つ */
+function world() {
+  const game = {
+    particles: [], landmines: [], enemies: [], projectiles: [], enemyBullets: [], barriers: [], orbs: [],
+    spawnExplosion() {}, spawnSparks() {}, spawnHeavyDamage() {}, addScore() {},
+    player: null, carrier: null, camera: { x: 0, y: 0, shake() {} }, canvas: { width: 1024, height: 768 },
+  };
+  game.map = {
+    width: 4000, height: 4000, rows: 250, cols: 250,
+    isSolid: () => false, isSolidAtPixel: () => false, isSolidPoint: () => false,
+    slopeHitAlong: () => null, popOutOfRock: () => null, hasShapedTileIn: () => false,
+    pixelToTile: (x, y) => ({ r: Math.floor(y / 16), c: Math.floor(x / 16) }),
+    destroyArea: () => 0, isWaterAtPixel: () => false,
+  };
+  const orb = new Orb(game, { cx: CX, cy: CY, size: 'small' });
+  game.orbs.push(orb);
+  return { game: Object.assign(game, CombatActions), orb };
+}
+
+/**
+ * 右向きに飛ぶ弾を、入射角 thetaDeg で Orb の左上に当たる線に置き、Orb の手前から当たった先まで1ティック動いたことにする
+ * （_prevX は tick の頭の位置。renderInterp と同じ）
+ */
+function aim(p, orb, thetaDeg) {
+  const th = (thetaDeg * Math.PI) / 180;
+  const y = CY - orb.r * Math.sin(th);
+  const hitX = CX - orb.r * Math.cos(th);
+  p._prevX = hitX - 4; p._prevY = y;
+  p.x = hitX + 2; p.y = y;
+  return { th };
+}
+
+function spyWall(p) {
+  const calls = [];
+  p.onTownWall = (x, y) => { calls.push([x, y]); p.alive = false; p.exploded = true; };
+  return calls;
+}
+
+for (const [name, make] of [
+  ['自機のマシンガン弾', (g) => new PlayerBullet(g, 0, 0, 0)],
+  ['敵のマシンガン弾', (g) => new EnemyBullet(g, 0, 0, 0)],
+  ['自機ミサイル', (g) => new Missile(g, 0, 0, 0, true)],
+  ['敵の追尾ミサイル', (g) => { const m = new EnemyHomingMissile(g, 0, 0, 0); m.speed = 4; m.driftAngle = 0; return m; }],
+]) {
+  for (const deg of [0, 30]) {
+    test(`${name}: 入射角 ${deg}° では壊れる（固い壁に当たったときと同じ onTownWall を当たった点で呼ぶ）`, () => {
+      const { game, orb } = world();
+      const p = make(game);
+      aim(p, orb, deg);
+      const calls = spyWall(p);
+      sweepProjectileAgainstOrbs(game, p);
+      assert.equal(calls.length, 1);
+      assert.ok(Math.abs(Math.hypot(calls[0][0] - CX, calls[0][1] - CY) - orb.r) < 0.01, '当たった点が円周の上でない');
+    });
+  }
+  test(`${name}: 入射角 60° では鏡のように跳ね返り、持ち主は変わらない`, () => {
+    const { game, orb } = world();
+    const p = make(game);
+    const owner = p.isPlayerOwned;
+    aim(p, orb, 60);
+    const calls = spyWall(p);
+    sweepProjectileAgainstOrbs(game, p);
+    assert.equal(calls.length, 0);
+    assert.ok(p.alive !== false && !p.exploded);
+    const v = projectileVelocity(p), s = Math.hypot(v.vx, v.vy);
+    // (1, 0) を法線 (−cos60, −sin60) で鏡映すると (−cos120, −sin120) = (0.5, −0.866)
+    assert.ok(Math.abs(v.vx / s - 0.5) < 1e-6 && Math.abs(v.vy / s + Math.sqrt(3) / 2) < 1e-6, `向き ${v.vx / s}, ${v.vy / s}`);
+    assert.equal(p.isPlayerOwned, owner);
+    assert.ok(Math.hypot(p.x - CX, p.y - CY) > orb.r, '円の外へ出ていない');
+  });
+}
+
+test('グレネードは入射角 0° でも跳ね返る（爆発しない）', () => {
+  const { game, orb } = world();
+  const g = new Grenade(game, 0, 0, 0, 6);
+  aim(g, orb, 0);
+  sweepProjectileAgainstOrbs(game, g);
+  assert.ok(g.alive && !g.exploded);
+  assert.ok(g.vx < 0, `vx ${g.vx}`);
+});
+
+test('反射ビームは入射角 0° でも跳ね返り、節が折れる', () => {
+  const { game, orb } = world();
+  const b = new ReflectBeam(game, 0, 0, 0);
+  aim(b, orb, 0);
+  b.segStart = { x: b._prevX, y: b._prevY };
+  const bounces = b.bounces;
+  sweepProjectileAgainstOrbs(game, b);
+  assert.ok(b.alive);
+  assert.ok(b.vx < 0);
+  assert.equal(b.bounces, bounces + 1);
+});
+
+test('1フレームに Orb の直径より長く動く弾も、線分で当たる', () => {
+  const { game, orb } = world();
+  const p = new PlayerBullet(game, 0, 0, 0);
+  p._prevX = CX - 30; p._prevY = CY;
+  p.x = CX + 30; p.y = CY;   // 1ティックで 60px（直径 16 を飛び越す）
+  const calls = spyWall(p);
+  sweepProjectileAgainstOrbs(game, p);
+  assert.equal(calls.length, 1);
+  assert.ok(Math.abs(calls[0][0] - (CX - orb.r)) < 0.01);
+});
+
+test('Orb の中から出ていく弾には当てない（始点が円の中）', () => {
+  const { game } = world();
+  const p = new PlayerBullet(game, 0, 0, 0);
+  p._prevX = CX; p._prevY = CY;
+  p.x = CX + 20; p.y = CY;
+  const calls = spyWall(p);
+  sweepProjectileAgainstOrbs(game, p);
+  assert.equal(calls.length, 0);
+});
+
+test('segmentCircleHit: 最初に円へ入る点と t を返し、外れる・始点が中なら null', () => {
+  const h = segmentCircleHit(0, 0, 20, 0, 10, 0, 4);
+  assert.ok(Math.abs(h.x - 6) < 1e-9 && Math.abs(h.t - 0.3) < 1e-9);
+  assert.equal(segmentCircleHit(0, 10, 20, 10, 10, 0, 4), null);
+  assert.equal(segmentCircleHit(10, 0, 20, 0, 10, 0, 4), null);
+});
+
+test('敵の弾は、あいだにある Orb に止められて向こうの自機に当たらない（CollisionManager を通す）', () => {
+  const { game } = world();
+  let hits = 0;
+  game.player = { alive: true, docked: false, invincibleTimer: 0, x: CX + 40, y: CY - 12, width: 16, height: 24, vx: 0, vy: 0, takeDamage() { hits++; } };
+  const b = new EnemyBullet(game, CX - 40, CY, 0);
+  game.enemyBullets.push(b);
+  const cm = new CollisionManager(game);
+  for (let f = 0; f < 40 && game.enemyBullets.length > 0; f++) {
+    for (const e of game.enemyBullets) { e._prevX = e.x; e._prevY = e.y; }
+    cm._updateEnemyBullets();
+  }
+  assert.equal(hits, 0);
+  assert.equal(game.enemyBullets.length, 0, '弾が残っている');
+});
+
+test('グレネードの軌道予測線は Orb で跳ね返る', () => {
+  const { game } = world();
+  // 近くから真横に投げる（遠いと重力で落ちて Orb の下をくぐる）
+  const t = game._calcGrenadeTrajectory(CX - 30, CY, 0, 6);
+  const maxX = Math.max(...t.points.map((p) => p.x));
+  assert.ok(maxX < CX, `予測線が Orb を素通りした: ${maxX}`);
+});

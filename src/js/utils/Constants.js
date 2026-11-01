@@ -2523,3 +2523,16 @@ export const ORB_HIT_COOLDOWN = 30;          // 同じ Orb と同じ相手のあ
 // 当たった機体を飛ばす速さ（applyKnockback）。グレネード（vx 2・vy −3.5）より控えめ
 export const ORB_KNOCK_VX = 2;
 export const ORB_KNOCK_VY = -2;
+// 弾が Orb に当たったときの扱い（設計 決定7・8）。キーは弾の townKind（町と同じ分類）。
+//   angle:  入射角が ORB_BREAK_INCIDENCE_DEG 未満なら壊れる（onTownWall: マシンガンは火花で消え、ミサイルは爆発）、
+//           以上なら鏡のように跳ね返る（ユーザー指定）
+//   bounce: 角度に関係なく跳ね返る。グレネード（ユーザー指定）と、反射ビーム（もともと跳ね返る武器なので。私の判断）
+// 表に無い弾（基地のレーザーなど）は Orb を素通りする
+export const ORB_PROJECTILE_IMPACT = {
+    bullet: { rule: 'angle' },
+    missile: { rule: 'angle' },
+    grenade: { rule: 'bounce' },
+    beam: { rule: 'bounce' },
+};
+// 跳ね返りで向きが 90度より大きく変わる＝入射角（面の法線と、入ってきた向きの逆とのなす角）が 45度未満
+export const ORB_BREAK_INCIDENCE_DEG = 45;

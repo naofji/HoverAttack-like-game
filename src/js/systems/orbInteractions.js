@@ -12,9 +12,12 @@
 
 import {
     PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
-    ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY,
+    ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY, ORB_PROJECTILE_IMPACT, ORB_BREAK_INCIDENCE_DEG,
 } from '../utils/Constants.js';
-import { circleBoxContact, reflectVelocity } from '../utils/orbPhysics.js';
+import {
+    circleBoxContact, reflectVelocity, segmentCircleHit, projectileVelocity, setProjectileVelocity,
+} from '../utils/orbPhysics.js';
+import { bounceOffSurface } from '../utils/grenadePhysics.js';
 import { collidesWithTerrain } from '../utils/Physics.js';
 import { recordHit } from '../utils/hitPoint.js';
 import { applyKnockback } from '../utils/Knockback.js';
@@ -40,6 +43,54 @@ export function updateOrbs(game) {
         for (const body of bodies) resolveOrbBody(game, orb, body);
         detonateTouchedMines(game, orb);
     }
+    // 自機の弾（とグレネード）。敵の弾は CollisionManager が町のあとに1発ずつ掃く
+    for (const p of game.projectiles || []) sweepProjectileAgainstOrbs(game, p);
+}
+
+/** 当たったあと弾を円の外へ出す距離（px）。円周ちょうどに置くと次のティックの線分の始点が円の中と読まれる */
+const PROJECTILE_CLEARANCE = 0.5;
+const BREAK_COS = Math.cos((ORB_BREAK_INCIDENCE_DEG * Math.PI) / 180);
+
+/**
+ * 1発の弾を、このティックに動いた線分で Orb に当てる（町の Town.sweepProjectile と同じく、ティックの頭の位置 _prevX から）。
+ * 一番手前で当たった Orb について、ORB_PROJECTILE_IMPACT の規則で壊すか跳ね返す（設計 4.6）
+ */
+export function sweepProjectileAgainstOrbs(game, p) {
+    const orbs = game.orbs || [];
+    if (orbs.length === 0 || !p.alive || p.exploded) return;
+    const spec = ORB_PROJECTILE_IMPACT[p.townKind];
+    if (!spec) return;
+    const v = projectileVelocity(p);
+    const x0 = p._prevX !== undefined ? p._prevX : p.x - v.vx;
+    const y0 = p._prevY !== undefined ? p._prevY : p.y - v.vy;
+    let best = null, bestOrb = null;
+    for (const orb of orbs) {
+        const h = segmentCircleHit(x0, y0, p.x, p.y, orb.cx, orb.cy, orb.r);
+        if (h && (!best || h.t < best.t)) { best = h; bestOrb = orb; }
+    }
+    if (!best) return;
+    const nx = (best.x - bestOrb.cx) / bestOrb.r, ny = (best.y - bestOrb.cy) / bestOrb.r;
+    const speed = Math.hypot(v.vx, v.vy);
+    // 入射角の余弦 = 面の法線と、入ってきた向きの逆とのなす角の cos
+    const cosIncidence = speed > 0 ? -(v.vx * nx + v.vy * ny) / speed : 1;
+    if (spec.rule === 'angle' && cosIncidence > BREAK_COS) {
+        p.onTownWall(best.x, best.y);
+        return;
+    }
+    const ox = best.x + nx * PROJECTILE_CLEARANCE, oy = best.y + ny * PROJECTILE_CLEARANCE;
+    if (p.townKind === 'grenade') {
+        p.x = ox; p.y = oy;
+        bounceOffSurface(p, nx, ny);
+        return;
+    }
+    const vn = v.vx * nx + v.vy * ny;
+    const rx = v.vx - 2 * vn * nx, ry = v.vy - 2 * vn * ny;
+    if (typeof p.deflect === 'function') {
+        p.deflect(ox, oy, rx, ry);   // 反射ビーム（節を折る）
+        return;
+    }
+    p.x = ox; p.y = oy;
+    setProjectileVelocity(p, rx, ry);
 }
 
 /** Orb が触れた地雷を起爆する（地雷は触れると爆発するものなので、それに揃えた） */
