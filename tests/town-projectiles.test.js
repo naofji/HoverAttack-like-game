@@ -259,6 +259,9 @@ test('反射ビームは厚い壁も貫通し、通り道の建物を1棟1回ず
     const chips = [0, 0];
     const realChip = t.chip.bind(t);
     t.chip = (b, ...rest) => { chips[b.id]++; return realChip(b, ...rest); };
+    // 反射ビームは敵のビームなので、町（敵の陣地）の建物は欠かさない。この試験は自機側のビーム
+    // （今のゲームには無いが、表 TOWN_PROJECTILE_IMPACT.beam の行はある）の「1棟1回」の規則を見るので、持ち主を自機にする
+    beam.isPlayerOwned = true;
     for (let i = 0; i < 200 && beam.alive; i++) {
         beam.update();
         t.sweepProjectile(beam);
@@ -266,20 +269,37 @@ test('反射ビームは厚い壁も貫通し、通り道の建物を1棟1回ず
     assert.deepEqual(chips, [1, 1], '2棟とも、欠かせたのは1回ずつ');
 });
 
-test('的が重なっている建物は、その的を狙う弾を止めない（遮蔽は撃った者と的の「あいだ」の建物だけ）', () => {
-    // 戦車が塔の手前に止まっている（画面では戦車が塔より手前に描かれる）。外から撃った弾は
-    // 塔の縁で止まらず、戦車まで届く
+test('本物の反射ビーム（敵のビーム）は建物を貫通するが、何も欠かさない（町は敵の陣地）', async () => {
+    const { ReflectBeam } = await import('../src/js/entities/ReflectBeam.js');
+    const game = world();
+    const t = new Town([block(200, 0, 32, 200), block(400, 0, 32, 200)], { createCanvas: fakeCanvas, isSolidTile: () => true });
+    const beam = new ReflectBeam(game, 150, 100, 0);
+    let chips = 0;
+    const realChip = t.chip.bind(t);
+    t.chip = (...a) => { chips++; return realChip(...a); };
+    for (let i = 0; i < 200 && beam.alive; i++) {
+        beam.update();
+        t.sweepProjectile(beam);
+    }
+    assert.equal(chips, 0);
+    assert.ok(t.buildings.every((b) => b.remaining === b.total));
+});
+
+test('的が重なっている建物でも、弾は止まる（以前は的に届くよう止めなかった。2026-11-01 のルール整理でなくした）', () => {
+    // 戦車が塔の手前に止まっている。外から撃った弾は塔の縁で止まる。遮蔽は建物のあるところ全部。
+    // 撃った位置に重なる建物だけが通過する（撃った者の居る建物。town-enemy-territory.test.js）
     const game = world(); const t = town();
     const tank = { x: 210, y: 90, width: 20, height: 20, alive: true };
     game.enemies.push(tank);
     const b = new PlayerBullet(game, 150, 100, 0);
     game.projectiles.push(b);
-    for (let i = 0; i < 40 && b.alive && b.x < 215; i++) {
+    for (let i = 0; i < 40 && b.alive; i++) {
         b._prevX = b.x; b._prevY = b.y;
         b.update();
         t.update(game);
     }
-    assert.ok(b.alive && b.x >= 215, `塔の縁で止まった（x=${b.x}）`);
+    assert.equal(b.alive, false);
+    assert.ok(b.x >= 200 && b.x < 208, `塔の縁で止まるはず（x=${b.x}）`);
 });
 
 test('的が重なっていない建物は、今までどおり弾を止める（遮蔽）', () => {
@@ -294,22 +314,6 @@ test('的が重なっていない建物は、今までどおり弾を止める�
     }
     assert.equal(b.alive, false);
     assert.ok(b.x >= 200 && b.x < 208);
-});
-
-test('CollisionManager: 自機・母艦が重なっている建物は、敵の弾を止めない', async () => {
-    const { CollisionManager } = await import('../src/js/systems/CollisionManager.js');
-    const t = town();
-    const seen = [];
-    const realSweep = t.sweepProjectile.bind(t);
-    t.sweepProjectile = (p, exposed) => { seen.push([...(exposed || [])]); return realSweep(p, exposed); };
-    const bullet = { alive: true, x: 0, y: 0, update() {} };
-    const game = {
-        enemyBullets: [bullet], projectiles: [], enemies: [], carrier: null,
-        player: { x: 205, y: 90, width: 20, height: 20, alive: true, docked: false, invincibleTimer: 1 },
-        map: { town: t },
-    };
-    new CollisionManager(game)._updateEnemyBullets();
-    assert.deepEqual(seen, [[0]], '塔（0番）が自機の下にあるので無視する');
 });
 
 test('グレネードは屋根（上面）に落ちると縦だけ跳ね返り、横の速度は保つ', () => {

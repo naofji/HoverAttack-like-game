@@ -55,9 +55,10 @@ export function world(specs, { seed = 1, isSolidTile = () => true, view = null }
         },
     }, SpawnEffects);
     const real = game.spawnExplosion;
-    game.spawnExplosion = function (x, y, size, opts) {
+    // 引数は全部そのまま本物へ渡す（5番目の { fromEnemy } を捨てると、敵の爆発も自機の爆発として町に届いてしまう）
+    game.spawnExplosion = function (x, y, size, ...rest) {
         booms.push({ x, y, size, frame: town.explosives.frame });
-        return real.call(this, x, y, size, opts);
+        return real.call(this, x, y, size, ...rest);
     };
     return {
         town, game, booms, rockHits,

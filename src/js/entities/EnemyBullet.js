@@ -15,6 +15,8 @@ export class EnemyBullet extends Bullet {
             lifetime: ENEMY_BULLET_LIFETIME,
             sound: 'enemyMg',
         });
+        // 敵の弾。町（敵の陣地）の建物は、この弾では欠けない・燃えない（Town.sweepProjectile が見る）
+        this.isPlayerOwned = false;
     }
 
     get bodyColor() { return '#FFCC00'; }

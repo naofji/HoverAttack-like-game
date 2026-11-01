@@ -50,11 +50,18 @@ export const SpawnEffects = {
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
         }
 
-        // 町は敵の爆発でも欠かせる・誘爆させる（町は敵の所有物ではなく中立。地雷だけが敵の爆発に反応しない）。
         // 3面の町（map.town）。ミサイル・グレネード・機体の破壊・地雷・基地の爆発が全部ここを通る。
-        // 町自身の崩壊の粒はここを通さない（通すと崩壊が隣を崩す連鎖が止まらなくなる）
+        // 町自身の崩壊の粒はここを通さない（通すと崩壊が隣を崩す連鎖が止まらなくなる）。
+        // 町は敵の陣地（ユーザー判断 2026-11-01）なので、敵の弾の爆発（fromEnemy）は、自機・母艦が重なっている建物だけ欠かす
+        // （無傷だと、建物に重なるだけで完全防御できてしまう）。それ以外は欠かさない・燃やさない・誘爆させない。
+        // 撃墜した敵機・地雷・ドラム缶の誘爆の爆発は fromEnemy が偽で、これまでどおり町を壊す（火薬のギミック）
         const town = this.map && this.map.town;
-        if (town) town.blast(x, y, size);
+        if (town) {
+            const only = fromEnemy
+                ? town.buildingsUnder([this.player, this.carrier].filter((e) => e && e.alive))
+                : null;
+            town.blast(x, y, size, only);
+        }
     },
 
     /**

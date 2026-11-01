@@ -43,7 +43,21 @@ test('spawnExplosion を通った爆発は町に届く（粒の数をそのま�
         map: { town: { blast: (...a) => calls.push(a) } },
     };
     SpawnEffects.spawnExplosion.call(game, 10, 20, 36);
-    assert.deepEqual(calls, [[10, 20, 36]]);
+    assert.deepEqual(calls, [[10, 20, 36, null]], '自機側の爆発は、どの建物も欠かしてよい（only = null）');
+});
+
+test('敵の弾の爆発（fromEnemy）は、自機・母艦が重なっている建物だけを欠かしてよい建物として町に渡す', () => {
+    const calls = [];
+    const under = [];
+    const game = {
+        particles: [], landmines: [],
+        player: { alive: true, x: 0, y: 0, width: 16, height: 16 }, carrier: null,
+        map: { town: { blast: (...a) => calls.push(a), buildingsUnder: (es) => { under.push(es.length); return new Set([7]); } } },
+    };
+    SpawnEffects.spawnExplosion.call(game, 10, 20, 36, undefined, { fromEnemy: true });
+    assert.deepEqual(under, [1], '自機だけが対象（母艦は null）');
+    assert.equal(calls.length, 1);
+    assert.deepEqual([...calls[0][3]], [7]);
 });
 
 test('町の無い面の spawnExplosion は何もしない（map も town も無くてよい）', () => {

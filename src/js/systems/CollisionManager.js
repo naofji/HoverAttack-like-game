@@ -42,17 +42,18 @@ export class CollisionManager {
     _updateEnemyBullets() {
         const game = this.game;
 
-        // 3面の町の厚い壁（遮蔽）。自機・母艦が重なっている建物は止めない（その建物の手前にいるので、
-        // 撃った者とのあいだにはない）。1回の更新で1度だけ集める
+        // 町（3〜5面の建物・木・植物）。敵の弾も建物で止まる（遮蔽・当たり判定はある）が、建物は無傷（町は敵の陣地。
+        // Town.sweepProjectile のルールを参照）。例外は自機・母艦が重なっている建物（vulnerable）で、そこは欠ける。
+        // 撃った位置に重なる建物は通過する。1回の更新で1度だけ集める
         const town = game.map && game.map.town;
-        const exposed = town && game.enemyBullets.length > 0
+        const vulnerable = town && game.enemyBullets.length > 0
             ? town.buildingsUnder([game.player, game.carrier].filter((e) => e && e.alive)) : null;
 
         for (let i = game.enemyBullets.length - 1; i >= 0; i--) {
             const bullet = game.enemyBullets[i];
             bullet.update();
             // 自機・母艦との当たりより先に見る（壁で止まった弾は当たらない）
-            if (town && bullet.alive) town.sweepProjectile(bullet, exposed);
+            if (town && bullet.alive) town.sweepProjectile(bullet, vulnerable);
 
             if (bullet.alive) {
                 const playerVulnerable = game.player && game.player.alive
@@ -156,7 +157,7 @@ export class CollisionManager {
             }));
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = DAMAGE_CRUISE_MISSILE;
-            bullet._explode();
+            bullet._explode(true);   // 自機に当たって爆発。撃ち落とした爆発（下の迎撃）とは違い、町と地雷は巻き込まない
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = DAMAGE_HOMING_MISSILE;
             playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { fromEnemy: true });

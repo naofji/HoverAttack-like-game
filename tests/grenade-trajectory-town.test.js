@@ -41,15 +41,13 @@ function world({ withTown = true, blueprints = null } = {}) {
 
 /** 本物のグレネードを _simulationTick と同じ順（位置の記録 → 更新 → 町）で進め、3フレームおきの点を返す */
 function actualPoints(game, town, x, y, angle, speed) {
-    // 敵が重なっている建物は止めない（Town.update が毎 tick 集めるのと同じ）
-    const exposed = town.buildingsUnder(game.enemies.filter((e) => e.alive));
     const g = new Grenade(game, x, y, angle, speed);
     g.lifetime = 1e9;   // 寿命の爆発は予測の関心外（予測は GRENADE_LIFETIME 回で打ち切る）
     const pts = [];
     for (let i = 0; i < GRENADE_LIFETIME && g.alive; i++) {
         g._prevX = g.x; g._prevY = g.y;
         g.update();
-        if (g.alive) town.sweepProjectile(g, exposed);
+        if (g.alive) town.sweepProjectile(g);
         if (i % 3 === 0) pts.push({ x: g.x, y: g.y });
     }
     return pts;
@@ -98,13 +96,13 @@ test('撃った位置に重なる建物は予測でも無視する（本物と�
     }
 });
 
-test('敵が重なっている建物は、予測でも本物と同じに止めない（弾が的に届く）', () => {
+test('敵が重なっている建物でも、予測は本物と同じに跳ね返る（撃たれる側が重なっていても建物は弾を止める）', () => {
     const { game, town } = world();
-    // 塔のすぐ手前に立つ敵。塔と重なるので、本物の自機側の弾は塔に止められない
+    // 塔のすぐ手前に立つ敵。以前は、的が重なる建物は自機の弾を止めなかった（ルール整理 2026-11-01 でなくした）
     game.enemies.push({ alive: true, x: 190, y: 90, width: 30, height: 30 });
     const trajectory = game._calcGrenadeTrajectory(60, 100, 0, 12);
     const actual = actualPoints(game, town, 60, 100, 0, 12);
-    assert.ok(Math.max(...actual.map((p) => p.x)) > 232, '本物が敵の後ろの塔を抜けていない（前提が崩れている）');
+    assert.ok(Math.max(...actual.map((p) => p.x)) < 200, '本物が敵の後ろの塔に入った（前提が崩れている）');
     const n = Math.min(trajectory.points.length, actual.length);
     for (let i = 0; i < n; i++) {
         assert.ok(Math.abs(trajectory.points[i].x - actual[i].x) < 1e-4, `point[${i}].x`);

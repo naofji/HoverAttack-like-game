@@ -14,12 +14,12 @@
 
 import { rasterizeParts, computeAnchors, chunkTouchesRock, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
 import { paintParts } from './shapes.js';
+import { centerOf } from '../../utils/Physics.js';
 import {
     TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR, PLANT_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS,
     SNOWTREE_CHAR_EDGE, SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS, ICE_PARTICLE_COLORS,
 } from './palette.js';
 import { createExplosion, Particle, SnowFlurryParticle } from '../../entities/Particle.js';
-import { centerOf } from '../../utils/Physics.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
 import { ToppleTree } from './ToppleTree.js';
@@ -271,9 +271,11 @@ export class Town {
      * 爆発（spawnExplosion がすべての爆発で呼ぶ）。半径は粒の数から決める: K × √size
      * （マシンガンの着弾 4粒 → 約7px、ミサイル 36粒 → 約20px、グレネード 150粒 → 約40px）
      */
-    blast(x, y, size) {
+    blast(x, y, size, only = null) {
         const radius = TOWN_BLAST_RADIUS_K * Math.sqrt(size);
         for (const b of this.buildingsInCircle(x, y, radius)) {
+            // 敵の爆発（町は敵の陣地）は、自機・母艦が重なっている建物だけ欠かす。それ以外は無傷・延焼なし・誘爆なし
+            if (only && !only.has(b.id)) continue;
             this.chip(b, x, y, radius, 'blast');
             // 爆風の中の燃える材料には必ず火がつく（spec 3章）。半径の中は欠けて無くなるので、
             // 穴の縁（かけら2つぶん外まで）に残ったかけらにつける
@@ -305,17 +307,28 @@ export class Town {
      * 弾と建物の当たり。前の位置（tick の頭に記録した _prevX）から今の位置まで TOWN_SWEEP_STEP 刻みで
      * 調べる。厚い壁に当たったら当たった所を欠かせて p.onTownWall(x, y)。細い部品は 1棟1回欠かせて
      * 飛び続ける（表の thin）。
-     * 撃った位置に重なる建物は、その弾では無視する。機体は建物の手前に重なって描かれるので、
-     * 建物の前で撃つと撃った瞬間に目の前の壁で消えてしまう（遮蔽になるのは撃った者と的のあいだの建物）。
-     * 的の側も同じで、exposed（的になりうる機体が重なっている建物の番号。buildingsUnder() で作る）は
-     * 止めない。塔の手前に止まった戦車を外から撃つと、塔の縁で弾が止まって戦車に届かなかった
-     * （最終レビュー指摘。敵の湧き位置の 15% が厚い壁の上）
+     *
+     * 町の当たり方のルール（ユーザー整理 2026-11-01。実装はこの関数と SpawnEffects.spawnExplosion の2か所だけ）:
+     *   1) 撃った位置に重なる建物は、その弾では無視する（通過する）。機体は建物の手前に重なって描かれるので、
+     *      建物の前で撃つと撃った瞬間に目の前の壁で消えてしまう。弾を最初に見た tick で、発射位置に重なる建物を
+     *      その弾の「無視する建物」として覚える。敵も自機も同じ。逆の「的が重なっている建物を素通りして的に届く」規則は無い
+     *      （撃たれる側が建物に重なっていても、建物は弾を止める。遮蔽は建物のあるところ全部）
+     *   2) 自機側の弾は建物に当たり、欠かせる・火をつける・誘爆させる（TOWN_PROJECTILE_IMPACT の表のとおり）
+     *   3) 敵の弾（p.isPlayerOwned === false）も建物に当たる（止まる・跳ね返る）が、建物は無傷（欠かさない・火も誘爆も無し）。
+     *      町は敵の陣地で、敵の攻撃は friendly fire。待ちの面で敵が町を壊し尽くすと、自機が着いたときには何も残らない
+     *   例外) vulnerable（自機・母艦が重なっている建物の番号）だけは、敵の弾でも欠け、火がつく。無傷で弾を止めると、
+     *      自機は建物に重なっているだけで完全防御できてしまう（ユーザー指摘）。削れて壊れれば遮蔽でなくなる
+     * @param {Set<number>} vulnerable 自機・母艦が重なっている建物。敵の弾でも欠ける（buildingsUnder() で作る）
      */
-    sweepProjectile(p, exposed = NONE) {
+    sweepProjectile(p, vulnerable = NONE) {
         const spec = TOWN_PROJECTILE_IMPACT[p.townKind];
         if (!spec || !p.alive || p.exploded) return;
+        // 敵の弾は当たる（止まる）が、建物には何も起こさない。例外の建物（vulnerable）だけ自機側の弾と同じ
+        const enemy = p.isPlayerOwned === false;
+        const harmless = (b) => enemy && !vulnerable.has(b.id);
         if (spec.pierce) {
-            this._sweepBeam(p, spec);
+            if (!enemy) this._sweepBeam(p, spec);
+            else if (vulnerable.size > 0) this._sweepBeam(p, spec, vulnerable);
             return;
         }
         // 発射したその tick は tick の頭の位置の記録が無い。1 tick 前の位置は x - vx で見積もる
@@ -327,9 +340,9 @@ export class Town {
             this._projState.set(p, st);
         }
         const n = Math.max(1, Math.ceil(Math.hypot(p.x - x0, p.y - y0) / TOWN_SWEEP_STEP));
-        // 跳ね返す弾（グレネード）が側面か上面かを見るための、止まる壁の判定。ignore・exposed は本体の判定と同じ
+        // 跳ね返す弾（グレネード）が側面か上面かを見るための、止まる壁の判定。ignore は本体の判定と同じ
         const wallAt = (x, y) => this.buildingsAt(x, y).some((b) => {
-            if (st.ignore.has(b.id) || exposed.has(b.id)) return false;
+            if (st.ignore.has(b.id)) return false;
             const k = this.cellAt(b, x, y);
             return k >= 0 && b.cells[k] && (b.cells[k] & SOLID);
         });
@@ -337,7 +350,7 @@ export class Town {
             const px = x0 + ((p.x - x0) * s) / n;
             const py = y0 + ((p.y - y0) * s) / n;
             for (const b of this.buildingsAt(px, py)) {
-                if (st.ignore.has(b.id) || exposed.has(b.id)) continue;
+                if (st.ignore.has(b.id)) continue;
                 const k = this.cellAt(b, px, py);
                 if (k < 0 || !b.cells[k]) continue;
                 if (b.cells[k] & SOLID) {
@@ -353,15 +366,19 @@ export class Town {
                         p.y = qy;
                         return;
                     }
-                    if (spec.chip > 0) this.chip(b, px, py, spec.chip);
-                    if (spec.ignite) this.fire.igniteByBullet(b, px, py);
+                    if (!harmless(b)) {
+                        if (spec.chip > 0) this.chip(b, px, py, spec.chip);
+                        if (spec.ignite) this.fire.igniteByBullet(b, px, py);
+                    }
                     p.onTownWall(px, py);
                     return;
                 }
                 if (spec.thin === 'chip' && !st.thin.has(b.id)) {
                     st.thin.add(b.id);
-                    this.chip(b, px, py, spec.chip);
-                    if (spec.ignite) this.fire.igniteByBullet(b, px, py);
+                    if (!harmless(b)) {
+                        this.chip(b, px, py, spec.chip);
+                        if (spec.ignite) this.fire.igniteByBullet(b, px, py);
+                    }
                 }
             }
         }
@@ -369,9 +386,10 @@ export class Town {
 
     /**
      * 反射ビーム。帯全体（描画・CollisionManager と同じ segments()）を TOWN_SWEEP_STEP 刻みで調べ、
-     * かけらに触れた建物を1発につき1棟1回欠かせる。止まらない
+     * かけらに触れた建物を1発につき1棟1回欠かせる。止まらない。
+     * only: 敵のビームのとき、欠かしてよい建物の番号（自機・母艦が重なっている建物）。null なら全部
      */
-    _sweepBeam(p, spec) {
+    _sweepBeam(p, spec, only = null) {
         let st = this._projState.get(p);
         if (!st) { st = { chipped: new Set() }; this._projState.set(p, st); }
         for (const sg of p.segments()) {
@@ -380,7 +398,7 @@ export class Town {
                 const px = sg.x1 + ((sg.x2 - sg.x1) * s) / n;
                 const py = sg.y1 + ((sg.y2 - sg.y1) * s) / n;
                 for (const b of this.buildingsAt(px, py)) {
-                    if (st.chipped.has(b.id)) continue;
+                    if (st.chipped.has(b.id) || (only && !only.has(b.id))) continue;
                     const k = this.cellAt(b, px, py);
                     if (k < 0 || !b.cells[k]) continue;
                     st.chipped.add(b.id);
@@ -392,11 +410,13 @@ export class Town {
 
     /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */
     update(game) {
-        // 自機側の弾（ミサイル・グレネード・マシンガン）。敵弾は CollisionManager が更新の直後に見る。
-        // 敵が重なっている建物は、自機側の弾を止めない（1 tick に1回だけ集める）
+        // game.projectiles の弾（自機のミサイル・グレネード・マシンガンと、敵のミサイル・グレネード）。
+        // 敵のマシンガン・ホーミング・巡航・ビームは game.enemyBullets で、CollisionManager が更新の直後に見る。
+        // 持ち主による違い（敵は当たるが無傷。自機・母艦が重なる建物だけ例外）は sweepProjectile の中で決まる
         if (game.projectiles.length > 0) {
-            const exposed = this.buildingsUnder(game.enemies.filter((e) => e.alive));
-            for (const p of game.projectiles) this.sweepProjectile(p, exposed);
+            // 敵の弾でも欠ける建物（自機・母艦が重なっている建物）を、1 tick に1回だけ集める
+            const vulnerable = this.buildingsUnder([game.player, game.carrier].filter((e) => e && e.alive));
+            for (const p of game.projectiles) this.sweepProjectile(p, vulnerable);
         }
         this._updateShaking();
         this._updateFalling(game);

@@ -180,7 +180,7 @@ export class EnemyCruiseMissile {
         }
 
         if (hit) {
-            this._explode();
+            this._explode(true);
             return;
         }
 
@@ -248,10 +248,15 @@ export class EnemyCruiseMissile {
     onTownWall(x, y) {
         this.x = x;
         this.y = y;
-        this._explode();
+        this._explode(true);
     }
 
-    _explode() {
+    /**
+     * @param {boolean} fromEnemy 自機に撃ち落とされたのではなく、自分で当たって爆発した。
+     *   町（敵の陣地）と地雷は、敵の弾の爆発では巻き込まない（playBlast の fromEnemy）。
+     *   自機が撃ち落とした爆発（既定）は、自機の戦果なので町も地雷も巻き込む
+     */
+    _explode(fromEnemy = false) {
         if (this.exploded) return;
         this.exploded = true;
         this.alive = false;
@@ -263,7 +268,7 @@ export class EnemyCruiseMissile {
         map.destroyArea(tile.r, tile.c, GRENADE_BLAST_RADIUS);
 
         // Visual and Audio feedback
-        playBlast(this.game, this.x, this.y, 'cruise');
+        playBlast(this.game, this.x, this.y, 'cruise', undefined, { fromEnemy });
         audioManager.playExplosion(true, this.x);
         if (this.game.camera) this.game.camera.shake(8, 15);
     }

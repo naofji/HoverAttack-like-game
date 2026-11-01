@@ -234,16 +234,14 @@ export const CombatActions = {
         const town = map.town;
         const townSpec = TOWN_PROJECTILE_IMPACT.grenade;
         const virtual = town && townSpec && townSpec.bounce
-            ? { x, y, vx, vy, alive: true, townKind: 'grenade' } : null;
-        // 敵が重なっている建物は本物も止めない。予測中は敵が動かないので1回だけ集める
-        const exposed = virtual ? town.buildingsUnder(this.enemies.filter((e) => e.alive)) : null;
+            ? { x, y, vx, vy, alive: true, townKind: 'grenade', isPlayerOwned: true } : null;
 
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
             const g = virtual || { x, y, vx, vy };
             // 本物は tick の頭の位置を記録してから動かし、町はそこからの線分を調べる（renderInterp の _prevX）
             if (virtual) { g._prevX = x; g._prevY = y; }
             stepGrenade(map, g, motionFor(this, x, y));
-            if (virtual) town.sweepProjectile(g, exposed);
+            if (virtual) town.sweepProjectile(g);
             ({ x, y, vx, vy } = g);
 
             // バリア（電磁パルスバリア）があれば吸収されるためプレビューをそこで止める
