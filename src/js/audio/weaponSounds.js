@@ -178,6 +178,18 @@ export const WEAPON_SOUNDS = {
         clicks: { count: 1, gap: 0, freq: 2600, dur: 0.030, gain: 0.137, Q: 14, metal: 2.76 },
     },
 
+    // --- 2面の Orb が機体・地形に当たった「ゴン」---
+    // 重い石。低い芯（tone）が下がりながら減衰し、頭に暗い破裂（puffs）を1つ。金属の clicks は使わない
+    // （跳弾の「カン」と混ざると、弾が Orb で弾かれた音と区別できない）。
+    // 実測（tests/orb-sound.test.js、shieldDeflect 比 −6〜+6dB の枠。単発の「当たった」音どうし）:
+    // tone 0.30・puffs 0.08 は armorRicochet 比 +10.2dB で大きすぎ、1/4 にすると全体の基準比 −14.8dB で
+    // 「小さすぎて聞こえない」の下限（−14dB、weapon-sounds.test.js）を割った。0.17・0.045 で shieldDeflect 比 −0.2dB、ピーク 0.176。
+    // armorRicochet を基準にしないのは、あちらは連続で鳴るのでわざと小さく作ってあるため
+    orbImpact: {
+        tone: { type: 'triangle', from: 130, to: 70, dur: 0.18, gain: 0.17 },
+        puffs: { count: 1, gap: 0.04, freq: 220, dur: 0.05, gain: 0.045, bright: 3 },
+    },
+
     // --- グレネード ---
     // 撃つのではなく放り出すので、抜けの良い短い一撃。
     grenade: {

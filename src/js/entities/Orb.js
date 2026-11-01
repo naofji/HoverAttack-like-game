@@ -67,6 +67,7 @@ export class Orb {
         this.spin = 0;              // 空中で回り続ける角速度
         this.pushDir = 0;           // pushFrom で次の update に効く押し
         this.pushSpeed = 0;
+        this.bounceSpeed = 0;
         this.hitCooldown = new Map();   // 機体ごとの、次にダメージを与えられるまでのフレーム（orbInteractions）
         this.age = 0;               // 経過フレーム（奥の光の脈動）
         // 形と光の位相は置いた位置から決める（乱数を使わない。同じ週なら同じ見た目）
@@ -95,6 +96,7 @@ export class Orb {
 
     update() {
         this.age++;
+        this.bounceSpeed = 0;   // このフレームに地形で弾んだときの法線の速さ（音を鳴らす側が読む）
         for (const [body, t] of this.hitCooldown) {
             if (t <= 1) this.hitCooldown.delete(body); else this.hitCooldown.set(body, t - 1);
         }
@@ -173,6 +175,7 @@ export class Orb {
             if (vn >= 0) continue;
             // ゆっくり当たったら弾まずに法線成分を消す（転がっている最中の細かい跳ねを消す）
             const e = -vn < ORB_BOUNCE_MIN_SPEED ? 0 : ORB_TERRAIN_RESTITUTION;
+            if (e > 0) this.bounceSpeed = Math.max(this.bounceSpeed, -vn);
             const v = reflectVelocity(this.vx, this.vy, hit.nx, hit.ny, e);
             this.vx = v.vx;
             this.vy = v.vy;

@@ -13,8 +13,9 @@
 import {
     PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
     ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY, ORB_PROJECTILE_IMPACT, ORB_BREAK_INCIDENCE_DEG,
-    ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE,
+    ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE, ORB_SOUND_INTERVAL_MS,
 } from '../utils/Constants.js';
+import { audioManager } from '../audio/AudioManager.js';
 import {
     circleBoxContact, reflectVelocity, segmentCircleHit, projectileVelocity, setProjectileVelocity,
 } from '../utils/orbPhysics.js';
@@ -35,7 +36,10 @@ const PUSH_MIN_VX = 0.05;
 export function updateOrbs(game) {
     const orbs = game.orbs || [];
     if (orbs.length === 0) return;
-    for (const orb of orbs) orb.update();
+    for (const orb of orbs) {
+        orb.update();
+        if (orb.bounceSpeed > 0) playOrbImpactSound(orb.cx, orb.cy + orb.r);
+    }
     for (let i = 0; i < orbs.length; i++) {
         for (let j = i + 1; j < orbs.length; j++) resolveOrbPair(orbs[i], orbs[j]);
     }
@@ -92,6 +96,17 @@ export function sweepProjectileAgainstOrbs(game, p) {
     }
     p.x = ox; p.y = oy;
     setProjectileVelocity(p, rx, ry);
+}
+
+// 最後に「ゴン」を鳴らした時刻（実時間）。全部の Orb で共有する（5個が同時に転がっても濁らないように）
+let lastSoundAt = -Infinity;
+
+/** Orb の当たった音。ORB_SOUND_INTERVAL_MS に1回まで（ricochet.js の跳弾と同じ間引き） */
+function playOrbImpactSound(x, y) {
+    const now = Date.now();
+    if (now - lastSoundAt < ORB_SOUND_INTERVAL_MS) return;
+    lastSoundAt = now;
+    audioManager.playWeapon('orbImpact', x, y);
 }
 
 /** Orb が触れた地雷を起爆する（地雷は触れると爆発するものなので、それに揃えた） */
@@ -183,6 +198,7 @@ function impact(game, orb, body, hit) {
         body.takeDamage(damage);
     }
     orb.hitCooldown.set(body, ORB_HIT_COOLDOWN);
+    playOrbImpactSound(orb.cx - hit.nx * orb.r, orb.cy - hit.ny * orb.r);
     // 相手の速度は当てる前に読む（ノックバックで書き換わる）。動かない相手（砲台など）は 0
     const bvx = body.vx || 0, bvy = body.vy || 0;
     const v = reflectVelocity(orb.vx - bvx, orb.vy - bvy, hit.nx, hit.ny, ORB_IMPACT_RESTITUTION);

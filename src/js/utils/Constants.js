@@ -2540,3 +2540,6 @@ export const ORB_BREAK_INCIDENCE_DEG = 45;
 // 距離で線形に 0 へ弱め、重さで割る（large は 1/2.25）。「若干」なので small の最大でも歩きの速さほど
 export const ORB_BLAST_RADIUS = 48;
 export const ORB_BLAST_IMPULSE = 2;
+// Orb の「ゴン」を鳴らす間隔の下限（実時間 ms）。転がる最中に床・機体へ細かく当たると立て続けに鳴って濁る。
+// 物理ではなく耳の都合なので、ゲーム速度で伸び縮みしない実時間で見る（ricochet.js の跳弾と同じ考え）
+export const ORB_SOUND_INTERVAL_MS = 120;
