@@ -57,3 +57,27 @@ export function reflectVelocity(vx, vy, nx, ny, e) {
     if (vn >= 0) return { vx, vy };
     return { vx: vx - (1 + e) * vn * nx, vy: vy - (1 + e) * vn * ny };
 }
+
+/**
+ * 円と箱 {x, y, width, height} の接触。箱の中で円の中心に一番近い点から中心への単位法線（箱 → 円の向き）と、
+ * 重なりの深さ。中心が箱の中なら、めり込みの浅い辺の向き。触れていなければ null
+ * @returns {{nx:number, ny:number, depth:number} | null}
+ */
+export function circleBoxContact(cx, cy, r, box) {
+    const qx = Math.max(box.x, Math.min(cx, box.x + box.width));
+    const qy = Math.max(box.y, Math.min(cy, box.y + box.height));
+    const dx = cx - qx, dy = cy - qy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > 0) {
+        if (d2 >= r * r) return null;
+        const d = Math.sqrt(d2);
+        return { nx: dx / d, ny: dy / d, depth: r - d };
+    }
+    // 中心が箱の中。一番近い辺から外へ
+    const left = cx - box.x, right = box.x + box.width - cx, top = cy - box.y, bottom = box.y + box.height - cy;
+    const m = Math.min(left, right, top, bottom);
+    if (m === left) return { nx: -1, ny: 0, depth: r + left };
+    if (m === right) return { nx: 1, ny: 0, depth: r + right };
+    if (m === top) return { nx: 0, ny: -1, depth: r + top };
+    return { nx: 0, ny: 1, depth: r + bottom };
+}

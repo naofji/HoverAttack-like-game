@@ -2511,3 +2511,5 @@ export const ORB_SPAWN_SALT = 0x0B1A0B;      // 派生ストリームの種（ga
 export const ORB_SIZE_MIX = ['small', 'small', 'small', 'large', 'large'];
 // 石の奥の淡い紫の光が脈打つ周期（フレーム）。3秒ほど。ゆっくりでないと警告灯に見える（格納塔の縞と同じ考え）
 export const ORB_GLOW_PERIOD = 180;
+// 機体・Orb どうしとの反発係数。完全弾性ではなく 0.5〜0.7（ユーザー指定）の中央
+export const ORB_IMPACT_RESTITUTION = 0.6;
