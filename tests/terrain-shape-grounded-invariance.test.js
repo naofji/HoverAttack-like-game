@@ -17,8 +17,12 @@ import { digestGrounded } from '../tools/record-terrain-baseline.mjs';
 // 箱に掛かる岩を湧き探索の前に空けることを、意図して変えたため。変更の前（0ea9a46）と後の出力を
 // マップごとに比べ、砲台の行を除くと 15 マップ中 13 で一致し、違う2つ（level 0・2 の seed 1）は
 // どちらも基地の部屋の岩を空けたマップ（乱数で選ぶ湧き探索の候補が変わる）であることを確かめた。item と carrier は元の値のまま
+//
+// **2面（level 1）は 2026-11-01 に外した**（2面に斜面・長い坂・Orb を意図して足したため。設計 2026-11-01-stage2-orb-design.md）。
+// spawns の値は、その変更の前のコード（9b60939）で levels = [0, 2, 3, 5] を記録したもの。その時点の既定（level 1 を含む）の
+// 出力は上の旧値 93badb28… と一致していた。item と carrier は元の値のまま。2面は tests/stage2-slopes.test.js が縛る
 const BASELINE = {
-    spawns: { frames: 1278, sha256: '93badb288a4299ad3eb56216483ecbefef9de22c7b57fd1a6ff3f1a25158c823' },
+    spawns: { frames: 1116, sha256: 'dde487bad1b9ae7a7152ac9baffe1f8ec2dcc84db2b4a147854ee086cb2b1852' },
     item: { frames: 141, sha256: 'b3397706cbb87c65fa6f953e12d20a77a856977a73cdd25f189d21539dcc5731' },
     carrier: { frames: 600, sha256: '84100745b7d44bb6c04a825414ff02a39b470c0effa2b79fe17d1014845335fc' },
 };

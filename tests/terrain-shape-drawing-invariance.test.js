@@ -11,13 +11,16 @@
 //
 // **cache は 2026-10-31 に記録し直した**（砲台が壁に埋まる修正で、基地の砲台の箱に掛かる岩を空けるように
 // したため。基地の部屋の浮き足場が欠けたマップの絵が変わる）。damaged は元の値のまま一致している
+//
+// **2面（level 1）は 2026-11-01 に外した**（2面の縁を坂・面取りにし、長い坂を盛ったため。設計 2026-11-01-stage2-orb-design.md）。
+// cache と damaged は、その変更の前のコード（9b60939）で levels = [0, 2, 3, 5] を記録したもの。2面の絵は tests/stage2-slopes.test.js が縛る
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { digestDrawing } from '../tools/record-terrain-baseline.mjs';
 
 const BASELINE = {
-  cache: '3ae26e2255505a6e185505067e871d30a35ab251abb82e33dbf3c7264493f073',
-  damaged: 'f362b81d67f83bfbf3fb3f71adfadc7cf72f55237c740c494b942047fc110d8c',
+  cache: '2ae684dc2d5ace0d1da70f9c9036a3afa1f6db2fe261614c2d68298dd046ce24',
+  damaged: 'c32ab5bd504092eca1130408a25f66e15b471ee254ed17a6442f27b5814a7878',
 };
 
 test('5面以外の面では、地形のキャッシュに焼く絵も、壊した後の焼き直しも段5の前と同じ', async () => {

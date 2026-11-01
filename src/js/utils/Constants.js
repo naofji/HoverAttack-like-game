@@ -992,14 +992,17 @@ export const STAGE_PALETTES = [
 // tileShape = タイルの形を決める規則（utils/tileShape.js の computeTileShape）。'snowSlope' は5面の
 //  段を45度の坂に、角を面取りにする（絵と当たり判定が同じ形を共有する。設計:
 //  docs/superpowers/specs/2026-10-27-tile-shape-collision-design.md）。無ければ 'square'（今までどおり四角）。
+//  'caveSlope' は2面の、雪の無い同じ幾何（設計 docs/superpowers/specs/2026-11-01-stage2-orb-design.md）。
+// stairs = 盛る長い坂の種類（STAIRS_PROFILES のキー）。無ければ盛らない。
+// orbs = 置く Orb（押せて転がる壊せない鉱物）の数。無ければ置かない（設計 2026-11-01-stage2-orb-design.md）。
 export const ENV_KINDS = ['none', 'water', 'snow', 'fog'];
 export const ENV_BACKDROPS = ['cave', 'wet', 'snow', 'fog', 'machine'];
 export const STAGE_ENVIRONMENTS = [
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 1
-    { kind: 'none',  backdrop: 'cave',    terrain: 'cave' }, // 2
+    { kind: 'none',  backdrop: 'cave',    terrain: 'cave', tileShape: 'caveSlope', stairs: 'cave', orbs: 5 }, // 2: 坂と、転がる鉱物 Orb
     { kind: 'none',  backdrop: 'cave',    terrain: 'cave', props: 'town' }, // 3: 洞窟の町（壊せる町並み）
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
-    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow', tileShape: 'snowSlope' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
+    { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow', tileShape: 'snowSlope', stairs: 'snow' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave' }, // 6: 霧（砲兵の煙幕と見分けにくくする）
     { kind: 'none',  backdrop: 'machine', terrain: 'fortress', tileShape: 'metalSlope' }, // 7: 洞窟を改造した要塞（施設エリアの金属の斜面）
 ];
@@ -1571,6 +1574,15 @@ export const SNOW_CAP_COLOR = '#EEF4FB';
 export const SNOW_STAIRS_COUNT = 8;
 export const SNOW_STAIRS_LENGTH_MIN = 5;
 export const SNOW_STAIRS_LENGTH_RANGE = 5;  // 5〜9段
+// 面ごとの長い坂（STAGE_ENVIRONMENTS の stairs が引く）。salt は派生ストリームの種（game.rng を消費しない）。
+// snow の値と salt は、表にする前の5面の値そのまま（5面の階段と乱数の状態は tests/stage2-slopes.test.js が縛る）。
+// cave（2面）は 3本・4〜7段（たたき台・実機で調整）。2面は 187×93 タイル（部屋28）で、5面の 300×150（部屋50）の
+// 約39%しかない。5面の8本を面積で割り戻すと約3本で、部屋も小さいので段数も1〜2段短くした
+// （ユーザーの指摘「2面は狭いので多い」2026-11-01）
+export const STAIRS_PROFILES = {
+    snow: { count: SNOW_STAIRS_COUNT, lengthMin: SNOW_STAIRS_LENGTH_MIN, lengthRange: SNOW_STAIRS_LENGTH_RANGE, salt: 0x51A1E5 },
+    cave: { count: 3, lengthMin: 4, lengthRange: 3, salt: 0xCA7E51 },
+};
 
 // 霧。層は事前に描いた板を視差付きでずらすだけ。粒は出さない。
 export const FOG_COLOR = '#8A96A8';

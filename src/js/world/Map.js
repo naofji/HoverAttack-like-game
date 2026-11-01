@@ -17,10 +17,9 @@ import {
     COLOR_CAVE_BG, TILE_SIZE,
     SNOW_CAP_COLOR, SNOW_CAP_THICKNESS,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
-    STAGE_PALETTES, STAGE_ENVIRONMENTS,
+    STAGE_PALETTES, STAGE_ENVIRONMENTS, STAIRS_PROFILES,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
     WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
-    SNOW_STAIRS_COUNT, SNOW_STAIRS_LENGTH_MIN, SNOW_STAIRS_LENGTH_RANGE,
     GRENADE_BLOCK_DAMAGE,
     FORTRESS_ZONE_COUNT, FORTRESS_ZONE_W_MIN, FORTRESS_ZONE_W_RANGE,
     FORTRESS_ZONE_H_MIN, FORTRESS_ZONE_H_RANGE, FORTRESS_ZONE_MARGIN,
@@ -59,7 +58,7 @@ import { generateSnowTrees } from './town/generateSnowTrees.js';
 import { generateIcicles } from './town/generateIcicles.js';
 import { Town } from './town/Town.js';
 import {
-    SHAPE_FULL, SHAPE_EMPTY, computeTileShape, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
+    SHAPE_FULL, SHAPE_EMPTY, computeTileShape, isRoundedRule, shapeContainsPoint, shapeOverlapsRect, shapeTopY, shapeBottomY,
     shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeCornerCuts, shapeAfterBreak, shapeTriangle,
 } from '../utils/tileShape.js';
 
@@ -282,13 +281,15 @@ export class Map {
         // Step 9c: 雪の面の階段（派生ストリーム）。exposedAtGen を記録する前に盛るので
         // 段の上面にも雪が積もる。開始の部屋・基地の部屋は水と同じ除外矩形で弾く
         // （レビュー指摘: 除外せずに実装すると、開始直後や基地の部屋に階段が生えうる）
+        // 2面（洞窟の坂）も同じ関数で盛る。どの面に何本盛るかは STAGE_ENVIRONMENTS の stairs → STAIRS_PROFILES
         this.stairs = [];
-        if (this.envKind === 'snow') {
+        const stairsProfile = STAIRS_PROFILES[STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].stairs];
+        if (stairsProfile) {
             this.stairs = carveSnowStairs({
                 grid: this.grid, blockHP: this.blockHP, rows: this.rows, cols: this.cols, rooms: this.rooms,
                 excludeRects: this._reservedRects(),
-                rng: new SeededRNG((this.game.rng.state ^ 0x51A1E5) >>> 0),
-                count: SNOW_STAIRS_COUNT, lengthMin: SNOW_STAIRS_LENGTH_MIN, lengthRange: SNOW_STAIRS_LENGTH_RANGE,
+                rng: new SeededRNG((this.game.rng.state ^ stairsProfile.salt) >>> 0),
+                count: stairsProfile.count, lengthMin: stairsProfile.lengthMin, lengthRange: stairsProfile.lengthRange,
             });
         }
 
@@ -2107,7 +2108,7 @@ export class Map {
         // 削り幅は形が決めるので、乱数の 4〜9px の面取りは5面では使わない（判定が 8px のため）
         // 7面（'metalSlope'）で削れるのは施設エリアの中だけで、そこはパネルの絵で描く（_drawTile）。
         // 岩の絵の面取りは今までどおり乱数の 4〜9px にする（形の削り幅 0 を読むと四角になる）
-        const shaped = this.tileShapes && this.tileShapeRule === 'snowSlope';
+        const shaped = this.tileShapes && isRoundedRule(this.tileShapeRule);
         // 壊した後にだけ出る三角（^ v < >。設計 決定13）は、角の削り幅の列挙では辺が戻って自己交差するので、
         // 輪郭と雪のふちを shapeTriangle の頂点で書く
         let tri = null;

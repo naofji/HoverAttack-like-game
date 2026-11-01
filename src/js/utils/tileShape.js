@@ -33,6 +33,11 @@ export function unpackShape(code) {
 export const SHAPE_EMPTY = packShape(Q_EMPTY, Q_EMPTY, Q_EMPTY, Q_EMPTY);
 export const SHAPE_FULL = packShape(Q_FULL, Q_FULL, Q_FULL, Q_FULL);
 
+/** 縁を全部なだらかにする規則か（5面の雪の坂 'snowSlope' と、同じ幾何の2面の洞窟 'caveSlope'）。8px の小さい面取りも入れる */
+export function isRoundedRule(rule) {
+    return rule === 'snowSlope' || rule === 'caveSlope';
+}
+
 /**
  * 1タイルの形。
  *
@@ -53,12 +58,16 @@ export const SHAPE_FULL = packShape(Q_FULL, Q_FULL, Q_FULL, Q_FULL);
  * どのタイルを削ってよいかは cellAt が決める（Map は施設エリアの外を 'polished' として渡す）。
  *
  * @param {(r: number, c: number) => 'empty'|'rock'|'polished'} cellAt 範囲外は 'polished' を返すこと
- * @param {'square'|'snowSlope'|'metalSlope'|undefined} rule 面の規則。undefined は 'square'
+ * 'caveSlope'（2面）: 'snowSlope' と同じ幾何（縁は全部なだらか）。名前を分けたのは、雪ではない洞窟の面で
+ * 「snowSlope」と書くと雪の面に見えて紛らわしいため（設計 2026-11-01-stage2-orb-design.md 4.1）。
+ * 雪の飾りは規則ではなく envKind で決まるので、2面に雪は出ない。
+ *
+ * @param {'square'|'snowSlope'|'caveSlope'|'metalSlope'|undefined} rule 面の規則。undefined は 'square'
  */
 export function computeTileShape(cellAt, r, c, rule) {
     const self = cellAt(r, c);
     if (self === 'empty') return SHAPE_EMPTY;
-    if (self === 'polished' || (rule !== 'snowSlope' && rule !== 'metalSlope')) return SHAPE_FULL;
+    if (self === 'polished' || (!isRoundedRule(rule) && rule !== 'metalSlope')) return SHAPE_FULL;
 
     const open = (rr, cc) => cellAt(rr, cc) === 'empty';
     const top = open(r - 1, c), bottom = open(r + 1, c);
@@ -67,7 +76,7 @@ export function computeTileShape(cellAt, r, c, rule) {
 
     // 斜めは隣の2象限にも掛かるので、先に小さい面取りを入れ、斜めがあればそれで上書きする
     // （斜めの条件は残りの2辺が閉じていることなので、上書きで消える面取りは無い）
-    if (rule === 'snowSlope') {
+    if (isRoundedRule(rule)) {
         if (top && left) q[0] = Q_TRI_NO_TL;
         if (top && right) q[1] = Q_TRI_NO_TR;
         if (bottom && left) q[2] = Q_TRI_NO_BL;

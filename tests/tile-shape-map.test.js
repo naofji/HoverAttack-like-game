@@ -29,8 +29,9 @@ function refRectHits(map, x, y, w, h) {
     return false;
 }
 
-// 7面（level 6）は施設エリアの中だけ金属の斜面になる（'metalSlope'）。そちらは tests/facility.test.js が見る
-for (const level of [0, 1, 2, 3, 5]) {
+// 7面（level 6）は施設エリアの中だけ金属の斜面になる（'metalSlope'）。そちらは tests/facility.test.js が見る。
+// 2面（level 1）は 2026-11-01 から5面と同じ幾何の 'caveSlope'。そちらは tests/stage2-slopes.test.js が見る
+for (const level of [0, 2, 3, 5]) {
     test(`${level + 1}面: 形はすべて満ちか空で、点・矩形の問い合わせは今のタイル単位の判定と同じ`, async () => {
         for (const seed of [7, 2026]) {
             const map = await buildMap(seed, level);

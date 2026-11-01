@@ -280,7 +280,9 @@ export function digestProjectiles(rec = recordProjectiles()) {
  * @param {number[]} levels
  * @returns {{ spawns: string[], item: string[], carrier: string[] }}
  */
-export async function recordGrounded(levels = [0, 1, 2, 3, 5]) {
+// 2面（level 1）も既定から外した（2026-11-01）。2面に斜面と長い坂と Orb を意図して足したため
+// （設計 docs/superpowers/specs/2026-11-01-stage2-orb-design.md）。2面は tests/stage2-slopes.test.js が縛る
+export async function recordGrounded(levels = [0, 2, 3, 5]) {
     const out = { spawns: [], item: [], carrier: [] };
     if (!globalThis.document) {
         const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
@@ -352,7 +354,8 @@ function hashCalls(hash, calls) {
  * @param {number[]} levels
  * @returns {Promise<{ cache: string, damaged: string }>}
  */
-export async function digestDrawing(levels = [0, 1, 2, 3, 5]) {
+// 2面（level 1）は外した（2026-11-01、recordGrounded と同じ理由）
+export async function digestDrawing(levels = [0, 2, 3, 5]) {
     const { makeFakeCtx } = await import('../tests/helpers/fake-ctx.js');
     const prevDocument = globalThis.document;
     globalThis.document = {
