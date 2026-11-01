@@ -2480,3 +2480,25 @@ export const ICICLE_SOUND_SINK = {
     crunch: { gain: 0.021, dur: 0.09, from: 3500, to: 700 },
     swish: { gain: 0.0085, dur: 0.35, from: 2400, to: 1100, Q: 1.5 },
 };
+
+// --- 2面の Orb（押せて転がる壊せない鉱物）---
+// 設計: docs/superpowers/specs/2026-11-01-stage2-orb-design.md。数値はどれもたたき台（実機で調整）。
+// 大きさごとの値。mass は面積比（(24/16)² = 2.25）で、押される速さ・爆風・衝突の跳ね返りに効く。
+//   pushScale:   自機が平地で押すときの速さ（自機の歩きの最高速に対する倍率）。0.5 は母艦を押すときと同じ手応え
+//   uphillScale: 坂を押し上げるときの速さ（平地で押す速さに対する倍率）。重力がかかるので上りはきつい（ユーザー指定）。
+//                24px は「やっと進む」（設計 4.4）
+export const ORB_SIZES = {
+    small: { diameter: 16, mass: 1, pushScale: 0.5, uphillScale: 0.4 },
+    large: { diameter: 24, mass: 2.25, pushScale: 0.3, uphillScale: 0.15 },
+};
+// 転がりの抵抗（接地中、接線の速さを毎フレームこれだけ 0 へ寄せる）。真円ではないので転がるには高低差が要る、の表現
+// （ユーザー指定）。45度の坂の下り成分 GRAVITY·sin45 ≈ 0.21 より小さいので坂では転がり出し、平らな所では負けて止まる。
+// 坂を6段下ると約 5.9px/フレーム、そこから平地で約 14 タイル転がって止まる見積もり
+export const ORB_ROLL_RESISTANCE = 0.08;
+export const ORB_STOP_SPEED = 0.05;          // これ未満の速さは 0 にする（坂の途中・平地で震え続けない）
+// 1フレームの最高速。刻んで動かすのですり抜けはしないが、速すぎると避けようがない
+export const ORB_MAX_SPEED = 6;
+// 地形との反発係数。機体との反発（0.6）より小さくして、地面ではねすぎないようにする
+export const ORB_TERRAIN_RESTITUTION = 0.3;
+// これ未満の法線の速さで地形に当たったら弾まずに止める（転がっている最中の細かい跳ねを消す）
+export const ORB_BOUNCE_MIN_SPEED = 1.0;
