@@ -31,21 +31,36 @@ const REST_FRAMES = 10;
 const GROUND_PROBE = 1;
 
 // 絵の色（描画専用なので Constants.js ではなくここに置く。LEG_STYLES と同じ例外）。
-// ブラックオニキスを思わせる石（ユーザー指定）: わずかに青紫を帯びた漆黒の本体、ごく暗い灰紫の縞、
-// 暗い洞窟から輪郭を浮かせる紫がかったリムライト、左上に固定した艶、奥で脈打つ淡い紫の光
+// ブラックオニキスを思わせる石（ユーザー指定）。2026-11-01 に「もっと神秘的に」（ユーザー指定）で次を足した:
+//   縁が青みがかる（本体の塗りを、中心の漆黒から縁の深い青へのグラデーションに）／光の反射を増やす（艶を3つ）／
+//   周囲に紫から赤紫のにじみ（石の外へ広がる光の輪。半径の 2.4 倍まで、外側で透明）
 const ONYX = {
-    body: '#0B0A10',
-    band: '#2A2338',
-    rim: '#6E5C96',
-    highlight: '#DCD6FF',
-    glow: '#7A4FD0',
+    core: '#07060C',             // 中心の漆黒
+    mid: '#0E1122',              // 途中（ほぼ黒。急に青くならないように）
+    edge: '#1C3266',             // 縁の深い青
+    band: '#2A2848',
+    rim: '#6F9BEA',              // リムライト（縁の青を光らせる。背景から輪郭を浮かせる）
+    highlight: '#E4E8FF',        // 主の艶
+    specular: '#FFFFFF',         // 主の艶の芯（鋭い点）
+    reflect: '#7FA8FF',          // 右下の照り返し（洞窟の青い光を拾ったように）
+    glow: '#7A4FD0',             // 奥の光
 };
+// 周囲のにじみ。内側の紫 → 赤紫 → 透明。不透明度は奥の光と同じく脈打つ
+const AURA_PURPLE = [150, 80, 235];
+const AURA_MAGENTA = [205, 55, 165];
+const AURA_INNER = 0.8;          // 光の輪の内側の半径（r の倍率。石の中に少し食い込ませて境目を消す）
+const AURA_OUTER = 2.4;          // 外側の半径（r の倍率）
+const AURA_ALPHA = [0.18, 0.38]; // 輪の一番濃い所の不透明度（暗いとき・明るいとき）
 const OUTLINE_VERTICES = 8;      // いびつな多角形の頂点数（7〜9 のうち、回ったときに角が見え過ぎない数）
 const OUTLINE_MIN = 0.9;         // 頂点の半径の倍率の下限（判定の円から 1 割まで凹む）
 const BAND_OFFSETS = [-0.45, 0.05, 0.5];   // 縞の、中心からのずれ（r に対する比）。等間隔にしない（石の縞は不揃い）
 const GLOW_ALPHA = [0.10, 0.32];           // 奥の光の不透明度（暗いとき・明るいとき）
 const GLOW_SPEED_BOOST = 0.08;             // 速さ 1px/フレームあたりに足す明るさ（転がってくる Orb に気づけるように）
-const HIGHLIGHT_ALPHA = 0.5;
+const HIGHLIGHT_ALPHA = 0.7;     // 主の艶（0.5 → 0.7。反射を増やす指定）
+const SPECULAR_ALPHA = 0.9;
+const REFLECT_ALPHA = 0.3;
+
+const rgba = ([r, g, b], a) => `rgba(${r}, ${g}, ${b}, ${a})`;
 
 /** 整数の座標から 0〜1 の決まった値（乱数を使わずに Orb ごとの形と位相を変える） */
 function hash01(n) {
@@ -242,7 +257,8 @@ export class Orb {
 
     /**
      * ブラックオニキス風の石（設計 4.8）。輪郭と縞は angle で回し、艶（ハイライト）は光源が動かないので回さない。
-     * 縁のリムライトは、黒い石が暗い洞窟の背景に溶けて見えなくなるのを防ぐ
+     * 縁のリムライトは、黒い石が暗い洞窟の背景に溶けて見えなくなるのを防ぐ。
+     * 描く順: 周囲のにじみ → 本体（中心の黒から縁の青へ）→ 奥の光 → 縞 → リムライト → 艶3つ
      */
     draw(ctx) {
         const cx = this.cx, cy = this.cy, r = this.r, a = this.angle;
@@ -256,14 +272,31 @@ export class Orb {
             for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
             ctx.closePath();
         };
+        const pulse = 0.5 + 0.5 * Math.sin(((this.age + this.glowPhase) / ORB_GLOW_PERIOD) * Math.PI * 2);
+        const speed = Math.hypot(this.vx, this.vy);
         ctx.save();
+
+        // 周囲のにじみ（紫 → 赤紫 → 透明）。canvas の filter: blur は重いので、放射グラデーションでにじませる
+        const auraA = Math.min(0.6, AURA_ALPHA[0] + (AURA_ALPHA[1] - AURA_ALPHA[0]) * pulse + GLOW_SPEED_BOOST * speed);
+        const aura = ctx.createRadialGradient(cx, cy, r * AURA_INNER, cx, cy, r * AURA_OUTER);
+        aura.addColorStop(0, rgba(AURA_PURPLE, auraA));
+        aura.addColorStop(0.45, rgba(AURA_MAGENTA, auraA * 0.55));
+        aura.addColorStop(1, rgba(AURA_MAGENTA, 0));
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * AURA_OUTER, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 本体。中心を艶の側（左上）へ少し寄せた放射グラデーションで、縁ほど深い青になる（光源に合わせて回さない）
+        const body = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.1, cx, cy, r);
+        body.addColorStop(0, ONYX.core);
+        body.addColorStop(0.6, ONYX.mid);
+        body.addColorStop(1, ONYX.edge);
         outline();
-        ctx.fillStyle = ONYX.body;
+        ctx.fillStyle = body;
         ctx.fill();
 
         // 奥で脈打つ淡い紫の光。中心に置くので回転に関係しない
-        const pulse = 0.5 + 0.5 * Math.sin(((this.age + this.glowPhase) / ORB_GLOW_PERIOD) * Math.PI * 2);
-        const speed = Math.hypot(this.vx, this.vy);
         ctx.globalAlpha = Math.min(0.6, GLOW_ALPHA[0] + (GLOW_ALPHA[1] - GLOW_ALPHA[0]) * pulse + GLOW_SPEED_BOOST * speed);
         ctx.fillStyle = ONYX.glow;
         ctx.beginPath();
@@ -284,17 +317,27 @@ export class Orb {
             ctx.stroke();
         }
 
-        // リムライト
+        // リムライト（縁の青）
         outline();
         ctx.strokeStyle = ONYX.rim;
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // 艶。左上に固定（回さない）
-        ctx.globalAlpha = HIGHLIGHT_ALPHA;
+        // 艶。どれも光源に合わせて固定（回さない）。左上の主の艶・その芯・右下の青い照り返し
         ctx.fillStyle = ONYX.highlight;
+        ctx.globalAlpha = HIGHLIGHT_ALPHA;
         ctx.beginPath();
-        ctx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.28, r * 0.16, -Math.PI / 5, 0, Math.PI * 2);
+        ctx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.17, -Math.PI / 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ONYX.specular;
+        ctx.globalAlpha = SPECULAR_ALPHA;
+        ctx.beginPath();
+        ctx.ellipse(cx - r * 0.42, cy - r * 0.46, r * 0.09, r * 0.06, -Math.PI / 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ONYX.reflect;
+        ctx.globalAlpha = REFLECT_ALPHA;
+        ctx.beginPath();
+        ctx.ellipse(cx + r * 0.38, cy + r * 0.45, r * 0.26, r * 0.08, -Math.PI / 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }

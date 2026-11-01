@@ -44,3 +44,41 @@ test('輪郭は Orb ごとに決まったいびつな多角形（位置から決
     Math.random = saved;
   }
 });
+
+// 2026-11-01 ユーザー指定「もっと神秘的に」: 本体の縁は青みがかり、光の反射を増やし、周囲に紫〜赤紫のにじみ（blur）
+const rgb = (c) => {
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(c);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] };
+  const h = /^#([0-9a-f]{6})$/i.exec(c);
+  return h ? { r: parseInt(h[1].slice(0, 2), 16), g: parseInt(h[1].slice(2, 4), 16), b: parseInt(h[1].slice(4), 16), a: 1 } : null;
+};
+
+test('周囲に紫から赤紫へにじむ光の輪（半径の2倍より外まで広がり、外側で透明になる）', () => {
+  const orb = makeOrb();
+  const ctx = makeFakeCtx();
+  orb.draw(ctx);
+  const grads = ctx.calls.filter((c) => c.name === 'createRadialGradient').map((c) => c.grad);
+  const aura = grads.find((g) => g.args[5] >= orb.r * 2);
+  assert.ok(aura, 'にじみのグラデーションが無い');
+  const cols = aura.stops.map(([, c]) => rgb(c));
+  assert.ok(cols[0].b > cols[0].r && cols[0].b > cols[0].g, `内側が紫でない: ${aura.stops[0][1]}`);
+  assert.ok(cols.some((c) => c.r > c.b && c.r > c.g * 1.5 && c.a > 0), '赤紫の帯が無い');
+  assert.equal(cols[cols.length - 1].a, 0, '外側が透明でない');
+});
+
+test('本体の縁は青みがかっている（本体の塗りの一番外側の色は青が勝つ）', () => {
+  const orb = makeOrb();
+  const ctx = makeFakeCtx();
+  orb.draw(ctx);
+  const grads = ctx.calls.filter((c) => c.name === 'createRadialGradient').map((c) => c.grad);
+  const body = grads.find((g) => g.args[5] <= orb.r * 1.1);
+  assert.ok(body, '本体のグラデーションが無い');
+  const edge = rgb(body.stops[body.stops.length - 1][1]);
+  assert.ok(edge.b > edge.r + 20 && edge.b > edge.g, `縁が青くない: ${body.stops[body.stops.length - 1][1]}`);
+});
+
+test('光の反射が増えた（回らない艶が3つ以上）', () => {
+  const ctx = makeFakeCtx();
+  makeOrb().draw(ctx);
+  assert.ok(named(ctx.calls, 'ellipse').length >= 3, `艶 ${named(ctx.calls, 'ellipse').length}`);
+});
