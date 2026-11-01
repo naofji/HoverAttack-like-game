@@ -266,10 +266,19 @@ export class Orb {
             const t = a + (i / OUTLINE_VERTICES) * Math.PI * 2;
             return [cx + Math.cos(t) * r * k, cy + Math.sin(t) * r * k];
         });
+        // 輪郭は頂点を直線で結ばず、隣り合う頂点の中点を通る2次曲線でつなぐ（頂点を制御点にする）。
+        // 直線の8角形では縁がカクカクして見えた（ユーザー指定 2026-11-01「もう少しなだらかに」）。
+        // 曲線は頂点の多角形の内側を通るので、判定の円（半径 r）からははみ出さない
+        const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
         const outline = () => {
+            const n = pts.length;
+            const start = mid(pts[n - 1], pts[0]);
             ctx.beginPath();
-            ctx.moveTo(pts[0][0], pts[0][1]);
-            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+            ctx.moveTo(start[0], start[1]);
+            for (let i = 0; i < n; i++) {
+                const m = mid(pts[i], pts[(i + 1) % n]);
+                ctx.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]);
+            }
             ctx.closePath();
         };
         const pulse = 0.5 + 0.5 * Math.sin(((this.age + this.glowPhase) / ORB_GLOW_PERIOD) * Math.PI * 2);

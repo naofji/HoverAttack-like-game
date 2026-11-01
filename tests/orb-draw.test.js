@@ -82,3 +82,28 @@ test('光の反射が増えた（回らない艶が3つ以上）', () => {
   makeOrb().draw(ctx);
   assert.ok(named(ctx.calls, 'ellipse').length >= 3, `艶 ${named(ctx.calls, 'ellipse').length}`);
 });
+
+// 2026-11-01 ユーザー指定「縁がカクカクしているのを、もう少しなだらかに」: 輪郭は頂点を直線で結ばず、曲線でつなぐ
+test('輪郭（塗りとリムライト）は直線ではなく曲線でつなぐ', () => {
+  const ctx = makeFakeCtx();
+  makeOrb().draw(ctx);
+  const curves = named(ctx.calls, 'quadraticCurveTo').length + named(ctx.calls, 'bezierCurveTo').length;
+  assert.ok(curves >= 16, `曲線 ${curves}（塗りとリムライトで頂点数×2 以上）`);
+  // 直線は縞の3本だけ
+  assert.equal(named(ctx.calls, 'lineTo').length, 3);
+});
+
+test('曲線の輪郭も、位置から決まり乱数を使わず、angle で回る', () => {
+  const saved = Math.random;
+  Math.random = () => { throw new Error('Math.random'); };
+  try {
+    const a = makeOrb(), b = makeOrb(), c = makeOrb();
+    c.angle = 0.7;
+    const [ca, cb, cc] = [makeFakeCtx(), makeFakeCtx(), makeFakeCtx()];
+    a.draw(ca); b.draw(cb); c.draw(cc);
+    assert.deepEqual(named(ca.calls, 'quadraticCurveTo'), named(cb.calls, 'quadraticCurveTo'));
+    assert.notDeepEqual(named(ca.calls, 'quadraticCurveTo'), named(cc.calls, 'quadraticCurveTo'));
+  } finally {
+    Math.random = saved;
+  }
+});
