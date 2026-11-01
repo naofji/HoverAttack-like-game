@@ -305,7 +305,7 @@ test('_simulationTick が lifeKits を更新する（配線）', () => {
   const kit = { alive: true, update() { calls.push('update'); } };
   const noop = () => { };
   const fake = new Proxy({
-    lifeKits: [kit], barriers: [], electricFloors: [], landmines: [], projectiles: [], particles: [],
+    lifeKits: [kit], orbs: [], barriers: [], electricFloors: [], landmines: [], projectiles: [], particles: [],
     smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
     env: { update: noop }, map: { update: noop }, collisionManager: { update: noop },
   }, {
@@ -359,7 +359,7 @@ test('面を作り直すと前の面の lifeKits は消える', async () => {
       score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
       lifeKits: ['前の面の残機'],
       spawnManager: {
-        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { },
+        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { }, spawnOrbs() { },
         spawnBarriers() { }, spawnElectricFloors() { }, spawnEnemies() { },
       },
       camera: { follow() { }, snapToTarget() { } },

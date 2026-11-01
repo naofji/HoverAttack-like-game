@@ -2502,3 +2502,12 @@ export const ORB_MAX_SPEED = 6;
 export const ORB_TERRAIN_RESTITUTION = 0.3;
 // これ未満の法線の速さで地形に当たったら弾まずに止める（転がっている最中の細かい跳ねを消す）
 export const ORB_BOUNCE_MIN_SPEED = 1.0;
+// 置き場所（Map._findOrbPositions）。「マップの上の方を初期位置に」（ユーザー指定）。上から 40% 以内の床を探し、
+// 足りなければ 10% ずつ下へ広げる（40% は私の判断・実機で調整）。横に散らすため列を 20 以上離す
+export const ORB_SPAWN_TOP_FRACTION = 0.4;
+export const ORB_SPAWN_MIN_COL_GAP = 20;
+export const ORB_SPAWN_SALT = 0x0B1A0B;      // 派生ストリームの種（game.rng を消費しない）
+// 大きさの配り方。並べ替えて先頭から STAGE_ENVIRONMENTS の orbs 個を使う（5個なら 16px 3・24px 2）
+export const ORB_SIZE_MIX = ['small', 'small', 'small', 'large', 'large'];
+// 石の奥の淡い紫の光が脈打つ周期（フレーム）。3秒ほど。ゆっくりでないと警告灯に見える（格納塔の縞と同じ考え）
+export const ORB_GLOW_PERIOD = 180;

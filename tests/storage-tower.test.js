@@ -388,7 +388,7 @@ test('面を作り直すと前の面の塔は消え、spawnStorageTowers が呼�
       score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
       storageTowers: ['前の面の塔'],
       spawnManager: {
-        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { called++; },
+        findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { called++; }, spawnOrbs() { },
         spawnBarriers() { }, spawnElectricFloors() { }, spawnEnemies() { },
       },
       camera: { follow() { }, snapToTarget() { } },
@@ -409,7 +409,7 @@ test('_simulationTick が格納塔を更新し、壊れた塔を外す（配線�
   shootAt(game, t, Missile, true);
   // 塔の更新だけを本物にする（弾・アイテムの更新は地形を見るので、ここでは動かさない）
   const fake = new Proxy(Object.assign(game, {
-    barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
     env: { update: noop }, map: { ...game.map, update: noop }, collisionManager: { update: noop },
   }), {
     get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'
@@ -541,7 +541,7 @@ test('敵と塔が重なっていると、弾は手前の敵に先に当たり�
   // 敵との当たり判定（CollisionManager）が、塔の前に立つ敵でこのミサイルを消費した場面
   const collisionManager = { update() { order.push('collision'); m.exploded = true; m.alive = false; } };
   const fake = new Proxy(Object.assign(game, {
-    barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
     env: { update: noop }, map: { ...game.map, update: noop }, collisionManager,
   }), {
     get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'

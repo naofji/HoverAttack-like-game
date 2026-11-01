@@ -18,6 +18,7 @@ import {
     SNOW_CAP_COLOR, SNOW_CAP_THICKNESS,
     LANDMINE_WIDTH, LANDMINE_HEIGHT,
     STAGE_PALETTES, STAGE_ENVIRONMENTS, STAIRS_PROFILES,
+    ORB_SIZES, ORB_SPAWN_TOP_FRACTION, ORB_SPAWN_MIN_COL_GAP, ORB_SPAWN_SALT, ORB_SIZE_MIX,
     MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
     WATER_POOL_COUNT, WATER_POOL_DEPTH_MIN, WATER_POOL_DEPTH_RANGE, WATER_POOL_MAX_TILES,
     GRENADE_BLOCK_DAMAGE,
@@ -65,6 +66,15 @@ import {
 
 // --- Map generation constants ---
 const BORDER_THICKNESS = 2;
+
+/** Fisher-Yates で list をその場で混ぜて返す（派生ストリーム用。湧き探索の game.rng の混ぜ方と同じ手順） */
+function shuffleWith(rng, list) {
+    for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(rng.next() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+}
 
 /**
  * 硬い岩の描画色を、面のパレットの色 base から作る。
@@ -335,6 +345,8 @@ export class Map {
         if (this.envTerrain === 'fortress') this._metalizeFacilitySlopes();
         // 湧き位置（Step 10）は形を焼く前にタイルの上端で決めているので、形の高さへ置き直す
         this._seatSpawnsOnShapes();
+        // 2面の Orb（押せて転がる鉱物）。形を焼いた後に置く（平らな床を形で選ぶため）。派生ストリーム
+        this.orbSpawns = this._findOrbPositions();
 
         this._initTileCache();
         this._generateMiniMap();
@@ -1771,6 +1783,55 @@ export class Map {
             const ceiling = this.ceilingOver(p.x, ENEMY_TURRET_WIDTH, p.y);
             if (ceiling !== null && ceiling < p.y) p.y = ceiling;
         }
+    }
+
+    /**
+     * 2面の Orb の置き場所（設計 2026-11-01-stage2-orb-design.md 4.2）。STAGE_ENVIRONMENTS の orbs が無い面は空。
+     * 「マップの上の方を初期位置に、坂の上でなくてよい」（ユーザー指定）ので、上から ORB_SPAWN_TOP_FRACTION 以内の
+     * 平らな床を候補にし、足りなければ 0.1 ずつ下へ広げる。横に散らすため、選んだものと列を ORB_SPAWN_MIN_COL_GAP 以上離す。
+     * 平らな床（真下のタイルが全部満ち）に限るのは、置いた瞬間に転がり出さないため（落とすのはプレイヤー）。
+     * 乱数は派生ストリーム（game.rng を消費しない＝敵の構成は変わらない）
+     * @returns {Array<{cx:number, cy:number, size:'small'|'large'}>}
+     */
+    _findOrbPositions() {
+        const count = STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].orbs || 0;
+        if (count === 0) return [];
+        const rng = new SeededRNG((this.game.rng.state ^ ORB_SPAWN_SALT) >>> 0);
+        const sizes = shuffleWith(rng, [...ORB_SIZE_MIX]).slice(0, count);
+        const rects = this._reservedRects();
+        const inRects = (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
+        // 左上のタイル (r, c) から n×n が空で、真下の n タイルが平らな床か
+        const fits = (r, c, n) => {
+            if (r + n >= this.rows || c + n > this.cols) return false;
+            for (let dc = 0; dc < n; dc++) {
+                if (this.tileShapeAt(r + n, c + dc) !== SHAPE_FULL || this.grid[r + n][c + dc] === BLOCK_EMPTY) return false;
+                for (let dr = 0; dr < n; dr++) {
+                    if (this.grid[r + dr][c + dc] !== BLOCK_EMPTY || inRects(r + dr, c + dc)) return false;
+                }
+            }
+            return true;
+        };
+        const picked = [];
+        for (const size of sizes) {
+            // 足元のタイル数。24px は 1.5 タイルなので 2 タイルの床の真ん中に置く（端数のまま数えると候補が1つも無かった）
+            const n = Math.ceil(ORB_SIZES[size].diameter / TILE_SIZE);
+            for (let frac = ORB_SPAWN_TOP_FRACTION; frac <= 1.0001; frac += 0.1) {
+                const maxR = Math.floor(this.rows * frac);
+                const cands = [];
+                for (let r = 1; r + n <= maxR; r++) {
+                    for (let c = 1; c < this.cols - n; c++) if (fits(r, c, n)) cands.push({ r, c });
+                }
+                shuffleWith(rng, cands);
+                const hit = cands.find((p) => picked.every((q) => Math.abs(q.c - p.c) >= ORB_SPAWN_MIN_COL_GAP));
+                if (!hit) continue;
+                picked.push({ ...hit, n, d: ORB_SIZES[size].diameter, size });
+                break;
+            }
+        }
+        // 中心は床の上面にちょうど接する高さ（Orb は接しているだけなら岩に入ったと見ない。orbPhysics の ORB_CONTACT_EPS）
+        return picked.map((p) => ({
+            cx: (p.c + p.n / 2) * TILE_SIZE, cy: (p.r + p.n) * TILE_SIZE - p.d / 2, size: p.size,
+        }));
     }
 
     /**

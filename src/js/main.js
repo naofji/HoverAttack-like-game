@@ -66,6 +66,7 @@ import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './util
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/renderInterp.js';
 import { isInView } from './utils/viewCull.js';
+import { updateOrbs } from './systems/orbInteractions.js';
 import { SettingsFlow } from './ui/flows/settingsFlow.js';
 import { AttractFlow } from './ui/flows/attractFlow.js';
 import { OnlineFlow } from './systems/OnlineFlow.js';
@@ -118,6 +119,7 @@ export const Game = {
     barriers: [],   // 7面の要塞の電磁パルスのバリア
     electricFloors: [],   // 同、廊下の電流の床
     storageTowers: [],    // 格納塔（壊すとお宝が出る。今は7面の要塞の奥だけ）
+    orbs: [],             // 2面の Orb（押せて転がる壊せない鉱物。systems/orbInteractions.js）
     autoAimTarget: null,       // world coords {x,y} of snapped enemy, or null
     autoAimLeadPoint: null,    // 着弾予定地点 {x,y}。照準ではなくリードマーカーの位置
     autoAimLockedEnemy: null,  // 現在ロック中の敵エンティティ参照
@@ -552,6 +554,8 @@ export const Game = {
         // 3面の町（弾の当たり・落ちる破片・粒）。地形の更新のあと、敵の更新の前
         if (this.map.town) this.map.town.update(this);
         this._updateAndPrune(this.enemies);
+        // Orb は機体が動いた後に動かして押し・当たりを解き、自機の弾が敵に当たる（collisionManager）前に弾を止める
+        updateOrbs(this);
         this._updateEnemyHoverSound();
         this._checkMissionClear();
         this.collisionManager.update();
@@ -577,6 +581,7 @@ export const Game = {
         for (const k of this.lifeKits) fn(k);
         // 格納塔。ふだんは動かないが、足場の床を撃ち抜かれると落ちる
         for (const t of this.storageTowers) fn(t);
+        for (const o of this.orbs || []) fn(o);
         // 3面の町の落ちる破片。補間しないと、カメラに対してかくついて落ちる
         if (this.map && this.map.town) for (const p of this.map.town.falling) fn(p);
     },
@@ -1046,6 +1051,10 @@ export const Game = {
         }
 
         this.map.draw(ctx);
+        // Orb は地形の上、機体の下（機体が Orb の前に立って押す絵になる）
+        for (const orb of this.orbs || []) {
+            if (isInView(orb, this.camera, this.canvas, VIEW_CULL_MARGIN)) orb.draw(ctx);
+        }
         // 格納塔は地形の直後・自機より奥に描く。自機は塔を通り抜けられるので、手前に描くと重なっている間
         // 自機が塔の陰に隠れる（最終レビューの指摘）。中身のアイテムもこれより後に描くので隠れない。
         // ダメージバーはバリアのユニットと同じく、削れたら出す（壊せる的だと分かるように）

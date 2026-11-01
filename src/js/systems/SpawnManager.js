@@ -2,6 +2,7 @@
 // Spawn Manager - Entity spawning logic
 // ============================================
 
+import { Orb } from '../entities/Orb.js';
 import { TILE_SIZE, ENEMY_ATTACKER_TYPES } from '../utils/Constants.js';
 import { Landmine } from '../entities/Landmine.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
@@ -58,6 +59,15 @@ export class SpawnManager {
         for (const pos of this.game.map.landmineSpawns) {
             this.game.landmines.push(new Landmine(this.game, pos.x, pos.y));
         }
+    }
+
+    /**
+     * 2面の Orb（押せて転がる鉱物）を置く（map.orbSpawns の数だけ。今は2面だけで、他の面は空振り）。
+     * 面の種類では分岐しない（格納塔と同じ。置く面は STAGE_ENVIRONMENTS の orbs が決める）
+     */
+    spawnOrbs() {
+        this.game.orbs = [];
+        for (const spec of this.game.map.orbSpawns || []) this.game.orbs.push(new Orb(this.game, spec));
     }
 
     /**
