@@ -10,9 +10,14 @@
 // 機体の側は Orb を知らない。押す・乗る・止められるは、機体が動いた後にここで機体を Orb の外へ出して表す
 // （母艦を押すときと同じく、押したぶんは次のフレームに Orb が動く）。
 
-import { PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION } from '../utils/Constants.js';
-import { circleBoxContact } from '../utils/orbPhysics.js';
+import {
+    PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
+    ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY,
+} from '../utils/Constants.js';
+import { circleBoxContact, reflectVelocity } from '../utils/orbPhysics.js';
 import { collidesWithTerrain } from '../utils/Physics.js';
+import { recordHit } from '../utils/hitPoint.js';
+import { applyKnockback } from '../utils/Knockback.js';
 
 /** 乗っているとみなす法線の縦の成分（箱 → Orb が下向き＝機体が上）。45度より上から触れていれば乗る */
 const STAND_NY = 0.7;
@@ -33,6 +38,14 @@ export function updateOrbs(game) {
     const bodies = orbBodies(game);
     for (const orb of orbs) {
         for (const body of bodies) resolveOrbBody(game, orb, body);
+        detonateTouchedMines(game, orb);
+    }
+}
+
+/** Orb が触れた地雷を起爆する（地雷は触れると爆発するものなので、それに揃えた） */
+function detonateTouchedMines(game, orb) {
+    for (const mine of game.landmines || []) {
+        if (mine.alive && circleBoxContact(orb.cx, orb.cy, orb.r, mine)) mine.detonate();
     }
 }
 
@@ -90,6 +103,7 @@ function pushSpeedOf(game, body, dir, orb) {
 export function resolveOrbBody(game, orb, body) {
     const hit = circleBoxContact(orb.cx, orb.cy, orb.r, body);
     if (!hit) return;
+    if (impact(game, orb, body, hit)) return;
     if (hit.ny > STAND_NY) {
         standOnOrb(game, orb, body);
     } else if (hit.ny < -STAND_NY) {
@@ -99,6 +113,34 @@ export function resolveOrbBody(game, orb, body) {
     } else {
         pushSideways(game, orb, body);
     }
+}
+
+/**
+ * 速く当たったなら、ダメージ・ノックバック・反発を与えて真を返す。
+ * 当たったかとダメージは **Orb 自身が相手へ向かう速さ** で決める。相対速度で見ると、自機が歩いて（1.75px/フレーム）
+ * 止まっている Orb にぶつかっただけで閾値を超えてダメージが入った。反発は相対速度で解く（動いている相手にも正しく跳ね返る）。
+ * 同じ相手には ORB_HIT_COOLDOWN のあいだ当てない（その間は押す・乗る・止められるの扱い）
+ */
+function impact(game, orb, body, hit) {
+    // 法線は箱 → Orb。Orb が相手へ向かう速さはその逆向きの成分
+    const approach = -(orb.vx * hit.nx + orb.vy * hit.ny);
+    if (approach <= ORB_IMPACT_MIN_SPEED || orb.hitCooldown.has(body)) return false;
+    const damage = Math.min(ORB_IMPACT_DAMAGE_MAX, Math.round(ORB_IMPACT_DAMAGE_PER_SPEED * orb.mass * approach));
+    if (typeof body.takeDamage === 'function') {
+        recordHit(body, orb.cx - hit.nx * orb.r, orb.cy - hit.ny * orb.r);
+        body.takeDamage(damage);
+    }
+    orb.hitCooldown.set(body, ORB_HIT_COOLDOWN);
+    // 相手の速度は当てる前に読む（ノックバックで書き換わる）。動かない相手（砲台など）は 0
+    const bvx = body.vx || 0, bvy = body.vy || 0;
+    const v = reflectVelocity(orb.vx - bvx, orb.vy - bvy, hit.nx, hit.ny, ORB_IMPACT_RESTITUTION);
+    orb.vx = v.vx + bvx;
+    orb.vy = v.vy + bvy;
+    applyKnockback(body, body.x + body.width / 2 - orb.cx, ORB_KNOCK_VY, ORB_KNOCK_VX);
+    // Orb を相手の外へ出す（相手は飛ばされるので動かさない）
+    orb.x += hit.nx * hit.depth;
+    orb.y += hit.ny * hit.depth;
+    return true;
 }
 
 /** 機体を Orb の上に乗せる。足の幅のうち Orb の中心に一番近い列で、円の上面に合わせる */

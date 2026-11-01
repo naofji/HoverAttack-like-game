@@ -2513,3 +2513,13 @@ export const ORB_SIZE_MIX = ['small', 'small', 'small', 'large', 'large'];
 export const ORB_GLOW_PERIOD = 180;
 // 機体・Orb どうしとの反発係数。完全弾性ではなく 0.5〜0.7（ユーザー指定）の中央
 export const ORB_IMPACT_RESTITUTION = 0.6;
+// 機体への衝突ダメージ（設計 4.5）。Orb 自身が相手へ向かう速さがこれを超えたときだけ当たる。これ以下は押す・乗るだけ
+// （ゆっくり押しているだけでダメージが入ると押す遊びが成り立たない）。自機の歩きの最高速 1.75 より少し下
+export const ORB_IMPACT_MIN_SPEED = 1.5;
+// ダメージ = round(係数 × mass × 速さ)。small が 4px/フレームで 16（自機ミサイル 15 と同程度）、large は 36
+export const ORB_IMPACT_DAMAGE_PER_SPEED = 4;
+export const ORB_IMPACT_DAMAGE_MAX = 40;     // large が最高速 6 で当たると 54 になるので頭打ち（自機の HP 100 の 4 割）
+export const ORB_HIT_COOLDOWN = 30;          // 同じ Orb と同じ相手のあいだ、次のダメージまでのフレーム（連続ヒット防止）
+// 当たった機体を飛ばす速さ（applyKnockback）。グレネード（vx 2・vy −3.5）より控えめ
+export const ORB_KNOCK_VX = 2;
+export const ORB_KNOCK_VY = -2;
