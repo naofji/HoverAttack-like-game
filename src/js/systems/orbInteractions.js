@@ -13,6 +13,7 @@
 import {
     PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
     ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY, ORB_PROJECTILE_IMPACT, ORB_BREAK_INCIDENCE_DEG,
+    ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE,
 } from '../utils/Constants.js';
 import {
     circleBoxContact, reflectVelocity, segmentCircleHit, projectileVelocity, setProjectileVelocity,
@@ -232,4 +233,21 @@ function pushSideways(game, orb, body) {
 function blockOrb(orb, nx, ny) {
     const vn = orb.vx * nx + orb.vy * ny;
     if (vn < 0) { orb.vx -= vn * nx; orb.vy -= vn * ny; }
+}
+
+/**
+ * 爆風で Orb を押す（SpawnEffects.spawnExplosion から。ミサイル・グレネード・機体の破壊・地雷の爆発が全部通る）。
+ * 爆心から Orb の中心への向きに、ORB_BLAST_IMPULSE × (1 − 距離/半径) / 重さ を足す。敵の爆発でも動く
+ * （Orb は誰の物でもない）。中心が爆心と同じなら真上へ
+ */
+export function pushOrbsByBlast(game, x, y) {
+    for (const orb of game.orbs || []) {
+        const dx = orb.cx - x, dy = orb.cy - y;
+        const d = Math.hypot(dx, dy);
+        if (d > ORB_BLAST_RADIUS) continue;
+        const k = (ORB_BLAST_IMPULSE * (1 - d / ORB_BLAST_RADIUS)) / orb.mass;
+        if (d < 1e-9) { orb.vy -= k; continue; }
+        orb.vx += (dx / d) * k;
+        orb.vy += (dy / d) * k;
+    }
 }

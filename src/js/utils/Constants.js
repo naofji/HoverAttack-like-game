@@ -2536,3 +2536,7 @@ export const ORB_PROJECTILE_IMPACT = {
 };
 // 跳ね返りで向きが 90度より大きく変わる＝入射角（面の法線と、入ってきた向きの逆とのなす角）が 45度未満
 export const ORB_BREAK_INCIDENCE_DEG = 45;
+// 爆風で Orb が動く（設計 決定6「若干移動させることもできる」）。爆心で mass 1 の Orb に足す速さ（px/フレーム）。
+// 距離で線形に 0 へ弱め、重さで割る（large は 1/2.25）。「若干」なので small の最大でも歩きの速さほど
+export const ORB_BLAST_RADIUS = 48;
+export const ORB_BLAST_IMPULSE = 2;

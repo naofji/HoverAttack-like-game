@@ -9,6 +9,7 @@
 // settingsFlow.js と同じく **Object.assign で Game に混ぜる前提**の
 // オブジェクトリテラルで、`this` は Game を指す。
 
+import { pushOrbsByBlast } from './orbInteractions.js';
 import {
     DEBRIS_MAX_ACTIVE, LANDMINE_BLAST_RADIUS, SPLASH_MAX_PARTICLES, SPLASH_PARTICLES_PER_VY, WATER_RIPPLE_MAX,
     CASING_EJECT_SPREAD, CASING_EJECT_SPEED_MIN, CASING_EJECT_SPEED_MAX, CASING_EJECT_ANGLE_FROM_UP,
@@ -49,6 +50,9 @@ export const SpawnEffects = {
             const dy = (mine.y + mine.height / 2) - y;
             if (dx * dx + dy * dy <= LANDMINE_BLAST_RADIUS * LANDMINE_BLAST_RADIUS) mine.detonate();
         }
+
+        // 2面の Orb は爆風で少し動く（敵の爆発でも。Orb は誰の物でもない）
+        pushOrbsByBlast(this, x, y);
 
         // 3面の町（map.town）。ミサイル・グレネード・機体の破壊・地雷・基地の爆発が全部ここを通る。
         // 町自身の崩壊の粒はここを通さない（通すと崩壊が隣を崩す連鎖が止まらなくなる）。
