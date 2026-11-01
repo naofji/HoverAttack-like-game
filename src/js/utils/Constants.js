@@ -2507,8 +2507,10 @@ export const ORB_BOUNCE_MIN_SPEED = 1.0;
 export const ORB_SPAWN_TOP_FRACTION = 0.4;
 export const ORB_SPAWN_MIN_COL_GAP = 20;
 export const ORB_SPAWN_SALT = 0x0B1A0B;      // 派生ストリームの種（game.rng を消費しない）
-// 大きさの配り方。並べ替えて先頭から STAGE_ENVIRONMENTS の orbs 個を使う（5個なら 16px 3・24px 2）
-export const ORB_SIZE_MIX = ['small', 'small', 'small', 'large', 'large'];
+// 大きさの配り方。並べ替えて先頭から STAGE_ENVIRONMENTS の orbs 個を使う。
+// 2026-11-01 ユーザー指定で 24px だけにした（最初は 16px 3・24px 2）。16px の値（ORB_SIZES.small）は表に残してあるので、
+// 戻すときはここに 'small' を足すだけで済む
+export const ORB_SIZE_MIX = ['large', 'large', 'large', 'large', 'large'];
 // 石の奥の淡い紫の光が脈打つ周期（フレーム）。3秒ほど。ゆっくりでないと警告灯に見える（格納塔の縞と同じ考え）
 export const ORB_GLOW_PERIOD = 180;
 // 機体・Orb どうしとの反発係数。完全弾性ではなく 0.5〜0.7（ユーザー指定）の中央

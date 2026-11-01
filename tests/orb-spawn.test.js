@@ -1,5 +1,5 @@
 // Orb の置き場所と、ゲームへの組み込み（設計 2026-11-01-stage2-orb-design.md 4.2）。
-// 2面に5個（small 3・large 2）、盤面の上の方（上から 40% 以内）、坂の上でなくてよい、互いに離す。
+// 2面に5個（どれも 24px。2026-11-01 ユーザー指定で 16px を置かなくした）、盤面の上の方（上から 40% 以内）、坂の上でなくてよい、互いに離す。
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
@@ -25,12 +25,11 @@ async function buildMap(seed, level) {
 
 const SEEDS = [1, 2, 3, 4];
 
-test('2面に Orb が5個（small 3・large 2）', async () => {
+test('2面に Orb が5個、どれも 24px（large）', async () => {
   for (const seed of SEEDS) {
     const { map } = await buildMap(seed, 1);
     assert.equal(map.orbSpawns.length, 5, `seed ${seed}`);
-    assert.equal(map.orbSpawns.filter((o) => o.size === 'small').length, 3);
-    assert.equal(map.orbSpawns.filter((o) => o.size === 'large').length, 2);
+    assert.equal(map.orbSpawns.filter((o) => o.size === 'large').length, 5);
   }
 });
 
