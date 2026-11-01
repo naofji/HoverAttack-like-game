@@ -68,21 +68,6 @@ export class ReflectBeam {
         this.segs.unshift({ x1: sx, y1: sy, x2: endX, y2: endY, life: REFLECT_BEAM_SEGMENT_LIFE });
     }
 
-    /**
-     * 地形以外のもの（2面の Orb。systems/orbInteractions.js）で跳ね返った。(x, y) で節を閉じて折り、新しい速度で進む。
-     * 地形での跳ね返り（update の next.bounced）と同じ手順で、反射の回数にも数える
-     */
-    deflect(x, y, vx, vy) {
-        this._closeSegment(x, y);
-        this.x = x;
-        this.y = y;
-        this.vx = vx;
-        this.vy = vy;
-        this.segStart = { x, y };
-        this.segFrames = 0;
-        this.bounces++;
-    }
-
     update() {
         if (!this.alive) return;
 

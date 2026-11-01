@@ -67,6 +67,7 @@ const BREAK_COS = Math.cos((ORB_BREAK_INCIDENCE_DEG * Math.PI) / 180);
 export function sweepProjectileAgainstOrbs(game, p) {
     const orbs = game.orbs || [];
     if (orbs.length === 0 || !p.alive || p.exploded) return;
+    if (p.isBaseLaser) { absorbBaseLaser(game, p, orbs); return; }
     const spec = ORB_PROJECTILE_IMPACT[p.townKind];
     if (!spec) return;
     const v = projectileVelocity(p);
@@ -82,7 +83,8 @@ export function sweepProjectileAgainstOrbs(game, p) {
     const speed = Math.hypot(v.vx, v.vy);
     // 入射角の余弦 = 面の法線と、入ってきた向きの逆とのなす角の cos
     const cosIncidence = speed > 0 ? -(v.vx * nx + v.vy * ny) / speed : 1;
-    if (spec.rule === 'angle' && cosIncidence > BREAK_COS) {
+    // レーザー（反射ビーム）は吸収する。岩に当たったときと同じく火花を出して消える（onTownWall）
+    if (spec.rule === 'absorb' || (spec.rule === 'angle' && cosIncidence > BREAK_COS)) {
         p.onTownWall(best.x, best.y);
         return;
     }
@@ -94,10 +96,6 @@ export function sweepProjectileAgainstOrbs(game, p) {
     }
     const vn = v.vx * nx + v.vy * ny;
     const rx = v.vx - 2 * vn * nx, ry = v.vy - 2 * vn * ny;
-    if (typeof p.deflect === 'function') {
-        p.deflect(ox, oy, rx, ry);   // 反射ビーム（節を折る）
-        return;
-    }
     p.x = ox; p.y = oy;
     setProjectileVelocity(p, rx, ry);
 }
@@ -269,6 +267,27 @@ function pushSideways(game, orb, body) {
 function blockOrb(orb, nx, ny) {
     const vn = orb.vx * nx + orb.vy * ny;
     if (vn < 0) { orb.vx -= vn * nx; orb.vy -= vn * ny; }
+}
+
+/**
+ * 基地のレーザー（BaseLaser）。長さ width の光の帯で、x, y は帯の中心、dx, dy で進む。地形は素通りするが Orb には吸収される
+ * （ORB_PROJECTILE_IMPACT.laser、ユーザー指定）。帯の全体（後端 → 先端）と、このティックの先端の動きのどちらかが
+ * Orb に掛かれば消す。帯は 100px あり Orb（24px）より長いので、先端の動きだけを見ると帯の途中で重なったまま素通りする
+ */
+function absorbBaseLaser(game, laser, orbs) {
+    if (!ORB_PROJECTILE_IMPACT.laser) return;
+    const ux = Math.cos(laser.angle), uy = Math.sin(laser.angle), half = laser.width / 2;
+    const tx = laser.x - ux * half, ty = laser.y - uy * half;   // 後端
+    const hx = laser.x + ux * half, hy = laser.y + uy * half;   // 先端
+    for (const orb of orbs) {
+        const hit = segmentCircleHit(tx, ty, hx, hy, orb.cx, orb.cy, orb.r)
+            || segmentCircleHit(hx - laser.dx, hy - laser.dy, hx, hy, orb.cx, orb.cy, orb.r)
+            || (Math.hypot(tx - orb.cx, ty - orb.cy) < orb.r ? { x: tx, y: ty } : null);
+        if (!hit) continue;
+        laser.alive = false;
+        if (typeof game.spawnSparks === 'function') game.spawnSparks(hit.x, hit.y);
+        return;
+    }
 }
 
 /**

@@ -1,6 +1,6 @@
 // Orb と弾（設計 決定7・8、4.6）。弾は Orb で止まる（盾）。マシンガン・ミサイルは、跳ね返りで向きが 90度より
 // 大きく変わる＝面の法線から 45度より正面寄りに当たると壊れ（マシンガンは消える・ミサイルは爆発）、浅いと跳ね返る。
-// グレネードと反射ビームは角度に関係なく跳ね返る。跳ね返った弾は持ち主の陣営のまま
+// グレネードは角度に関係なく跳ね返る。レーザー（基地のレーザー・反射ビーム）は Orb に吸収される。跳ね返った弾は持ち主の陣営のまま
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { Orb } from '../src/js/entities/Orb.js';
@@ -10,6 +10,7 @@ import { Missile } from '../src/js/entities/Missile.js';
 import { EnemyHomingMissile } from '../src/js/entities/EnemyHomingMissile.js';
 import { Grenade } from '../src/js/entities/Grenade.js';
 import { ReflectBeam } from '../src/js/entities/ReflectBeam.js';
+import { BaseLaser } from '../src/js/entities/BaseLaser.js';
 import { CombatActions } from '../src/js/systems/CombatActions.js';
 import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { sweepProjectileAgainstOrbs } from '../src/js/systems/orbInteractions.js';
@@ -103,16 +104,43 @@ test('グレネードは入射角 0° でも跳ね返る（爆発しない）', 
   assert.ok(g.vx < 0, `vx ${g.vx}`);
 });
 
-test('反射ビームは入射角 0° でも跳ね返り、節が折れる', () => {
+// 2026-11-01 ユーザー指定: レーザー（基地のレーザーと反射ビーム）は Orb が打ち消す（吸収する）。以前は反射ビームが跳ね返り、基地のレーザーは素通りした
+for (const deg of [0, 60]) {
+  test(`反射ビームは入射角 ${deg}° でも跳ね返らずに Orb に吸収される`, () => {
+    const { game, orb } = world();
+    const b = new ReflectBeam(game, 0, 0, 0);
+    aim(b, orb, deg);
+    const calls = spyWall(b);
+    sweepProjectileAgainstOrbs(game, b);
+    assert.equal(calls.length, 1);
+    assert.equal(b.alive, false);
+  });
+}
+
+test('基地のレーザーは Orb に触れると消える（帯のどこかが Orb に掛かれば）', () => {
   const { game, orb } = world();
-  const b = new ReflectBeam(game, 0, 0, 0);
-  aim(b, orb, 0);
-  b.segStart = { x: b._prevX, y: b._prevY };
-  const bounces = b.bounces;
-  sweepProjectileAgainstOrbs(game, b);
-  assert.ok(b.alive);
-  assert.ok(b.vx < 0);
-  assert.equal(b.bounces, bounces + 1);
+  const laser = new BaseLaser(game, CX - 30, CY, 0);   // 中心が Orb の 30px 左、帯は ±50px なので先端は Orb の向こう
+  game.map.width = 4000;
+  sweepProjectileAgainstOrbs(game, laser);
+  assert.equal(laser.alive, false);
+});
+
+test('Orb に掛からない基地のレーザーはそのまま飛ぶ', () => {
+  const { game } = world();
+  const laser = new BaseLaser(game, CX - 30, CY + 40, 0);
+  sweepProjectileAgainstOrbs(game, laser);
+  assert.equal(laser.alive, true);
+});
+
+test('基地のレーザーは、あいだにある Orb に吸収されて向こうの自機に当たらない（CollisionManager を通す）', () => {
+  const { game } = world();
+  let hits = 0;
+  game.player = { alive: true, docked: false, invincibleTimer: 0, x: CX + 60, y: CY - 12, width: 16, height: 24, vx: 0, vy: 0, takeDamage() { hits++; } };
+  game.enemyBullets.push(new BaseLaser(game, CX - 160, CY, 0));
+  const cm = new CollisionManager(game);
+  for (let f = 0; f < 60 && game.enemyBullets.length > 0; f++) cm._updateEnemyBullets();
+  assert.equal(hits, 0);
+  assert.equal(game.enemyBullets.length, 0, 'レーザーが残っている');
 });
 
 test('1フレームに Orb の直径より長く動く弾も、線分で当たる', () => {
