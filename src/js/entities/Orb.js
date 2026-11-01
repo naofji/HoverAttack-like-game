@@ -14,6 +14,19 @@ import {
 } from '../utils/Constants.js';
 import { circleTerrainNormal, resolveCircleTerrain, reflectVelocity } from '../utils/orbPhysics.js';
 
+/**
+ * 1回の刻みで、動いた距離に加えて押し出してよい距離（px）。重力で床へ沈む 0.3px ほどと、坂の継ぎ目の段差を
+ * 吸収できればよい。これを超える押し出しは「すき間に挟まった」として止める
+ */
+const MAX_EXTRA_PUSH = 1.5;
+/**
+ * 眠らせる条件。接地中に、1フレームの移動がこれ未満で、速さが REST_SPEED 未満のフレームが REST_FRAMES 続いたら止める。
+ * 2つの坂でできた V 字の谷では、膨らませた円がフレームごとに片側の坂だけに触れ、その接線へ重力で滑っては反対の坂に
+ * 当たって 0.1〜0.3px 揺れ続けた（最終レビュー Important 3 の直し）。坂を転がり出す Orb は 3 フレームほどで速さ 0.3 を超えるので眠らない
+ */
+const REST_MOVE = 0.5;
+const REST_SPEED = 0.3;
+const REST_FRAMES = 10;
 /** 接地を見るときに円を膨らませる量（px）。ぴったり接しているだけの床も「接地」と読むため */
 const GROUND_PROBE = 1;
 
@@ -68,6 +81,8 @@ export class Orb {
         this.pushDir = 0;           // pushFrom で次の update に効く押し
         this.pushSpeed = 0;
         this.bounceSpeed = 0;
+        this.restFrames = 0;        // 眠らせるまでの、ほとんど動かないフレームの数
+        this.sleeping = false;
         this.hitCooldown = new Map();   // 機体ごとの、次にダメージを与えられるまでのフレーム（orbInteractions）
         this.age = 0;               // 経過フレーム（奥の光の脈動）
         // 形と光の位相は置いた位置から決める（乱数を使わない。同じ週なら同じ見た目）
@@ -101,6 +116,13 @@ export class Orb {
             if (t <= 1) this.hitCooldown.delete(body); else this.hitCooldown.set(body, t - 1);
         }
         const pushed = this.pushDir !== 0;
+        if (this.sleeping) {
+            // 起きるのは、押されたとき・ほかの物（衝突・爆風・テスト）に速度を与えられたとき・足場が無くなったとき
+            this._probeGround();
+            if (!pushed && this.vx === 0 && this.vy === 0 && this.onGround) return;
+            this.sleeping = false;
+            this.restFrames = 0;
+        }
         if (pushed) {
             this._applyPush();
         } else {
@@ -125,6 +147,13 @@ export class Orb {
         this._probeGround();
         if (this.onGround && !pushed) this._rollResistance();
         if (Math.hypot(this.vx, this.vy) < ORB_STOP_SPEED) { this.vx = 0; this.vy = 0; }
+
+        const moved = Math.hypot(this.cx - x0, this.cy - y0);
+        if (this.onGround && !pushed && moved < REST_MOVE && Math.hypot(this.vx, this.vy) < REST_SPEED) {
+            if (++this.restFrames >= REST_FRAMES) { this.sleeping = true; this.vx = 0; this.vy = 0; }
+        } else {
+            this.restFrames = 0;
+        }
 
         // 絵の回転。接地中は接線方向に動いた距離ぶん（滑らずに転がる）、空中は最後の回転を保つ
         if (this.onGround) {
@@ -164,11 +193,21 @@ export class Orb {
     _moveAndCollide() {
         const map = this.game.map;
         const steps = Math.max(1, Math.ceil(Math.hypot(this.vx, this.vy) / (this.r / 2)));
+        const stepLen = Math.hypot(this.vx, this.vy) / steps;
         for (let i = 0; i < steps; i++) {
+            const sx = this.x, sy = this.y;
             this.x += this.vx / steps;
             this.y += this.vy / steps;
             const hit = resolveCircleTerrain(map, this.cx, this.cy, this.r);
             if (!hit) continue;
+            // 押し出しがこの刻みで動いた距離より大きく跳ぶなら（狭いすき間に挟まった）、動く前の位置に戻して止める。
+            // 跳ばせると、すき間の両側を 10〜14px ずつ行き来して止まらなかった（最終レビュー Important 3）
+            const pushed = Math.hypot(hit.cx - this.cx, hit.cy - this.cy);
+            if (hit.stuck || pushed > stepLen + MAX_EXTRA_PUSH) {
+                this.x = sx; this.y = sy;
+                this.vx = 0; this.vy = 0;
+                return;
+            }
             this.x = hit.cx - this.r;
             this.y = hit.cy - this.r;
             const vn = this.vx * hit.nx + this.vy * hit.ny;

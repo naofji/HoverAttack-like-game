@@ -201,3 +201,57 @@ test('壁際に立つ自機へ Orb がゆっくり転がってきても、自機
   }
   assert.equal(inRock, 0, '自機が壁に入った');
 });
+
+// 最終レビュー Important 1: 押していない機体に寄ってくる Orb を止める向きが逆で、Orb は止まらず機体を押し続けた。
+// 坂の途中で手を離すと、接したまま加速した Orb に被弾した（設計の「勢いがついて戻ってくれば当たる」とは別物）
+test('止まっている自機へゆっくり転がってきた Orb は自機の手前で止まり、自機を押さない', () => {
+  const game = world();
+  const p = addPlayer(game, 20 * T);
+  for (let f = 0; f < 10; f++) step(game);   // 床に落ち着かせる
+  const x0 = p.x;
+  const orb = addOrb(game, p.x + p.width + 8 + 0.5, 'small');
+  orb.vx = -1.4;   // 閾値より遅い（ダメージにならない）。1回だけ与える
+  for (let f = 0; f < 60; f++) step(game);
+  assert.ok(Math.abs(p.x - x0) < 1, `自機が ${(p.x - x0).toFixed(1)}px 押された`);
+  assert.equal(orb.vx, 0, 'Orb が止まらない');
+});
+
+for (const size of ['small', 'large']) {
+  test(`${size}: 坂の途中まで押し上げて手を離し、その場に立っていても、接している Orb に被弾しない`, () => {
+    const game = world({ slope: true });
+    game.spawnHeavyDamage = () => {};
+    const r = ORB_SIZES[size].diameter / 2;
+    const orb = addOrb(game, 38 * T, size);
+    const p = addPlayer(game, 38 * T - r - 30);
+    p.invincibleTimer = 0;
+    game.held.add('KeyD');
+    let f = 0;
+    while (orb.cx < 40 * T + 4 && f < 2000) { step(game); f++; }
+    for (let i = 0; i < 80; i++) step(game);
+    game.held.clear();
+    const hp = p.hp;
+    for (let i = 0; i < 400; i++) { p.invincibleTimer = 0; step(game); }
+    assert.equal(p.hp, hp, `被弾した（${hp - p.hp}）`);
+  });
+}
+
+// 最終レビュー Important 2: 動かない砲台・基地（vx を持たない）まで Orb の縁へ押し出していて、押し続けると砲台が
+// 335px 動き、床の外で宙に浮いた。設計 4.5「止まっている砲台・基地のような動かないものは壁として跳ね返す」
+test('自機が Orb を砲台へ押し続けても、砲台は動かず、Orb は砲台にめり込まない', async () => {
+  const { EnemyTurret } = await import('../src/js/entities/EnemyTurret.js');
+  const game = world();
+  const turret = new EnemyTurret(game, 30 * T, FLOOR * T - 16);
+  game.enemies.push(turret);
+  const tx = turret.x, ty = turret.y;
+  const orb = addOrb(game, 30 * T - 40, 'small');
+  addPlayer(game, 30 * T - 80);
+  game.held.add('KeyD');
+  let overlap = 0;
+  for (let f = 0; f < 600; f++) {
+    step(game);
+    if (orb.cx + orb.r > turret.x + 0.6 && orb.cx - orb.r < turret.x + turret.width) overlap++;
+  }
+  assert.equal(turret.x, tx, `砲台が ${turret.x - tx}px 動いた`);
+  assert.equal(turret.y, ty);
+  assert.equal(overlap, 0, `Orb が砲台に重なったフレーム ${overlap}`);
+});

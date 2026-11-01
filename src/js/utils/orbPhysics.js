@@ -35,20 +35,22 @@ export function circleTerrainNormal(map, cx, cy, r) {
 }
 
 /**
- * 円が岩に入っていたら、法線の向きへ刻んで押し出した中心と単位法線。入っていなければ null。
- * 押し出しきれない（r 動かしても岩の中）ときは、押し出した分だけ動かして返す（次のフレームに続きを押す）
- * @returns {{cx:number, cy:number, nx:number, ny:number} | null}
+ * 円が岩に入っていたら、刻んで押し出した中心と、最初に触れたときの単位法線（反射に使う）。入っていなければ null。
+ * 刻みごとに法線を取り直す（最初の1本の向きへまっすぐ押すと、狭いすき間ではフレームごとに法線が反転し、
+ * 半径近い距離を行ったり来たりした。最終レビュー Important 3）。r 押しても抜けなければ stuck を立てる
+ * @returns {{cx:number, cy:number, nx:number, ny:number, stuck:boolean} | null}
  */
 export function resolveCircleTerrain(map, cx, cy, r) {
     const rr = r - ORB_CONTACT_EPS;
-    const n = circleTerrainNormal(map, cx, cy, rr);
-    if (!n) return null;
-    let x = cx, y = cy;
-    for (let d = PUSH_STEP; d <= r; d += PUSH_STEP) {
-        x = cx + n.nx * d; y = cy + n.ny * d;
-        if (!circleTerrainNormal(map, x, y, rr)) break;
+    const first = circleTerrainNormal(map, cx, cy, rr);
+    if (!first) return null;
+    let x = cx, y = cy, n = first;
+    for (let d = 0; d < r; d += PUSH_STEP) {
+        x += n.nx * PUSH_STEP; y += n.ny * PUSH_STEP;
+        n = circleTerrainNormal(map, x, y, rr);
+        if (!n) return { cx: x, cy: y, nx: first.nx, ny: first.ny, stuck: false };
     }
-    return { cx: x, cy: y, nx: n.nx, ny: n.ny };
+    return { cx: x, cy: y, nx: first.nx, ny: first.ny, stuck: true };
 }
 
 /** 法線成分を -e 倍にする（離れていく向き vn ≥ 0 なら変えない）。接線成分はそのまま */

@@ -1800,6 +1800,22 @@ export class Map {
         const sizes = shuffleWith(rng, [...ORB_SIZE_MIX]).slice(0, count);
         const rects = this._reservedRects();
         const inRects = (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
+        // 地雷・敵の湧き位置の周り 1 タイルにも置かない。予約矩形だけを避けていたら、週の 13.5% で Orb が地雷に
+        // 触れた位置に置かれて開始1ティック目に爆発し、敵の湧き位置と重なると開始時に敵がずれた（最終レビュー Important 4）。
+        // どれも地図が持っている値なので、乱数は使わない
+        const keepOut = [
+            ...this.landmineSpawns.map((p) => [p.x, p.y, LANDMINE_WIDTH, LANDMINE_HEIGHT]),
+            ...this.enemyTankSpawns.map((p) => [p.x, p.y, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT]),
+            ...this.enemyAttackerSpawns.map((p) => [p.x, p.y, PLAYER_WIDTH, PLAYER_HEIGHT]),
+            ...this.enemyDroneSpawns.map((p) => [p.x, p.y, ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT]),
+            ...this.enemyTurretSpawns.map((p) => [p.x, p.y, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT]),
+            ...(this.enemyBaseSpawn ? [[this.enemyBaseSpawn.x, this.enemyBaseSpawn.y, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT]] : []),
+        ];
+        // 左上のタイル (r, c) から n×n タイルの箱を 1 タイル広げて、湧き位置の箱に掛かるか
+        const nearSpawn = (r, c, n) => {
+            const x0 = (c - 1) * TILE_SIZE, y0 = (r - 1) * TILE_SIZE, x1 = (c + n + 1) * TILE_SIZE, y1 = (r + n + 1) * TILE_SIZE;
+            return keepOut.some(([x, y, w, h]) => x1 > x && x0 < x + w && y1 > y && y0 < y + h);
+        };
         // 左上のタイル (r, c) から n×n が空で、真下の n タイルが平らな床か
         const fits = (r, c, n) => {
             if (r + n >= this.rows || c + n > this.cols) return false;
@@ -1819,7 +1835,7 @@ export class Map {
                 const maxR = Math.floor(this.rows * frac);
                 const cands = [];
                 for (let r = 1; r + n <= maxR; r++) {
-                    for (let c = 1; c < this.cols - n; c++) if (fits(r, c, n)) cands.push({ r, c });
+                    for (let c = 1; c < this.cols - n; c++) if (fits(r, c, n) && !nearSpawn(r, c, n)) cands.push({ r, c });
                 }
                 shuffleWith(rng, cands);
                 const hit = cands.find((p) => picked.every((q) => Math.abs(q.c - p.c) >= ORB_SPAWN_MIN_COL_GAP));

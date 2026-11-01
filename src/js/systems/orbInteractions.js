@@ -43,9 +43,13 @@ export function updateOrbs(game) {
     for (let i = 0; i < orbs.length; i++) {
         for (let j = i + 1; j < orbs.length; j++) resolveOrbPair(orbs[i], orbs[j]);
     }
+    // 動かない機体（砲台・基地）は最後に解く。押している自機が同じティックに Orb を押し込み直しても、
+    // 最後は Orb が壁（動かない機体）の外に出ているように
     const bodies = orbBodies(game);
+    const movers = bodies.filter((b) => !isStaticBody(b)), statics = bodies.filter(isStaticBody);
     for (const orb of orbs) {
-        for (const body of bodies) resolveOrbBody(game, orb, body);
+        for (const body of movers) resolveOrbBody(game, orb, body);
+        for (const body of statics) resolveOrbBody(game, orb, body);
         detonateTouchedMines(game, orb);
     }
     // 自機の弾（とグレネード）。敵の弾は CollisionManager が町のあとに1発ずつ掃く
@@ -145,6 +149,14 @@ export function resolveOrbPair(a, b) {
     b.vx += (j / b.mass) * nx; b.vy += (j / b.mass) * ny;
 }
 
+/**
+ * 動かない機体か（砲台・基地。どちらも vx を持たず、重力でも動かない）。押し出すと床の外で宙に浮いた
+ * （最終レビュー Important 2）。設計 4.5「止まっている砲台・基地のような動かないものは壁として跳ね返す」
+ */
+function isStaticBody(body) {
+    return body.vx === undefined;
+}
+
 /** 機体が岩に入っているか（機体ごとの判定があればそれを使う） */
 function bodyInRock(game, body) {
     return typeof body._collidesWithMap === 'function' ? body._collidesWithMap() : collidesWithTerrain(body, game.map);
@@ -171,6 +183,12 @@ export function resolveOrbBody(game, orb, body) {
     const hit = circleBoxContact(orb.cx, orb.cy, orb.r, body);
     if (!hit) return;
     if (impact(game, orb, body, hit)) return;
+    if (isStaticBody(body)) {
+        // 動かない機体は壁として扱う。機体は動かさず、Orb を外へ出して相手へ向かう速さを消す
+        orb.x += hit.nx * hit.depth; orb.y += hit.ny * hit.depth;
+        blockOrb(orb, hit.nx, hit.ny);
+        return;
+    }
     if (hit.ny > STAND_NY) {
         standOnOrb(game, orb, body);
     } else if (hit.ny < -STAND_NY) {
@@ -229,7 +247,9 @@ function pushSideways(game, orb, body) {
     const dir = orb.cx >= body.x + body.width / 2 ? 1 : -1;
     const speed = pushSpeedOf(game, body, dir, orb);
     if (speed > 0) orb.pushFrom(dir, speed);
-    else blockOrb(orb, -dir, 0);   // 押していない機体に Orb が寄ってきたら、そこで止める
+    // 押していない機体に Orb が寄ってきたら、そこで止める。法線は「機体 → Orb」の向き（dir, 0）。
+    // 以前は (−dir, 0) を渡していて、寄ってくる Orb は止まらず機体を押し続け、離れていく Orb を止めていた（最終レビュー Important 1）
+    else blockOrb(orb, dir, 0);
     // 機体の縁を、その高さでの円の横の端に合わせる
     const qy = Math.max(body.y, Math.min(orb.cy, body.y + body.height));
     const dy = qy - orb.cy;
@@ -245,7 +265,7 @@ function pushSideways(game, orb, body) {
     body.vx = 0;
 }
 
-/** Orb の速度のうち、法線 (nx, ny)（Orb から離れる向きの逆＝相手へ向かう向きの反対）へ向かう成分を消す */
+/** 法線 (nx, ny) は「相手 → Orb」の向き。Orb の速度のうち相手へ向かう成分（v·n < 0）だけを消す */
 function blockOrb(orb, nx, ny) {
     const vn = orb.vx * nx + orb.vy * ny;
     if (vn < 0) { orb.vx -= vn * nx; orb.vy -= vn * ny; }

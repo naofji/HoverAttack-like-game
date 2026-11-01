@@ -138,3 +138,32 @@ test('Orb は描画の補間の対象', () => {
   Game._forEachMovingEntity.call({ orbs: [orb], enemies: [], projectiles: [], enemyBullets: [], repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [] }, (e) => seen.push(e));
   assert.ok(seen.includes(orb));
 });
+
+// 最終レビュー Important 4: 置き場所が予約矩形しか避けておらず、週の 13.5% で Orb が地雷に触れた位置に置かれ、
+// 2面の開始1ティック目に地雷が爆発した。敵の湧き位置と重なると開始時に敵がずれた
+test('Orb は地雷・敵の湧き位置から 1 タイル以上離れて置かれる（60週）', async () => {
+  const { LANDMINE_WIDTH, LANDMINE_HEIGHT, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT,
+    ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT } =
+    await import('../src/js/utils/Constants.js');
+  let near = 0, orbs = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const { map } = await buildMap(seed * 7919, 1);
+    const rects = [
+      ...map.landmineSpawns.map((p) => [p.x, p.y, LANDMINE_WIDTH, LANDMINE_HEIGHT]),
+      ...map.enemyTankSpawns.map((p) => [p.x, p.y, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT]),
+      ...map.enemyAttackerSpawns.map((p) => [p.x, p.y, PLAYER_WIDTH, PLAYER_HEIGHT]),
+      ...map.enemyDroneSpawns.map((p) => [p.x, p.y, ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT]),
+      ...map.enemyTurretSpawns.map((p) => [p.x, p.y, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT]),
+      ...(map.enemyBaseSpawn ? [[map.enemyBaseSpawn.x, map.enemyBaseSpawn.y, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT]] : []),
+    ];
+    for (const o of map.orbSpawns) {
+      orbs++;
+      const r = ORB_SIZES[o.size].diameter / 2;
+      for (const [x, y, w, h] of rects) {
+        if (o.cx + r + T > x && o.cx - r - T < x + w && o.cy + r + T > y && o.cy - r - T < y + h) { near++; break; }
+      }
+    }
+  }
+  assert.equal(orbs, 300, '置ける数が減った');
+  assert.equal(near, 0, `湧き位置の近くに置かれた Orb ${near}`);
+});

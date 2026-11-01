@@ -155,3 +155,32 @@ test('Orb の物理は Math.random を呼ばない', () => {
     Math.random = saved;
   }
 });
+
+// 最終レビュー Important 3: 狭いすき間に挟まった Orb が、押し出しの法線の向きがフレームごとに変わって
+// 10〜14px の瞬間移動を延々と繰り返した（本物の2面 100週で 500個中 6個が止まらなかった）
+test('斜めのすき間に落ちた Orb は 1000 フレーム後には止まり、1フレームに 2px より大きく跳ばない', () => {
+  const rows = [];
+  for (let r = 0; r < 20; r++) {
+    let s = '';
+    for (let c = 0; c < 30; c++) {
+      if (r === 10) s += c <= 14 ? '#' : '.';
+      else if (r === 11) s += c >= 16 ? '#' : '.';
+      else s += r >= 16 ? '#' : '.';
+    }
+    rows.push(s);
+  }
+  for (const size of ['small', 'large']) {
+    for (let x0 = 13 * T; x0 <= 17 * T; x0 += 2) {
+      const game = makeGame(makeMap(rows, null, { tileShape: 'caveSlope' }));
+      const o = new Orb(game, { cx: x0, cy: 6 * T, size });
+      let moving = 0, worst = 0;
+      for (let f = 0; f < 1500; f++) {
+        const px = o.cx, py = o.cy;
+        o.update();
+        const j = Math.hypot(o.cx - px, o.cy - py);
+        if (f > 1000) { worst = Math.max(worst, j); if (j > 0.01) moving++; }
+      }
+      assert.equal(moving, 0, `${size} x0=${x0}: 止まらない（最大 ${worst.toFixed(1)}px）`);
+    }
+  }
+});
