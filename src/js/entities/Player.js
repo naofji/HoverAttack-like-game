@@ -251,14 +251,19 @@ export class Player {
 
     /** Apply horizontal movement or friction. */
     _updateHorizontal(input) {
+        // 左右の入力の向き。母艦を横から押すのは入力で進んでいるときだけ（_pushOutOfCarrierHorizontally）。
+        // vx の向きで見ると、被弾で飛ばされてぶつかっただけでも母艦が動いてしまう
+        this.heldDir = 0;
         if (this.crouching) {
             if (this.onGround) this.vx = 0;
             return;
         }
         if (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) {
             this.vx = -PLAYER_MAX_SPEED;
+            this.heldDir = -1;
         } else if (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) {
             this.vx = PLAYER_MAX_SPEED;
+            this.heldDir = 1;
         } else if (this.onGround) {
             // 滑るのは「雪の積もった地形の上」だけ。陸上も、甲板や敵の頭の上も
             // slide=0 で即停止になる（utils/surface.js）
@@ -540,9 +545,16 @@ export class Player {
     /**
      * 横方向。母艦の側面に当たったら押し出される。母艦が動いてぶつかる場合も含む。
      * **マップに当たって止まったフレームは呼ばない**（_moveAndCollide 側で判断）。
+     * 押し出した先が岩の中なら、敵の押し出し（_pushOutOfEnemiesHorizontally）と同じく
+     * このフレームの横の移動を取り消す（壁際で母艦に押されて壁に入った）。
+     *
+     * 左右の入力で母艦の側面へ進んでいるなら、母艦をその向きへ押す（Carrier.pushFrom）。母艦が敵の
+     * 射線に入っているのにドッキングする間が無いとき、横へずらすため（ユーザーの要望）。自機はここで
+     * 母艦の縁に止められ、次のフレームに母艦が動いたぶん進むので、母艦と同じ速さで一緒に進む
      */
     _pushOutOfCarrierHorizontally() {
         const carrier = this.game.carrier;
+        const xBefore = this.x;
         if (carrier && carrier.alive) {
             // If the player overlaps the carrier horizontally AND vertically
             if (this.x < carrier.x + carrier.width &&
@@ -552,30 +564,44 @@ export class Player {
 
                 // We hit the side of the carrier
                 // Push out appropriately
-                if (this.vx > 0 || carrier.vx < 0) {
+                // どちら側から来たかは動く前の位置で見る（4px leeway）。速度の向きだけで分岐を選ぶと、
+                // 右側から左へ押して母艦が左へ動き出した（carrier.vx < 0）とたん「左から当たった」側に入り、
+                // そこの条件で弾かれて押し出しも押すのも止まった
+                const fromLeft = this.x + this.width - this.vx <= carrier.x + 4;
+                const fromRight = this.x - this.vx >= carrier.x + carrier.width - 4;
+                if ((this.vx > 0 || carrier.vx < 0) && fromLeft) {
                     // Moving right into carrier OR carrier moving left into us
-                    if (this.x + this.width - this.vx <= carrier.x + 4) { // 4px leeway
-                        this.x = carrier.x - this.width;
-                        this.vx = 0;
-                    }
-                } else if (this.vx < 0 || carrier.vx > 0) {
+                    this.x = carrier.x - this.width;
+                    this.vx = 0;
+                    if (this.heldDir === 1) carrier.pushFrom(1);
+                } else if ((this.vx < 0 || carrier.vx > 0) && fromRight) {
                     // Moving left into carrier OR carrier moving right into us
-                    if (this.x - this.vx >= carrier.x + carrier.width - 4) {
-                        this.x = carrier.x + carrier.width;
-                        this.vx = 0;
-                    }
+                    this.x = carrier.x + carrier.width;
+                    this.vx = 0;
+                    if (this.heldDir === -1) carrier.pushFrom(-1);
                 }
             }
         }
+        this._undoPushIntoRock(xBefore);
+    }
+
+    /**
+     * 母艦・敵の押し出しで横に置き直した先が岩の中なら、このフレームの横の移動を取り消す（相手に
+     * 阻まれて止まる）。押し出す前の位置へ戻すだけだと、相手と重なったまま歩き続けてすり抜けた
+     * （段の脇の戦車で。tests/environment-land-invariance.test.js の台本）。動く前の位置も岩に掛かる
+     * とき（乗り上げで y が変わった）は押し出す前の位置へ戻す
+     * @param {number} xBefore 押し出す前の x
+     */
+    _undoPushIntoRock(xBefore) {
+        if (this.x === xBefore || !this._collidesWithMap()) return;
+        this.x = this._frameStartX;
+        if (this._collidesWithMap()) this.x = xBefore;
     }
 
 
     /**
-     * 横方向。敵の側面に当たったら押し出される。押し出した先が岩の中なら、このフレームの横の移動を
-     * 取り消す（敵に阻まれて止まる）。敵の向こう側の縁へ置くので、ノックバックで深く重なると向こうの
-     * 壁に入った（実機の指摘）。押し出す前の位置へ戻すだけだと、自機は敵と重なったまま歩き続けて
-     * すり抜けた（段の脇の戦車で。tests/environment-land-invariance.test.js の台本）。
-     * 動く前の位置も岩に掛かるとき（乗り上げで y が変わった）は押し出す前の位置へ戻す
+     * 横方向。敵の側面に当たったら押し出される。敵の向こう側の縁へ置くので、ノックバックで深く重なると
+     * 向こうの壁に入った（実機の指摘）。置き直した先が岩なら _undoPushIntoRock で取り消す
      */
     _pushOutOfEnemiesHorizontally() {
         for (const enemy of this.game.enemies) {
@@ -594,10 +620,7 @@ export class Player {
                     this.x = enemy.x + enemy.width;
                     this.vx = 0;
                 }
-                if (this.x !== xBefore && this._collidesWithMap()) {
-                    this.x = this._frameStartX;
-                    if (this._collidesWithMap()) this.x = xBefore;
-                }
+                this._undoPushIntoRock(xBefore);
             }
         }
     }
@@ -662,17 +685,22 @@ export class Player {
                 if (pRight > cPlatformLeft && pLeft < cPlatformRight) {
                     // Check if we just crossed the platform boundary, or if we are embedded in it while falling
                     if (pPrevBottom <= cPlatformY + 4 && pBottom >= cPlatformY) {
-                        // Land on carrier
+                        // Land on carrier。乗った先で頭が天井に入るなら乗らない（敵の頭と同じ。_landOnEnemy）
+                        const xBefore = this.x, yBefore = this.y;
+                        this.y = cPlatformY - this.height;
+                        // Move with carrier horizontally if standing on it
+                        this.x += carrier.vx;
+                        if (this._collidesWithMap()) {
+                            this.x = xBefore;
+                            this.y = yBefore;
+                            return;
+                        }
                         if (this.vy > PLAYER_STUN_FALL_SPEED) { // Hard landing threshold
                             this.stunTimer = PLAYER_STUN_DURATION;
                         }
-                        this.y = cPlatformY - this.height;
                         this.onGround = true;
                         this.walkFrame = 2; // Reset to standing straight
                         this.vy = 0;
-
-                        // Move with carrier horizontally if standing on it
-                        this.x += carrier.vx;
                     }
                 }
             }
@@ -689,7 +717,14 @@ export class Player {
                 const hOverlap = this.x + this.width > carrier.x && this.x < carrier.x + carrier.width;
                 // 頭がキャリア底面に入り込み、かつ足はまだ底面以下にある（真下からの衝突）
                 if (hOverlap && this.y < cBottom && this.y + this.height >= cBottom) {
+                    // 頭を底面に合わせると足が床に入るなら、押し下げも持ち上げもしない（母艦が床すれすれで、
+                    // 床から上がり始めた自機の頭が底に入ったとき。他の押し出しと同じ規則）
+                    const yBefore = this.y;
                     this.y = cBottom;           // 頭をキャリア底面にスナップ（プレイヤーはキャリアに追従）
+                    if (this._collidesWithMap()) {
+                        this.y = yBefore;
+                        return;
+                    }
                     carrier.vy = this.vy * 0.5; // キャリアは重いので半分の速度で持ち上がる
                     carrier.vx = this.vx;       // 持ち上げ中はプレイヤーの左右移動に追従
                 }

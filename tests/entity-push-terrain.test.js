@@ -8,6 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
+import { Carrier } from '../src/js/entities/Carrier.js';
 import { makeMap, makeGame, makeAttacker } from './helpers/enemy-world.js';
 import { collidesWithTerrain } from '../src/js/utils/Physics.js';
 import { TILE_SIZE as T } from '../src/js/utils/Constants.js';
@@ -155,3 +156,107 @@ for (const dir of [-1, 1]) {
         assert.ok(Math.abs(edge - face) < 0.1, `壁の面 ${face} で止まっていない: 縁 ${edge}`);
     });
 }
+
+// 母艦の押し出しも同じ規則（2026-10-31、ユーザーの指示「母艦の押し出しも同じように」）。
+// 本物の地図の計測では0件だったが、作りは機体どうしと同じで、壁際・天井際・床際で母艦と重なると岩に入る
+
+/** 母艦の押し出しが読むのは矩形・速度・甲板の左右だけ（Carrier の値と同じ） */
+function carrierAt(game, x, y, vx = 0) {
+    const c = { game, alive: true, x, y, width: 64, height: 32, vx, vy: 0, platformLeft: 16, platformRight: 48 };
+    game.carrier = c;
+    return c;
+}
+
+test('右へ動く母艦に押されても、自機は右の壁の中へ押し出されない', () => {
+    // 列 12 から右が壁（x = 192）。自機は壁に接して立ち、母艦は左から 3px 重なって右へ動いている
+    const game = world({ wallFrom: 12 });
+    const p = new Player(game, 0, 0);
+    game.player = p;
+    p.x = 12 * T - p.width;
+    p.y = 20 * T - p.height;
+    p.vx = 0;
+    p.onGround = true;
+    carrierAt(game, p.x + 3 - 64, 20 * T - 32, 1);
+    assert.equal(collidesWithTerrain(p, game.map), false, '前提: 動く前は岩の外');
+    p._moveAndCollide();
+    assert.equal(collidesWithTerrain(p, game.map), false, `壁の中 (${p.x}, ${p.y})`);
+});
+
+test('左へ動く母艦（Carrier._pushPlayer）に押されても、自機は左の壁の中へ押し出されない', () => {
+    // 列 4 から左が壁（右の面 x = 80）。自機は壁の 1px 先に立ち、母艦は右から 6px 重なって左へ動いている
+    const game = world({ wallTo: 4 });
+    const p = new Player(game, 0, 0);
+    game.player = p;
+    p.x = 5 * T + 1;
+    p.y = 20 * T - p.height;
+    const c = carrierAt(game, p.x + p.width - 6, 20 * T - 32, -1);
+    assert.equal(collidesWithTerrain(p, game.map), false, '前提: 押される前は岩の外');
+    Carrier.prototype._pushPlayer.call(c);
+    assert.equal(collidesWithTerrain(p, game.map), false, `壁の中 (${p.x}, ${p.y})`);
+});
+
+test('自機が母艦の甲板に降りても、天井の中へは押し上げられない', () => {
+    // 天井の下端は y = 160。甲板は「自機が乗ると頭が天井に 4px 入る」高さ
+    const game = world({ ceilRows: 10 });
+    const p = new Player(game, 0, 0);
+    game.player = p;
+    const c = carrierAt(game, 100, 10 * T + p.height - 4);
+    p.x = c.x + 24;
+    p.y = 10 * T;
+    p.vy = 0.5;
+    p.onGround = false;
+    assert.equal(collidesWithTerrain(p, game.map), false, '前提: 動く前は岩の外');
+    p._moveAndCollide();
+    assert.equal(collidesWithTerrain(p, game.map), false, `天井の中 (${p.x}, ${p.y})`);
+});
+
+test('自機が下から母艦を持ち上げても、床の中へは押し下げられない', () => {
+    // 床から上がり始めた自機の頭が母艦の底に 4px 入っている。頭を底に合わせると足が床に 4px 入る
+    const game = world();
+    const p = new Player(game, 0, 0);
+    game.player = p;
+    p.x = 100;
+    p.y = 20 * T - p.height;
+    p.vy = -0.5;
+    p.onGround = false;
+    const c = carrierAt(game, 90, 20 * T - p.height + 4 - 32);
+    assert.equal(collidesWithTerrain(p, game.map), false, '前提: 動く前は岩の外');
+    p._moveAndCollide();
+    assert.equal(collidesWithTerrain(p, game.map), false, `床の中 (${p.x}, ${p.y})`);
+    assert.equal(c.vy, 0, '押し下げを断ったら母艦も持ち上げない');
+});
+
+test('岩が無ければ、母艦の押し出しは今までどおり（横・甲板・持ち上げ）', () => {
+    const game = world();
+    const p = new Player(game, 0, 0);
+    game.player = p;
+    p.x = 200;
+    p.y = 20 * T - p.height;
+    p.vx = 0;
+    p.onGround = true;
+    const c = carrierAt(game, 200 + 3 - 64, 20 * T - 32, 1);
+    p._moveAndCollide();
+    assert.equal(p.x, c.x + c.width, '横: 母艦の右の縁へ');
+
+    const q = new Player(game, 0, 0);
+    game.player = q;
+    const d = carrierAt(game, 300, 100);
+    q.x = d.x + 24;
+    q.y = 100 - q.height + 2;
+    q.vy = 0.5;
+    q.onGround = false;
+    q._moveAndCollide();
+    assert.equal(q.y, d.y - q.height, '甲板: 甲板の上へ');
+    assert.equal(q.onGround, true);
+
+    const r = new Player(game, 0, 0);
+    game.player = r;
+    r.x = 400;
+    r.y = 200;
+    r.vy = -1;
+    r.onGround = false;
+    const e = carrierAt(game, 390, 200 + 3 - 32);
+    r._moveAndCollide();
+    assert.equal(r.y, e.y + e.height, '持ち上げ: 頭を母艦の底へ');
+    assert.ok(e.vy < 0, '母艦が持ち上がる');
+});

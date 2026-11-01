@@ -308,6 +308,11 @@ export const MG_RELOAD_THRESHOLD_MAX = 15;
 export const CARRIER_WIDTH = 64;
 export const CARRIER_HEIGHT = 32;
 export const CARRIER_SPEED = 0.4;
+// 自機で母艦を横から押したときの、母艦の速さ（自機の歩きの最高速に対する倍率）。母艦が敵の射線に
+// 入っているのにドッキングする間が無いとき、押して横へずらす（ユーザーの要望）。0.5＝自機の半分
+// （ユーザー指定。下から持ち上げるときの「母艦は重いので半分」と同じ手応え）。1.75 × 0.5 = 0.875px/フレーム
+// で、ドッキング中に操縦したときの最高速（約 1.82）のおよそ半分
+export const CARRIER_PUSH_SPEED_SCALE = 0.5;
 export const CARRIER_MAX_HP = 120;  // 敵ミサイル12発ぶん。80(8発)では事故死が多かった
 export const CARRIER_INITIAL_LIVES = 1;
 export const CARRIER_PROXIMITY_ALERT_RANGE = 80; // Distance in pixels to trigger yellow alert

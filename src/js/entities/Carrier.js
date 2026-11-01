@@ -4,7 +4,7 @@
 
 import {
     TILE_SIZE,
-    CARRIER_WIDTH, CARRIER_HEIGHT, CARRIER_SPEED,
+    CARRIER_WIDTH, CARRIER_HEIGHT, CARRIER_SPEED, CARRIER_PUSH_SPEED_SCALE, PLAYER_MAX_SPEED,
     CARRIER_MAX_HP, CARRIER_INITIAL_LIVES,
     CARRIER_MAX_FALLING_SPEED,
     WATER_FALL_SPEED_SCALE,
@@ -69,6 +69,12 @@ export class Carrier {
         // Friction & Gravity
         this.vx *= FRICTION;
         if (Math.abs(this.vx) < 0.05) this.vx = 0;
+        // 自機に横から押されているあいだは、その速さで動く（pushFrom）。摩擦の後に置くのは、押した速さが
+        // そのまま出るように（摩擦の前だと 0.82 倍になって「自機の半分」より遅くなる）。離せば上の摩擦で滑って止まる
+        if (this.pushVx) {
+            this.vx = this.pushVx;
+            this.pushVx = 0;
+        }
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
         const fallScale = this.motion.fallSpeedScale !== undefined
@@ -275,6 +281,16 @@ export class Carrier {
         }
     }
 
+    /**
+     * 自機に横から押された（Player._pushOutOfCarrierHorizontally）。次の update でこの向きへ
+     * 自機の歩きの最高速 × CARRIER_PUSH_SPEED_SCALE で動く。自機は母艦の後に更新されるので、
+     * 押したぶんは次のフレームに効く
+     * @param {-1|1} dir 押された向き
+     */
+    pushFrom(dir) {
+        this.pushVx = dir * PLAYER_MAX_SPEED * CARRIER_PUSH_SPEED_SCALE;
+    }
+
     _pushPlayer() {
         const player = this.game.player;
         if (!player || !player.alive || player.docked || this.vx === 0) return;
@@ -285,11 +301,15 @@ export class Carrier {
             player.y < this.y + this.height &&
             player.y + player.height > this.y) {
 
+            const xBefore = player.x;
             if (this.vx > 0 && player.x + player.width / 2 >= this.x + this.width / 2) {
                 player.x = this.x + this.width;
             } else if (this.vx < 0 && player.x + player.width / 2 <= this.x + this.width / 2) {
                 player.x = this.x - player.width;
             }
+            // 押した先が岩の中なら押さない（壁際の自機を壁へ押し込んでいた。Player の押し出しと同じ規則）。
+            // 自機は母艦と重なったまま残るが、次のフレーム以降に離れる
+            if (player.x !== xBefore && player._collidesWithMap()) player.x = xBefore;
         }
     }
 
