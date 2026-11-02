@@ -95,10 +95,12 @@ export class Orb {
         this.spin = 0;              // 空中で回り続ける角速度
         this.pushDir = 0;           // pushFrom で次の update に効く押し
         this.pushSpeed = 0;
+        this.liftSpeed = 0;         // liftFrom で次の update に効く、下からの持ち上げ
         this.bounceSpeed = 0;
         this.restFrames = 0;        // 眠らせるまでの、ほとんど動かないフレームの数
         this.sleeping = false;
         this.hitCooldown = new Map();   // 機体ごとの、次にダメージを与えられるまでのフレーム（orbInteractions）
+        this.pushStall = new Map();     // 押している敵ごとの、押し始めの位置と時刻（押しても動かないかの見張り。orbInteractions）
         this.age = 0;               // 経過フレーム（奥の光の脈動）
         // 形と光の位相は置いた位置から決める（乱数を使わない。同じ週なら同じ見た目）
         const seed = Math.round(cx) * 73856093 ^ Math.round(cy) * 19349663;
@@ -124,13 +126,23 @@ export class Orb {
         this.pushSpeed = speed;
     }
 
+    /**
+     * 次の update で、真上へ speed で動かす（機体が下から持ち上げる。orbInteractions の liftOrb）。
+     * 押されたフレームと同じく重力を掛けず、動きは _moveAndCollide で地形に当てる（天井の岩にめり込まない）
+     * @param {number} speed px/フレーム
+     */
+    liftFrom(speed) {
+        this.liftSpeed = speed;
+    }
+
     update() {
         this.age++;
         this.bounceSpeed = 0;   // このフレームに地形で弾んだときの法線の速さ（音を鳴らす側が読む）
         for (const [body, t] of this.hitCooldown) {
             if (t <= 1) this.hitCooldown.delete(body); else this.hitCooldown.set(body, t - 1);
         }
-        const pushed = this.pushDir !== 0;
+        const lifted = this.liftSpeed > 0;
+        const pushed = this.pushDir !== 0 || lifted;
         if (this.sleeping) {
             // 起きるのは、押されたとき・ほかの物（衝突・爆風・テスト）に速度を与えられたとき・足場が無くなったとき
             this._probeGround();
@@ -138,7 +150,9 @@ export class Orb {
             this.sleeping = false;
             this.restFrames = 0;
         }
-        if (pushed) {
+        if (lifted) {
+            this.vy = -this.liftSpeed;
+        } else if (pushed) {
             this._applyPush();
         } else {
             this.vy += GRAVITY;
@@ -150,6 +164,7 @@ export class Orb {
             if (this.onGround && Math.hypot(this.vx, this.vy) < ORB_STOP_SPEED) { this.vx = 0; this.vy = 0; }
         }
         this.pushDir = 0;
+        this.liftSpeed = 0;
 
         const speed = Math.hypot(this.vx, this.vy);
         if (speed > ORB_MAX_SPEED) {

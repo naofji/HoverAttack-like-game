@@ -2491,6 +2491,12 @@ export const ORB_SIZES = {
     small: { diameter: 16, mass: 1, pushScale: 0.5, uphillScale: 0.4 },
     large: { diameter: 24, mass: 2.25, pushScale: 0.3, uphillScale: 0.15 },
 };
+// 敵（戦車・アタッカー）が押しても Orb が動かないとき、壁に当たったときと同じ反応（戦車は折り返す、アタッカーは跳ぶ・跳べなければ折り返す）
+// をさせる（2026-11-03 ユーザー指定。以前は押したままその場で歩き続けた）。押し始めから ORB_PUSH_STALL_FRAMES たっても、
+// Orb が押す速さから見込む距離の ORB_PUSH_STALL_RATIO 倍も進んでいなければ「動かない」とみなす（orbInteractions の watchPushStall）。
+// 坂の押し上げ（平地の uphillScale 倍。24px は 0.15）もこの比を下回るので、敵は大きい Orb を坂へ押し上げずに引き返す
+export const ORB_PUSH_STALL_FRAMES = 20;
+export const ORB_PUSH_STALL_RATIO = 0.25;
 // 転がりの抵抗（接地中、接線の速さを毎フレームこれだけ 0 へ寄せる）。真円ではないので転がるには高低差が要る、の表現
 // （ユーザー指定）。45度の坂の下り成分 GRAVITY·sin45 ≈ 0.21 より小さいので坂では転がり出し、平らな所では負けて止まる。
 // 坂を6段下ると約 5.9px/フレーム、そこから平地で約 14 タイル転がって止まる見積もり

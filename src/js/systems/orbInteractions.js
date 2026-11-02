@@ -13,7 +13,7 @@
 import {
     PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
     ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY, ORB_PROJECTILE_IMPACT, ORB_BREAK_INCIDENCE_DEG,
-    ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE, ORB_SOUND_INTERVAL_MS,
+    ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE, ORB_SOUND_INTERVAL_MS, ORB_PUSH_STALL_FRAMES, ORB_PUSH_STALL_RATIO,
 } from '../utils/Constants.js';
 import { audioManager } from '../audio/AudioManager.js';
 import {
@@ -23,6 +23,7 @@ import { bounceOffSurface } from '../utils/grenadePhysics.js';
 import { collidesWithTerrain } from '../utils/Physics.js';
 import { recordHit } from '../utils/hitPoint.js';
 import { applyKnockback } from '../utils/Knockback.js';
+import { playBeamHit } from '../entities/beamHit.js';
 
 /** 乗っているとみなす法線の縦の成分（箱 → Orb が下向き＝機体が上）。45度より上から触れていれば乗る */
 const STAND_NY = 0.7;
@@ -83,8 +84,14 @@ export function sweepProjectileAgainstOrbs(game, p) {
     const speed = Math.hypot(v.vx, v.vy);
     // 入射角の余弦 = 面の法線と、入ってきた向きの逆とのなす角の cos
     const cosIncidence = speed > 0 ? -(v.vx * nx + v.vy * ny) / speed : 1;
-    // レーザー（反射ビーム）は吸収する。岩に当たったときと同じく火花を出して消える（onTownWall）
-    if (spec.rule === 'absorb' || (spec.rule === 'angle' && cosIncidence > BREAK_COS)) {
+    // レーザー（反射ビーム）は吸収する。反射ビームが自機に当たったときと同じ派手な演出で消える（2026-11-03 ユーザー指定）。
+    // 反射ビームは onTownWall を持たないので呼ばない（以前は呼んでいて、当たった瞬間に落ちるはずだった）
+    if (spec.rule === 'absorb') {
+        p.alive = false;
+        playBeamHit(game, best.x, best.y);
+        return;
+    }
+    if (spec.rule === 'angle' && cosIncidence > BREAK_COS) {
         p.onTownWall(best.x, best.y);
         return;
     }
@@ -190,6 +197,8 @@ export function resolveOrbBody(game, orb, body) {
     if (hit.ny > STAND_NY) {
         standOnOrb(game, orb, body);
     } else if (hit.ny < -STAND_NY) {
+        const lift = liftSpeedOf(game, body, orb);
+        if (lift > 0) { liftOrb(game, orb, body, lift); return; }
         // Orb が機体の上（敵の頭に乗った）。Orb を上へ出し、機体へ向かう速さを消す
         orb.x += hit.nx * hit.depth; orb.y += hit.ny * hit.depth;
         blockOrb(orb, hit.nx, hit.ny);
@@ -238,6 +247,41 @@ function standOnOrb(game, orb, body) {
     if (bodyInRock(game, body)) { body.y = yBefore; return; }
     if (body.vy > 0) body.vy = 0;
     body.onGround = true;
+    // Orb の上に乗っている印。アタッカーの崖の判定は地形しか見ないので、Orb の上では前を崖と読んで毎フレーム向きを変え、
+    // 降りられなくなった（attacker/collision.js が読んで消す）
+    body.onOrb = true;
+}
+
+/**
+ * 機体が下から Orb を持ち上げる速さ。上へ動いていなければ 0。
+ * 横に押すとき（pushSpeedOf）と同じ重さの手応えにする（2026-11-03 ユーザー指定）: 自機は PLAYER_MAX_SPEED × pushScale を上限に、
+ * 母艦は重いので自分の速さで、敵は速さ × pushScale。以前は Orb を重なりの深さだけ直に上へずらしていて、
+ * 自機の上昇の速さ（ホバーで 1.8px/フレームほど）のまま上がり、横に押すとき（large で 0.525）より3倍以上速かった
+ */
+function liftSpeedOf(game, body, orb) {
+    const up = -(body.vy || 0);
+    if (up < PUSH_MIN_VX) return 0;
+    if (body === game.player) return Math.min(up, PLAYER_MAX_SPEED) * orb.spec.pushScale;
+    if (body === game.carrier) return up;
+    return up * orb.spec.pushScale;
+}
+
+/**
+ * 下から持ち上げる。Orb は直に動かさず、次の update で liftFrom の速さで上へ動かす（地形に当てるのは Orb の物理に任せる。
+ * 直にずらしていた頃は天井の岩にめり込んだ）。機体は Orb の下面へ出す（横に押すとき機体を Orb の縁へ出すのと同じ。
+ * 天井で Orb が止まれば機体もその下で止まる）。
+ * 機体の vy は消さない（横に押すとき vx を消さないのと同じ）。Orb の速さまで落とすと、自機はバースト直後のホバーが
+ * 効かないあいだに重力に負けて落ち、持ち上げ続けられなかった
+ */
+function liftOrb(game, orb, body, speed) {
+    orb.liftFrom(speed);
+    const qx = Math.max(body.x, Math.min(orb.cx, body.x + body.width));
+    const dx = qx - orb.cx;
+    const bottom = orb.cy + Math.sqrt(Math.max(0, orb.r * orb.r - dx * dx));
+    const yBefore = body.y;
+    body.y = bottom;
+    // 下へ出した先が岩（床すれすれで持ち上げた）なら出さない。重なりは次のフレームに Orb が上がって解ける
+    if (bodyInRock(game, body)) body.y = yBefore;
 }
 
 /** 横の接触。押す意図があれば Orb を押し、機体は Orb の縁へ出す */
@@ -245,6 +289,7 @@ function pushSideways(game, orb, body) {
     const dir = orb.cx >= body.x + body.width / 2 ? 1 : -1;
     const speed = pushSpeedOf(game, body, dir, orb);
     if (speed > 0) orb.pushFrom(dir, speed);
+    if (speed > 0 && typeof body.onBlockedByOrb === 'function') watchPushStall(orb, body, dir, speed);
     // 押していない機体に Orb が寄ってきたら、そこで止める。法線は「機体 → Orb」の向き（dir, 0）。
     // 以前は (−dir, 0) を渡していて、寄ってくる Orb は止まらず機体を押し続け、離れていく Orb を止めていた（最終レビュー Important 1）
     else blockOrb(orb, dir, 0);
@@ -261,6 +306,30 @@ function pushSideways(game, orb, body) {
     body.x = body._frameStartX !== undefined ? body._frameStartX : xBefore;
     if (bodyInRock(game, body)) body.x = xBefore;
     body.vx = 0;
+}
+
+/** 押しの見張りで、押さないフレームがこれだけ続くまでは同じ区間とみなす。戦車はホバーで床から浮き沈みし、接地（＝押す）が1フレームおきに途切れる */
+const PUSH_STALL_GAP = 3;
+
+/**
+ * 敵（onBlockedByOrb を持つ戦車・アタッカー）が押しても Orb が動かないかを見張る（2026-11-03 ユーザー指定）。
+ * 押し始めから ORB_PUSH_STALL_FRAMES たっても、Orb が押す速さから見込む距離の ORB_PUSH_STALL_RATIO 倍も進んでいなければ、
+ * 壁に当たったときと同じ反応をさせる。進んでいれば区間を始め直す。
+ * 1フレームごとの移動では見ない: 壁際の Orb は押されては戻され 0.1px ほど前後に揺れ、進んだフレームが混じって数えが途切れた
+ */
+function watchPushStall(orb, body, dir, speed) {
+    let w = orb.pushStall.get(body);
+    if (!w || orb.age - w.lastAge > PUSH_STALL_GAP) w = { startCx: orb.cx, startAge: orb.age, lastAge: orb.age };
+    w.lastAge = orb.age;
+    orb.pushStall.set(body, w);
+    const frames = orb.age - w.startAge;
+    if (frames < ORB_PUSH_STALL_FRAMES) return;
+    if ((orb.cx - w.startCx) * dir < speed * frames * ORB_PUSH_STALL_RATIO) {
+        orb.pushStall.delete(body);
+        body.onBlockedByOrb(dir);
+        return;
+    }
+    orb.pushStall.set(body, { startCx: orb.cx, startAge: orb.age, lastAge: orb.age });
 }
 
 /** 法線 (nx, ny) は「相手 → Orb」の向き。Orb の速度のうち相手へ向かう成分（v·n < 0）だけを消す */
@@ -285,7 +354,7 @@ function absorbBaseLaser(game, laser, orbs) {
             || (Math.hypot(tx - orb.cx, ty - orb.cy) < orb.r ? { x: tx, y: ty } : null);
         if (!hit) continue;
         laser.alive = false;
-        if (typeof game.spawnSparks === 'function') game.spawnSparks(hit.x, hit.y);
+        playBeamHit(game, hit.x, hit.y);
         return;
     }
 }

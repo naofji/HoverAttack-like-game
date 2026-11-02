@@ -15,6 +15,8 @@ import { CombatActions } from '../src/js/systems/CombatActions.js';
 import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { sweepProjectileAgainstOrbs } from '../src/js/systems/orbInteractions.js';
 import { segmentCircleHit, projectileVelocity } from '../src/js/utils/orbPhysics.js';
+import { ImpactFlash } from '../src/js/entities/Particle.js';
+import { audioManager } from '../src/js/audio/AudioManager.js';
 
 before(() => {
   const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
@@ -104,25 +106,66 @@ test('グレネードは入射角 0° でも跳ね返る（爆発しない）', 
   assert.ok(g.vx < 0, `vx ${g.vx}`);
 });
 
-// 2026-11-01 ユーザー指定: レーザー（基地のレーザーと反射ビーム）は Orb が打ち消す（吸収する）。以前は反射ビームが跳ね返り、基地のレーザーは素通りした
+// 2026-11-01 ユーザー指定: レーザー（基地のレーザーと反射ビーム）は Orb が打ち消す（吸収する）。以前は反射ビームが跳ね返り、基地のレーザーは素通りした。
+// 2026-11-03 ユーザー指定: 吸収するときは、反射ビームが自機に当たったときと同じ派手な演出（閃光・紫の火花・beamHit の音）にする。
+// 反射ビームは onTownWall を持たない（以前はそれを呼んでいて、テストでは差し替えていたので本番で落ちることに気づかなかった）。
+// ここでは差し替えずに本物の弾で通す
+function spyWeapon() {
+  const calls = [];
+  const saved = audioManager.playWeapon;
+  audioManager.playWeapon = (kind, x, y) => { calls.push({ kind, x, y }); };
+  return { calls, restore: () => { audioManager.playWeapon = saved; } };
+}
+
+/** 反射ビームが自機に当たったときの演出（CollisionManager を通す）を、粒の種類ごとの数にして返す */
+function beamHitOnPlayerEffect() {
+  const { game } = world();
+  game.player = { alive: true, docked: false, invincibleTimer: 0, x: 100, y: 100, width: 16, height: 24, vx: 0, vy: 0, takeDamage() {} };
+  const b = new ReflectBeam(game, 90, 112, 0);
+  b._prevX = 90; b._prevY = 112;
+  new CollisionManager(game)._applyBulletHit(b, game.player, { x: 100, y: 112 });
+  return kinds(game.particles);
+}
+
+const kinds = (ps) => {
+  const out = {};
+  for (const q of ps) out[q.constructor.name] = (out[q.constructor.name] || 0) + 1;
+  return out;
+};
+
 for (const deg of [0, 60]) {
-  test(`反射ビームは入射角 ${deg}° でも跳ね返らずに Orb に吸収される`, () => {
-    const { game, orb } = world();
-    const b = new ReflectBeam(game, 0, 0, 0);
-    aim(b, orb, deg);
-    const calls = spyWall(b);
-    sweepProjectileAgainstOrbs(game, b);
-    assert.equal(calls.length, 1);
-    assert.equal(b.alive, false);
+  test(`反射ビームは入射角 ${deg}° でも跳ね返らずに Orb に吸収され、自機に当たったときと同じ演出と音を出す`, () => {
+    const s = spyWeapon();
+    try {
+      const want = beamHitOnPlayerEffect();
+      s.calls.length = 0;
+      const { game, orb } = world();
+      const b = new ReflectBeam(game, 0, 0, 0);
+      s.calls.length = 0;   // 撃った音は数えない
+      aim(b, orb, deg);
+      sweepProjectileAgainstOrbs(game, b);
+      assert.equal(b.alive, false);
+      assert.deepEqual(kinds(game.particles), want);
+      assert.ok(game.particles.some((q) => q instanceof ImpactFlash), '閃光が無い');
+      assert.deepEqual(s.calls.map((c) => c.kind), ['beamHit']);
+      assert.ok(Math.abs(Math.hypot(s.calls[0].x - CX, s.calls[0].y - CY) - orb.r) < 0.01, '当たった点が円周の上でない');
+    } finally { s.restore(); }
   });
 }
 
-test('基地のレーザーは Orb に触れると消える（帯のどこかが Orb に掛かれば）', () => {
-  const { game, orb } = world();
-  const laser = new BaseLaser(game, CX - 30, CY, 0);   // 中心が Orb の 30px 左、帯は ±50px なので先端は Orb の向こう
-  game.map.width = 4000;
-  sweepProjectileAgainstOrbs(game, laser);
-  assert.equal(laser.alive, false);
+test('基地のレーザーは Orb に触れると消え、反射ビームが自機に当たったときと同じ演出と音を出す', () => {
+  const s = spyWeapon();
+  try {
+    const want = beamHitOnPlayerEffect();
+    s.calls.length = 0;
+    const { game } = world();
+    const laser = new BaseLaser(game, CX - 30, CY, 0);   // 中心が Orb の 30px 左、帯は ±50px なので先端は Orb の向こう
+    s.calls.length = 0;
+    sweepProjectileAgainstOrbs(game, laser);
+    assert.equal(laser.alive, false);
+    assert.deepEqual(kinds(game.particles), want);
+    assert.deepEqual(s.calls.map((c) => c.kind), ['beamHit']);
+  } finally { s.restore(); }
 });
 
 test('Orb に掛からない基地のレーザーはそのまま飛ぶ', () => {

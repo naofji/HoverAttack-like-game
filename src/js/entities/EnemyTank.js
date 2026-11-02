@@ -286,6 +286,16 @@ export class EnemyTank {
         }
     }
 
+    /**
+     * 押しても Orb が動かない（orbInteractions が呼ぶ）。壁と同じく折り返す。Orb（24px）は1段（16px）より高いので
+     * 乗り上げはしない。反動中は向きを変えない（壁のときと同じ）
+     */
+    onBlockedByOrb() {
+        if (isRecoiling(this)) return;
+        this.patrolDir *= -1;
+        this.vx = this.patrolDir * ENEMY_TANK_SPEED;
+    }
+
     _checkHorizontalEntities() {
         checkHorizontalEntityCollision(this, this._buildEntityList(), () => {
             this.patrolDir *= -1;

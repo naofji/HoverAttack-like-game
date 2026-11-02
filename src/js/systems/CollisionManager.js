@@ -15,14 +15,10 @@ import {
     HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
     SCORE_HOMING_INTERCEPT, SCORE_CRUISE_DESTROY,
     REFLECT_BEAM_DAMAGE,
-    BEAM_SPARK_COLORS, BEAM_SPARK_COUNT,
-    BEAM_SPARK_SPEED_MIN, BEAM_SPARK_SPEED_MAX, BEAM_SPARK_LIFETIME, BEAM_SPARK_SIZE, COLOR_BEAM_SPARK_FADE,
-    BEAM_SPARK_FLASH_RADIUS, COLOR_BEAM_HIT_FLASH_CORE, COLOR_BEAM_HIT_FLASH_RING,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
 import { playRicochet } from '../entities/ricochet.js';
-import { createSparks, ImpactFlash } from '../entities/Particle.js';
-import { audioManager } from '../audio/AudioManager.js';
+import { playBeamHit } from '../entities/beamHit.js';
 import { recordHit } from '../utils/hitPoint.js';
 import { sweepProjectileAgainstOrbs } from './orbInteractions.js';
 
@@ -130,34 +126,8 @@ export class CollisionManager {
             damage = BASE_LASER_DAMAGE;
         } else if (bullet.isReflectBeam) {
             damage = REFLECT_BEAM_DAMAGE;
-            // 「当たっても地味で判りづらい」という実機フィードバックへの対応。
-            // 紫のスパークを被弾点から全方向へ弾けさせる。
-            // 爆発（spawnExplosion）は使わない：playBlast は爆発音まで込みなので、
-            // 演出だけ欲しいここでは合わない（音は下で beamHit を選んで鳴らす）。
-            //
-            // 粒だけでは「まだ地味で見えない」と再度指摘されたので、被弾点に
-            // 紫の閃光を1つ足した。粒は散らばって視界の端では拾えないが、
-            // 1点で光る閃光は拾える。ImpactFlash は「命中の合図」用の既存の
-            // 部品で、色を渡せるようにして使い回している
-            game.particles.push(new ImpactFlash(hx, hy, BEAM_SPARK_FLASH_RADIUS, 0, {
-                core: COLOR_BEAM_HIT_FLASH_CORE,
-                ring: COLOR_BEAM_HIT_FLASH_RING,
-            }));
-            // 被弾の音。当たるとビーム自体が消える（下で alive = false）ので
-            // 1発につき1回しか鳴らない。連射でも 0.4秒(REFLECT_BEAM_BURST_DELAY)
-            // 離れた2回までで、鳴り続けることはない
-            audioManager.playWeapon('beamHit', hx, hy);
-            game.particles.push(...createSparks(hx, hy, {
-                colors: BEAM_SPARK_COLORS,
-                count: BEAM_SPARK_COUNT,
-                radial: true,
-                speedMin: BEAM_SPARK_SPEED_MIN,
-                speedMax: BEAM_SPARK_SPEED_MAX,
-                lifetime: BEAM_SPARK_LIFETIME,
-                size: BEAM_SPARK_SIZE,
-                // 出た瞬間は白く、離れるにつれてビームの紫へ冷める
-                fadeTo: COLOR_BEAM_SPARK_FADE,
-            }));
+            // 閃光・紫の火花・beamHit の音。Orb がレーザーを吸収するときも同じ演出なので entities/beamHit.js に出した
+            playBeamHit(game, hx, hy);
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = DAMAGE_CRUISE_MISSILE;
             bullet._explode(true);   // 自機に当たって爆発。撃ち落とした爆発（下の迎撃）とは違い、町と地雷は巻き込まない

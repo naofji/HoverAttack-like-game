@@ -47,20 +47,16 @@ export const AttackerCollision = {
                 if (this.vx !== 0) this.x = wallSnapX(this.x, this.width, this.vx);
                 else this.x -= this.vx * this.motion.speed;
                 this._undoSnapIntoRock('x', xBefore);
-                this.vx = 0;
-
-                const mType = this.config.movementType || 'stop_and_shoot';
-                // Try to jump over the wall
-                if (this.onGround && this.jumpCooldown <= 0) {
-                    this._jump();
-                } else if (this.aiState === 'patrol' || mType === 'pace_and_jump' || mType === 'chase_and_jump') {
-                    this.patrolDir *= -1; // Reverse patrol direction
-                }
+                this._reactToWall();
             }
         }
 
         // --- Cliff check ---
-        if (this.onGround && !hitHMap) {
+        // Orb の上に乗っているとき（前のフレームの orbInteractions の standOnOrb が立てる）は見ない。地形しか見ないので
+        // Orb の上では前も後ろも崖と読み、毎フレーム向きを変えて降りられなかった。見なければ歩いて前へ降りる
+        const onOrb = this.onOrb;
+        this.onOrb = false;
+        if (this.onGround && !hitHMap && !onOrb) {
             const mType = this.config.movementType;
             const moveDir = this.vx !== 0 ? Math.sign(this.vx) : this.patrolDir;
 
@@ -150,6 +146,23 @@ export const AttackerCollision = {
                 }
             }
         }
+    },
+
+    /** 壁に当たって止まった。跳べるなら跳び越えにかかり、跳べなければ（巡回・行き来する型は）折り返す */
+    _reactToWall() {
+        this.vx = 0;
+        const mType = this.config.movementType || 'stop_and_shoot';
+        // Try to jump over the wall
+        if (this.onGround && this.jumpCooldown <= 0) {
+            this._jump();
+        } else if (this.aiState === 'patrol' || mType === 'pace_and_jump' || mType === 'chase_and_jump') {
+            this.patrolDir *= -1; // Reverse patrol direction
+        }
+    },
+
+    /** 押しても Orb が動かない（orbInteractions が呼ぶ）。壁に当たったときと同じ反応をする（2026-11-03 ユーザー指定） */
+    onBlockedByOrb() {
+        this._reactToWall();
     },
 
     _checkHorizontalEntities() {
