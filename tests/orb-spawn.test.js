@@ -120,7 +120,7 @@ test('面を作り直すと前の面の Orb は消え、spawnOrbs が呼ばれ�
 
 test('_simulationTick が Orb を更新する（配線）。敵の更新の後', () => {
   const order = [];
-  const orb = { alive: true, update: () => order.push('orb') };
+  const orb = { alive: true, update: () => order.push('orb'), clearSupport() {} };
   const fake = new Proxy({
     orbs: [orb], enemies: [], projectiles: [], enemyBullets: [], landmines: [], particles: [],
     barriers: [], electricFloors: [], storageTowers: [], smokeScreens: [], autoAimUnits: [],

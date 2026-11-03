@@ -11,7 +11,7 @@
 // （母艦を押すときと同じく、押したぶんは次のフレームに Orb が動く）。
 
 import {
-    PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
+    PLAYER_MAX_SPEED, ORB_IMPACT_RESTITUTION, ORB_BOUNCE_MIN_SPEED, ORB_IMPACT_MIN_SPEED, ORB_IMPACT_DAMAGE_PER_SPEED, ORB_IMPACT_DAMAGE_MAX,
     ORB_HIT_COOLDOWN, ORB_KNOCK_VX, ORB_KNOCK_VY, ORB_PROJECTILE_IMPACT, ORB_BREAK_INCIDENCE_DEG,
     ORB_BLAST_RADIUS, ORB_BLAST_IMPULSE, ORB_SOUND_INTERVAL_MS, ORB_PUSH_STALL_FRAMES, ORB_PUSH_STALL_RATIO,
 } from '../utils/Constants.js';
@@ -29,6 +29,20 @@ import { playBeamHit } from '../entities/beamHit.js';
 const STAND_NY = 0.7;
 /** 押していると読む横の速さの下限（px/フレーム）。止まりかけの機体が触れただけで押さない */
 const PUSH_MIN_VX = 0.05;
+/**
+ * 足場（ほかの Orb・機体の上面）に乗っているとみなす、すき間の許し（px）。Orb の接地（GROUND_PROBE）と同じ 1。
+ * ぴったり接しているだけで重なっていない Orb も「乗っている」と読む（読まないと、1フレームおきに足場を
+ * 失って 0.3px 落ちる＝揺れが戻る）
+ */
+const SUPPORT_PROBE = 1;
+/** 足場とみなす法線の縦の成分（足場 → Orb が上向き）。Orb の地形の接地（_probeGround の 0.5）と同じ */
+const SUPPORT_NY = 0.5;
+/**
+ * Orb の上の Orb を足場で支えるのは、ほぼ真上（法線の横の成分がこれ未満、約3度）に乗っているときだけ。
+ * 足場にすると地形と同じ転がりの抵抗が効くので、広く支えると、中心から 6px（約15度）ずれて乗った Orb まで
+ * 転がり落ちずに止まった（実測）。ずれて乗った Orb は今までどおり転がり落ちる（揺れたのは真上に乗ったときだけ）
+ */
+const ORB_STACK_MAX_NX = 0.05;
 
 /**
  * 1ティックぶん。敵の更新の直後、弾と敵の当たり（collisionManager）の前に呼ぶ（main.js の _simulationTick）。
@@ -41,6 +55,8 @@ export function updateOrbs(game) {
         orb.update();
         if (orb.bounceSpeed > 0) playOrbImpactSound(orb.cx, orb.cy + orb.r);
     }
+    // 足場は毎ティック当たりから置き直す（乗っている物が動き去ったら、次の update で落ちる）
+    for (const orb of orbs) orb.clearSupport();
     for (let i = 0; i < orbs.length; i++) {
         for (let j = i + 1; j < orbs.length; j++) resolveOrbPair(orbs[i], orbs[j]);
     }
@@ -76,7 +92,7 @@ export function sweepProjectileAgainstOrbs(game, p) {
     const y0 = p._prevY !== undefined ? p._prevY : p.y - v.vy;
     let best = null, bestOrb = null;
     for (const orb of orbs) {
-        const h = segmentCircleHit(x0, y0, p.x, p.y, orb.cx, orb.cy, orb.r);
+        const h = segmentCircleHit(x0, y0, p.x, p.y, orb.cx, orb.cy, orb.r) || insideEntry(x0, y0, v, orb);
         if (h && (!best || h.t < best.t)) { best = h; bestOrb = orb; }
     }
     if (!best) return;
@@ -105,6 +121,23 @@ export function sweepProjectileAgainstOrbs(game, p) {
     const rx = v.vx - 2 * vn * nx, ry = v.vy - 2 * vn * ny;
     p.x = ox; p.y = oy;
     setProjectileVelocity(p, rx, ry);
+}
+
+/**
+ * 線分の始点がもう Orb の中にあり、しかも中心へ向かって飛んでいるなら、始点から一番近い円周の点で当てる。
+ * segmentCircleHit は始点が中なら当てない（Orb に重なって撃った弾がその場で消えないように）ので、
+ * それだけだと、自機が Orb に押し当てたまま撃った弾（銃口が円の中に出る）や、転がってきた Orb に
+ * 飲み込まれた弾が、Orb を素通りして向こうへ抜けた（最終レビュー Minor）。
+ * 外へ向かって飛んでいる弾（中心から離れていく）は今までどおり当てない
+ */
+function insideEntry(x0, y0, v, orb) {
+    const fx = x0 - orb.cx, fy = y0 - orb.cy;
+    const d = Math.hypot(fx, fy);
+    if (d >= orb.r || fx * v.vx + fy * v.vy >= 0) return null;
+    // 中心ちょうどから撃った弾は、来た向きの側の円周で
+    const ux = d > 1e-9 ? fx / d : -v.vx / (Math.hypot(v.vx, v.vy) || 1);
+    const uy = d > 1e-9 ? fy / d : -v.vy / (Math.hypot(v.vx, v.vy) || 1);
+    return { x: orb.cx + ux * orb.r, y: orb.cy + uy * orb.r, t: 0 };
 }
 
 // 最後に「ゴン」を鳴らした時刻（実時間）。全部の Orb で共有する（5個が同時に転がっても濁らないように）
@@ -136,14 +169,20 @@ export function orbBodies(game) {
 }
 
 /**
- * Orb どうし。重なりを重さの逆比で分け、法線方向の相対速度を反発係数で跳ね返す（運動量は保つ）
+ * Orb どうし。重なりを重さの逆比で分け、法線方向の相対速度を反発係数で跳ね返す（運動量は保つ）。
+ * ただし片方がもう片方の上に**ゆっくり**乗っていて、下の Orb が接地しているなら、下の Orb は床として扱う
+ * （restOnOrb）。重さで分けると、真上に乗せた2個が毎フレーム「上が沈む → 半分ずつ押し戻す（下は床へ）
+ * → 下が床に押し返される」を繰り返して、2個とも 0.0625px 揺れ続けた（実測。最終レビュー Minor）
  */
 export function resolveOrbPair(a, b) {
     const dx = b.cx - a.cx, dy = b.cy - a.cy;
     const d = Math.hypot(dx, dy);
     const overlap = a.r + b.r - d;
-    if (overlap <= 0) return;
+    if (overlap <= -SUPPORT_PROBE) return;
     const nx = d > 1e-9 ? dx / d : 1, ny = d > 1e-9 ? dy / d : 0;
+    if (ny < -SUPPORT_NY && restOnOrb(b, a, nx, ny, overlap)) return;    // b が a の上
+    if (ny > SUPPORT_NY && restOnOrb(a, b, -nx, -ny, overlap)) return;   // a が b の上
+    if (overlap <= 0) return;
     const total = a.mass + b.mass;
     a.x -= nx * overlap * (b.mass / total); a.y -= ny * overlap * (b.mass / total);
     b.x += nx * overlap * (a.mass / total); b.y += ny * overlap * (a.mass / total);
@@ -152,6 +191,23 @@ export function resolveOrbPair(a, b) {
     const j = (-(1 + ORB_IMPACT_RESTITUTION) * vrel) / (1 / a.mass + 1 / b.mass);
     a.vx -= (j / a.mass) * nx; a.vy -= (j / a.mass) * ny;
     b.vx += (j / b.mass) * nx; b.vy += (j / b.mass) * ny;
+}
+
+/**
+ * upper が lower の上にゆっくり乗っているなら、lower を床として upper だけを外へ出し、足場にして真を返す。
+ * (nx, ny) は lower → upper の単位法線。lower が接地していない（空中で重なった）・
+ * 真上からずれている（転がり落ちる）・速く落ちてきた（弾ませる）なら偽
+ */
+function restOnOrb(upper, lower, nx, ny, overlap) {
+    if (!lower.onGround || Math.abs(nx) > ORB_STACK_MAX_NX) return false;
+    const vn = (upper.vx - lower.vx) * nx + (upper.vy - lower.vy) * ny;   // 負なら近づいている
+    if (vn < -ORB_BOUNCE_MIN_SPEED) return false;
+    if (overlap > 0) { upper.x += nx * overlap; upper.y += ny * overlap; }
+    // 近づく速さを消すのは触れているときだけ（すき間があるなら重力で降りてくる。Orb の _touchingGround と同じ考え）
+    const gap = Math.max(0, -overlap);
+    if (vn < 0 && gap === 0) { upper.vx -= vn * nx; upper.vy -= vn * ny; }
+    upper.setSupport(nx, ny, lower.vx, lower.vy, gap);
+    return true;
 }
 
 /**
@@ -186,25 +242,35 @@ function pushSpeedOf(game, body, dir, orb) {
  */
 export function resolveOrbBody(game, orb, body) {
     const hit = circleBoxContact(orb.cx, orb.cy, orb.r, body);
-    if (!hit) return;
-    if (impact(game, orb, body, hit)) return;
-    if (isStaticBody(body)) {
+    if (hit && impact(game, orb, body, hit)) return;
+    if (hit && isStaticBody(body)) {
         // 動かない機体は壁として扱う。機体は動かさず、Orb を外へ出して相手へ向かう速さを消す
         orb.x += hit.nx * hit.depth; orb.y += hit.ny * hit.depth;
         blockOrb(orb, hit.nx, hit.ny);
-        return;
-    }
-    if (hit.ny > STAND_NY) {
+    } else if (hit && hit.ny > STAND_NY) {
         standOnOrb(game, orb, body);
-    } else if (hit.ny < -STAND_NY) {
+    } else if (hit && hit.ny < -STAND_NY) {
         const lift = liftSpeedOf(game, body, orb);
         if (lift > 0) { liftOrb(game, orb, body, lift); return; }
-        // Orb が機体の上（敵の頭に乗った）。Orb を上へ出し、機体へ向かう速さを消す
+        // Orb が機体の上（母艦の甲板・敵の頭・砲台の上）。Orb を上へ出し、機体へ向かう速さを消す
         orb.x += hit.nx * hit.depth; orb.y += hit.ny * hit.depth;
         blockOrb(orb, hit.nx, hit.ny);
-    } else {
+    } else if (hit) {
         pushSideways(game, orb, body);
     }
+    supportOnBody(orb, body);
+}
+
+/**
+ * 機体の上面に乗っている（重なりを解いたあと、すき間 SUPPORT_PROBE 以内で上から触れている）なら、機体を Orb の足場にする。
+ * 足場の速度は機体の速度（動かない機体は 0）。これで甲板の上の Orb にも転がりの抵抗が効き、走る母艦には
+ * 摩擦でついていく（以前は抵抗が効かずに転がり落ち、走る母艦の甲板は下から抜けていった。最終レビュー Minor）
+ */
+function supportOnBody(orb, body) {
+    if (orb.liftSpeed > 0) return;   // 下から持ち上げられている最中は足場ではない（liftOrb）
+    const probe = circleBoxContact(orb.cx, orb.cy, orb.r + SUPPORT_PROBE, body);
+    if (!probe || probe.ny > -SUPPORT_NY) return;
+    orb.setSupport(probe.nx, probe.ny, body.vx || 0, body.vy || 0, Math.max(0, SUPPORT_PROBE - probe.depth));
 }
 
 /**

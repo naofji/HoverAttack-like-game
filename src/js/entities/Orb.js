@@ -29,6 +29,13 @@ const REST_SPEED = 0.3;
 const REST_FRAMES = 10;
 /** 接地を見るときに円を膨らませる量（px）。ぴったり接しているだけの床も「接地」と読むため */
 const GROUND_PROBE = 1;
+/**
+ * 床へ向かう速さを消すのは、床とのすき間がこれ以下（実際に触れている）のときだけ（px）。止まった Orb は
+ * 押し出しの刻み（orbPhysics の PUSH_STEP 0.25）以内に収まるので、それより少し大きく取る。
+ * 接地（GROUND_PROBE の 1px 以内）だけで消していた頃は、床の 1px 手前までゆっくり降りてきた Orb が
+ * そこで止まり、床から 0.75px 浮いて眠った（足場を入れたときにテストで見つかった、もとからあった穴）
+ */
+const TOUCH_GAP = 0.3;
 
 // 絵の色（描画専用なので Constants.js ではなくここに置く。LEG_STYLES と同じ例外）。
 // ブラックオニキスを思わせる石（ユーザー指定）。2026-11-01 に「もっと神秘的に」（ユーザー指定）で次を足した:
@@ -91,6 +98,12 @@ export class Orb {
         this.onGround = false;
         this.groundNx = 0;
         this.groundNy = -1;
+        // 地形でない足場（ほかの Orb・機体の上面）。orbInteractions が毎ティック当たりを見て setSupport で置く。
+        // 地形しか接地と読まなかった頃は、Orb の上の Orb と甲板の上の Orb が「宙に浮いている」扱いで、
+        // 毎フレーム重力で沈んでは押し戻されて 0.0625px 揺れ続け（Orb の上）、転がりの抵抗が効かずに
+        // 甲板から転がり落ち、動く母艦の甲板は下から抜けていった（実測。最終レビュー Minor）
+        this.support = null;        // {nx, ny, vx, vy, gap}: 足場 → Orb の法線、足場の速度、すき間
+        this.groundFromSupport = false;   // いまの onGround が地形ではなく support から来ているか
         this.angle = 0;             // 絵の回転（転がった距離 / r）
         this.spin = 0;              // 空中で回り続ける角速度
         this.pushDir = 0;           // pushFrom で次の update に効く押し
@@ -146,7 +159,8 @@ export class Orb {
         if (this.sleeping) {
             // 起きるのは、押されたとき・ほかの物（衝突・爆風・テスト）に速度を与えられたとき・足場が無くなったとき
             this._probeGround();
-            if (!pushed && this.vx === 0 && this.vy === 0 && this.onGround) return;
+            // 動く足場（走る母艦）の上では眠り続けない（起きて、摩擦で足場についていく）
+            if (!pushed && this.vx === 0 && this.vy === 0 && this.onGround && !this._supportMoving()) return;
             this.sleeping = false;
             this.restFrames = 0;
         }
@@ -158,7 +172,7 @@ export class Orb {
             this.vy += GRAVITY;
             // 接地中は床へ向かう成分を先に消す。消さずに沈めて押し出すと、止まった Orb が毎フレーム
             // 0.3px 沈んで押し戻され、床の上で震えた
-            if (this.onGround) this._dropIntoGround();
+            if (this.onGround && this._touchingGround()) this._dropIntoGround();
             // 床に止まっている Orb は動かさない。法線は円周の点の和なので 1e-16 ほど傾くことがあり、
             // 重力を消した残りでわずかに動くと、止まった位置が毎フレーム少しずつずれた
             if (this.onGround && Math.hypot(this.vx, this.vy) < ORB_STOP_SPEED) { this.vx = 0; this.vy = 0; }
@@ -179,16 +193,20 @@ export class Orb {
         if (Math.hypot(this.vx, this.vy) < ORB_STOP_SPEED) { this.vx = 0; this.vy = 0; }
 
         const moved = Math.hypot(this.cx - x0, this.cy - y0);
-        if (this.onGround && !pushed && moved < REST_MOVE && Math.hypot(this.vx, this.vy) < REST_SPEED) {
+        if (this.onGround && !pushed && !this._supportMoving()
+            && moved < REST_MOVE && Math.hypot(this.vx, this.vy) < REST_SPEED) {
             if (++this.restFrames >= REST_FRAMES) { this.sleeping = true; this.vx = 0; this.vy = 0; }
         } else {
             this.restFrames = 0;
         }
 
-        // 絵の回転。接地中は接線方向に動いた距離ぶん（滑らずに転がる）、空中は最後の回転を保つ
+        // 絵の回転。接地中は接線方向に**足場に対して**動いた距離ぶん（滑らずに転がる）、空中は最後の回転を保つ。
+        // 足場の速度を引くのは、走る母艦の甲板に乗って運ばれているだけの Orb が回って見えないため
         if (this.onGround) {
             const tx = -this.groundNy, ty = this.groundNx;   // 接線（法線を時計回りに 90度）
-            this.spin = ((this.cx - x0) * tx + (this.cy - y0) * ty) / this.r;
+            const sv = this.groundFromSupport ? this.support : null;
+            const rx = (this.cx - x0) - (sv ? sv.vx : 0), ry = (this.cy - y0) - (sv ? sv.vy : 0);
+            this.spin = (rx * tx + ry * ty) / this.r;
         }
         this.angle += this.spin;
     }
@@ -207,6 +225,13 @@ export class Orb {
         const s = this.pushSpeed * (uphill ? this.spec.uphillScale : 1);
         this.vx = tx * s;
         this.vy = ty * s;
+    }
+
+    /** 床（地形か足場）に実際に触れているか。すき間が TOUCH_GAP 以下 */
+    _touchingGround() {
+        if (this.groundFromSupport) return this.support.gap <= TOUCH_GAP;
+        const n = circleTerrainNormal(this.game.map, this.cx, this.cy, this.r + TOUCH_GAP);
+        return !!n && n.ny < -0.5;
     }
 
     _dropIntoGround() {
@@ -251,21 +276,62 @@ export class Orb {
         }
     }
 
-    /** 少し膨らませた円で床を探す。法線が上を向いていれば接地（坂も含む。壁・天井は接地ではない） */
+    /**
+     * 少し膨らませた円で床を探す。法線が上を向いていれば接地（坂も含む。壁・天井は接地ではない）。
+     * 地形に床が無く、足場（support）があればそれに乗っている。地形の床があるときは地形を優先する
+     */
     _probeGround() {
         const n = circleTerrainNormal(this.game.map, this.cx, this.cy, this.r + GROUND_PROBE);
         this.onGround = !!n && n.ny < -0.5;
+        this.groundFromSupport = false;
         if (this.onGround) {
             this.groundNx = n.nx;
             this.groundNy = n.ny;
+        } else if (this.support) {
+            this._standOnSupport();
         }
     }
 
-    /** 接線の速さを抵抗のぶん 0 へ寄せる。法線成分（弾んで離れていく分）は触らない */
+    /**
+     * 足場に乗せる（orbInteractions が当たりを見て呼ぶ）。法線 (nx, ny) は足場 → Orb の向き、(vx, vy) は足場の速度、
+     * gap は足場とのすき間（px。触れているかを _touchingGround が見る）。
+     * すぐに接地にするのは、次の update の頭（_dropIntoGround）でもう床として効かせるため
+     */
+    setSupport(nx, ny, vx, vy, gap) {
+        this.support = { nx, ny, vx, vy, gap };
+        if (!this.onGround || this.groundFromSupport) this._standOnSupport();
+    }
+
+    /** 足場を外す（毎ティックの当たりの頭で。当たりで置き直されなければ、次の update で落ち始める） */
+    clearSupport() {
+        this.support = null;
+        if (this.groundFromSupport) { this.onGround = false; this.groundFromSupport = false; }
+    }
+
+    _standOnSupport() {
+        this.onGround = true;
+        this.groundFromSupport = true;
+        this.groundNx = this.support.nx;
+        this.groundNy = this.support.ny;
+    }
+
+    /** 乗っている足場が動いているか（母艦・歩く敵の上） */
+    _supportMoving() {
+        return this.groundFromSupport && (this.support.vx !== 0 || this.support.vy !== 0);
+    }
+
+    /**
+     * 接線の速さを抵抗のぶん**足場の速さへ**寄せる（地形なら 0 へ）。法線成分（弾んで離れていく分）は触らない。
+     * 足場の速さへ寄せるのは、甲板の上の Orb が摩擦で母艦についていくため（寄せ先が 0 だと、走る母艦の
+     * 甲板の上で Orb が置いていかれた）
+     */
     _rollResistance() {
         const tx = -this.groundNy, ty = this.groundNx;
+        const sv = this.groundFromSupport ? this.support : null;
+        const target = sv ? sv.vx * tx + sv.vy * ty : 0;
         const vt = this.vx * tx + this.vy * ty;
-        const vtNew = Math.sign(vt) * Math.max(0, Math.abs(vt) - ORB_ROLL_RESISTANCE);
+        const rel = vt - target;
+        const vtNew = target + Math.sign(rel) * Math.max(0, Math.abs(rel) - ORB_ROLL_RESISTANCE);
         this.vx += (vtNew - vt) * tx;
         this.vy += (vtNew - vt) * ty;
     }

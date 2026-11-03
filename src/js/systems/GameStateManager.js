@@ -95,8 +95,8 @@ export class GameStateManager {
 
         // Recreate landmines and enemies
         game.spawnManager.spawnLandmines();
-        game.spawnManager.spawnStorageTowers();
-        game.spawnManager.spawnOrbs();   // 2面の Orb（押せて転がる鉱物。他の面は空振り）  // 格納塔（今は7面の要塞のお宝だけ。他の面は空振り）
+        game.spawnManager.spawnStorageTowers();   // 格納塔（今は7面の要塞のお宝だけ。他の面は空振り）
+        game.spawnManager.spawnOrbs();   // 2面の Orb（押せて転がる鉱物。他の面は空振り）
         game.spawnManager.spawnBarriers();   // 同、電磁パルスのバリア
         game.spawnManager.spawnElectricFloors();   // 同、電流の床
         game.spawnManager.spawnEnemies();

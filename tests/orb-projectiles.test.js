@@ -207,6 +207,17 @@ test('Orb の中から出ていく弾には当てない（始点が円の中）'
   assert.equal(calls.length, 0);
 });
 
+test('始点がもう Orb の中でも、中心へ向かう弾は円周で当たる（押し当てたまま撃った弾が素通りしない）', () => {
+  const { game, orb } = world();
+  const p = new PlayerBullet(game, 0, 0, 0);
+  p._prevX = CX - orb.r + 2; p._prevY = CY;   // 銃口が円の中に出た
+  p.x = CX + orb.r + 6; p.y = CY;             // そのままだと向こうへ抜ける
+  const calls = spyWall(p);
+  sweepProjectileAgainstOrbs(game, p);
+  assert.equal(calls.length, 1, '素通りした');
+  assert.ok(Math.abs(calls[0][0] - (CX - orb.r)) < 0.01 && Math.abs(calls[0][1] - CY) < 0.01, `当たった点 ${calls[0]}`);
+});
+
 test('segmentCircleHit: 最初に円へ入る点と t を返し、外れる・始点が中なら null', () => {
   const h = segmentCircleHit(0, 0, 20, 0, 10, 0, 4);
   assert.ok(Math.abs(h.x - 6) < 1e-9 && Math.abs(h.t - 0.3) < 1e-9);
