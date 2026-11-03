@@ -11,7 +11,10 @@
 import {
     TILE_SIZE,
     EMERGENCY_WILD_FIRE_SPREAD, EMERGENCY_WILD_FIRE_INTERVAL_MULT,
+    ATTACKER_MG_BURST_COUNT, ATTACKER_MG_BURST_DELAY, ATTACKER_MG_SPREAD,
 } from '../../utils/Constants.js';
+import { EnemyBullet } from '../EnemyBullet.js';
+import { isCrouched } from './stance.js';
 import { Missile } from '../Missile.js';
 import { Grenade } from '../Grenade.js';
 import { EnemyHomingMissile } from '../EnemyHomingMissile.js';
@@ -37,7 +40,8 @@ export const AttackerCombat = {
             if (this.burstTimer <= 0) {
                 this._fire(target);
                 this.burstCount--;
-                this.burstTimer = 15; // 15 frames between burst shots
+                // artillery は 15 フレームおき、MG 持ちは ATTACKER_MG_BURST_DELAY おき
+                this.burstTimer = this.weapon === 'mg' ? ATTACKER_MG_BURST_DELAY : 15;
                 if (this.burstCount <= 0) {
                     this.fireTimer = this.config.fireInterval;
                 }
@@ -65,6 +69,16 @@ export const AttackerCombat = {
         if (this.config.name === 'artillery') {
             this.crouching = true;
             this.crouchTimer = 30; // crouch for half a second before bursting
+            return;
+        }
+
+        // MG 持ちは連射を始める。弾を出すのは上の burstCount の枝（artillery の
+        // 連射と同じ仕組み）。狙いの外れは5発で共有するので、ここで1回だけ引く
+        if (this.weapon === 'mg') {
+            const accuracy = this.config.aimAccuracy ?? 1.0;
+            this.mgAimError = Math.random() > accuracy ? (Math.random() - 0.5) * 1.0 : 0;
+            this.burstCount = ATTACKER_MG_BURST_COUNT;
+            this.burstTimer = 0;
             return;
         }
 
@@ -133,13 +147,25 @@ export const AttackerCombat = {
         const dy = targetY - (this.y + this.height / 2);
         let angle = Math.atan2(dy, dx);
 
+        // MG 持ち: 1発ごとに狙い直し（連射中も相手を追う）、外れは連射の頭で引いた
+        // ものを使う。総攻撃中の _fireWild() はミサイルのまま ── 地形を壊して
+        // 基地へ近づく役は素のミサイルにしか無い（EnemyBullet は地形を掘らない）
+        if (this.weapon === 'mg') {
+            angle += this.mgAimError + (Math.random() - 0.5) * ATTACKER_MG_SPREAD;
+            const mx = this.x + this.width / 2 + Math.cos(angle) * 10;
+            const my = this.y + this.height / 2 + Math.sin(angle) * 6;
+            // 音は EnemyBullet 自身が鳴らす（Bullet の sound: 'enemyMg'）
+            this.game.enemyBullets.push(new EnemyBullet(this.game, mx, my, angle));
+            return;
+        }
+
         const accuracy = this.config.aimAccuracy !== undefined ? this.config.aimAccuracy : 1.0;
 
         if (Math.random() > accuracy) {
             angle += (Math.random() - 0.5) * 1.0;
         }
 
-        const crouchOffset = (this.crouching || this.burstCount > 0) ? 6 : 0;
+        const crouchOffset = isCrouched(this) ? 6 : 0;
         const muzzleX = this.x + this.width / 2 + Math.cos(angle) * 10;
         const muzzleY = this.y + this.height / 2 + Math.sin(angle) * 6 + crouchOffset;
 

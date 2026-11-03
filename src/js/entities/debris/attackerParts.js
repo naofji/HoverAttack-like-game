@@ -3,6 +3,7 @@
 // 座標は機体左上原点・右向き（16x24）。
 
 import { segmentPart } from './shapes.js';
+import { isCrouched } from '../attacker/stance.js';
 
 /**
  * 型別の胴体・頭部・装甲・砲。crouchOffset は draw() が全体を下げる量。
@@ -11,7 +12,7 @@ import { segmentPart } from './shapes.js';
 export function attackerBodyParts(attacker) {
     const cfg = attacker.config;
     const type = cfg.name;
-    const dy = (attacker.crouching || attacker.burstCount > 0) ? 4 : 0;
+    const dy = isCrouched(attacker) ? 4 : 0;
     const at = (x, y, w, h, color, weight) => ({ x, y: y + dy, w, h, color, weight });
 
     if (type === 'heavy') {

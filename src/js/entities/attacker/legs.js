@@ -3,8 +3,8 @@
 // ============================================
 //
 // 型ごとの脚の見た目と、関節（腰・膝・足）の座標の計算。
-// EnemyAttacker.js から切り出した。**外部の import を1つも必要としない**
-// ── 定数と、それを使う計算がここで閉じている。
+// EnemyAttacker.js から切り出した。**外部の import は同じフォルダの stance.js
+// （しゃがんでいるか）だけ** ── 定数と、それを使う計算がここで閉じている。
 //
 // **関節の座標を出すのはここだけ。** 描画側（_drawLegs / _drawArtilleryLegs）も
 // 当たり判定も同じ _legJoints() を通す。以前は歩行と描画で別々に角度を出していて
@@ -14,6 +14,8 @@
 // リテラルで、`this` は EnemyAttacker のインスタンスを指す。関数化して
 // attacker を第一引数に取る形にしなかったのは、テストが
 // `a._legJoints(...)` のようにインスタンス経由で呼んでいるため。
+
+import { isCrouched } from './stance.js';
 
 /**
  * 型別の脚描画パラメータ（描画専用なので Constants.js には置かない）。
@@ -286,7 +288,7 @@ export const AttackerLegs = {
      */
     _collectLegPoses() {
         const style = this._legStyle();
-        const isCrouching = this.crouching || this.burstCount > 0;
+        const isCrouching = isCrouched(this);
         // hipY は draw() の平行移動込みで見た絶対位置に合わせる
         return this._legJoints(16, style, isCrouching).map((j) => ({
             isNear: j.isNear,

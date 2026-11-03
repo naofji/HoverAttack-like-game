@@ -9,6 +9,7 @@
 // リテラルで、`this` はインスタンスを指す（理由は attacker/legs.js の冒頭）。
 
 import { drawThrusterFlame, attackerFlamePower } from '../thrusterFlame.js';
+import { isCrouched } from './stance.js';
 
 export const AttackerDraw = {
     draw(ctx) {
@@ -32,7 +33,7 @@ export const AttackerDraw = {
             ctx.translate(x, y);
         }
 
-        const isCrouching = this.crouching || this.burstCount > 0;
+        const isCrouching = isCrouched(this);
         const crouchOffset = isCrouching ? 4 : 0;
         ctx.translate(0, crouchOffset);
 

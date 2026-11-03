@@ -36,6 +36,7 @@ import { AttackerCombat } from './attacker/combat.js';
 import { AttackerMovement } from './attacker/movement.js';
 import { AttackerAfterimage } from './attacker/afterimage.js';
 import { SlopeBody } from './slopeBody.js';
+import { isCrouched } from './attacker/stance.js';
 
 export class EnemyAttacker {
     constructor(game, x, y, config) {
@@ -123,6 +124,12 @@ export class EnemyAttacker {
         this.crouchTimer = 0;
         this.burstCount = 0;
         this.burstTimer = 0;
+        // 'missile'（既定）か 'mg'（5連射）。表の行に `weapon` があればそれ。
+        // MG 持ちの行（色違い）を渡すのは SpawnManager が standard の一部にだけ
+        // （utils/attackerWeapon.js）。ここで決めないのは、面ごとの比率を
+        // 機体数の中で正確に出すには「何機目か」を数える必要があるため
+        this.weapon = config.weapon ?? 'missile';
+        this.mgAimError = 0;   // MG の連射1回ぶんの狙いの外れ（連射の頭で引く）
 
         // Hover fuel support (used if movementType allows hovering)
         this.hoverFuel = HOVER_MAX_FUEL;
@@ -367,7 +374,7 @@ export class EnemyAttacker {
      */
     _hoverNozzle() {
         const cfg = this.config;
-        const crouchOffset = (this.crouching || this.burstCount > 0) ? 4 : 0;
+        const crouchOffset = isCrouched(this) ? 4 : 0;
         return {
             x: this.facingRight ? (this.x + cfg.flameX) : (this.x + this.width - cfg.flameX),
             y: this.y + crouchOffset + cfg.flameY,

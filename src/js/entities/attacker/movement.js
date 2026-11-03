@@ -29,6 +29,9 @@ import { audioManager } from '../../audio/AudioManager.js';
 export const AttackerMovement = {
     /** Apply movement velocity for the current frame. */
     _updateMovement(target) {
+        // 連射中は足を止める。artillery はしゃがんで、MG 持ちの standard は立ったまま
+        // （しゃがみは attacker/stance.js）。MG 持ちも止めるのは、5連射のあいだ
+        // 位置が決まる＝自機が弾の筋を読んで避けられるようにするため
         if (this.crouching || this.burstCount > 0) {
             this.vx = 0;
         } else if (this.aiState === 'chase') {

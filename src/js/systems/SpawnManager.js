@@ -4,6 +4,7 @@
 
 import { Orb } from '../entities/Orb.js';
 import { TILE_SIZE, ENEMY_ATTACKER_TYPES } from '../utils/Constants.js';
+import { standardWeaponAt, STANDARD_MG_CONFIG } from '../utils/attackerWeapon.js';
 import { Landmine } from '../entities/Landmine.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
 import { EnemyAttacker } from '../entities/EnemyAttacker.js';
@@ -158,6 +159,9 @@ export class SpawnManager {
         }
 
         // Attackers (Humanoids)
+        // standard の何機目か。MG 持ちの割り当て（utils/attackerWeapon.js）に使う。
+        // 乱数は引かない（引くと週次の決定性が壊れる）
+        let standardIndex = 0;
         for (const pos of game.map.enemyAttackerSpawns) {
             let rnd = this.game.rng.next() * totalWeight;
             let selectedTypeKey = 'standard';
@@ -170,7 +174,13 @@ export class SpawnManager {
                 rnd -= typeDef.spawnWeight;
             }
             const adjustedPos = resolveOverlap(pos.x, pos.y);
-            const attacker = new EnemyAttacker(game, adjustedPos.x, adjustedPos.y, availableTypes[selectedTypeKey]);
+            let config = availableTypes[selectedTypeKey];
+            // standard の一部は MG 持ち（色違い）の行で作る
+            if (selectedTypeKey === 'standard'
+                && standardWeaponAt(game.missionsCompleted, standardIndex++) === 'mg') {
+                config = STANDARD_MG_CONFIG;
+            }
+            const attacker = new EnemyAttacker(game, adjustedPos.x, adjustedPos.y, config);
             if (game.baseEmergencyAlert) {
                 attacker.setEmergencyDefense(true, game.emergencyTargetBase);
             }
