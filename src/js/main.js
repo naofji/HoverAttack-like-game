@@ -31,6 +31,7 @@ import {
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
     VIEW_CULL_MARGIN,
     CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
+    ENEMY_BASE_DRAW_OVERHANG, FLAG_HEIGHT,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, stepSetting } from './utils/settings.js';
@@ -928,7 +929,11 @@ export const Game = {
 
     _checkMissionClear() {
         if (this.base && !this.base.alive && !this.flag && this.gameState === 'playing') {
-            this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, this.base.y + this.base.height - 20);
+            // 足元は箱の下端ではなく床の表面に合わせる。基地の箱は構造物の絵のはみ出し
+            // （ENEMY_BASE_DRAW_OVERHANG）ぶん床より上に置いてあるので、箱の下端に合わせると
+            // フラッグが 12px 浮いて見えた（実機の指摘）。
+            const floorY = this.base.y + this.base.height + ENEMY_BASE_DRAW_OVERHANG;
+            this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, floorY - FLAG_HEIGHT);
         }
 
         if (!this.flag) return;
