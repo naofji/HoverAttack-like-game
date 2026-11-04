@@ -10,8 +10,9 @@ import { Map as GameMap } from '../src/js/world/Map.js';
 import { MapRender } from '../src/js/world/mapRender.js';
 import { MapMiniMap } from '../src/js/world/mapMiniMap.js';
 import { MapWater } from '../src/js/world/mapWater.js';
+import { MapShapes } from '../src/js/world/mapShapes.js';
 
-const MIXINS = { MapRender, MapMiniMap, MapWater };
+const MIXINS = { MapRender, MapMiniMap, MapWater, MapShapes };
 
 test('mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
