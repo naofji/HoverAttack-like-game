@@ -448,6 +448,9 @@ export const CRUISE_MISSILE_ENGAGE_DISTANCE = 240; // Distance in pixels before 
 export const CRUISE_MISSILE_LIFETIME = 1800; // Very long lifetime (30 seconds)
 export const CRUISE_MISSILE_HP = 9; // 3 machine gun hits
 export const CRUISE_MISSILE_WARNING_TIME = 180; // 3 seconds warning
+// 撃ち落としたとき（HP を削り切ったときだけ）の得点。2026-07-18 のバランス調整で 100 → 150 に
+// したが、実際の加点は CollisionManager の別の定数 SCORE_CRUISE_DESTROY = 100 のままで、
+// 2026-11-04 にこの定数へ一本化するまで効いていなかった（ユーザー判断で設計どおり 150 を採用）
 export const CRUISE_MISSILE_SCORE = 150;
 export const CRUISE_MISSILE_MIN_DELAY = 1200; // 20 seconds at 60fps
 export const CRUISE_MISSILE_MAX_DELAY = 1800; // 30 seconds at 60fps
@@ -2007,7 +2010,7 @@ export const ENEMY_MISSILE_DAMAGE_CARRIER = 10;   // 敵ミサイル → 母艦�
 export const HOMING_INTERCEPT_RADIUS_SQ = 144;   // 12px
 export const CRUISE_INTERCEPT_RADIUS_SQ = 400;   // 20px。巡航ミサイルは大きいので広め
 export const HOMING_INTERCEPT_SCORE = 20;        // 誘導ミサイルは1発で消える
-export const SCORE_CRUISE_DESTROY = 100;         // 巡航ミサイルは HP を削り切ったときだけ
+// 巡航ミサイルの得点は CRUISE_MISSILE_SCORE（巡航ミサイルの節）
 
 // --- 敵基地破壊のフィナーレ演出 ---
 // 閃光 → 集中線 → 衝撃波リング の順に効き、寿命もこの順に長くなる。

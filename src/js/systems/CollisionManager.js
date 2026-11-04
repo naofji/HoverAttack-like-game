@@ -13,7 +13,7 @@ import {
     CRUISE_MISSILE_DAMAGE, ENEMY_HOMING_MISSILE_DAMAGE, PLAYER_MISSILE_DAMAGE,
     ENEMY_MISSILE_DAMAGE_PLAYER, ENEMY_MISSILE_DAMAGE_CARRIER,
     HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
-    HOMING_INTERCEPT_SCORE, SCORE_CRUISE_DESTROY,
+    HOMING_INTERCEPT_SCORE, CRUISE_MISSILE_SCORE,
     REFLECT_BEAM_DAMAGE,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
@@ -165,7 +165,7 @@ export class CollisionManager {
 
                     if (bullet.hp <= 0) {
                         bullet._explode();
-                        game.addScore(SCORE_CRUISE_DESTROY);
+                        game.addScore(CRUISE_MISSILE_SCORE);
                     } else {
                         playBlast(game, proj.x, proj.y, 'cruiseSpark');
                     }
