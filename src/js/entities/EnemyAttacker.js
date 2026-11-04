@@ -122,7 +122,7 @@ export class EnemyAttacker {
         this.crouchTimer = 0;
         this.burstCount = 0;
         this.burstTimer = 0;
-        // 'missile'（既定）か 'mg'（5連射）。表の行に `weapon` があればそれ。
+        // 'missile'（既定）か 'mg'（3連射、ATTACKER_MG_BURST_COUNT）。表の行に `weapon` があればそれ。
         // MG 持ちの行（色違い）を渡すのは SpawnManager が standard の一部にだけ
         // （utils/attackerWeapon.js）。ここで決めないのは、面ごとの比率を
         // 機体数の中で正確に出すには「何機目か」を数える必要があるため

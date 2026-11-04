@@ -1,4 +1,4 @@
-// standard アタッカーの一部がミサイルではなくマシンガン（5連射）を撃つ。
+// standard アタッカーの一部がミサイルではなくマシンガン（3連射）を撃つ。
 // ユーザー指定（2026-11-03）: 1面はミサイルのみ、2面から MG 持ちが増え、
 // 7面でミサイル:MG = 1:3。
 import { test } from 'node:test';
@@ -114,7 +114,9 @@ function shoot(weapon, frames) {
   return game;
 }
 
-test('MG 持ちは1回の射撃で EnemyBullet を5発撃ち、ミサイルは撃たない', () => {
+test('MG 持ちは1回の射撃で EnemyBullet を3発撃ち、ミサイルは撃たない', () => {
+  // 弾数はユーザー指定（5 → 3、2026-11-05）。定数から期待値を作ると値を変えても通ってしまうので、数で縛る
+  assert.equal(ATTACKER_MG_BURST_COUNT, 3);
   const frames = 2 + ATTACKER_MG_BURST_COUNT * ATTACKER_MG_BURST_DELAY;
   const game = shoot('mg', frames);
   assert.equal(game.enemyBullets.filter((b) => b instanceof EnemyBullet).length, ATTACKER_MG_BURST_COUNT);
@@ -123,7 +125,7 @@ test('MG 持ちは1回の射撃で EnemyBullet を5発撃ち、ミサイルは�
   assert.ok(game.enemyBullets.every((b) => b.vx > 0), '自機と逆へ撃った');
 });
 
-test('MG の連射が終わると fireInterval まで撃たない（6発目が出ない）', () => {
+test('MG の連射が終わると fireInterval まで撃たない（連射の次の1発が出ない）', () => {
   const frames = 2 + ATTACKER_MG_BURST_COUNT * ATTACKER_MG_BURST_DELAY + ENEMY_ATTACKER_TYPES.standard.fireInterval - 10;
   const game = shoot('mg', frames);
   assert.equal(game.enemyBullets.length, ATTACKER_MG_BURST_COUNT);

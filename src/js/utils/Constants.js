@@ -658,7 +658,7 @@ export const ENEMY_ATTACKER_TYPES = {
 };
 
 // --- standard アタッカーのマシンガン持ち ---
-// standard だけ、面が進むほど「ミサイル1発」ではなく「マシンガン5連射」を撃つ機体が
+// standard だけ、面が進むほど「ミサイル1発」ではなく「マシンガン3連射」を撃つ機体が
 // 混ざる（ユーザー指定 2026-11-03: 1面はミサイルのみ、2面から増え、7面で
 // ミサイル:マシンガン = 1:3）。2〜7面は 0 → 0.75 を等間隔に刻んだ。
 // 添字は missionsCompleted（0 = 1面）。表より先の面は最後の行を使う。
@@ -667,12 +667,13 @@ export const ENEMY_ATTACKER_TYPES = {
 // 端数を繰り越して決めるので、各面の比率がその面の機体数の中で正確に出るうえ、
 // game.rng を消費しない＝週次の決定性（tests/MapDeterminism.test.js）を壊さない
 export const STANDARD_MG_SHARE_BY_MISSION = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75];
-// 1回の射撃で撃つ弾数（ユーザー指定「5連射」）。弾は砲台・ドローンと同じ EnemyBullet
-export const ATTACKER_MG_BURST_COUNT = 5;
+// 1回の射撃で撃つ弾数。弾は砲台・ドローンと同じ EnemyBullet。
+// 5 → 3（ユーザー指定 2026-11-05。最初の指定は「5連射」だった）
+export const ATTACKER_MG_BURST_COUNT = 3;
 // 発と発の間隔（フレーム）。ドローンの5連射（ENEMY_DRONE_BURST_INTERVAL）と同じ 6
 export const ATTACKER_MG_BURST_DELAY = 6;
 // 1発ごとのばらつき（ラジアン、全幅）。ドローンの連射と同じ 0.1。
-// 狙いの外れ（aimAccuracy）は連射の頭で1回だけ引き、5発で共有する
+// 狙いの外れ（aimAccuracy）は連射の頭で1回だけ引き、連射の全弾で共有する
 // ── 1発ごとに引くと standard（0.6）では弾が扇状に散って「連射」に見えないため
 export const ATTACKER_MG_SPREAD = 0.1;
 // MG 持ちの standard の色（ユーザー指定 2026-11-03「系統は一緒で見分けられるように」）。
