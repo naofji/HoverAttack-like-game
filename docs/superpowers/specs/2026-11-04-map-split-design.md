@@ -1,6 +1,6 @@
 # `world/Map.js` の層分け（挙動を変えない構造リファクタ）
 
-2026-11-04。親: なし（`EnemyAttacker` の層分け、`ScreenRenderer` / `Game` の mixin 化と同じ方針の続き）。
+2026-11-04。**実装済み（ブランチ refactor/map-split、91b507e〜f20d6da）。** 親: なし（`EnemyAttacker` の層分け、`ScreenRenderer` / `Game` の mixin 化と同じ方針の続き）。
 
 ## 何のためか
 
@@ -213,3 +213,11 @@ mixin のファイルは `Map.js` を import しない（`Map.js` が mixin を 
   - **検証 3（import 漏れ）は指紋ツールが兼ねる。** 全7面で `draw` / `update` / 問い合わせ / 破壊を実際に呼ぶので、漏れがあれば `ReferenceError` で落ちる。
     `--coverage` で、91 メソッドのうち一度も呼ばれないものを数えた → `_carveArea` `_carveMainPath` `_carveTunnel` の3つだけ。
     **どこからも呼ばれていない死んだコード**（呼び元は互いだけ）。この設計では消さずに `carve.js` へ動かす（使うのは `BORDER_THICKNESS` と `BLOCK_EMPTY` だけで、どちらも `carve.js` が import する）。消すかは別に決める
+
+## 結果（2026-11-04）
+
+- `Map.js` 2452 → 546 行。7段とも各コミットで指紋 IDENTICAL・メソッド集合一致
+- 92 メソッドの本文（コメント込み）が基準と1バイトも違わないこと、基準のコメント行が1行も失われていないことを機械的に照合した
+- `main.js` が committed の状態のワークツリーで全テスト: 基準 3209 / 3208 pass / 0 fail → 後 3212 / 3211 / 0（+3 は map-mixins.test.js）
+- 設計からの変更: `mapgen/common.js` は段5で作った（spawns.js が最初に `BORDER_THICKNESS` を使う層のため）。
+  「Block Destruction」の見出しは `_snowDressExposedBelow` の直前にあったが、`damageBlock` の見出しなので `Map.js` に残した
