@@ -21,7 +21,8 @@ import {
     FINALE_SHAKE_INTENSITY, FINALE_SHAKE_DURATION,
     BASE_ORBIT_SHIELD_MISSION, BASE_ORBIT_SHIELD_PANELS, BASE_ORBIT_SHIELD_RADIUS,
     BASE_ORBIT_SHIELD_SPEED, BASE_ORBIT_SHIELD_GUARD_HALF, BASE_ORBIT_SHIELD_HEIGHT,
-    BASE_ORBIT_SHIELD_DEPLOY
+    BASE_ORBIT_SHIELD_DEPLOY,
+    BASE_TURRET_MISSION, BASE_MISSILE_MISSION, BASE_HOMING_MISSION, BASE_CRUISE_MISSION, BASE_EMERGENCY_MISSION,
 } from '../utils/Constants.js';
 import {
     panelAngles, panelOffsetX, panelDepth, isGuardAngle, guardBlocks, deployEase,
@@ -266,8 +267,7 @@ export class EnemyBase {
     }
 
     _updateBaseTurret() {
-        // Mission 2+ (missionsCompleted 1+)
-        if (this.game.missionsCompleted < 1) return;
+        if (this.game.missionsCompleted < BASE_TURRET_MISSION) return;
 
         const target = this._findTarget(BASE_LASER_RANGE);
 
@@ -310,8 +310,7 @@ export class EnemyBase {
     }
 
     _updateBaseMissile() {
-        // Mission 4+ (missionsCompleted 3+)
-        if (this.game.missionsCompleted < 3) return;
+        if (this.game.missionsCompleted < BASE_MISSILE_MISSION) return;
 
         this.missileTimer--;
         if (this.missileTimer <= 0) {
@@ -336,8 +335,7 @@ export class EnemyBase {
     }
 
     _updateBaseHoming() {
-        // Mission 6+ (missionsCompleted 5+)
-        if (this.game.missionsCompleted < 5) return;
+        if (this.game.missionsCompleted < BASE_HOMING_MISSION) return;
 
         this.homingTimer--;
         if (this.homingTimer <= 0) {
@@ -406,8 +404,7 @@ export class EnemyBase {
     }
 
     _updateCruiseMissile() {
-        // Enabled from Mission 7 (missionsCompleted 6)
-        if (this.game.missionsCompleted >= 6) {
+        if (this.game.missionsCompleted >= BASE_CRUISE_MISSION) {
             const target = this._findCruiseTarget();
             if (!target) return;
 
@@ -700,9 +697,9 @@ export class EnemyBase {
             return; // 緊急防衛アラートも立てない。弾いた攻撃は「当たっていない」扱い
         }
 
-        // Mission 2+ (missionsCompleted 1+): being hit calls in emergency reinforcements,
+        // BASE_EMERGENCY_MISSION から: being hit calls in emergency reinforcements,
         // but not while the destruction sequence is already underway (dying window).
-        if (this.game.missionsCompleted >= 1 && !this.dying) {
+        if (this.game.missionsCompleted >= BASE_EMERGENCY_MISSION && !this.dying) {
             const alreadyAlerted = !!this.game.baseEmergencyAlert;
             this.game.triggerBaseEmergencyAlert(this);
             // Only spawn the one-shot visual pulse the moment the alert first goes live,

@@ -17,6 +17,7 @@ import {
     ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT, ENEMY_BASE_WIDTH,
     ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG, TILE_SIZE, LANDMINE_WIDTH, LANDMINE_HEIGHT, STAGE_ENVIRONMENTS,
     ORB_SIZES, ORB_SPAWN_TOP_FRACTION, ORB_SPAWN_MIN_COL_GAP, ORB_SPAWN_SALT, ORB_SIZE_MIX,
+    BASE_ROOM_MID_PLATFORM_MISSION, BASE_ROOM_SIDE_PLATFORMS_MISSION, ENEMY_DRONE_MISSION,
 } from '../../utils/Constants.js';
 import { SeededRNG } from '../../utils/SeededRNG.js';
 import { BORDER_THICKNESS } from './common.js';
@@ -191,14 +192,14 @@ export const MapSpawns = {
         this.grid[centerR - 4][centerC + 6] = BLOCK_INDESTRUCTIBLE;
         this.blockHP[centerR - 4][centerC + 6] = 999;
 
-        // 2. Middle floor platform (From Mission 3)
-        if (this.missionLevel >= 2) {
+        // 2. Middle floor platform
+        if (this.missionLevel >= BASE_ROOM_MID_PLATFORM_MISSION) {
             this.grid[centerR + 2][centerC] = BLOCK_INDESTRUCTIBLE;
             this.blockHP[centerR + 2][centerC] = 999;
         }
 
-        // 3. Side floor platforms (From Mission 4)
-        if (this.missionLevel >= 3) {
+        // 3. Side floor platforms
+        if (this.missionLevel >= BASE_ROOM_SIDE_PLATFORMS_MISSION) {
             // Left side platform
             this.grid[centerR + 4][centerC - 4] = BLOCK_INDESTRUCTIBLE;
             this.blockHP[centerR + 4][centerC - 4] = 999;
@@ -239,8 +240,10 @@ export const MapSpawns = {
         const ceiling = (col) => ({ x: x(col), y: (r - 4 + 1) * S, isCeiling: true });
         const floor = (row, col) => ({ x: x(col), y: row * S - ENEMY_TURRET_HEIGHT, isCeiling: false });
         const spots = [ceiling(c - 6), ceiling(c + 6)];         // Always 2
-        if (this.missionLevel === 2) spots.push(floor(r + 2, c)); // Mission 3 only
-        if (this.missionLevel >= 3) spots.push(floor(r + 4, c - 4), floor(r + 4, c + 4)); // Mission 4+
+        // 真ん中の台に砲台を置くのは、左右の台がまだ無い面だけ（左右の台が出ると真ん中は空ける）
+        const sides = this.missionLevel >= BASE_ROOM_SIDE_PLATFORMS_MISSION;
+        if (this.missionLevel >= BASE_ROOM_MID_PLATFORM_MISSION && !sides) spots.push(floor(r + 2, c));
+        if (sides) spots.push(floor(r + 4, c - 4), floor(r + 4, c + 4));
         return spots;
     },
 
@@ -278,8 +281,8 @@ export const MapSpawns = {
             y: (floorR - 1) * TILE_SIZE - ENEMY_TANK_HEIGHT
         });
 
-        // Add some drones (Mission 4+)
-        if (this.missionLevel >= 3) {
+        // Add some drones
+        if (this.missionLevel >= ENEMY_DRONE_MISSION) {
             this.enemyDroneSpawns.push({
                 x: (c - 3) * TILE_SIZE,
                 y: (r - 6) * TILE_SIZE

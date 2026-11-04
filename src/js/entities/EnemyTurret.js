@@ -16,6 +16,7 @@ import {
     COLOR_REFLECT_BEAM_CORE,
     COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, COLOR_BEAM_CANNON_LAMP_BACK,
     BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
+    ENEMY_TURRET_LATE_BURST_MISSION, ENEMY_TURRET_LATE_BURST_COUNT,
 } from '../utils/Constants.js';
 import { hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
@@ -161,10 +162,9 @@ export class EnemyTurret {
             this.cooldownTimer = Math.floor(Math.random() * this.spec.cooldown); // Randomize initial offset
         }
 
-        // Burst scaling: Mission 5 (index 4) and above get 8 rounds
-        // （既存のタレットだけ。ビームは常に単発 = spec.burst）
-        this.maxBurstCount = (this.type === 'gun' && this.game.missionsCompleted >= 4)
-            ? 8
+        // 5面からは機関砲の砲台だけ連射数が増える（ビームは常に単発 = spec.burst）
+        this.maxBurstCount = (this.type === 'gun' && this.game.missionsCompleted >= ENEMY_TURRET_LATE_BURST_MISSION)
+            ? ENEMY_TURRET_LATE_BURST_COUNT
             : this.spec.burst;
 
         this.burstCount = 0;

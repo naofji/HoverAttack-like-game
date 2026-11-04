@@ -15,6 +15,7 @@ import {
     WATER_SPRING_INTERVAL, WATER_SPRING_MASS,
     WATER_FALL_INTERVAL,
     WATER_PRESSURE_INTERVAL,
+    ENEMY_ATTACKER_MISSION, ENEMY_DRONE_MISSION, ENEMY_TURRET_MISSION,
 } from '../utils/Constants.js';
 import { CaveBackdrop } from './CaveBackdrop.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
@@ -98,14 +99,11 @@ export class Map {
         this.targetTankCount = Math.max(4, Math.floor(maxTanks * areaRatio));
         this.targetLandmineCount = Math.max(12, Math.floor(maxLandmines * areaRatio));
 
-        // Attackers enabled from Mission 2 (missionLevel 1)
-        this.targetAttackerCount = (this.missionLevel >= 1) ? Math.max(5, Math.floor(maxAttackers * areaRatio)) : 0;
+        this.targetAttackerCount = (this.missionLevel >= ENEMY_ATTACKER_MISSION) ? Math.max(5, Math.floor(maxAttackers * areaRatio)) : 0;
 
-        // Drones start from Mission 4 (missionLevel 3)
-        this.targetDroneCount = (this.missionLevel >= 3) ? Math.max(5, Math.floor(maxDrones * areaRatio)) : 0;
+        this.targetDroneCount = (this.missionLevel >= ENEMY_DRONE_MISSION) ? Math.max(5, Math.floor(maxDrones * areaRatio)) : 0;
 
-        // Turrets start from Mission 3 (missionLevel 2)
-        this.targetTurretCount = (this.missionLevel >= 2) ? Math.max(3, Math.floor(maxTurrets * areaRatio)) : 0;
+        this.targetTurretCount = (this.missionLevel >= ENEMY_TURRET_MISSION) ? Math.max(3, Math.floor(maxTurrets * areaRatio)) : 0;
 
         this.grid = [];
         this.blockHP = [];

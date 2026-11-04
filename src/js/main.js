@@ -29,6 +29,7 @@ import {
     VIEW_CULL_MARGIN,
     CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
     ENEMY_BASE_DRAW_OVERHANG, FLAG_HEIGHT,
+    STAGE_COUNT, BASE_EMERGENCY_MISSION,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, stepSetting } from './utils/settings.js';
@@ -354,7 +355,7 @@ export const Game = {
     /** Highest stage number the player has reached locally (persisted, not weekly). */
     maxStageReached() {
         try {
-            return Math.min(7, Number(localStorage.getItem('hoverattack_max_stage_reached') || 0));
+            return Math.min(STAGE_COUNT, Number(localStorage.getItem('hoverattack_max_stage_reached') || 0));
         } catch (e) {
             return 0;
         }
@@ -362,7 +363,7 @@ export const Game = {
 
     /** Record that the player has reached the current stage (call at stage start). */
     _recordStageReached() {
-        const stage = Math.min(7, this.missionsCompleted + 1);
+        const stage = Math.min(STAGE_COUNT, this.missionsCompleted + 1);
         try {
             const prev = Number(localStorage.getItem('hoverattack_max_stage_reached') || 0);
             if (stage > prev) localStorage.setItem('hoverattack_max_stage_reached', String(stage));
@@ -822,7 +823,7 @@ export const Game = {
         this.currentTimeBonus = 0;
 
         // Record this stage's result (finalised: kills + flag + time bonus).
-        const clearedStage = this.missionsCompleted; // already incremented above (1..7)
+        const clearedStage = this.missionsCompleted; // already incremented above (1..STAGE_COUNT)
         const stageResult = buildStageResult({
             stage: clearedStage,
             scoreNow: this.score,
@@ -839,7 +840,7 @@ export const Game = {
 
         this.slotRunning = true;
 
-        this.gameState = this.missionsCompleted >= 7 ? 'game_clear' : 'mission_clear';
+        this.gameState = this.missionsCompleted >= STAGE_COUNT ? 'game_clear' : 'mission_clear';
         this.stateTimer = 0;
         audioManager.stopBGM();
         // ここでシミュレーションが止まるので、鳴り続ける音は自分で止める。
@@ -1165,7 +1166,7 @@ export const Game = {
     triggerBaseEmergencyAlert(enemyBase) {
         if (this.baseEmergencyAlert) return; // one-shot latch: already active
 
-        if (this.missionsCompleted < 1) return; // only mission 2+ (defense in depth)
+        if (this.missionsCompleted < BASE_EMERGENCY_MISSION) return; // 基地側でも見ているが念のため（defense in depth）
 
         this.baseEmergencyAlert = true;
         this.emergencyTargetBase = enemyBase;

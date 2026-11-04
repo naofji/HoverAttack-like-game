@@ -15,6 +15,7 @@
 import { getCountryCode } from '../utils/geo.js';
 import { formatClock } from '../utils/formatTime.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { STAGE_COUNT } from '../utils/Constants.js';
 
 export const OnlineFlow = {
     async _refreshOnline() {
@@ -51,8 +52,8 @@ export const OnlineFlow = {
                 this.playerNameInput = this.playerNameInput.slice(0, -1);
             } else if (c === 'Enter') {
                 if (this.playerNameInput.trim().length === 0) this.playerNameInput = 'AAA';
-                const displayMission = Math.min(7, this.missionsCompleted + 1);
-                const formattedTime = this.missionsCompleted >= 7 ? formatClock(this.totalTime) : null;
+                const displayMission = Math.min(STAGE_COUNT, this.missionsCompleted + 1);
+                const formattedTime = this.missionsCompleted >= STAGE_COUNT ? formatClock(this.totalTime) : null;
                 const country = getCountryCode();
                 // Overall weekly ranking: only recorded when it's an actual high score.
                 // (A stage-only qualifier reaches naming to save per-stage records, but

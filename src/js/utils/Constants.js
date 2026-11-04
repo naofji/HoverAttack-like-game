@@ -456,8 +456,18 @@ export const CRUISE_MISSILE_MIN_DELAY = 1200; // 20 seconds at 60fps
 export const CRUISE_MISSILE_MAX_DELAY = 1800; // 30 seconds at 60fps
 export const CRUISE_MISSILE_ACTIVATION_RANGE = 150 * TILE_SIZE; // Engagement range in pixels
 
+// --- 何面から出るか ---
+// `*_MISSION` の定数はどれも「missionsCompleted がこの値以上なら有効」（0 = 1面、6 = 7面）。
+// 周回シールド（BASE_ORBIT_SHIELD_MISSION）・オーバードライブの後半（OVERDRIVE_LATE_MISSION）と同じ約束。
+// 以前は各ファイルに `missionsCompleted < 3` のような数字で直に書いてあった（2026-11-05 にここへ集めた。
+// 値はどれもそのまま）。敵アタッカーの型ごとの解禁は ENEMY_ATTACKER_TYPES の firstMission 列。
+
+// 面の数。ステージ別ランキング・セーブ・クリア判定・表示がこれを読む
+export const STAGE_COUNT = 7;
+
 // --- Enemy Attacker (Humanoid) ---
 // 生成数はマップ面積で決まるので Map.js のコンストラクタが持つ（ここには置かない）
+export const ENEMY_ATTACKER_MISSION = 1;   // 2面から（1面は戦車・地雷だけ）
 //
 // exhaustColor と flameColor は別物。exhaustColor は機体側の部品の色（standard の
 // ノズル矩形、artillery のアンテナ）で機体色に馴染ませてある。flameColor は噴射炎だけの色で、
@@ -538,6 +548,7 @@ export const ENEMY_ATTACKER_TYPES = {
         sightRange: CANVAS_WIDTH * 0.4,
         score: 300,
         spawnWeight: 60,      // 60%
+        firstMission: 0,      // 制限なし（アタッカー自体が出るのは ENEMY_ATTACKER_MISSION から）
         usesGrenades: false,
         aimAccuracy: 0.6,
         movementType: 'pace_and_jump',
@@ -561,6 +572,7 @@ export const ENEMY_ATTACKER_TYPES = {
         sightRange: CANVAS_WIDTH * 0.6,
         score: 500,
         spawnWeight: 25,      // 25%
+        firstMission: 2,      // 3面から（missionsCompleted。SpawnManager がこれ未満の面では抽選に入れない）
         usesGrenades: false,
         aimAccuracy: 0.4,
         movementType: 'chase_and_jump',
@@ -586,6 +598,7 @@ export const ENEMY_ATTACKER_TYPES = {
         sightRange: CANVAS_WIDTH * 0.5,
         score: 700,
         spawnWeight: 15,      // 15%
+        firstMission: 4,      // 5面から（missionsCompleted。SpawnManager がこれ未満の面では抽選に入れない）
         usesGrenades: true,
         grenadeChance: 0.05,  // 5% chance to throw grenade instead of missile
         aimAccuracy: 0.8,
@@ -625,6 +638,7 @@ export const ENEMY_ATTACKER_TYPES = {
         sightRange: CANVAS_WIDTH * 0.8, // Very long sight
         score: 900,
         spawnWeight: 100,     // Increased for testing
+        firstMission: 5,      // 6面から（missionsCompleted。SpawnManager がこれ未満の面では抽選に入れない）
         usesGrenades: false,
         aimAccuracy: 1.0,
         movementType: 'skirmish',
@@ -674,6 +688,7 @@ export const STANDARD_MG_COLORS = {
 };
 
 // --- Enemy Drone (Aerial) ---
+export const ENEMY_DRONE_MISSION = 3;      // 4面から（基地の部屋の見張りも同じ）
 export const ENEMY_DRONE_HP = 8;            // Weak armor
 export const ENEMY_DRONE_SPEED = 4.0;       // Dashing speed
 export const ENEMY_DRONE_SPEED_Y_MAX = 3.0; // Dashing vertical speed
@@ -702,6 +717,12 @@ export const ENEMY_TURRET_SCORE = 200;
 export const ENEMY_TURRET_BURST_COUNT = 5;      // Bullets per burst
 export const ENEMY_TURRET_BURST_DELAY = 10;     // Ticks between burst shots
 export const ENEMY_TURRET_COOLDOWN = 120;       // Ticks between bursts (2 seconds)
+export const ENEMY_TURRET_MISSION = 2;          // 3面から
+// 5面からは機関砲の砲台だけ1回に8発（反射ビームの砲台は常に単発 = spec.burst）
+export const ENEMY_TURRET_LATE_BURST_MISSION = 4;
+export const ENEMY_TURRET_LATE_BURST_COUNT = 8;
+// 7面からは砲台の並びの偶数番目を反射ビームに差し替える（SpawnManager.spawnEnemies）
+export const BEAM_TURRET_MISSION = 6;
 
 // --- Enemy Main Base (Win Condition) ---
 export const ENEMY_BASE_SCORE = 10000;
@@ -709,6 +730,15 @@ export const ENEMY_BASE_WIDTH = 24;
 export const ENEMY_BASE_HEIGHT = 32;
 export const ENEMY_BASE_SHIELDS = 3;            // Layers of defense
 export const ENEMY_BASE_HP = 1;                 // Final core HP
+// 基地の武器と守りが加わる面。1面の基地は何もしない
+export const BASE_TURRET_MISSION = 1;           // 2面から レーザー砲台
+export const BASE_EMERGENCY_MISSION = 1;        // 2面から 撃たれると緊急防衛（守備隊を呼び戻す）
+export const BASE_MISSILE_MISSION = 3;          // 4面から ミサイル
+export const BASE_HOMING_MISSION = 5;           // 6面から 追尾ミサイルの斉射
+export const BASE_CRUISE_MISSION = 6;           // 7面から 巡航ミサイル
+// 基地の部屋の足場（壊せない台）。砲台はこの台の上に置く（mapgen/spawns.js の _findEnemyTurretPositions）
+export const BASE_ROOM_MID_PLATFORM_MISSION = 2;    // 3面から 真ん中の床の台
+export const BASE_ROOM_SIDE_PLATFORMS_MISSION = 3;  // 4面から 左右の床の台
 // 構造物の描画が当たり判定の箱より下へはみ出す量 px。
 //
 // 基地の絵はコアを中心に上下 28px（合わせて 56px）で描いてあるのに、箱は
@@ -1000,7 +1030,7 @@ export const EMERGENCY_WILD_FIRE_INTERVAL_MULT = 1.0;
 // 上げるならテストの意図ごと書き換えることになる（＝この判断を踏み直せる）
 export const EMERGENCY_DRONE_GRENADE_CHANCE = ENEMY_DRONE_GRENADE_CHANCE;
 
-// --- Per-stage block palettes (stage 1..7) ---
+// --- Per-stage block palettes (stage 1..7、STAGE_COUNT 面ぶん) ---
 // Shared by Map rendering and the stage-ranking attract screen so each stage shows in its own colour.
 export const STAGE_PALETTES = [
     { fill: '#8B4513', border: '#5c2e0b' }, // 1: Brown

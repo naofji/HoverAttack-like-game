@@ -3,7 +3,7 @@
 // ============================================
 
 import { Orb } from '../entities/Orb.js';
-import { TILE_SIZE, ENEMY_ATTACKER_TYPES } from '../utils/Constants.js';
+import { TILE_SIZE, ENEMY_ATTACKER_TYPES, BEAM_TURRET_MISSION } from '../utils/Constants.js';
 import { standardWeaponAt, STANDARD_MG_CONFIG } from '../utils/attackerWeapon.js';
 import { Landmine } from '../entities/Landmine.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
@@ -149,10 +149,9 @@ export class SpawnManager {
         const availableTypes = {};
         let totalWeight = 0;
 
+        // 型ごとの解禁は表の firstMission 列。並び順（＝抽選で重みを引く順）は表の順のまま
         for (const [key, type] of Object.entries(ENEMY_ATTACKER_TYPES)) {
-            if (key === 'heavy' && game.missionsCompleted < 2) continue;
-            if (key === 'rival' && game.missionsCompleted < 4) continue;
-            if (key === 'artillery' && game.missionsCompleted < 5) continue; // Mission 6+
+            if (game.missionsCompleted < type.firstMission) continue;
 
             availableTypes[key] = type;
             totalWeight += type.spawnWeight;
@@ -197,12 +196,12 @@ export class SpawnManager {
         }
 
         // Spawn stationary turrets
-        // 7面（missionsCompleted >= 6）では**並び順の偶数番目**を反射ビームに
+        // 7面（BEAM_TURRET_MISSION）からは**並び順の偶数番目**を反射ビームに
         // 差し替える。この配列は Map._findEnemyTurretPositions() が既に game.rng で
         // シャッフルして作っているので、偶数番目を取るだけなら**追加の乱数消費が
         // ゼロ**になる。ここで rng.next() を1回でも呼ぶと、以降の敵の構成が全部
         // ずれて週次の決定性が壊れる（tests/MapDeterminism.test.js）
-        const beamMission = game.missionsCompleted >= 6;
+        const beamMission = game.missionsCompleted >= BEAM_TURRET_MISSION;
         game.map.enemyTurretSpawns.forEach((pos, i) => {
             // pos.type があればそれに従う（要塞の入り口の守衛はノーマルに固定。
             // 7面はビームが混ざる面なので、放っておくと門番がビームになって

@@ -1,11 +1,13 @@
 // ============================================
+import { STAGE_COUNT } from '../utils/Constants.js';
 // StageRankingManager - per-stage weekly rankings (local)
 // Two lists per stage: fastest time (asc) and high score (desc), top 5 each.
 // ============================================
 
 const STAGE_KEY = 'hoverattack_stage_rankings';
 export const STAGE_TOP = 5;
-export const STAGE_COUNT = 7;
+// 面の数の置き場は Constants.js。ここを import している既存のファイル・テストのために名前を通しておく
+export { STAGE_COUNT };
 
 function emptyStages() {
     // posted: このスロットへ addStageResult で取り込んだ (name, timeMs, score) の

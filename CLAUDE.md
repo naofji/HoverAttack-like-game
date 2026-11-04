@@ -30,6 +30,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
+| 何面から出るか（敵・基地の武器・砲台の連射など） | `Constants.js` の `*_MISSION`（missionsCompleted の値。0 = 1面）、アタッカーの型は `ENEMY_ATTACKER_TYPES` の `firstMission` 列。面の数は `STAGE_COUNT` | 各機能の側（数字を直に書かない） |
 | 調整用の数値 | `src/js/utils/Constants.js` | — |
 
 `Constants.js` はゲームバランスと演出の数値の唯一の置き場。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `entities/attacker/legs.js` の `LEG_STYLES`）。

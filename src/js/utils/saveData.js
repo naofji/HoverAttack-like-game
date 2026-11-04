@@ -9,12 +9,12 @@
 // 呼び出し側は既定値（globalThis.localStorage）のまま使えばよい。
 // ============================================
 
-import { SAVE_COST } from './Constants.js';
+import { SAVE_COST, STAGE_COUNT } from './Constants.js';
 import { MODE_ORDER } from './modes.js';
 
 export const PROGRESS_STORAGE_KEY = 'hoverattack_progress';
 
-const MAX_STAGE = 7;
+const MAX_STAGE = STAGE_COUNT;
 
 /** 何も無いときの姿。読めない・壊れている・週が違う、はすべてこれに落ちる。 */
 function emptyProgress() {
