@@ -48,7 +48,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 
 - `main.js` — `Game` オブジェクト。ループ、状態遷移、毎フレームの世界の更新、描画の呼び出し順。**約1200行。ここに書き足す前に、下の mixin か systems/ か utils/ に置けないか考えること。**
   - **`Game` はクラスではなくオブジェクトリテラルで、大きな機能群は別ファイルの同じ形のリテラルを `Object.assign(Game, ...)` で混ぜている**（`main.js` 末尾の Mixins 節）。`this` の意味は変わらないので、テストの `Game._updateSettings.call(fakeGame)` という呼び方がそのまま通る。**新しい mixin を足すときも「`game` を第一引数に取る関数」にはしないこと** — テスト28ファイルの呼び方を全部変えることになる。
-  - 現在の mixin: `ui/flows/settingsFlow.js`（設定画面）、`ui/flows/attractFlow.js`（タイトル・デモループ・面セレクト）、`systems/OnlineFlow.js`（ランキングの取得/送信/名前入力）、`systems/CombatActions.js`（ドッキング・射撃・グレネード軌道）、`systems/SpawnEffects.js`（爆発・破片・煙幕の生成）
+  - 現在の mixin: `ui/flows/settingsFlow.js`（設定画面）、`ui/flows/attractFlow.js`（タイトル・デモループ・面セレクト）、`systems/OnlineFlow.js`（ランキングの取得/送信/名前入力）、`systems/CombatActions.js`（ドッキング・射撃・グレネード軌道）、`systems/SpawnEffects.js`（爆発・破片・煙幕の生成）、`systems/AutoAim.js`（Auto Aim の残り時間・解除・ロック対象・偏差の着弾予定地点）。mixin どうしの名前の重なりは `tests/game-mixins.test.js` が縛っている（本体のリテラルとの重なりは縛れないので、移したら本体から消すこと）
 - `entities/` — 自機・敵・弾・アイテム。それぞれ `update()` と `draw(ctx)` を持つ
   - `entities/attacker/` — `EnemyAttacker` を層で分けたもの（`movement` / `combat` / `collision` / `draw` / `legs`）。`ScreenRenderer` と同じ `Object.assign(EnemyAttacker.prototype, ...)` 方式。**`EnemyAttacker.js` 本体に残っているのは `constructor` と `update()`（どの順で何を呼ぶかの唯一の記述）と破壊まわりだけ**なので、挙動を足すときはまず層のどれかに置けないか見る
   - `entities/player/draw.js` — 自機の描画（胴体・脚の関節・武装・噴射・オーバードライブの光・1UP）。同じ `Object.assign(Player.prototype, ...)` 方式。脚の関節（`_legJoints` / `_collectLegPoses`）と `_aimAngle` は破片生成も読むので、見た目を変えると破片も変わる。名前の重なりは `tests/player-mixins.test.js` が縛っている
