@@ -1,7 +1,7 @@
 import { BGMManager } from './BGMManager.js';
 import { MP3BGMManager } from './MP3BGMManager.js';
 import { effectiveVolumes } from '../utils/settings.js';
-import { clampVolume, loadBgmVolume, saveBgmVolume } from '../utils/bgmVolume.js';
+import { clampVolume, loadBgmVolume } from '../utils/bgmVolume.js';
 import { AudioStings } from './sounds/stings.js';
 import { AudioPlayerSounds } from './sounds/playerSounds.js';
 import { AudioLoopSounds } from './sounds/loopSounds.js';
@@ -27,7 +27,7 @@ export class AudioManager {
         // 0〜1。「実効値」＝ 設定画面の マスター音量 × BGM 音量 の積。
         // BGM 個別の値ではないので、旧キー（hoverAttack.bgmVolume）へ書き戻すのに
         // このフィールドを使ってはいけない（それをやって旧キーの意味が壊れたのが
-        // 今回の不具合。詳しくは setBgmVolume() / _applyBgmVolume() のコメント）
+        // 今回の不具合。詳しくは _applyBgmVolume() のコメント）
         this.bgmVolume = loadBgmVolume();   // 前回の設定を引き継ぐ（起動直後のみ旧キーの生値）
         this.hoverOsc = null;
         this.hoverNoise = null;
@@ -137,8 +137,9 @@ export class AudioManager {
      * やってしまうと、旧キー（hoverAttack.bgmVolume＝ -/+ の時代からある値）に
      * 実効値が書き込まれてしまい、「旧キーは書き換えない（設定画面を戻したときに
      * 前の音量が残るように）」という設計を壊す。実際に、マスター 50%・BGM 100%
-     * にすると旧キーへ 0.5 が保存される不具合になっていた。保存が要る場面は
-     * setBgmVolume() を使うこと。
+     * にすると旧キーへ 0.5 が保存される不具合になっていた（以前は保存もする版の
+     * setBgmVolume() があったが、呼び出し元が無くなったので 2026-11-04 に消した。
+     * 旧キーは今は読むだけ＝loadBgmVolume）。
      * @param {number} v 0〜1（実効値）
      */
     _applyBgmVolume(v) {
@@ -147,32 +148,13 @@ export class AudioManager {
     }
 
     /**
-     * BGM の音量を設定して保存する。
-     * AudioContext がまだ無い（音を鳴らす前）段階でも値は覚えておき、
-     * init() で BGM を作るときに反映する。
-     *
-     * 現在の呼び出し元は無い（設定画面は _applyBgmVolume() を使う）。それでも
-     * 残しているのは、「保存もする BGM 単体の入り口」が要る場面（例えば将来
-     * 設定画面を経ない直接操作を足すとき）のための公開 API として。
-     * ここで保存する v は実効値ではなく BGM 単体の値である前提。実効値を渡すと
-     * 旧キーの意味が壊れるので、呼ぶ側は effectiveVolumes() を通した後の値を
-     * 渡さないこと。
-     * @param {number} v 0〜1
-     */
-    setBgmVolume(v) {
-        this._applyBgmVolume(v);
-        saveBgmVolume(this.bgmVolume);
-        return this.bgmVolume;
-    }
-
-    /**
      * ユーザー設定を音に反映する。値が変わるたびに呼んでよい。
      *
      * BGM と効果音は別々の経路なので、マスターを掛けた実効値をそれぞれに配る
      * （utils/settings.js の effectiveVolumes がその計算を持つ）。
      * BGM 側は _applyBgmVolume()（保存しない）を使う。保存は saveSettings() が
-     * settings 全体をまとめて1キーに書くので、ここで setBgmVolume() を呼んで
-     * 旧キーに実効値を書き込んでしまうと二重保存になり、旧キーの意味も壊れる。
+     * settings 全体をまとめて1キーに書く。旧キーに実効値を書き込むと二重保存になり、
+     * 旧キーの意味も壊れる。
      *
      * ゲームオーバーのファンファーレ（playGameOver）は SE バスを通らず
      * 「全体音量」だけに従う設計なので、実効値とは別にマスター単体も覚えておく。

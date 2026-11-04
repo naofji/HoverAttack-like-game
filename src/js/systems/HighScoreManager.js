@@ -1,31 +1,24 @@
 // ============================================
-// HighScore Manager - weekly ranking + wall of fame (local)
+// HighScore Manager - weekly ranking (local)
 // ============================================
+//
+// 以前は週が替わるとき前週の上位3件をローカルの「殿堂」（hoverattack_wall_of_fame）へ
+// 保存していたが、WALL OF FAME の画面はオンライン（GAS）の fame を出していて、ローカルの
+// 殿堂を読む所が無かったので 2026-11-04 に消した（読み出しの getWallOfFame も）。
+// 既に保存されているキーは読まずに放っておく（害は無い）
 
 const WEEKLY_KEY = 'hoverattack_weekly_ranking';
-const FAME_KEY = 'hoverattack_wall_of_fame';
 const MAX_WEEKLY = 20;
-const FAME_TOP = 3;
 const MIN_SCORE = 10000; // Scores must exceed this to be recordable.
 
 export class HighScoreManager {
     constructor(weekId) {
         this.weekId = weekId;
         this.scores = [];        // this week's ranking (up to MAX_WEEKLY)
-        this.wallOfFame = [];     // [{ weekId, entries: [top3] }], oldest first in storage
         this._load();
     }
 
     _load() {
-        // Load wall of fame (persistent archive).
-        try {
-            const fameData = localStorage.getItem(FAME_KEY);
-            this.wallOfFame = fameData ? JSON.parse(fameData) : [];
-        } catch (e) {
-            console.error('Failed to load wall of fame:', e);
-            this.wallOfFame = [];
-        }
-
         // Load this week's ranking; roll over if the stored week differs.
         let stored = null;
         try {
@@ -39,14 +32,7 @@ export class HighScoreManager {
         if (stored && stored.weekId === this.weekId) {
             this.scores = Array.isArray(stored.scores) ? stored.scores : [];
         } else {
-            // New week: archive the previous week's top 3, then reset.
-            if (stored && Array.isArray(stored.scores) && stored.scores.length > 0) {
-                this.wallOfFame.push({
-                    weekId: stored.weekId,
-                    entries: stored.scores.slice(0, FAME_TOP),
-                });
-                this._saveFame();
-            }
+            // New week: reset.
             this.scores = [];
             this._saveWeekly();
         }
@@ -60,13 +46,6 @@ export class HighScoreManager {
         }
     }
 
-    _saveFame() {
-        try {
-            localStorage.setItem(FAME_KEY, JSON.stringify(this.wallOfFame));
-        } catch (e) {
-            console.error('Failed to save wall of fame:', e);
-        }
-    }
 
     isHighScore(score) {
         if (score <= MIN_SCORE) return false;
@@ -102,10 +81,5 @@ export class HighScoreManager {
     /** This week's ranking (up to MAX_WEEKLY entries). */
     getTop10() {
         return this.scores;
-    }
-
-    /** Wall of fame, newest week first. */
-    getWallOfFame() {
-        return this.wallOfFame.slice().reverse();
     }
 }

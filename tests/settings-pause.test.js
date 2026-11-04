@@ -289,12 +289,8 @@ test('A/D で音量を変えると、本物の _saveSettings → applySettings �
   const origLocalStorage = globalThis.localStorage;
   globalThis.localStorage = storage;
 
-  // applySettings 自体はモックしない（本物を通す）。その内部が保存する版
-  // setBgmVolume を呼んでいないことだけを見張る。呼んでいれば旧キーが
-  // 実効値で上書きされる（(1) の不具合そのもの）。
-  const savingCalls = [];
-  const origSetBgmVolume = audioManager.setBgmVolume;
-  audioManager.setBgmVolume = (v) => { savingCalls.push(v); return origSetBgmVolume.call(audioManager, v); };
+  // applySettings 自体はモックしない（本物を通す）。旧キーが実効値で上書きされて
+  // いないことは、下で storage を直に見て確かめる（(1) の不具合そのもの）。
 
   try {
     const masterIndex = visibleSettingsItems(true).findIndex((item) => item.key === 'masterVolume');
@@ -315,12 +311,10 @@ test('A/D で音量を変えると、本物の _saveSettings → applySettings �
     const stored = JSON.parse(storage.dump()[SETTINGS_STORAGE_KEY]);
     assert.equal(stored.masterVolume, 0.55, '変更後の値で保存されていない');
 
-    // (1) の回帰: 保存する版の setBgmVolume が呼ばれていない＝旧キーは無傷
-    assert.deepEqual(savingCalls, [], '保存する版の setBgmVolume が呼ばれている（旧キーが上書きされる）');
+    // (1) の回帰: 旧キーは無傷
     assert.equal(storage.dump()[BGM_VOLUME_STORAGE_KEY], '0.4',
       '旧キーが実効値で上書きされている（(1) の再発）');
   } finally {
-    audioManager.setBgmVolume = origSetBgmVolume;
     globalThis.localStorage = origLocalStorage;
   }
 });

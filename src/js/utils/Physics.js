@@ -5,26 +5,11 @@
 import { TILE_SIZE, SIGHT_ASPECT } from './Constants.js';
 
 /**
- * Check if an entity's bounding box collides with the map.
- * Uses a set of check points (corners + midpoints) for accuracy.
- * @param {object} entity - Must have x, y, width, height
- * @param {object} map - Must have isSolidAtPixel(x, y)
- * @param {Array} [customPoints] - Optional custom check points [{x, y}, ...]
- * @returns {boolean}
- */
-export function collidesWithMap(entity, map, customPoints) {
-    const points = customPoints || getDefaultCheckPoints(entity);
-    for (const p of points) {
-        if (map.isSolidAtPixel(p.x, p.y)) return true;
-    }
-    return false;
-}
-
-/**
- * collidesWithMap と同じ点で、タイルの形（utils/tileShape.js）に当てる。坂の削れた部分の空中は
- * 岩ではない。四角い地形（5面以外）では isSolidPoint が isSolidAtPixel と同じ答えを返し、
- * 形のあるタイルも無いので、collidesWithMap と同じ結果になる（tests/tile-shape-map.test.js・
- * terrain-shape-invariance.test.js）
+ * 機体の当たり判定の点（getDefaultCheckPoints＝四隅と中点）を、タイルの形（utils/tileShape.js）に
+ * 当てる。坂の削れた部分の空中は岩ではない。四角い地形（5面以外）では isSolidPoint が
+ * isSolidAtPixel と同じ答えを返し、形のあるタイルも無いので、タイル単位で当てるのと同じ結果になる
+ * （tests/tile-shape-map.test.js・terrain-shape-invariance.test.js）。以前はタイル単位の
+ * collidesWithMap も並べて持っていたが、本番では使われなくなったので 2026-11-04 に消した
  */
 export function collidesWithTerrain(entity, map, customPoints) {
     const points = customPoints || getDefaultCheckPoints(entity);

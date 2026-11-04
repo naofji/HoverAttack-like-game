@@ -1,27 +1,21 @@
 /**
- * BGM 音量の刻みと保存。
+ * BGM 音量の丸めと、旧キー（hoverAttack.bgmVolume）の読み込み。
+ *
+ * 音量の上げ下げと保存は設定画面（utils/settings.js の stepSetting / saveSettings）に移った。
+ * 以前ここにあった -/+ キー用の stepVolume と、旧キーへ書く saveBgmVolume は、呼び出し元が
+ * 無くなったので 2026-11-04 に消した。旧キーは前回の設定を引き継ぐために読むだけ。
  *
  * 音を鳴らす処理からは切り離してある。段の計算と localStorage の扱いは
  * DOM もオーディオも要らないので、ここだけを単体で試せるようにするため。
  */
 import {
-    VOLUME_STEP_COARSE, BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
+    BGM_VOLUME_DEFAULT, BGM_VOLUME_STORAGE_KEY,
 } from './Constants.js';
 
 /** 0〜1 に丸める。段の境界で 0.30000000000000004 にならないよう桁も落とす。 */
 export function clampVolume(v) {
     if (!Number.isFinite(v)) return BGM_VOLUME_DEFAULT;
     return Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000;
-}
-
-/**
- * 1段上げ下げした音量を返す。
- * @param {number} current 現在の音量（0〜1）
- * @param {number} direction +1 で上げ、-1 で下げ
- * @param {number} [step] 1段の幅。既定は -/+ キー用の粗いほう
- */
-export function stepVolume(current, direction, step = VOLUME_STEP_COARSE) {
-    return clampVolume(clampVolume(current) + Math.sign(direction) * step);
 }
 
 /** 表示用のパーセント（0〜100の整数）。 */
@@ -42,11 +36,4 @@ export function loadBgmVolume(storage = globalThis.localStorage) {
     } catch (e) {
         return BGM_VOLUME_DEFAULT;
     }
-}
-
-/** 音量を保存する。保存できなくてもゲームは続くので黙って諦める。 */
-export function saveBgmVolume(v, storage = globalThis.localStorage) {
-    try {
-        if (storage) storage.setItem(BGM_VOLUME_STORAGE_KEY, String(clampVolume(v)));
-    } catch (e) { /* 容量超過・プライベートブラウジング */ }
 }

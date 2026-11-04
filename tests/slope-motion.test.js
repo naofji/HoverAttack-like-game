@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeMap } from './helpers/enemy-world.js';
-import { collidesWithMap, collidesWithTerrain, getDefaultCheckPoints } from '../src/js/utils/Physics.js';
+import { collidesWithTerrain, getDefaultCheckPoints } from '../src/js/utils/Physics.js';
 import { liftOutOfFloor, dropOutOfCeiling, floorBelow } from '../src/js/utils/slopeMotion.js';
 import { TILE_SIZE as T } from '../src/js/utils/Constants.js';
 
@@ -64,9 +64,9 @@ test('floorBelow: 浮いた箱の足の列で一番高い床の y。届かなけ
     assert.equal(floorBelow(flat, box(T, 6 * T - 24 - 2), 3), 6 * T);
 });
 
-test('collidesWithTerrain は斜辺の上の空中では偽、タイル単位の collidesWithMap は真', () => {
+test('collidesWithTerrain は斜辺の上の空中では偽、タイル単位なら真', () => {
     const m = snow(RAMP);
     const b = box(2 * T, 7 * T + 2 - 24); // 足の点（y+h−1 = 7T+1）は (7,2) の斜辺の手前
     assert.equal(collidesWithTerrain(b, m), false);
-    assert.equal(collidesWithMap(b, m), true);
+    assert.equal(getDefaultCheckPoints(b).some((p) => m.isSolidAtPixel(p.x, p.y)), true);
 });
