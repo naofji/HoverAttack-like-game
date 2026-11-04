@@ -12,8 +12,9 @@ import { MapMiniMap } from '../src/js/world/mapMiniMap.js';
 import { MapWater } from '../src/js/world/mapWater.js';
 import { MapShapes } from '../src/js/world/mapShapes.js';
 import { MapSpawns } from '../src/js/world/mapgen/spawns.js';
+import { MapFeatures } from '../src/js/world/mapgen/features.js';
 
-const MIXINS = { MapRender, MapMiniMap, MapWater, MapShapes, MapSpawns };
+const MIXINS = { MapRender, MapMiniMap, MapWater, MapShapes, MapSpawns, MapFeatures };
 
 test('mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
