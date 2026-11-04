@@ -314,8 +314,15 @@ export class Carrier {
     }
 
     _collidesWithMap() {
-        // 点は _slopePoints（ファイル末尾）。5面の坂と面取りは形で当てる（点を渡すので点だけで見る）
-        return collidesWithTerrain(this, this.game.map, this._slopePoints(this));
+        // 点は _slopePoints（ファイル末尾）。坂と面取りは形で当てる
+        const map = this.game.map;
+        if (collidesWithTerrain(this, map, this._slopePoints(this))) return true;
+        // 形のあるタイルの近くでは、点の囲む矩形でも当てる（既定の点の collidesWithTerrain と同じ規則。
+        // 点を渡すとその規則が働かないので、ここで足す）。面取りの先の岩は 2px ほどの細い楔になり、
+        // 点の格子では拾えず、船体が浮いた板に刺さった（実機の指摘、2面。本物の2面で走らせた
+        // 4848 回のうち 46.5% で船体が岩に入っていた）
+        return map.hasShapedTileIn(this.x, this.y, this.width, this.height)
+            && map.rectHitsTerrain(this.x + 2, this.y + 2, this.width - 4, this.height - 3);
     }
 
     // ------------------------------------------
@@ -455,18 +462,17 @@ export class Carrier {
     }
 }
 
-// 地形の判定の8点。船体が広い（64px）ので底に4点ある。坂の部品（slopeMotion.js）が足の列を
-// 探すときも同じ点を使う
-Carrier.prototype._slopePoints = (c) => [
-    { x: c.x + 2, y: c.y + 2 },
-    { x: c.x + c.width - 2, y: c.y + 2 },
-    { x: c.x + 2, y: c.y + c.height - 1 },
-    { x: c.x + c.width - 2, y: c.y + c.height - 1 },
-    { x: c.x + c.width / 2, y: c.y + 2 },
-    { x: c.x + c.width / 2, y: c.y + c.height - 1 },
-    { x: c.x + c.width / 4, y: c.y + c.height - 1 },
-    { x: c.x + c.width * 3 / 4, y: c.y + c.height - 1 },
-];
+// 地形の判定の点。坂の部品（slopeMotion.js）が足の列を探すときも同じ点を使う。
+// 縦3段 × 横5列。どの2点のあいだも 16px（1タイル）以下にして、船体に掛かる四角いタイルは必ず
+// どれかの点が拾うようにしてある。以前は上の段が 3点（30px 空き）・縦は上端と下端の2段だけで、
+// 船体の高さの途中にある浮いた板を通り抜け、段差の確かめ（1タイル持ち上げて空くか）も誤って
+// 「上れる」と答えて板の中へ持ち上げていた（実機の指摘、2026-11-04。本物の1面で 8.6% の走行）。
+// 下の段（足）は前と同じ5点なので、坂の上り下り（footPoints を使う）は変わらない
+Carrier.prototype._slopePoints = (c) => {
+    const xs = [c.x + 2, c.x + c.width / 4, c.x + c.width / 2, c.x + c.width * 3 / 4, c.x + c.width - 2];
+    const ys = [c.y + 2, c.y + c.height / 2, c.y + c.height - 1];
+    return ys.flatMap((y) => xs.map((x) => ({ x, y })));
+};
 // 体の近くに形のあるタイルがあるか（自機・アタッカー・戦車と同じ判定）
 Carrier.prototype._touchesShapedTile = SlopeBody._touchesShapedTile;
 Carrier.prototype._undoSnapIntoRock = SlopeBody._undoSnapIntoRock;
