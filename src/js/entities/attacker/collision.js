@@ -10,7 +10,7 @@
 
 import { TILE_SIZE, SLOPE_UPHILL_SCALE } from '../../utils/Constants.js';
 import {
-    collidesWithTerrain, checkHorizontalEntityCollision, checkVerticalEntityCollision, wallSnapX,
+    checkHorizontalEntityCollision, checkVerticalEntityCollision,
 } from '../../utils/Physics.js';
 
 export const AttackerCollision = {
@@ -29,24 +29,10 @@ export const AttackerCollision = {
         let hitHMap = false;
         if (this._collidesWithMap() && !this._slideAlongSlopeHorizontally()) {
             // 坂（形のあるタイル）なら斜辺の外へ上下に押し出して進む（自機と同じ。slopeBody.js）。
-            // STEP-UP: walk up a single tile instead of jumping (matches Player)
-            let steppedUp = false;
-            if (this.onGround && Math.abs(this.vx) > 0) {
-                const originalY = this.y;
-                this.y -= TILE_SIZE;
-                if (!this._collidesWithMap()) {
-                    steppedUp = true;
-                } else {
-                    this.y = originalY;
-                }
-            }
-
-            if (!steppedUp) {
+            // 1段なら跳ばずに歩いて乗り上げ、駄目なら壁の面へ吸着して止まる（walkerBody.js、自機と共通）
+            if (!this._tryStepUp()) {
                 hitHMap = true;
-                // 壁の面へ吸着（動く前の位置から求めると、2px/フレームより速いと1タイル離れる。utils/Physics.js）
-                if (this.vx !== 0) this.x = wallSnapX(this.x, this.width, this.vx);
-                else this.x -= this.vx * this.motion.speed;
-                this._undoSnapIntoRock('x', xBefore);
+                this._snapToWall(xBefore);
                 this._reactToWall();
             }
         }
@@ -104,48 +90,16 @@ export const AttackerCollision = {
         // 他機の頭の上（_checkVerticalEntities）では立てない
         this.onTerrain = false;
 
-        if (this._collidesWithMap()) {
-            const yBefore = this.y - this.vy * this.motion.speed;
-            if (this.vy > 0) {
-                // Landing（坂なら斜辺へ。slopeBody.js）
-                if (!this._landOnSlope()) {
-                    this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
-                    this._undoSnapIntoRock('y', yBefore);
-                }
-                this.onGround = true;
-                this.onTerrain = true;
-                this.walkFrame = 2;
-            } else if (this.vy < 0) {
-                // Hit ceiling（天井の斜面なら沿って流れる。slopeBody.js）
-                if (!this._hitCeilingSlope()) {
-                    this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
-                    this._undoSnapIntoRock('y', yBefore);
-                }
-            }
-            this.vy = 0;
-        }
+        // 着地と天井（坂なら斜辺へ）。walkerBody.js、自機と共通
+        this._resolveVerticalMapHit();
 
         // Vertical Entity Collision
         if (!this.onGround && this.vy > 0) {
             this._checkVerticalEntities();
         }
 
-        // --- Ground probe ---
-        // 坂を下るときは落下を待たずに斜辺へ下ろす（slopeBody.js）
-        if (this._glueDownSlope(this._prevOnTerrain)) return;
-        if (!this.onGround && this.vy >= 0 && this.vy < 0.5) {
-            const probeY = this.y + this.height + 1;
-            const leftFoot = map.isSolidPoint(this.x + 4, probeY);
-            const rightFoot = map.isSolidPoint(this.x + this.width - 4, probeY);
-            if (leftFoot || rightFoot) {
-                this.onGround = true;
-                this.onTerrain = true;
-                this.vy = 0;
-                if (!this._settleOnSlope()) {
-                    this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
-                }
-            }
-        }
+        // --- Ground probe ---（足元 1px 下。walkerBody.js、自機と共通）
+        this._probeFeet();
     },
 
     /** 壁に当たって止まった。跳べるなら跳び越えにかかり、跳べなければ（巡回・行き来する型は）折り返す */
@@ -183,10 +137,6 @@ export const AttackerCollision = {
         const player = this.game.player;
         if (player && player.alive && !player.docked) list.push(player);
         return list;
-    },
-
-    _collidesWithMap() {
-        return collidesWithTerrain(this, this.game.map);
     },
 
     /**

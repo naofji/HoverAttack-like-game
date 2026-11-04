@@ -3,7 +3,6 @@
 // ============================================
 
 import {
-    TILE_SIZE,
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
     PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
@@ -23,8 +22,8 @@ import {
     HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
-import { collidesWithTerrain, wallSnapX } from '../utils/Physics.js';
 import { SlopeBody } from './slopeBody.js';
+import { WalkerBody } from './walkerBody.js';
 import { groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -478,25 +477,10 @@ export class Player {
         if (this._collidesWithMap()) {
             // 坂（形のあるタイル）なら、まず斜辺の外へ上下に押し出す（slopeBody.js）
             if (this._slideAlongSlopeHorizontally()) return false;
-            // STEP-UP LOGIC: Try stepping up 1 tile if on ground
-            let steppedUp = false;
-            if (this.onGround && Math.abs(this.vx) > 0) {
-                const originalY = this.y;
-                this.y -= TILE_SIZE;
-                if (!this._collidesWithMap()) {
-                    steppedUp = true;
-                    // Successfully stepped up! 
-                } else {
-                    this.y = originalY; // Could not step up
-                }
-            }
-
-            if (!steppedUp) {
+            // 1段なら乗り上げ、駄目なら壁の面へ吸着して止まる（walkerBody.js、敵アタッカーと共通）
+            if (!this._tryStepUp()) {
                 hitHMap = true;
-                // 壁の面へ吸着（動く前の位置から求めると、2px/フレームより速いと1タイル離れる。utils/Physics.js）
-                if (this.vx !== 0) this.x = wallSnapX(this.x, this.width, this.vx);
-                else this.x -= this.vx * this.motion.speed;
-                this._undoSnapIntoRock('x', xBefore);
+                this._snapToWall(xBefore);
                 this.vx = 0;
             }
         }
@@ -590,40 +574,25 @@ export class Player {
 
     /** 縦方向。マップへの着地（強い落下ならスタン）と天井への衝突。 */
     _landOnMapOrHitCeiling() {
-        if (this._collidesWithMap()) {
-            const yBefore = this.y - this.vy * this.motion.speed;
-            if (this.vy > 0) {
-                // Landing on map
-                if (this.vy > PLAYER_STUN_FALL_SPEED) { // Hard landing threshold
-                    this.stunTimer = PLAYER_STUN_DURATION;
-                }
-                if (!this._landOnSlope()) {
-                    this.y = Math.floor((this.y + this.height) / TILE_SIZE) * TILE_SIZE - this.height;
-                    this._undoSnapIntoRock('y', yBefore);
-                }
-                this.onGround = true;
-                this.onTerrain = true;
-                this.walkFrame = 2; // Reset to standing straight
-            } else if (this.vy < 0) {
-                // Hit ceiling
-                if (!this._hitCeilingSlope()) {
-                    this.y = Math.ceil(this.y / TILE_SIZE) * TILE_SIZE + 0.01;
-                    this._undoSnapIntoRock('y', yBefore);
-                }
-                // 天井に当たったらバースト後のクールダウンを解除する。
-                //
-                // 解除しないと、天井の低い場所では「バースト → 数フレームで
-                // 天井 → vy=0 → クールダウンが残っていてホバーに入れない →
-                // 落ちて着地 → W を押しっぱなしなのでまたバースト」という
-                // 跳ね返りのループになる（実機フィードバック。テストで再現
-                // させると200フレームで8回バーストしていた）。
-                // プレイヤーの期待は「天井に当たったらそこからホバリングが
-                // 始まって張り付く」なので、当たった時点でホバーを許す。
-                // ホバーの推力(-0.50)は重力(0.30)を上回るので、W を押している
-                // 間は天井に押し付けられ続け、燃料が尽きれば落ちる。
-                this.hoverCooldown = 0;
-            }
-            this.vy = 0;
+        // 着地・天井の位置合わせは walkerBody.js（敵アタッカーと共通）。ここに残すのは自機だけの反応
+        const vyAtHit = this.vy;
+        const hit = this._resolveVerticalMapHit();
+        if (hit === 'land') {
+            // 硬着地のスタン。位置合わせ（_landOnSlope など）はスタンを読まないので、後から立てても同じ
+            if (vyAtHit > PLAYER_STUN_FALL_SPEED) this.stunTimer = PLAYER_STUN_DURATION;
+        } else if (hit === 'ceiling') {
+            // 天井に当たったらバースト後のクールダウンを解除する。
+            //
+            // 解除しないと、天井の低い場所では「バースト → 数フレームで
+            // 天井 → vy=0 → クールダウンが残っていてホバーに入れない →
+            // 落ちて着地 → W を押しっぱなしなのでまたバースト」という
+            // 跳ね返りのループになる（実機フィードバック。テストで再現
+            // させると200フレームで8回バーストしていた）。
+            // プレイヤーの期待は「天井に当たったらそこからホバリングが
+            // 始まって張り付く」なので、当たった時点でホバーを許す。
+            // ホバーの推力(-0.50)は重力(0.30)を上回るので、W を押している
+            // 間は天井に押し付けられ続け、燃料が尽きれば落ちる。
+            this.hoverCooldown = 0;
         }
     }
 
@@ -730,43 +699,21 @@ export class Player {
 
 
     _probeGroundBelowFeet() {
-        const map = this.game.map;
-        // 坂を下るとき、落下を待たずに斜辺へ下ろす（slopeBody.js）
-        if (this._glueDownSlope(this._prevOnTerrain)) return;
-        // Extra ground probe: check 1px below feet if vy is ~0 (standing still or falling slightly)
-        // This prevents the "not grounded" flicker when standing on a surface,
-        // but it must NOT trigger when moving upward (vy < 0) otherwise slow hover gets stuck to the ground.
-        if (!this.onGround && this.vy >= 0 && this.vy < 0.5) {
-            const probeY = this.y + this.height + 1;
-            const leftFoot = map.isSolidPoint(this.x + 4, probeY);
-            const rightFoot = map.isSolidPoint(this.x + this.width - 4, probeY);
-            if (leftFoot || rightFoot) {
-                this.onGround = true;
-                this.onTerrain = true;
-                this.vy = 0;
-                // Snap to surface。坂の上ではタイルの上端は床ではないので斜辺へ合わせる（slopeBody.js）
-                if (!this._settleOnSlope()) {
-                    this.y = Math.floor(probeY / TILE_SIZE) * TILE_SIZE - this.height;
-                }
-            } else {
-                // Also check if standing on an enemy directly below
-                for (const enemy of this.game.enemies) {
-                    if (!enemy.alive) continue;
-                    if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width) {
-                        if (Math.abs(probeY - enemy.y) < 2) {
-                            this.onGround = true;
-                            this.vy = 0;
-                            this.y = enemy.y - this.height;
-                            break;
-                        }
-                    }
+        // 足元 1px 下の地形を探す手順は walkerBody.js（敵アタッカーと共通）。
+        // 地形が無かったときだけ、自機は敵の頭の上に立っていないかも探す
+        if (this._probeFeet() !== 'missed') return;
+        const probeY = this.y + this.height + 1;
+        for (const enemy of this.game.enemies) {
+            if (!enemy.alive) continue;
+            if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width) {
+                if (Math.abs(probeY - enemy.y) < 2) {
+                    this.onGround = true;
+                    this.vy = 0;
+                    this.y = enemy.y - this.height;
+                    break;
                 }
             }
         }
-    }
-
-    _collidesWithMap() {
-        return collidesWithTerrain(this, this.game.map);
     }
 
     takeDamage(amount) {
@@ -1010,5 +957,5 @@ export class Player {
 // 通っていない経路でも motion が undefined にならないようにする。
 Player.prototype.motion = LAND_MOTION;
 
-// 坂を歩く・坂に当たる手順（敵アタッカーと共通）と、描画（entities/player/draw.js）
-Object.assign(Player.prototype, SlopeBody, PlayerDraw);
+// 坂を歩く・坂に当たる手順と地形の上を歩く手順（どちらも敵アタッカーと共通）と、描画（entities/player/draw.js）
+Object.assign(Player.prototype, SlopeBody, WalkerBody, PlayerDraw);

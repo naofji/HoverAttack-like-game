@@ -36,6 +36,7 @@ import { AttackerCombat } from './attacker/combat.js';
 import { AttackerMovement } from './attacker/movement.js';
 import { AttackerAfterimage } from './attacker/afterimage.js';
 import { SlopeBody } from './slopeBody.js';
+import { WalkerBody } from './walkerBody.js';
 import { isCrouched } from './attacker/stance.js';
 
 export class EnemyAttacker {
@@ -444,7 +445,7 @@ export class EnemyAttacker {
 Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
-    AttackerAfterimage, SlopeBody,
+    AttackerAfterimage, SlopeBody, WalkerBody,
 );
 
 // プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で

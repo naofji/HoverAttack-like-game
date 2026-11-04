@@ -1,5 +1,5 @@
-// entities/Player.js は描画を entities/player/draw.js の mixin に置き、坂の手順（slopeBody.js）と
-// いっしょに Object.assign で Player.prototype へ混ぜている。Object.assign は同名のキーを黙って
+// entities/Player.js は描画を entities/player/draw.js の mixin に置き、坂の手順（slopeBody.js）・地形の上を
+// 歩く手順（walkerBody.js）といっしょに Object.assign で Player.prototype へ混ぜている。Object.assign は同名のキーを黙って
 // 後勝ちで上書きするので、名前が重なると片方のメソッドが消えても何も言わない。それをここで縛る
 // （tests/map-mixins.test.js と同じ見方）。
 //
@@ -10,8 +10,10 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { PlayerDraw } from '../src/js/entities/player/draw.js';
 import { SlopeBody } from '../src/js/entities/slopeBody.js';
+import { WalkerBody } from '../src/js/entities/walkerBody.js';
+import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
 
-const MIXINS = { SlopeBody, PlayerDraw };
+const MIXINS = { SlopeBody, WalkerBody, PlayerDraw };
 
 test('Player の mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
@@ -40,5 +42,14 @@ test('Player の mixin のメソッドが class 本体の同名メソッドを�
 test('PlayerDraw の中身は関数だけ（値を混ぜると全インスタンスで共有されてしまう）', () => {
   for (const [key, value] of Object.entries(PlayerDraw)) {
     assert.equal(typeof value, 'function', `PlayerDraw.${key} が関数でない`);
+  }
+});
+
+test('敵アタッカーにも共通の手順（SlopeBody・WalkerBody）がそのまま入っている', () => {
+  // 自機と同じ部品を使っていることが寄せた理由なので、アタッカー側で同名に上書きされていないかも見る
+  for (const [mixinName, mixin] of Object.entries({ SlopeBody, WalkerBody })) {
+    for (const key of Object.keys(mixin)) {
+      assert.equal(EnemyAttacker.prototype[key], mixin[key], `${mixinName}.${key} が EnemyAttacker で別のものになっている`);
+    }
   }
 });

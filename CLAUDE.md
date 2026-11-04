@@ -52,6 +52,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 - `entities/` — 自機・敵・弾・アイテム。それぞれ `update()` と `draw(ctx)` を持つ
   - `entities/attacker/` — `EnemyAttacker` を層で分けたもの（`movement` / `combat` / `collision` / `draw` / `legs`）。`ScreenRenderer` と同じ `Object.assign(EnemyAttacker.prototype, ...)` 方式。**`EnemyAttacker.js` 本体に残っているのは `constructor` と `update()`（どの順で何を呼ぶかの唯一の記述）と破壊まわりだけ**なので、挙動を足すときはまず層のどれかに置けないか見る
   - `entities/player/draw.js` — 自機の描画（胴体・脚の関節・武装・噴射・オーバードライブの光・1UP）。同じ `Object.assign(Player.prototype, ...)` 方式。脚の関節（`_legJoints` / `_collectLegPoses`）と `_aimAngle` は破片生成も読むので、見た目を変えると破片も変わる。名前の重なりは `tests/player-mixins.test.js` が縛っている
+  - `entities/slopeBody.js`（坂）と `entities/walkerBody.js`（1段の乗り上げ・壁への吸着・着地と天井・足元の探り）は**自機と敵アタッカーの共通部品**。片方だけ直して食い違わないよう、地形の解き方はここに1つだけ置く。機体ごとの反応（自機のスタン・天井でホバー許可、アタッカーの跳ぶ・折り返す）は呼ぶ側に残す。触ったら `node tools/trace-walkers.mjs` の指紋（3シード×7面で機体を走らせた状態）で前後を比べる
 - `systems/` — 衝突、スポーン、ゲーム状態、ランキング（ローカル／オンライン）
 - `world/` — マップ生成と描画、カメラ、洞窟の遠景
   - `world/Map.js` も層で分けてある（`EnemyAttacker` と同じ `Object.assign(Map.prototype, ...)` 方式）。**本体に残っているのは `constructor` と `_generate()`（生成の手順＝`game.rng` を引く順の唯一の記述）、破壊（`damageBlock` / `destroyArea` / `invalidateTileRegion`）、水を進める `update()`、`pixelToTile` だけ。** 描画は `mapRender.js`、ミニマップは `mapMiniMap.js`、水の問い合わせは `mapWater.js`、形・当たりは `mapShapes.js`、生成の各段は `mapgen/`（`carve` / `features` / `spawns`）。mixin どうしで名前が重なると黙って上書きされるので `tests/map-mixins.test.js` が縛っている。生成まわりを動かしたら `node tools/trace-map.mjs` の指紋で前後を比べる
