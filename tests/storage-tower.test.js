@@ -52,7 +52,7 @@ import { Grenade } from '../src/js/entities/Grenade.js';
 import { ITEM_SIZE } from '../src/js/entities/PickupItem.js';
 import {
   STORAGE_TOWER_W, STORAGE_TOWER_H, STORAGE_TOWER_HP,
-  DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, GRENADE_DAMAGE_RADIUS,
+  PLAYER_MISSILE_DAMAGE, PLAYER_MG_DAMAGE, GRENADE_DAMAGE_RADIUS,
 } from '../src/js/utils/Constants.js';
 
 /** 弾と塔だけの偽ゲーム。地図は何も無い空（グレネードの地形破壊は空振りさせる）。 */
@@ -89,7 +89,7 @@ function shootAt(game, t, Cls, ...rest) {
 test('塔の寸法は自機と同じ 16×24、HP はミサイルちょうど1発', () => {
   assert.equal(STORAGE_TOWER_W, 16);
   assert.equal(STORAGE_TOWER_H, 24);
-  assert.equal(STORAGE_TOWER_HP, DAMAGE_PLAYER_MISSILE);
+  assert.equal(STORAGE_TOWER_HP, PLAYER_MISSILE_DAMAGE);
 });
 
 test('塔は下端が y、中心が x に立つ', () => {

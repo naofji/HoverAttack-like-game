@@ -608,7 +608,7 @@ export const ENEMY_ATTACKER_TYPES = {
     },
     artillery: {
         name: 'artillery',
-        // 50 → 45 → 30。ミサイル(DAMAGE_PLAYER_MISSILE=15)で**2発ちょうど**。
+        // 50 → 45 → 30。ミサイル(PLAYER_MISSILE_DAMAGE=15)で**2発ちょうど**。
         // ただし HP を下げただけだと MG でも楽に落ちてしまうので、
         // mgDamageMult で MG にだけ効く軽減を掛けている
         // （「ミサイルなら2発、バルカンではなかなか落ちない」2026-08-22 の指示）
@@ -1098,7 +1098,7 @@ export const FORTRESS_TREASURE_COUNT = 3;
 // 大きさは自機（PLAYER_WIDTH × PLAYER_HEIGHT）と同じ（ユーザー指定）
 export const STORAGE_TOWER_W = 16;
 export const STORAGE_TOWER_H = 24;
-// ミサイル（DAMAGE_PLAYER_MISSILE 15）ちょうど1発（ユーザー指定「ミサイル1発程度」）。
+// ミサイル（PLAYER_MISSILE_DAMAGE 15）ちょうど1発（ユーザー指定「ミサイル1発程度」）。
 // 機関砲（PLAYER_MG_DAMAGE 3）なら5発、グレネード（80）なら爆風の内側で1発
 export const STORAGE_TOWER_HP = 15;
 // 絵（ユーザー指定「黄白色っぽい円筒形のタンクが足台の上に載った形、オレンジの横縞の光が明滅」）。
@@ -1155,7 +1155,7 @@ export const FORTRESS_GARRISON_TANKS = 2;
 // 消える。壁を壊して進むのではなく装置を倒して進む形にすることで、横視点の遊びとして
 // 成立させる（真上から見た間取り図に見える、という実機の指摘への答えでもある）。
 // ユニットの硬さ。**ミサイル2発、マシンガン5発**で壊れるように置いてある（実機の指定）。
-// 30 = DAMAGE_PLAYER_MISSILE(15) x 2 = PLAYER_MG_DAMAGE(3) x BARRIER_UNIT_MG_MULT(2) x 5。
+// 30 = PLAYER_MISSILE_DAMAGE(15) x 2 = PLAYER_MG_DAMAGE(3) x BARRIER_UNIT_MG_MULT(2) x 5。
 // マシンガンに倍率を掛けているのは、素の 3 だと10発かかって「撫でて壊す」には
 // 長すぎるため。敵の mgDamageMult と同じ考え方（あちらは装甲で減らす向き）
 export const BARRIER_EMITTER_HP = 30;
@@ -1993,18 +1993,20 @@ export const MISSILE_HIT_KNOCKBACK_VX = 1.5;
 // CollisionManager が当たり判定と一緒に private な定数として抱えていたもの。
 // 弾の速さや射程は上のほうに、威力だけが別ファイルにある状態だったので、
 // 火力を触るのに2箇所を見る必要があった。実際に効いている値をそのまま移す。
-export const DAMAGE_CRUISE_MISSILE = 40;         // 巡航ミサイルの直撃
-export const DAMAGE_HOMING_MISSILE = 20;         // 誘導ミサイルの直撃
-export const DAMAGE_PLAYER_MISSILE = 15;         // 自機ミサイル → 敵
-export const DAMAGE_ENEMY_MISSILE_PLAYER = 15;   // 敵ミサイル → 自機（rival は2倍）
-export const DAMAGE_ENEMY_MISSILE_CARRIER = 10;  // 敵ミサイル → 母艦（同上）
+// 名前は「何の・ダメージ・誰へ」の順（PLAYER_MG_DAMAGE / ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER と同じ）。
+// 以前は DAMAGE_ が頭に付いていて、ここの5つだけ並びが違った（2026-11-04 に揃えた）
+export const CRUISE_MISSILE_DAMAGE = 40;          // 巡航ミサイルの直撃
+export const ENEMY_HOMING_MISSILE_DAMAGE = 20;    // 誘導ミサイルの直撃
+export const PLAYER_MISSILE_DAMAGE = 15;          // 自機ミサイル → 敵
+export const ENEMY_MISSILE_DAMAGE_PLAYER = 15;    // 敵ミサイル → 自機（rival は2倍）
+export const ENEMY_MISSILE_DAMAGE_CARRIER = 10;   // 敵ミサイル → 母艦（同上）
 
 // --- 飛来するミサイルの迎撃 ---
 // 自機の弾で撃ち落とせる距離と、成功したときの得点。
 // 距離は二乗で持つ（毎フレーム全弾ぶん比較するので平方根を取らない）。
 export const HOMING_INTERCEPT_RADIUS_SQ = 144;   // 12px
 export const CRUISE_INTERCEPT_RADIUS_SQ = 400;   // 20px。巡航ミサイルは大きいので広め
-export const SCORE_HOMING_INTERCEPT = 20;        // 誘導ミサイルは1発で消える
+export const HOMING_INTERCEPT_SCORE = 20;        // 誘導ミサイルは1発で消える
 export const SCORE_CRUISE_DESTROY = 100;         // 巡航ミサイルは HP を削り切ったときだけ
 
 // --- 敵基地破壊のフィナーレ演出 ---

@@ -7,7 +7,7 @@ import {
   ENEMY_DRONE_SCORE,
   ENEMY_DRONE_HP,
   ENEMY_ATTACKER_TYPES,
-  DAMAGE_ENEMY_MISSILE_CARRIER, BASE_LASER_DAMAGE, PLAYER_MAX_HP,
+  ENEMY_MISSILE_DAMAGE_CARRIER, BASE_LASER_DAMAGE, PLAYER_MAX_HP,
 } from '../src/js/utils/Constants.js';
 
 test('carrier starts with a single life', () => {
@@ -45,7 +45,7 @@ test('満タンからバーストできる回数', () => {
 test('母艦は敵ミサイル12発に耐える', () => {
   // 威力は CollisionManager が private に持っていたので、以前はこのテストが
   // 10 を手で写していた。今は Constants.js が唯一の置き場なので直接引く
-  assert.equal(Math.ceil(CARRIER_MAX_HP / DAMAGE_ENEMY_MISSILE_CARRIER), 12);
+  assert.equal(Math.ceil(CARRIER_MAX_HP / ENEMY_MISSILE_DAMAGE_CARRIER), 12);
 });
 
 test('基地レーザーは自機を2発で落とす', () => {

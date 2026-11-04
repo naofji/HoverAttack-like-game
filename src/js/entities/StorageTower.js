@@ -21,7 +21,7 @@ import {
     STORAGE_TOWER_STAND_COLOR, STORAGE_TOWER_STAND_H, STORAGE_TOWER_STRIPE_COLOR, STORAGE_TOWER_STRIPE_EDGE_COLOR, STORAGE_TOWER_STRIPE_H, STORAGE_TOWER_STRIPE_LIFT,
     STORAGE_TOWER_STRIPE_COUNT, STORAGE_TOWER_BLINK_PERIOD,
     STORAGE_TOWER_STRIPE_ALPHA_MIN, STORAGE_TOWER_STRIPE_ALPHA_MAX, STORAGE_TOWER_PHASE_STEP,
-    DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE,
+    PLAYER_MISSILE_DAMAGE, PLAYER_MG_DAMAGE,
 } from '../utils/Constants.js';
 import { Missile } from './Missile.js';
 import { PlayerBullet } from './PlayerBullet.js';
@@ -76,7 +76,7 @@ export class StorageTower {
                 proj.alive = false;
                 proj.exploded = true;
                 playBlast(this.game, proj.x, proj.y, 'missileHit');
-                this.damage(DAMAGE_PLAYER_MISSILE);
+                this.damage(PLAYER_MISSILE_DAMAGE);
             } else if (proj instanceof PlayerBullet) {
                 proj.alive = false;
                 playBlast(this.game, proj.x, proj.y, 'mgHit');

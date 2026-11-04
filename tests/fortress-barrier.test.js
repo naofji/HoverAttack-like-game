@@ -51,8 +51,8 @@ test('バリアは上下2基のユニットを両方壊すまで消えない', (
 });
 
 test('ユニットはミサイル2発ぶんの硬さ', async () => {
-  const { DAMAGE_PLAYER_MISSILE } = await import('../src/js/utils/Constants.js');
-  assert.equal(BARRIER_EMITTER_HP, DAMAGE_PLAYER_MISSILE * 2);
+  const { PLAYER_MISSILE_DAMAGE } = await import('../src/js/utils/Constants.js');
+  assert.equal(BARRIER_EMITTER_HP, PLAYER_MISSILE_DAMAGE * 2);
 });
 
 test('自機が触れるとダメージを受け、来た方向へ押し戻される', () => {
@@ -531,7 +531,7 @@ test('_drawHpBarIfDamaged が受け付ける形になっている', () => {
 import { Missile } from '../src/js/entities/Missile.js';
 import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
 import {
-  DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, BARRIER_UNIT_MG_MULT,
+  PLAYER_MISSILE_DAMAGE, PLAYER_MG_DAMAGE, BARRIER_UNIT_MG_MULT,
 } from '../src/js/utils/Constants.js';
 
 /** ユニットの上に弾を1発置いて当てる。壊れたら true。 */
@@ -564,7 +564,7 @@ test('ユニットはマシンガン5発で壊れる', () => {
 });
 
 test('手数は定数から導けている（HP を動かせば両方ついてくる）', () => {
-  assert.equal(BARRIER_EMITTER_HP, DAMAGE_PLAYER_MISSILE * 2, 'ミサイル2発ぶんでない');
+  assert.equal(BARRIER_EMITTER_HP, PLAYER_MISSILE_DAMAGE * 2, 'ミサイル2発ぶんでない');
   assert.equal(BARRIER_EMITTER_HP, PLAYER_MG_DAMAGE * BARRIER_UNIT_MG_MULT * 5,
     'マシンガン5発ぶんでない');
 });

@@ -10,10 +10,10 @@ import { applyRecoil } from '../utils/Recoil.js';
 import {
     MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX,
     ENEMY_BULLET_DAMAGE, BASE_LASER_DAMAGE, PLAYER_MG_DAMAGE,
-    DAMAGE_CRUISE_MISSILE, DAMAGE_HOMING_MISSILE, DAMAGE_PLAYER_MISSILE,
-    DAMAGE_ENEMY_MISSILE_PLAYER, DAMAGE_ENEMY_MISSILE_CARRIER,
+    CRUISE_MISSILE_DAMAGE, ENEMY_HOMING_MISSILE_DAMAGE, PLAYER_MISSILE_DAMAGE,
+    ENEMY_MISSILE_DAMAGE_PLAYER, ENEMY_MISSILE_DAMAGE_CARRIER,
     HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
-    SCORE_HOMING_INTERCEPT, SCORE_CRUISE_DESTROY,
+    HOMING_INTERCEPT_SCORE, SCORE_CRUISE_DESTROY,
     REFLECT_BEAM_DAMAGE,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
@@ -121,10 +121,10 @@ export class CollisionManager {
             // 閃光・紫の火花・beamHit の音。Orb がレーザーを吸収するときも同じ演出なので entities/beamHit.js に出した
             playBeamHit(game, hx, hy);
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
-            damage = DAMAGE_CRUISE_MISSILE;
+            damage = CRUISE_MISSILE_DAMAGE;
             bullet._explode(true);   // 自機に当たって爆発。撃ち落とした爆発（下の迎撃）とは違い、町と地雷は巻き込まない
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
-            damage = DAMAGE_HOMING_MISSILE;
+            damage = ENEMY_HOMING_MISSILE_DAMAGE;
             playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { fromEnemy: true });
         }
 
@@ -153,12 +153,12 @@ export class CollisionManager {
                     proj.alive = false;
                     if (proj instanceof Missile) proj.exploded = true;
                     playBlast(game, bullet.x, bullet.y, 'homingHit');   // 自機が撃ち落とした爆発は誘爆させてよい
-                    game.addScore(SCORE_HOMING_INTERCEPT);
+                    game.addScore(HOMING_INTERCEPT_SCORE);
                     return true;
                 }
             } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
                 if (this._distSq(proj, bullet) < CRUISE_INTERCEPT_RADIUS_SQ) {
-                    const damage = proj instanceof Missile ? DAMAGE_PLAYER_MISSILE : PLAYER_MG_DAMAGE;
+                    const damage = proj instanceof Missile ? PLAYER_MISSILE_DAMAGE : PLAYER_MG_DAMAGE;
                     bullet.hp -= damage;
                     proj.alive = false;
                     if (proj instanceof Missile) proj.exploded = true;
@@ -209,7 +209,7 @@ export class CollisionManager {
                 recordHit(enemy, proj.x, proj.y);
                 // 第2引数の被弾点Xは、6面以降の基地の周回シールドが
                 // 「どちら側から来たか」を見るために要る（他の敵は無視する）
-                enemy.takeDamage(DAMAGE_PLAYER_MISSILE, proj.x);
+                enemy.takeDamage(PLAYER_MISSILE_DAMAGE, proj.x);
                 // 着弾点から見て外向きへ吹き飛ばす。反動プロファイルを持たない
                 // 据え付け物（砲台・基地）には何も起きない。
                 applyRecoil(enemy, (enemy.x + enemy.width / 2) - proj.x);
@@ -261,7 +261,7 @@ export class CollisionManager {
         if (player && player.alive && !player.docked && player.invincibleTimer <= 0
             && pointInRect(proj.x, proj.y, player)) {
             recordHit(player, proj.x, proj.y);
-            player.takeDamage(DAMAGE_ENEMY_MISSILE_PLAYER * damageMultiplier);
+            player.takeDamage(ENEMY_MISSILE_DAMAGE_PLAYER * damageMultiplier);
             const dx = (player.x + player.width / 2) - proj.x;
             applyKnockback(player, dx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
             playBlast(game, proj.x, proj.y, 'enemyMissileHit', undefined, { fromEnemy: true });
@@ -272,7 +272,7 @@ export class CollisionManager {
 
         if (carrier && carrier.alive && pointInRect(proj.x, proj.y, carrier)) {
             recordHit(carrier, proj.x, proj.y);
-            carrier.takeDamage(DAMAGE_ENEMY_MISSILE_CARRIER * damageMultiplier);
+            carrier.takeDamage(ENEMY_MISSILE_DAMAGE_CARRIER * damageMultiplier);
             playBlast(game, proj.x, proj.y, 'enemyMissileHit', undefined, { fromEnemy: true });
             proj.alive = false;
             proj.exploded = true;

@@ -22,7 +22,7 @@ import {
     BARRIER_FLARE_FRAMES, BARRIER_FLARE_WIDTH, BARRIER_FLARE_HEIGHT,
     BARRIER_SUCK_COUNT, BARRIER_SUCK_RADIUS, BARRIER_SUCK_FRAMES, BARRIER_SUCK_SIZE,
     BARRIER_EXTEND_MAX, BLOCK_EMPTY,
-    BARRIER_UNIT_MG_MULT, DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, GRENADE_DAMAGE,
+    BARRIER_UNIT_MG_MULT, PLAYER_MISSILE_DAMAGE, PLAYER_MG_DAMAGE, GRENADE_DAMAGE,
 } from '../utils/Constants.js';
 import { Particle } from './Particle.js';
 import { Missile } from './Missile.js';
@@ -226,8 +226,8 @@ export class FortressBarrier {
     _damageFor(proj) {
         if (proj instanceof PlayerBullet) return PLAYER_MG_DAMAGE * BARRIER_UNIT_MG_MULT;
         if (proj instanceof Grenade) return GRENADE_DAMAGE;
-        if (proj instanceof Missile) return DAMAGE_PLAYER_MISSILE;
-        return DAMAGE_PLAYER_MISSILE;   // 未知の弾はミサイル扱い
+        if (proj instanceof Missile) return PLAYER_MISSILE_DAMAGE;
+        return PLAYER_MISSILE_DAMAGE;   // 未知の弾はミサイル扱い
     }
 
     /** 自機の弾がユニットに当たったか。当たったら削って true。 */

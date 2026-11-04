@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ATTACKER_HEAVY_DROP_CHANCE, ATTACKER_RIVAL_DROP_CHANCE, ATTACKER_ARTILLERY_DROP_CHANCE,
-  ENEMY_ATTACKER_TYPES, DAMAGE_PLAYER_MISSILE, PLAYER_MG_DAMAGE, PLAYER_MG_BURST_SIZE,
+  ENEMY_ATTACKER_TYPES, PLAYER_MISSILE_DAMAGE, PLAYER_MG_DAMAGE, PLAYER_MG_BURST_SIZE,
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
 import { rollAttackerDrop } from '../src/js/utils/drops.js';
@@ -85,15 +85,15 @@ test('artillery は自機ミサイル2発ちょうどで落ちる', () => {
   game.spawnDebris = () => { };
   const e = makeAttacker(game, 64, FLOOR_Y, 'artillery');
 
-  e.takeDamage(DAMAGE_PLAYER_MISSILE);
+  e.takeDamage(PLAYER_MISSILE_DAMAGE);
   assert.equal(e.alive, true, '1発で落ちている（脆すぎる）');
 
-  e.takeDamage(DAMAGE_PLAYER_MISSILE);
+  e.takeDamage(PLAYER_MISSILE_DAMAGE);
   assert.equal(e.alive, false, '2発で落ちていない');
 });
 
 test('artillery の HP はミサイル2発ぶんちょうど', () => {
-  assert.equal(ENEMY_ATTACKER_TYPES.artillery.hp, DAMAGE_PLAYER_MISSILE * 2);
+  assert.equal(ENEMY_ATTACKER_TYPES.artillery.hp, PLAYER_MISSILE_DAMAGE * 2);
 });
 
 // 「ミサイルなら2発、MG だとなかなか落ちない」を数値で押さえる。
