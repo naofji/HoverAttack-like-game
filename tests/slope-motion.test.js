@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeMap } from './helpers/enemy-world.js';
 import { collidesWithMap, collidesWithTerrain, getDefaultCheckPoints } from '../src/js/utils/Physics.js';
-import { liftOutOfFloor, dropOutOfCeiling, floorBelow, ceilingAbove } from '../src/js/utils/slopeMotion.js';
+import { liftOutOfFloor, dropOutOfCeiling, floorBelow } from '../src/js/utils/slopeMotion.js';
 import { TILE_SIZE as T } from '../src/js/utils/Constants.js';
 
 const EMPTY5 = ['......', '......', '......', '......', '......'];
@@ -62,15 +62,6 @@ test('floorBelow: 浮いた箱の足の列で一番高い床の y。届かなけ
     // 四角い床でも使える
     const flat = makeMap([...EMPTY5, '......', '######']);
     assert.equal(floorBelow(flat, box(T, 6 * T - 24 - 2), 3), 6 * T);
-});
-
-test('ceilingAbove: 箱の頭の列で一番低い天井の y。届かなければ null', () => {
-    const m = snow(CEIL);
-    const b = box(2 * T, T + 17); // 頭（y）は一番低い下面 T+14 の 3px 下
-    assert.equal(ceilingAbove(m, b, 4), T + 14);
-    assert.equal(ceilingAbove(m, b, 2), null);
-    // 3列とも天井が見つかっても、一番低い面（頭が最初に当たる面）を返す
-    assert.equal(ceilingAbove(m, b, 20), T + 14);
 });
 
 test('collidesWithTerrain は斜辺の上の空中では偽、タイル単位の collidesWithMap は真', () => {

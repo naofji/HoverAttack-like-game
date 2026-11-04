@@ -395,7 +395,6 @@ export class EnemyTank {
 
         const x = this.x;
         const y = this.y;
-        const dir = this.facingRight ? 1 : -1;
 
         ctx.save();
         if (!this.facingRight) {

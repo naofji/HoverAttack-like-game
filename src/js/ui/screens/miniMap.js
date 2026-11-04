@@ -19,7 +19,6 @@ import {
 import { pickStickyMiniMapCorner, miniMapCornerPositions } from '../minimapPlacement.js';
 import { advanceMiniMapTransition } from '../minimapTransition.js';
 import { crosshairScreenPos } from '../Crosshair.js';
-import { UI, glow } from '../theme.js';
 
 export const MiniMap = {
     drawMiniMap(ctx) {

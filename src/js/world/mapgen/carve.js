@@ -128,8 +128,6 @@ export const MapCarve = {
 
     _carveTunnelPath(r1, c1, r2, c2, width) {
         // Manhattan-style L-shaped tunnels look more like an ant nest than direct diagonals
-        const midC = c1;
-        const midR = r2;
 
         // Vertical then Horizontal (or vice versa)
         if (this.game.rng.next() < 0.5) {
@@ -215,49 +213,6 @@ export const MapCarve = {
             }
         }
         return count;
-    },
-
-    _carveArea(startC, startR, width, height) {
-        for (let r = startR; r < startR + height && r < this.rows - BORDER_THICKNESS; r++) {
-            for (let c = startC; c < startC + width && c < this.cols - BORDER_THICKNESS; c++) {
-                if (r >= BORDER_THICKNESS && c >= BORDER_THICKNESS) {
-                    this.grid[r][c] = BLOCK_EMPTY;
-                    this.blockHP[r][c] = 0;
-                }
-            }
-        }
-    },
-
-    _carveMainPath() {
-        let r = 5;
-        let c = 5;
-        const targetR = this.rows - 8;
-        const targetC = this.cols - 8;
-
-        while (r < targetR || c < targetC) {
-            this._carveTunnel(r, c, 3);
-            const rand = this.game.rng.next();
-            if (c < targetC && (rand < 0.5 || r >= targetR)) {
-                c += 1;
-            } else if (r < targetR) {
-                r += 1;
-            }
-        }
-        this._carveTunnel(r, c, 3);
-    },
-
-    _carveTunnel(r, c, size) {
-        for (let dr = -1; dr < size; dr++) {
-            for (let dc = -1; dc < size; dc++) {
-                const nr = r + dr;
-                const nc = c + dc;
-                if (nr >= BORDER_THICKNESS && nr < this.rows - BORDER_THICKNESS &&
-                    nc >= BORDER_THICKNESS && nc < this.cols - BORDER_THICKNESS) {
-                    this.grid[nr][nc] = BLOCK_EMPTY;
-                    this.blockHP[nr][nc] = 0;
-                }
-            }
-        }
     },
 
     _placeHardBlocks() {

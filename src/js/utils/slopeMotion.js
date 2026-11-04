@@ -87,13 +87,3 @@ export function floorBelow(map, entity, maxDown, pointsFn = getDefaultCheckPoint
     }
     return best;
 }
-
-/** 体の上端から maxUp px 上までに、頭の列で一番低い天井の下面の y。無ければ null */
-export function ceilingAbove(map, entity, maxUp, pointsFn = getDefaultCheckPoints) {
-    let best = null;
-    for (const p of headPoints(pointsFn(entity))) {
-        const b = map.terrainBottomY(p.x, entity.y, entity.y - maxUp);
-        if (b !== null && (best === null || b > best)) best = b;
-    }
-    return best;
-}

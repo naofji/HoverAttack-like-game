@@ -33,7 +33,6 @@ export const MapRender = {
     },
 
     _renderAllToCache() {
-        const S = TILE_SIZE;
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 this._drawTile(this.tileCacheCtx, r, c);

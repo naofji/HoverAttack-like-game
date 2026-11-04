@@ -5,6 +5,7 @@ import { playDestruction, DESTRUCTION_PROFILES } from '../src/js/entities/destru
 import { ImpactFlash } from '../src/js/entities/Particle.js';
 import { DEBRIS_SPECS } from '../src/js/entities/debris/index.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
+import { IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS } from '../src/js/utils/Constants.js';
 
 // --- 遅延実行 ---------------------------------------------------------------
 
@@ -83,6 +84,43 @@ test('閃光が先、爆発は後（順序が逆転しない）', () => {
   const delay = DESTRUCTION_PROFILES.player.blast.delay;
   run(game, delay);
   assert.equal(game.explosions.length, 1, `${delay}tick 後に爆発していない`);
+});
+
+// 以前は Particle.js の createDeathFlashes（本番では呼ばれていない旧実装）で見ていたのを、
+// 本番の経路へ移した（2026-11-04）。上限 36 tick は旧テストの値で、閃光5つの機体に掛ける
+test('破壊時の閃光は複数が時間をずらして瞬く', () => {
+  for (const kind of ['attacker', 'player']) {
+    const game = makeGame();
+    playDestruction(game, makeEntity(), kind);
+    const delays = game.particles.filter((p) => p instanceof ImpactFlash).map((f) => f.delay).sort((a, b) => a - b);
+    assert.equal(delays.length, DESTRUCTION_PROFILES[kind].flash.count);
+    assert.equal(delays[0], 0, `${kind}: 最初の1つは即座に光ってほしい`);
+    assert.ok(new Set(delays).size > 1, `${kind}: 全部同時に光っている（連なって見えない）`);
+    // 「何tick目までに始まるか」ではなく「連鎖全体が一瞬で終わるか」を見る。
+    // 遅延には乱数の倍率(最大1.4)が乗るので、刻み×個数では上限を割ってしまう。
+    const burstEnd = Math.max(...delays) + IMPACT_FLASH_LIFETIME;
+    assert.ok(burstEnd <= 36,
+      `${kind}: 連鎖が長すぎて瞬きに見えない: ${burstEnd} tick (約${(burstEnd / 60).toFixed(2)}秒)`);
+  }
+});
+
+test('破壊時の閃光は機体の範囲に散る', () => {
+  const game = makeGame();
+  const e = makeEntity();
+  playDestruction(game, e, 'attacker');
+  for (const f of game.particles.filter((p) => p instanceof ImpactFlash)) {
+    assert.ok(f.x >= e.x - e.width && f.x <= e.x + e.width * 2, `x が機体から離れすぎ: ${f.x}`);
+    assert.ok(f.y >= e.y - e.height && f.y <= e.y + e.height * 2, `y が機体から離れすぎ: ${f.y}`);
+  }
+});
+
+test('アタッカーの破壊時の閃光はミサイル着弾と同じくらいの大きさ', () => {
+  const game = makeGame();
+  playDestruction(game, makeEntity(), 'attacker');
+  for (const f of game.particles.filter((p) => p instanceof ImpactFlash)) {
+    assert.ok(f.radius >= IMPACT_FLASH_RADIUS * 0.6 && f.radius <= IMPACT_FLASH_RADIUS * 1.2,
+      `ミサイル着弾(${IMPACT_FLASH_RADIUS})と大きさが違いすぎる: ${f.radius}`);
+  }
 });
 
 test('破片は閃光と同時に出る（ホールド中に光る）', () => {

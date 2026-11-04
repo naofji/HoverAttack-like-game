@@ -75,22 +75,14 @@ export class CollisionManager {
     }
 
     /**
-     * 弾が対象に触れているか。
+     * 触れているなら**当たった場所**を、触れていなければ null を返す。
      *
      * 反射ビームだけは**帯全体**が当たるので、先端の1点ではなく節ごとの線分で見る。
      * 判定に使う帯は描画と同じ segments() の戻り値で、ここが食い違うと
      * 「見えているのに当たらない／見えていないのに当たる」になる。
-     *
-     * 判別子は isReflectBeam フラグに揃える（isBaseLaser と同じ作法）。
-     * 同じファイル内でここだけ `typeof segments === 'function'` という
-     * 別の基準を使っていて、ダメージ側（_applyBulletHit）と食い違っていた。
-     */
-    _bulletTouches(bullet, target) {
-        return this._bulletHitPoint(bullet, target) !== null;
-    }
-
-    /**
-     * 触れているなら**当たった場所**を、触れていなければ null を返す。
+     * 判別子は isReflectBeam フラグに揃える（isBaseLaser と同じ作法。以前は触れているかだけを
+     * 返す _bulletTouches がここだけ `typeof segments === 'function'` という別の基準を使っていて、
+     * ダメージ側（_applyBulletHit）と食い違っていた。_bulletTouches は呼ばれなくなったので消した）。
      *
      * 反射ビームは帯の途中でも当たるので、弾の座標（＝帯の先端）は当たった場所とは
      * 限らない。帯は最大80pxあり、先端を被弾点にすると火花も破片の爆心も

@@ -7,10 +7,10 @@ import {
     PLAYER_HEIGHT, PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED,
     LANDING_MIN_AIRBORNE_FRAMES, HOVER_MAX_FUEL, HOVER_FUEL_RECOVERY,
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
-    ENEMY_RECOIL_PROFILES, SMOKE_COOLDOWN,
+    ENEMY_RECOIL_PROFILES,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
-    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL, HOVER_WATER_MIST_COUNT,
+    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL,
     HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { JET_BUBBLE_DROP } from './thrusterFlame.js';
@@ -401,7 +401,6 @@ export class EnemyAttacker {
         this.alive = false;
         playDestruction(this.game, this, 'attacker');
         const cx = this.x + this.width / 2;
-        const cy = this.y + this.height / 2;
         this.game.addScore(this.score);
 
         // ドロップの中身はスポーン時（decideAttackerDrop）で既に確定している。

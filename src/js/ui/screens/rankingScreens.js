@@ -12,7 +12,6 @@
 // **ScreenRenderer.prototype へ Object.assign で混ぜる前提**のオブジェクト
 // リテラルで、`this` は ScreenRenderer を指す（理由は screens/miniMap.js の冒頭）。
 
-import { STAGE_PALETTES } from '../../utils/Constants.js';
 import { flagEmoji } from '../../utils/geo.js';
 import { formatClock } from '../../utils/formatTime.js';
 import { lerpColor } from '../../utils/color.js';

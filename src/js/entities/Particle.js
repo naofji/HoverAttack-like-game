@@ -6,7 +6,6 @@ import {
     PARTICLE_LIFETIME, EXPLOSION_SPREAD_WITH_DEBRIS,
     PLAYER_DEATH_EXPLOSION_SPREAD, CARRIER_DEATH_EXPLOSION_SPREAD,
     IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS,
-    DEATH_FLASH_COUNT, DEATH_FLASH_STAGGER,
     RICOCHET_STREAK_LENGTH, RICOCHET_STREAK_LIFETIME, RICOCHET_STREAK_WIDTH,
     COLOR_RICOCHET, COLOR_RICOCHET_FADE,
     SPLASH_LIFETIME,
@@ -570,25 +569,6 @@ export class ImpactFlash {
 
         ctx.restore();
     }
-}
-
-/**
- * 機体の破壊時に、ミサイル着弾と同じくらいの閃光を機体の範囲へ散らし、
- * 時間差で瞬かせる。1発の大きな光より誘爆している感じが出る。
- * @returns {ImpactFlash[]}
- */
-export function createDeathFlashes(x, y, width, height) {
-    const out = [];
-    for (let i = 0; i < DEATH_FLASH_COUNT; i++) {
-        out.push(new ImpactFlash(
-            x + Math.random() * width,
-            y + Math.random() * height,
-            IMPACT_FLASH_RADIUS * (0.7 + Math.random() * 0.4),
-            // 1つ目は即座に。以降は刻みごとにばらつかせる
-            i === 0 ? 0 : Math.round(i * DEATH_FLASH_STAGGER * (0.6 + Math.random() * 0.8)),
-        ));
-    }
-    return out;
 }
 
 // --------------------------------------------

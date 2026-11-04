@@ -386,7 +386,6 @@ export const CAMERA_LERP = 0.08;
 export const HUD_TOP_HEIGHT = 60; // Expanded to fit 2 rows
 export const HUD_BOTTOM_HEIGHT = 0;
 export const HUD_FONT = 'bold 16px "Space Mono", monospace';
-export const HUD_COLOR = '#00FF00';
 export const HUD_BG_COLOR = 'rgba(0, 0, 0, 0.85)';
 
 // --- Particles ---
@@ -1589,7 +1588,6 @@ export const HOVER_WATER_MIST_INTERVAL = 2; // より連続して湧き出るよ
 export const HOVER_WATER_MIST_BURST_FRAMES = 20;
 export const HOVER_WATER_MIST_MIN_COUNT = 6;  // 水面から離れているとき（最遠付近）の最小粒数
 export const HOVER_WATER_MIST_MAX_COUNT = 24; // 水面に最も近いときの最大粒数
-export const HOVER_WATER_MIST_COUNT = 18;    // 互換・中間値（固定指定用）
 // キャリアの水滴の粒の数に掛ける倍率。キャリアは浮力で水面にぴったり浮くので距離はほぼ0＝粒の数は
 // いつも最大（24）になり、左・中央・右の3か所で出るので1フレームあたり36粒・同時に約1,800粒浮いて
 // 派手すぎた（2026-10-11 実機の指摘「少し控えめに」）。半分から始めて実機で見て調整する
@@ -1967,7 +1965,6 @@ export const IMPACT_FLASH_RADIUS_MG = 6;  // マシンガンなど軽い着弾�
 
 // 機体の破壊時は、ミサイル着弾と同じくらいの閃光を時間差で連ねて瞬かせる。
 // 1発の大きな光より、複数が次々に走るほうが「誘爆している」感じが出る。
-export const DEATH_FLASH_COUNT = 5;
 export const DEATH_FLASH_STAGGER = 4;     // 1つあたりの遅延の刻み（tick）
 
 // --- 敵の被弾ノックバック（反動） ---

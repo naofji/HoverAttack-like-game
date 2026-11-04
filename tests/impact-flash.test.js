@@ -1,10 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ImpactFlash, createDeathFlashes } from '../src/js/entities/Particle.js';
+import { ImpactFlash } from '../src/js/entities/Particle.js';
 import { makeFakeCtx, extractSets } from './helpers/fake-ctx.js';
 import {
   IMPACT_FLASH_LIFETIME, IMPACT_FLASH_RADIUS, IMPACT_FLASH_RADIUS_MG,
-  DEATH_FLASH_COUNT, DEATH_FLASH_STAGGER,
 } from '../src/js/utils/Constants.js';
 
 const X = 300;
@@ -96,33 +95,4 @@ test('遅延中は寿命を消費しない', () => {
   for (let i = 0; i < 4; i++) delayed.update();
   const plain = new ImpactFlash(X, Y);
   assert.equal(delayed.lifetime, plain.lifetime, '待機中に寿命が減っている');
-});
-
-test('破壊時の閃光は複数が時間をずらして瞬く', () => {
-  const flashes = createDeathFlashes(100, 200, 16, 24);
-  assert.equal(flashes.length, DEATH_FLASH_COUNT);
-
-  const delays = flashes.map((f) => f.delay).sort((a, b) => a - b);
-  assert.equal(delays[0], 0, '最初の1つは即座に光ってほしい');
-  assert.ok(new Set(delays).size > 1, '全部同時に光っている（連なって見えない）');
-  // 「何tick目までに始まるか」ではなく「連鎖全体が一瞬で終わるか」を見る。
-  // 遅延には乱数の倍率(最大1.4)が乗るので、刻み×個数では上限を割ってしまう。
-  const burstEnd = Math.max(...delays) + IMPACT_FLASH_LIFETIME;
-  assert.ok(burstEnd <= 36,
-    `連鎖が長すぎて瞬きに見えない: ${burstEnd} tick (約${(burstEnd / 60).toFixed(2)}秒)`);
-});
-
-test('破壊時の閃光は機体の範囲に散る', () => {
-  const [x, y, w, h] = [100, 200, 16, 24];
-  for (const f of createDeathFlashes(x, y, w, h)) {
-    assert.ok(f.x >= x - w && f.x <= x + w * 2, `x が機体から離れすぎ: ${f.x}`);
-    assert.ok(f.y >= y - h && f.y <= y + h * 2, `y が機体から離れすぎ: ${f.y}`);
-  }
-});
-
-test('破壊時の閃光はミサイル着弾と同じくらいの大きさ', () => {
-  for (const f of createDeathFlashes(100, 200, 16, 24)) {
-    assert.ok(f.radius >= IMPACT_FLASH_RADIUS * 0.6 && f.radius <= IMPACT_FLASH_RADIUS * 1.2,
-      `ミサイル着弾(${IMPACT_FLASH_RADIUS})と大きさが違いすぎる: ${f.radius}`);
-  }
 });
