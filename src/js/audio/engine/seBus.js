@@ -167,6 +167,9 @@ export const AudioSeBus = {
         this.stopCarrierEngine();
         this.stopRepairHum();
         this.stopTownFire();
+        // バリアの唸り（7面）。更新役の _updateBarrierSound は _simulationTick の中なので、
+        // ポーズとミッションクリアでシミュレーションが止まると最後の音量のまま残っていた
+        this.stopBarrierHum();
     },
 
     fadeOutSe(seconds = SE_FADE_OUT_SECONDS) {

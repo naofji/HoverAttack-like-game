@@ -18,6 +18,7 @@ function spyAudio(fn) {
     const names = [
         'fadeOutSe', 'resumeSe', 'stopLoopingSe',
         'stopHover', 'stopEnemyHover', 'stopCarrierEngine', 'stopRepairHum',
+        'stopTownFire', 'stopBarrierHum',
         'stopBGM', 'playTitleBGM', 'playSuccess', 'playGameOver', 'startBGM',
         'playRankingBGM',
     ];
@@ -118,12 +119,15 @@ test('ゲームを始めると効果音が戻る', () => {
     });
 });
 
-test('stopLoopingSe は鳴り続ける音を4つとも止める', () => {
+// バリアの唸り（7面）は 2026-11-04 まで入っていなかった。唸りの更新は _simulationTick の中なので、
+// ポーズ（設定画面）とミッションクリアでシミュレーションが止まると、最後の音量のまま鳴り続けた。
+// 町の炎は以前から入っていたが、このテストの一覧に無かったので一緒に足した
+test('stopLoopingSe は鳴り続ける音を6つとも止める', () => {
     spyAudio((calls) => {
         // spyAudio が stopLoopingSe 自体も差し替えるので、本物を呼ぶ
         const real = Object.getPrototypeOf(audioManager).stopLoopingSe;
         real.call(audioManager);
-        for (const n of ['stopHover', 'stopEnemyHover', 'stopCarrierEngine', 'stopRepairHum']) {
+        for (const n of ['stopHover', 'stopEnemyHover', 'stopCarrierEngine', 'stopRepairHum', 'stopTownFire', 'stopBarrierHum']) {
             assert.ok(calls.includes(n), `${n} が呼ばれていない`);
         }
     });
