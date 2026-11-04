@@ -124,10 +124,7 @@ export function drawStageScene(ctx, x, y, w, h, stageIndex, palette, nowMs) {
     if (proj === 'fly') {
         // Stage 7: the cruise missile itself flies right -> left toward the player
         // (it fires nothing). The player launches an interceptor missile at it.
-        const phase = (nowMs % 2200) / 2200;
-        const cruiseX = lerp(enemyX + 30, playerX + 40, phase);
-        drawEntity(ctx, e.cruise, 'cruise', cruiseX, floorY, -bob, midY - bob);
-        drawPlayerMissile(ctx, { x: playerX + 26, y: midY + bob }, { x: cruiseX, y: midY - bob }, nowMs);
+        drawIntercept(ctx, e, { x: playerX + 26, y: midY + bob }, enemyX + 30, playerX + 40, floorY, midY - bob, bob, nowMs);
     } else {
         drawEntity(ctx, e[enemyKey], enemyKey, enemyX, floorY, -bob);
         drawExchange(ctx, { x: playerX + 26, y: midY + bob }, { x: enemyX - 26, y: midY - bob }, nowMs, proj);
@@ -213,6 +210,77 @@ function drawCave(ctx, x, y, w, h, palette) {
     ctx.strokeStyle = lerpColor(palette.fill, '#ffffff', 0.35);
     roundRectPath(ctx, x, y, w, h, r);
     ctx.stroke();
+}
+
+// --- 7面: クルーズミサイルの迎撃 ---
+// 以前は迎撃弾（1.6秒周期）とクルーズミサイル（2.2秒周期）が別々の時計で動き、弾は毎フレーム
+// 「その瞬間の相手の位置」へ向けて補間していた。周期が揃わないので、相手が近づくと弾がほとんど
+// 進まない・相手が右端へ戻った瞬間に弾が跳ぶ・当たっても何も起きずにすり抜ける、と見えた（実機の指摘）。
+// 今は1本の周期の台本にした: 相手は一定の速さで飛んでくる → 決まった時刻に撃つ → 弾は会合点へ
+// 一定の速さで飛び、相手とちょうどそこで出会う → 爆発して、周期の終わりまで相手は消える。
+// 描画専用の値なので Constants ではなくここに置く。
+const INTERCEPT_CYCLE_MS = 2400;
+const INTERCEPT_LAUNCH = 0.2;   // 撃つ時刻（周期に対する比）
+const INTERCEPT_HIT = 0.55;     // 出会う時刻。相手はこのとき start→end の 55% まで来ている
+const INTERCEPT_BLAST = 0.15;   // 爆発の長さ（周期に対する比）
+const INTERCEPT_FLASH = 0.04;   // 撃った瞬間の銃口の光
+
+/**
+ * 迎撃の1周期のどこにいるか。純粋関数（テストで縛る: tests/stage-scene-intercept.test.js）。
+ * @param {number} phase 0..1（周期の中の位置）
+ * @param {number} fromX 迎撃弾が出る x
+ * @param {number} startX 相手が現れる x（右端）
+ * @param {number} endX 相手が進んでいく先の x（自機の手前）
+ * @returns {{cruiseX:number|null, missileT:number|null, missileX:number|null, hitX:number,
+ *   blast:number|null, muzzle:boolean}} cruiseX が null なら相手は描かない（撃ち落とした後）。
+ *   missileT は弾の飛んだ割合 0..1（null なら飛んでいない）。blast は爆発の進み 0..1
+ */
+export function interceptPhase(phase, fromX, startX, endX) {
+    const hitX = lerp(startX, endX, INTERCEPT_HIT);
+    const out = { cruiseX: null, missileT: null, missileX: null, hitX, blast: null, muzzle: false };
+    if (phase < INTERCEPT_HIT) out.cruiseX = lerp(startX, endX, phase);
+    if (phase >= INTERCEPT_LAUNCH && phase < INTERCEPT_HIT) {
+        out.missileT = (phase - INTERCEPT_LAUNCH) / (INTERCEPT_HIT - INTERCEPT_LAUNCH);
+        out.missileX = lerp(fromX, hitX, out.missileT);
+    }
+    out.muzzle = phase >= INTERCEPT_LAUNCH && phase < INTERCEPT_LAUNCH + INTERCEPT_FLASH;
+    if (phase >= INTERCEPT_HIT && phase < INTERCEPT_HIT + INTERCEPT_BLAST) {
+        out.blast = (phase - INTERCEPT_HIT) / INTERCEPT_BLAST;
+    }
+    return out;
+}
+
+function drawIntercept(ctx, e, p, startX, endX, floorY, cruiseY, bob, nowMs) {
+    const phase = (nowMs % INTERCEPT_CYCLE_MS) / INTERCEPT_CYCLE_MS;
+    const s = interceptPhase(phase, p.x, startX, endX);
+    if (s.cruiseX !== null) drawEntity(ctx, e.cruise, 'cruise', s.cruiseX, floorY, -bob, cruiseY);
+    if (s.missileT !== null) {
+        // 高さも会合点（相手の今の高さ）へ寄せていく。相手は上下に揺れているので、最後に追いつく形にする
+        drawFlyingMissile(ctx, s.missileX, lerp(p.y, cruiseY, s.missileT), true, '#FFDD33');
+    }
+    if (s.muzzle) drawFlash(ctx, p.x, p.y, '#FFEE99');
+    if (s.blast !== null) drawBlast(ctx, s.hitX, cruiseY, s.blast);
+}
+
+/** 撃ち落とした爆発。広がりながら薄れる火の玉と、外へ散る火花 */
+function drawBlast(ctx, bx, by, t) {
+    ctx.save();
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = '#FFB347';
+    ctx.beginPath();
+    ctx.arc(bx, by, 6 + t * 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFF2B0';
+    ctx.beginPath();
+    ctx.arc(bx, by, 3 + t * 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FF7A33';
+    for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.4;
+        const r = 8 + t * 20;
+        ctx.fillRect(bx + Math.cos(a) * r - 1, by + Math.sin(a) * r - 1, 2, 2);
+    }
+    ctx.restore();
 }
 
 // Player missile (yellow, bazooka) travels p -> target on a loop, with a muzzle flash.
