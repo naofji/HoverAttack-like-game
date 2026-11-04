@@ -719,6 +719,15 @@ export const ENEMY_TURRET_BURST_COUNT = 5;      // Bullets per burst
 export const ENEMY_TURRET_BURST_DELAY = 10;     // Ticks between burst shots
 export const ENEMY_TURRET_COOLDOWN = 120;       // Ticks between bursts (2 seconds)
 export const ENEMY_TURRET_MISSION = 2;          // 3面から
+// 砲身を回す速さ（ラジアン／フレーム）。以前は自機を見つけた瞬間に砲身が跳んでいたのを、
+// 今の向きから一定の速さで回してから撃つようにした（ユーザー指定 2026-11-05）。
+// 0.04 = 約2.3度／フレーム。真横から真横へ（半回転）で約79フレーム＝newtype で約1.3秒。
+// 自機が 300px 先にいれば 1フレームに 12px ぶん追えるので、自機の最高速（3.5px 前後）なら置いていかれない
+export const ENEMY_TURRET_TURN_SPEED = 0.04;
+// 反射ビーム砲の砲身。まずは機関砲と同じ値（別々に調整できるよう定数は分けておく）
+export const REFLECT_BEAM_TURN_SPEED = 0.04;
+// 撃ち始めてよい砲身のずれ（ラジアン）。0.05 = 約3度。これより外れている間は回すだけで撃たない
+export const ENEMY_TURRET_AIM_TOLERANCE = 0.05;
 // 5面からは機関砲の砲台だけ1回に8発（反射ビームの砲台は常に単発 = spec.burst）
 export const ENEMY_TURRET_LATE_BURST_MISSION = 4;
 export const ENEMY_TURRET_LATE_BURST_COUNT = 8;

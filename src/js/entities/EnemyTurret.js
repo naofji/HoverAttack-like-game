@@ -17,7 +17,9 @@ import {
     COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT, COLOR_BEAM_CANNON_LAMP_BACK,
     BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
     ENEMY_TURRET_LATE_BURST_MISSION, ENEMY_TURRET_LATE_BURST_COUNT,
+    ENEMY_TURRET_TURN_SPEED, REFLECT_BEAM_TURN_SPEED, ENEMY_TURRET_AIM_TOLERANCE,
 } from '../utils/Constants.js';
+import { stepBarrelAngle, isBarrelAimed } from '../utils/turretAim.js';
 import { hasLineOfSight, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -77,6 +79,7 @@ const TURRET_TYPES = {
         cooldown: ENEMY_TURRET_COOLDOWN,
         burst: ENEMY_TURRET_BURST_COUNT,
         burstDelay: ENEMY_TURRET_BURST_DELAY,   // 従来どおり
+        turnSpeed: ENEMY_TURRET_TURN_SPEED,     // 砲身を回す速さ（ラジアン／フレーム）
         colors: { base: '#555555', barrel: '#888888', pivot: '#667788' },
     },
     beam: {
@@ -90,6 +93,7 @@ const TURRET_TYPES = {
         ignoresLineOfSight: true,
         burst: REFLECT_BEAM_SHOT_COUNT,          // 2連弾
         burstDelay: REFLECT_BEAM_BURST_DELAY,    // 発と発の間隔を長めに取る
+        turnSpeed: REFLECT_BEAM_TURN_SPEED,
         colors: {
             base: COLOR_BEAM_CANNON_BASE,
             barrel: COLOR_BEAM_CANNON_BARREL,
@@ -190,8 +194,18 @@ export class EnemyTurret {
         this._updateStateMachine(target);
     }
 
-    /** Rotate barrel to track (or return to rest when no target). */
+    /** 休みの向き（台座から真っすぐ伸びる向き）。床の砲台は真上、天井の砲台は真下 */
+    _restAngle() {
+        return this.isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
+    }
+
+    /**
+     * 砲身を一定の速さ（spec.turnSpeed）で回す。目標がいればそちらへ、いなければ休みの向きへ。
+     * 以前は目標がいると currentAngle = targetAngle（即時照準）で、自機を見つけた瞬間に砲身が
+     * 跳んでいた（ユーザー指定で一定速度の旋回に変更、2026-11-05）。回し方は utils/turretAim.js
+     */
     _updateAiming(target) {
+        const rest = this._restAngle();
         if (target) {
             const cx = this.x + this.width  / 2;
             const cy = this.y + this.height / 2;
@@ -199,11 +213,15 @@ export class EnemyTurret {
                 target.y + target.height / 2 - cy,
                 target.x + target.width  / 2 - cx
             );
-            this.currentAngle = this.targetAngle; // Instant aim
         } else {
-            const rest = this.isCeilingMounted ? Math.PI / 2 : -Math.PI / 2;
-            this.currentAngle += (rest - this.currentAngle) * 0.05;
+            this.targetAngle = rest;
         }
+        this.currentAngle = stepBarrelAngle(this.currentAngle, this.targetAngle, rest, this.spec.turnSpeed);
+    }
+
+    /** 砲身が目標を向いているか。向くまでは撃ち始めない（回してから撃つ） */
+    _isAimed() {
+        return isBarrelAimed(this.currentAngle, this.targetAngle, this._restAngle(), ENEMY_TURRET_AIM_TOLERANCE);
     }
 
     /** Advance the idle → bursting → cooldown state machine. */
@@ -211,13 +229,20 @@ export class EnemyTurret {
         if (this.state === 'idle') {
             if (this.cooldownTimer > 0) {
                 this.cooldownTimer--;
-            } else if (target) {
+            } else if (target && this._isAimed()) {
+                // 撃ち始めるのは砲身が向いてから。下の bursting の枝でも各弾が向くまで待つので、撃つ時刻は
+                // こちらを外しても変わらない。ここで待つのは、回している間も状態を 'idle' のまま保つため
+                // （ビーム砲は 'idle' の間の cooldownTimer を充填のランプに使っている）
                 this.state     = 'bursting';
                 this.burstCount = this.maxBurstCount;
                 this.burstTimer = 0;
             }
         } else if (this.state === 'bursting') {
             if (this.burstTimer <= 0) {
+                // 連射の各弾も、砲身が自機を向くまで待つ（回してから撃つ）。ふつうに動く自機なら
+                // 砲身が追いつくので連射の間隔はほぼ変わらない。見失ったとき（target が無い）は待たずに
+                // 今の向きへ撃つ — 待つと砲身が休みの向き（真上・真下）まで回ってから天井や床へ撃ってしまう
+                if (target && !this._isAimed()) return;
                 this._executeAttack();
                 this.burstCount--;
                 // 連射間隔は型から引く。以前は全型共通の ENEMY_TURRET_BURST_DELAY(10) を
@@ -321,8 +346,8 @@ export class EnemyTurret {
             // 扇型（±SPREAD で複数本同時）はやめた。2連弾にして、_updateStateMachine()
             // が spec.burstDelay(24) 間隔を空けて _executeAttack() を2回呼ぶことで
             // 「1発撃って、しばらくして2発目」という形にした。角度は _updateAiming() が
-            // 毎フレーム currentAngle = targetAngle（即時照準）で自機を追っているので、
-            // 間隔を空けて撃つだけで2発目は自動的にその瞬間の自機の位置を向く。
+            // 毎フレーム自機の方へ砲身を回している（一定の速さ。以前は即時照準）ので、
+            // 間隔を空けて撃つだけで2発目はその間に回った向き＝自機を追った向きになる。
             // 固定の扇を足さなくても「狙い直し」で角度が変わるので、SPREAD は不要になった。
             //
             // ただし自機が止まっていると「狙い直し」が効かず、2発とも同じ線に乗ってしまう

@@ -195,7 +195,9 @@ test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範�
   game.player.x = 100;
   game.player.y = 150;
 
-  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 1; i++) t.update();
+  // 砲身は一定の速さで回る（以前は即時照準）。2発目は砲身が動いた後の自機を向くまで待ってから
+  // 撃つので、間隔（REFLECT_BEAM_BURST_DELAY）ちょうどではなく、向くまで回して待つ
+  for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 120 && game.enemyBullets.length < 2; i++) t.update();
   assert.equal(game.enemyBullets.length, 2, '2発目が出ていない');
 
   const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
