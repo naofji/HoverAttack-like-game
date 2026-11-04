@@ -171,14 +171,18 @@ export const RankingScreens = {
             const blockH = SPACE.md + lineHeight('body') * 3 + SPACE.md;
             const rowsPerCol = Math.max(1, Math.floor((bottom - areaTop) / blockH));
 
-            // 週数が少ないときは上に寄せず、縦に中央へ置く（下だけ大きく空くのを防ぐ）
+            // 週数が少ないときは上に寄せず、縦に中央へ置く（下だけ大きく空くのを防ぐ）。
+            // 左右の列には同じ数ずつ振り分ける（左が多いときは1つだけ）。以前は中央寄せを
+            // 「左右に半分ずつ」で計算しながら、並べるほうは左の列を rowsPerCol（6週）まで埋めてから
+            // 右へ移っていた。8週だと左6・右2になり、左の列が中央寄せの想定より2週ぶん下へ伸びて
+            // 最後の週が画面の下端で切れた（実機の指摘。12週ちょうどのときだけ両者が一致していた）
             const usedRows = Math.min(rowsPerCol, Math.ceil(fame.length / 2));
             const topY = areaTop + Math.floor(((bottom - areaTop) - usedRows * blockH) / 2);
 
-            fame.slice(0, rowsPerCol * 2).forEach((wk, i) => {
-                const colIndex = Math.floor(i / rowsPerCol);   // 先に縦を埋めてから隣の列へ
+            fame.slice(0, usedRows * 2).forEach((wk, i) => {
+                const colIndex = Math.floor(i / usedRows);   // 先に縦を埋めてから隣の列へ
                 const blockLeft = left + colIndex * (blockW + colGap);
-                let y = topY + (i % rowsPerCol) * blockH;
+                let y = topY + (i % usedRows) * blockH;
 
                 // 週の見出しは「ラベル」。行より小さくして、序列を大きさで示す。
                 ctx.textAlign = 'left';
