@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Map as GameMap } from '../src/js/world/Map.js';
 import { MapRender } from '../src/js/world/mapRender.js';
+import { MapMiniMap } from '../src/js/world/mapMiniMap.js';
 
-const MIXINS = { MapRender };
+const MIXINS = { MapRender, MapMiniMap };
 
 test('mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
