@@ -1494,7 +1494,10 @@ export const CASING_LENGTH = 3;             // 排出方向を向く長辺
 export const CASING_WIDTH = 1.5;
 export const CASING_GRAVITY = 0.18;         // DebrisPart(0.1〜)より軽い金属片なので少し強め
 export const CASING_MAX_FALL_SPEED = 4;
-export const CASING_SPIN = 0.5;             // 転がりながら落ちる回転（rad/frame、±半分）
+// 転がりながら落ちる回転の幅（rad/frame）。実際の回転は ±半分＝ ±0.5 rad/frame。
+// 以前は 0.5 と書かれていたが使われておらず、Particle.js が幅 1.0 を直書きしていた。
+// 見た目を変えないよう、実際に使われていた 1.0 に合わせて配線した（2026-11-04）
+export const CASING_SPIN = 1.0;
 export const CASING_LIFETIME = 50;          // 約0.83秒でフェードアウトしながら消える
 // 地形に当たったときの跳ね返り。GRENADE_BOUNCE と同じ考え方（速度を反転させつつ減衰）
 // だが薬莢は軽い金属片なのでより弾む（0.5弱→0.55）。何度か跳ねてから転がって止まる見た目にする

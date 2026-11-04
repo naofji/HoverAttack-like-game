@@ -14,7 +14,7 @@ import {
     SNOWTREE_FLURRY_DRAG, SNOWTREE_FLURRY_GRAVITY, SNOWTREE_FLURRY_SWAY, SNOWTREE_FLURRY_SWAY_FREQ,
     HOVER_WATER_MIST_COLOR, HOVER_WATER_MIST_LIFETIME,
     CASING_COLOR, CASING_LENGTH, CASING_WIDTH, CASING_GRAVITY, CASING_MAX_FALL_SPEED,
-    CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION,
+    CASING_LIFETIME, CASING_FADE_START, CASING_BOUNCE, CASING_FRICTION, CASING_SPIN,
 } from '../utils/Constants.js';
 import { lerpColor } from '../utils/color.js';
 import { motionFor } from '../world/StageEnvironment.js';
@@ -391,7 +391,7 @@ export class CasingParticle {
         this.vx = vx;
         this.vy = vy;
         this.angle = Math.random() * Math.PI * 2;
-        this.spin = (Math.random() - 0.5) * 1.0; // rad/frame。転がりながら落ちる見た目
+        this.spin = (Math.random() - 0.5) * CASING_SPIN; // rad/frame。転がりながら落ちる見た目
         this.maxLife = CASING_LIFETIME;
         this.life = CASING_LIFETIME;
         this.alive = true;
