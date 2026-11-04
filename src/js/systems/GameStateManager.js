@@ -48,13 +48,9 @@ export class GameStateManager {
         game.electricFloors = [];   // 同、電流の床
         game.enemies = [];
         game.enemyBullets = [];
-        game.repairKits = [];
-        // **元からあった漏れ。** missileKits だけリセットされておらず、前の面で
-        // 拾い残したミサイル補給とオーバードライブが次の面へ持ち越されていた。
-        // 7面の要塞のお宝をこの配列に入れるので、ここで直しておく
-        game.missileKits = [];
-        game.autoAimUnits = [];
-        game.lifeKits = [];
+        // 落ちているアイテム。種類ごとの配列だった頃、missileKits だけここで空にし忘れていて、
+        // 前の面で拾い残したミサイル補給とオーバードライブが次の面へ持ち越されていた。1本にまとめたのはそのため
+        game.pickups = [];
         game.storageTowers = [];   // 格納塔（お宝の入れ物）。前の面の塔を残さない
         game.orbs = [];            // 2面の Orb。死んで復帰しても動いた場所のまま残り、面のやり直しで元に戻る
         game.autoAimTarget = null;

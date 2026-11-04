@@ -16,8 +16,8 @@ function makeWorld(order, town) {
         env: { update: noop, drawBehindTerrain: () => order.push('behind'), drawOverWorld: noop, drawOverlay: noop },
         carrier: null, player: null, flag: null, grenadeTrajectory: null,
         enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [],
-        projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-        missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+        projectiles: [], particles: [], pickups: [],
+        enemyBullets: [], smokeScreens: [],
         _applyRenderInterpolation: noop,
         _restoreRenderInterpolation: noop,
         _drawHpBarIfDamaged: noop,
@@ -50,7 +50,7 @@ test('町は map.update() の直後に、Game を渡して更新する', () => {
         _updateLandmines: noop, barriers: [], electricFloors: [], storageTowers: [], _updateBarrierSound: noop, _updateAutoAim: noop,
         _updateOverdrive: noop, env: { update: noop }, _updateEnemyHoverSound: noop,
         _checkMissionClear: noop, collisionManager: { update: noop }, _updateProximityAlert: noop,
-        projectiles: [], particles: [], smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], enemies: [],
+        projectiles: [], particles: [], smokeScreens: [], pickups: [], enemies: [],
         map: { update: () => order.push('map'), town: { update: (game) => order.push(game === g ? 'town' : 'town(違う game)') } },
     });
     Game._simulationTick.call(g);
@@ -62,7 +62,7 @@ test('落ちる破片も描画補間に載る', () => {
     const seen = [];
     const g = {
         player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-        repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [],
+        pickups: [], storageTowers: [],
         map: { town: { falling: [piece] } },
     };
     Game._forEachMovingEntity.call(g, (e) => seen.push(e));

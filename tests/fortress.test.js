@@ -593,7 +593,7 @@ test('お宝が格納塔に入って実際にゲームへ置かれる（7面だ�
   const { Map } = await import('../src/js/world/Map.js');
   for (const lv of [0, 6]) {
     const map = new Map({ rng: new SeededRNG(1) }, lv);
-    const game = { map, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [] };
+    const game = { map, storageTowers: [], pickups: [], };
     new SpawnManager(game).spawnStorageTowers();
     const kinds = game.storageTowers.map((t) => t.kind);
     if (lv === 6) {

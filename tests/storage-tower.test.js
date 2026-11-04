@@ -7,6 +7,8 @@ import { Game } from '../src/js/main.js';
 import { RepairKit } from '../src/js/entities/RepairKit.js';
 import { OverdriveKit } from '../src/js/entities/OverdriveKit.js';
 import { ExtraLifeKit } from '../src/js/entities/ExtraLifeKit.js';
+import { MissileKit } from '../src/js/entities/MissileKit.js';
+import { AutoAimUnit } from '../src/js/entities/AutoAimUnit.js';
 
 before(() => {
   const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
@@ -14,25 +16,26 @@ before(() => {
 });
 
 function itemGame() {
-  return { repairKits: [], missileKits: [], lifeKits: [] };
+  return { pickups: [], };
 }
 
 // ---------- 中身の種類→アイテムの表 ----------
 
-test('spawnItem は kind ごとに正しいクラスを正しい配列に入れる', () => {
+test('spawnItem は kind ごとに正しいクラスを作って pickups に1個だけ入れる', () => {
+  // 敵アタッカーの落とし物（missile / overdrive / repair / autoaim）と格納塔の中身（overdrive / repair / life）が
+  // 同じ表を通る。MissileKit と OverdriveKit は親子なので instanceof ではなく constructor で見る
   const cases = [
-    ['overdrive', OverdriveKit, 'missileKits'],
-    ['repair', RepairKit, 'repairKits'],
-    ['life', ExtraLifeKit, 'lifeKits'],
+    ['missile', MissileKit],
+    ['overdrive', OverdriveKit],
+    ['repair', RepairKit],
+    ['autoaim', AutoAimUnit],
+    ['life', ExtraLifeKit],
   ];
-  for (const [kind, cls, list] of cases) {
+  for (const [kind, cls] of cases) {
     const game = itemGame();
     const item = spawnItem(game, kind, 100, 50);
-    assert.ok(item instanceof cls, `${kind} のクラスが違う`);
-    assert.deepEqual(game[list], [item], `${kind} が ${list} に入っていない`);
-    for (const other of ['repairKits', 'missileKits', 'lifeKits'].filter((l) => l !== list)) {
-      assert.equal(game[other].length, 0, `${kind} が ${other} にも入った`);
-    }
+    assert.equal(item.constructor, cls, `${kind} のクラスが違う`);
+    assert.deepEqual(game.pickups, [item], `${kind} が pickups にちょうど1個入っていない`);
     // PickupItem と同じ座標の約束（x は中心、y は上端）
     assert.equal(item.x + item.width / 2, 100);
     assert.equal(item.y, 50);
@@ -59,7 +62,7 @@ import {
 function towerGame() {
   const game = {
     projectiles: [], particles: [], enemies: [], storageTowers: [],
-    repairKits: [], missileKits: [], lifeKits: [],
+    pickups: [],
     score: 0,
     addScore(n) { this.score += n; },
     spawnExplosion() {},
@@ -107,8 +110,8 @@ test('自機のミサイル1発で壊れ、中身が1個だけ出る', () => {
   const m = shootAt(game, t, Missile, true);
   t.update();
   assert.equal(t.alive, false);
-  assert.equal(game.lifeKits.length, 1);
-  assert.equal(game.repairKits.length + game.missileKits.length, 0);
+  assert.equal(pickupsOf(game, ExtraLifeKit).length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length + pickupsOf(game, MissileKit).length, 0);
   assert.equal(m.alive, false);
   assert.equal(m.exploded, true, 'ミサイルが消費されていない（地形にも当たって爆発する）');
 });
@@ -123,11 +126,11 @@ test('機関砲は4発では壊れず5発で壊れる', () => {
     assert.equal(b.alive, false, '当たった弾が消えていない');
   }
   assert.equal(t.alive, true, '4発で壊れた');
-  assert.equal(game.repairKits.length, 0);
+  assert.equal(pickupsOf(game, RepairKit).length, 0);
   shootAt(game, t, PlayerBullet);
   t.update();
   assert.equal(t.alive, false, '5発で壊れない');
-  assert.equal(game.repairKits.length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length, 1);
 });
 
 test('自機のグレネードの爆風は中心から半径の内側で壊し、外側では壊さない', () => {
@@ -138,7 +141,7 @@ test('自機のグレネードの爆風は中心から半径の内側で壊し�
     const g = new Grenade(game, cx + d, cy, 0);
     g._explode();
     assert.equal(t.alive, !broken, `距離 ${d}px`);
-    assert.equal(game.missileKits.length, broken ? 1 : 0);
+    assert.equal(pickupsOf(game, MissileKit).length, broken ? 1 : 0);
   }
 });
 
@@ -163,10 +166,10 @@ test('壊れた塔に当たっても2個目は出ず、弾も消費されない'
   t.update();
   const second = shootAt(game, t, Missile, true);
   t.update();
-  assert.equal(game.repairKits.length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length, 1);
   assert.equal(second.alive, true);
   damageTowersInRadius(game, t.x + t.width / 2, t.y + t.height / 2, 40, 999);
-  assert.equal(game.repairKits.length, 1, '爆風で2個目が出た');
+  assert.equal(pickupsOf(game, RepairKit).length, 1, '爆風で2個目が出た');
 });
 
 test('同じフレームに2発当たっても中身は1個', () => {
@@ -175,7 +178,7 @@ test('同じフレームに2発当たっても中身は1個', () => {
   shootAt(game, t, Missile, true);
   const second = shootAt(game, t, Missile, true);
   t.update();
-  assert.equal(game.repairKits.length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length, 1);
   assert.equal(second.alive, true, '壊れた後の弾まで吸った');
 });
 
@@ -184,7 +187,7 @@ test('中身は塔の足元の床の上に出る', () => {
   const t = addTower(game, 200, 300, 'life');
   shootAt(game, t, Missile, true);
   t.update();
-  const item = game.lifeKits[0];
+  const item = pickupsOf(game, ExtraLifeKit)[0];
   assert.equal(item.y + ITEM_SIZE, 300);
   assert.equal(item.x + item.width / 2, 200);
 });
@@ -213,7 +216,7 @@ test('damage を壊れた後に呼んでも2個目は出ない（呼び出し側
   const t = addTower(game, 200, 300, 'repair');
   assert.equal(t.damage(999), true);
   assert.equal(t.damage(999), false);
-  assert.equal(game.repairKits.length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length, 1);
 });
 
 // ---------- 絵（黄白色の円筒・足台・オレンジの横縞の明滅） ----------
@@ -303,7 +306,7 @@ async function stage7Maps() {
 }
 
 function spawnGame(map) {
-  return { map, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [] };
+  return { map, storageTowers: [], pickups: [], };
 }
 
 test('実際の7面: お宝の位置ごとに塔が1本ずつ立ち、むき出しのアイテムは無い', async () => {
@@ -312,7 +315,7 @@ test('実際の7面: お宝の位置ごとに塔が1本ずつ立ち、むき出�
     new SpawnManager(game).spawnStorageTowers();
     assert.equal(game.storageTowers.length, m.fortressZones.length * FORTRESS_TREASURE_COUNT);
     assert.ok(game.storageTowers.every((t) => t instanceof StorageTower));
-    assert.equal(game.repairKits.length + game.missileKits.length + game.lifeKits.length, 0,
+    assert.equal(pickupsOf(game, RepairKit).length + pickupsOf(game, MissileKit).length + pickupsOf(game, ExtraLifeKit).length, 0,
       'むき出しのアイテムが置かれた');
     // 塔の位置はお宝の位置そのもの（中心x = お宝の列の中心、下端 = お宝の行の下）
     const want = m.fortressZones.flatMap((z) => z.treasures.map((t) => `${t.c * TILE_SIZE + TILE_SIZE / 2},${(t.r + 1) * TILE_SIZE}`));
@@ -363,7 +366,7 @@ test('汎用: 置き場所の一覧に入れれば7面でなくても立ち、�
   const t = game.storageTowers[0];
   assert.equal(t.y + t.height, 200);
   t.damage(999);
-  assert.equal(game.missileKits.length, 1);
+  assert.equal(pickupsOf(game, MissileKit).length, 1);
 });
 
 test('spawnStorageTowers は前の塔を捨てて作り直す', () => {
@@ -409,7 +412,7 @@ test('_simulationTick が格納塔を更新し、壊れた塔を外す（配線�
   shootAt(game, t, Missile, true);
   // 塔の更新だけを本物にする（弾・アイテムの更新は地形を見るので、ここでは動かさない）
   const fake = new Proxy(Object.assign(game, {
-    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], pickups: [],
     env: { update: noop }, map: { ...game.map, update: noop }, collisionManager: { update: noop },
   }), {
     get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'
@@ -419,7 +422,7 @@ test('_simulationTick が格納塔を更新し、壊れた塔を外す（配線�
   Game._simulationTick.call(fake);
   assert.equal(t.alive, false, '1ティックで塔が更新されていない');
   assert.equal(game.storageTowers.length, 0, '壊れた塔が残った');
-  assert.equal(game.repairKits.length, 1);
+  assert.equal(pickupsOf(game, RepairKit).length, 1);
 });
 
 test('_drawWorld が格納塔を描く（配線）', () => {
@@ -433,8 +436,8 @@ test('_drawWorld が格納塔を描く（配線）', () => {
     env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
     carrier: null, player: null, flag: null, grenadeTrajectory: null,
     enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [tower],
-    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-    missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+    projectiles: [], particles: [], pickups: [],
+    enemyBullets: [], smokeScreens: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
     _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
   };
@@ -478,8 +481,8 @@ test('塔は自機より奥に描く（通り抜けたとき自機が塔の陰�
     carrier: { draw: () => order.push('carrier') }, player: { draw: () => order.push('player') },
     flag: null, grenadeTrajectory: null,
     enemies: [], landmines: [], barriers: [], electricFloors: [], storageTowers: [tower],
-    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-    missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+    projectiles: [], particles: [], pickups: [],
+    enemyBullets: [], smokeScreens: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
     _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
   };
@@ -531,6 +534,7 @@ test('オレンジの帯は 2px の1本（縞を何本も入れると、暗い�
 
 import { makeMap } from './helpers/enemy-world.js';
 import { METAL_BLOCK_HP } from '../src/js/utils/Constants.js';
+import { pickupsOf } from './helpers/pickups.js';
 
 test('敵と塔が重なっていると、弾は手前の敵に先に当たり、塔は削れない', () => {
   const noop = () => { };
@@ -541,7 +545,7 @@ test('敵と塔が重なっていると、弾は手前の敵に先に当たり�
   // 敵との当たり判定（CollisionManager）が、塔の前に立つ敵でこのミサイルを消費した場面
   const collisionManager = { update() { order.push('collision'); m.exploded = true; m.alive = false; } };
   const fake = new Proxy(Object.assign(game, {
-    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], autoAimUnits: [],
+    orbs: [], barriers: [], electricFloors: [], landmines: [], smokeScreens: [], pickups: [],
     env: { update: noop }, map: { ...game.map, update: noop }, collisionManager,
   }), {
     get: (o, k) => (k in o ? o[k] : (k === '_updateAndPrune'
@@ -551,7 +555,7 @@ test('敵と塔が重なっていると、弾は手前の敵に先に当たり�
   Game._simulationTick.call(fake);
   assert.deepEqual(order, ['collision', 'tower'], '塔が敵より先に弾を見た');
   assert.equal(t.hp, t.maxHp, '敵に当たった弾で塔も削れた');
-  assert.equal(game.repairKits.length, 0);
+  assert.equal(pickupsOf(game, RepairKit).length, 0);
 });
 
 /** 床（行 10）の列 10〜13 に穴があり、その下の行 20 に床がある地図 */
@@ -594,7 +598,7 @@ test('落ちた先で壊すと、中身は着地した床の上に出る', () =>
   const t = addTower(game, 11 * TILE_SIZE + TILE_SIZE / 2, 10 * TILE_SIZE, 'repair');
   for (let i = 0; i < 300; i++) t.update();
   t.damage(999);
-  assert.equal(game.repairKits[0].y + ITEM_SIZE, 20 * TILE_SIZE);
+  assert.equal(pickupsOf(game, RepairKit)[0].y + ITEM_SIZE, 20 * TILE_SIZE);
 });
 
 test('実際の7面: 塔の下の床を撃ち抜くと塔が落ち、下の地形に着地する', async () => {
@@ -619,7 +623,7 @@ test('補間の対象に塔が入る（落ちるときにカメラに対して�
   const seen = [];
   const fake = {
     player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-    repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [tower], map: {},
+    pickups: [], storageTowers: [tower], map: {},
   };
   Game._forEachMovingEntity.call(fake, (e) => seen.push(e));
   assert.deepEqual(seen, [tower]);

@@ -111,10 +111,10 @@ export const Game = {
     landmines: [],
     enemies: [],
     enemyBullets: [],
-    repairKits: [],
-    autoAimUnits: [],
-    missileKits: [],
-    lifeKits: [],         // 要塞のお宝の残機アイテム（7面だけ）
+    // 落ちているアイテム（リペア・ミサイル補給・オーバードライブ・Auto Aim・残機）。どれも PickupItem で、
+    // 拾ったときの効果は各アイテムが持つので1本の配列で足りる。以前は種類ごとに4本あり、
+    // 面の作り直しで1本だけ空にし忘れて前の面の拾い残しが持ち越された（GameStateManager.resetLevel）
+    pickups: [],
     barriers: [],   // 7面の要塞の電磁パルスのバリア
     electricFloors: [],   // 同、廊下の電流の床
     storageTowers: [],    // 格納塔（壊すとお宝が出る。今は7面の要塞の奥だけ）
@@ -542,10 +542,7 @@ export const Game = {
         for (const barrier of this.barriers) barrier.update();
         this._updateBarrierSound();
         this._updateElectricFloors();
-        this._updateAndPrune(this.repairKits);
-        this._updateAndPrune(this.autoAimUnits);
-        this._updateAndPrune(this.missileKits);
-        this._updateAndPrune(this.lifeKits);
+        this._updateAndPrune(this.pickups);
         this._updateAutoAim();
         this._updateOverdrive();
         this.env.update();
@@ -574,10 +571,7 @@ export const Game = {
         for (const e of this.enemies) fn(e);
         for (const p of this.projectiles) fn(p);
         for (const b of this.enemyBullets) fn(b);
-        for (const k of this.repairKits) fn(k);
-        for (const u of this.autoAimUnits) fn(u);
-        for (const k of this.missileKits) fn(k);
-        for (const k of this.lifeKits) fn(k);
+        for (const k of this.pickups) fn(k);
         // 格納塔。ふだんは動かないが、足場の床を撃ち抜かれると落ちる
         for (const t of this.storageTowers) fn(t);
         for (const o of this.orbs || []) fn(o);
@@ -959,10 +953,8 @@ export const Game = {
             if (!isInView(floor.rect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             floor.draw(ctx);
         }
-        for (const kit of this.repairKits) kit.draw(ctx);
-        for (const unit of this.autoAimUnits) unit.draw(ctx);
-        for (const kit of this.missileKits) kit.draw(ctx);
-        for (const kit of this.lifeKits) kit.draw(ctx);
+        // 重なったときは後から出たものが手前（種類ごとの配列だった頃は種類の順だった）
+        for (const item of this.pickups) item.draw(ctx);
 
         // グレネード軌道プレビュー描画（長押し中）
         if (this.grenadeTrajectory) {

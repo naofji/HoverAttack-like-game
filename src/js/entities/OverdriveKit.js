@@ -6,10 +6,9 @@ import { audioManager } from '../audio/AudioManager.js';
 /**
  * オーバードライブキット。heavy が落とすミサイル補給の**レア版**。
  *
- * MissileKit を継承しているのは、満タン補給という土台がそのまま要るのと、
- * 同じ `game.missileKits` 配列に入れて拾得の判定・更新・描画をまるごと
- * 共用するため（配列を1本増やすと main.js の更新順に手を入れることになる）。
- * 足しているのは時限バフ1つと見た目だけ。
+ * MissileKit を継承しているのは、満タン補給という土台がそのまま要るため。
+ * 足しているのは時限バフ1つと見た目だけ。（以前はアイテムが種類ごとの配列に分かれていて、
+ * 同じ missileKits 配列に入れて更新・描画を共用することも継承の理由だった。今は全部 game.pickups）
  *
  * 効果の中身は Player 側（consumeMissile / consumeMGRound）にある。
  */

@@ -14,10 +14,7 @@ import {
     HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { JET_BUBBLE_DROP } from './thrusterFlame.js';
-import { RepairKit } from './RepairKit.js';
-import { AutoAimUnit } from './AutoAimUnit.js';
-import { MissileKit } from './MissileKit.js';
-import { OverdriveKit } from './OverdriveKit.js';
+import { spawnItem } from './itemKinds.js';
 import { decideAttackerDrop } from '../utils/drops.js';
 import { spawnStateRng } from '../utils/spawnState.js';
 import { attackerBodyParts, attackerLegParts } from './debris/attackerParts.js';
@@ -405,23 +402,9 @@ export class EnemyAttacker {
         this.game.addScore(this.score);
 
         // ドロップの中身はスポーン時（decideAttackerDrop）で既に確定している。
-        // ここでは乱数を一切引かず、決まった物を出すだけ
-        switch (this.dropKind) {
-            case 'missile':
-                this.game.missileKits.push(new MissileKit(this.game, cx, this.y));
-                break;
-            case 'overdrive':
-                this.game.missileKits.push(new OverdriveKit(this.game, cx, this.y));
-                break;
-            case 'repair':
-                this.game.repairKits.push(new RepairKit(this.game, cx, this.y));
-                break;
-            case 'autoaim':
-                this.game.autoAimUnits.push(new AutoAimUnit(this.game, cx, this.y));
-                break;
-            default:
-                break;
-        }
+        // ここでは乱数を一切引かず、決まった物を出すだけ（null は何も落とさない）。
+        // 作り方は格納塔の中身と同じ表（itemKinds.js）。綴りを間違えた種類は黙らず例外になる
+        if (this.dropKind) spawnItem(this.game, this.dropKind, cx, this.y);
     }
 
     // ------------------------------------------

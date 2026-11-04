@@ -2,21 +2,22 @@
 // 中身の種類 → アイテムの表
 // ============================================
 //
-// 要塞のお宝・格納塔の中身は 'overdrive' / 'repair' / 'life' のような種類の名前で持ち、
-// 実物のアイテムはここで作る。お宝の湧きと格納塔の破壊の2か所が同じ表を通るので、
-// 新しい中身を足すときは表に1行でよい。
-//
-// オーバードライブキットは missileKits に入れる（OverdriveKit が MissileKit を継承していて、
-// 更新・描画・拾得をそちらの配列で回しているため）。
+// アイテムは 'overdrive' / 'repair' / 'life' のような種類の名前で持ち、実物はここで作る。
+// 敵アタッカーの落とし物（dropKind）・要塞のお宝・格納塔の中身の3か所が同じ表を通るので、
+// 新しいアイテムを足すときは表に1行でよい。作ったアイテムは game.pickups（1本の配列）に入る。
 
 import { RepairKit } from './RepairKit.js';
+import { MissileKit } from './MissileKit.js';
 import { OverdriveKit } from './OverdriveKit.js';
+import { AutoAimUnit } from './AutoAimUnit.js';
 import { ExtraLifeKit } from './ExtraLifeKit.js';
 
 export const ITEM_KINDS = {
-    overdrive: { cls: OverdriveKit, list: 'missileKits' },
-    repair: { cls: RepairKit, list: 'repairKits' },
-    life: { cls: ExtraLifeKit, list: 'lifeKits' },
+    missile: MissileKit,
+    overdrive: OverdriveKit,
+    repair: RepairKit,
+    autoaim: AutoAimUnit,
+    life: ExtraLifeKit,
 };
 
 /**
@@ -32,9 +33,9 @@ export const ITEM_KINDS = {
  * @returns {import('./PickupItem.js').PickupItem}
  */
 export function spawnItem(game, kind, x, y) {
-    const entry = ITEM_KINDS[kind];
-    if (!entry) throw new Error(`未知のアイテムの種類: ${kind}`);
-    const item = new entry.cls(game, x, y);
-    game[entry.list].push(item);
+    const Cls = ITEM_KINDS[kind];
+    if (!Cls) throw new Error(`未知のアイテムの種類: ${kind}`);
+    const item = new Cls(game, x, y);
+    game.pickups.push(item);
     return item;
 }

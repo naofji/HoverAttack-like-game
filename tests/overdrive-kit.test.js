@@ -1,7 +1,7 @@
 // オーバードライブキット（heavy が落とすレア版）。
 //
 // 通常のミサイル補給を継承していて、満タン補給の上に時限バフを乗せただけ。
-// 同じ game.missileKits 配列に入るので、拾得の判定も描画の呼び出し側も
+// 同じ pickupsOf(game, MissileKit) 配列に入るので、拾得の判定も描画の呼び出し側も
 // 変えていない。その「継承で済ませた」形が崩れていないことも縛る。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,6 +18,7 @@ import { rollAttackerDrop } from '../src/js/utils/drops.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { WEAPON_SOUNDS } from '../src/js/audio/weaponSounds.js';
+import { pickupsOf } from './helpers/pickups.js';
 
 const FLOOR_Y = 20 * 16 - 24;
 
@@ -131,19 +132,19 @@ function stubRng(...rolls) {
 
 test('レア版に当たるとオーバードライブキットが落ちる', () => {
   const game = dieWithKind('overdrive');
-  assert.equal(game.missileKits.length, 1);
-  assert.ok(game.missileKits[0] instanceof OverdriveKit);
+  assert.equal(pickupsOf(game, MissileKit).length, 1);
+  assert.ok(pickupsOf(game, MissileKit)[0] instanceof OverdriveKit);
 });
 
 test('レア版を外すと通常のミサイルキットが落ちる', () => {
   const game = dieWithKind('missile');
-  assert.equal(game.missileKits.length, 1);
-  assert.ok(game.missileKits[0] instanceof MissileKit);
-  assert.ok(!(game.missileKits[0] instanceof OverdriveKit), 'レア版が出てしまっている');
+  assert.equal(pickupsOf(game, MissileKit).length, 1);
+  assert.ok(pickupsOf(game, MissileKit)[0] instanceof MissileKit);
+  assert.ok(!(pickupsOf(game, MissileKit)[0] instanceof OverdriveKit), 'レア版が出てしまっている');
 });
 
 test('ドロップ自体を外せば何も落ちない（ドロップ率は変えていない）', () => {
-  assert.equal(dieWithKind(null).missileKits.length, 0);
+  assert.equal(pickupsOf(dieWithKind(null), MissileKit).length, 0);
 });
 
 test('6面以降はレア版の窓が広い（rollAttackerDrop の分岐）', () => {

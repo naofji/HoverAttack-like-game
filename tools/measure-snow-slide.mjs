@@ -31,7 +31,7 @@ function makeGame(map) {
         map, env: SNOW,
         player: null, carrier: null,
         enemies: [], projectiles: [], enemyBullets: [],
-        missileKits: [], repairKits: [], autoAimUnits: [], particles: [],
+        pickups: [], particles: [],
         rng: new SeededRNG(1),
         camera: { x: 0, y: 0 }, canvas: { width: 1366, height: 768 },
         spawnSparks() {}, spawnExplosion() {}, addScore() {},

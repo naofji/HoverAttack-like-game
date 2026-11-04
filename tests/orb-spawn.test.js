@@ -123,8 +123,7 @@ test('_simulationTick が Orb を更新する（配線）。敵の更新の後',
   const orb = { alive: true, update: () => order.push('orb'), clearSupport() {} };
   const fake = new Proxy({
     orbs: [orb], enemies: [], projectiles: [], enemyBullets: [], landmines: [], particles: [],
-    barriers: [], electricFloors: [], storageTowers: [], smokeScreens: [], autoAimUnits: [],
-    repairKits: [], missileKits: [], lifeKits: [],
+    barriers: [], electricFloors: [], storageTowers: [], smokeScreens: [], pickups: [],
     _updateAndPrune: (list) => { if (list === fake.enemies) order.push('enemies'); },
   }, { get: (o, k) => (k in o ? o[k] : (k === 'map' || k === 'env' || k === 'collisionManager' ? { update() {} } : () => {})) });
   Game._simulationTick.call(fake);
@@ -134,7 +133,7 @@ test('_simulationTick が Orb を更新する（配線）。敵の更新の後',
 test('Orb は描画の補間の対象', () => {
   const seen = [];
   const orb = { x: 1, y: 2 };
-  Game._forEachMovingEntity.call({ orbs: [orb], enemies: [], projectiles: [], enemyBullets: [], repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [], storageTowers: [] }, (e) => seen.push(e));
+  Game._forEachMovingEntity.call({ orbs: [orb], enemies: [], projectiles: [], enemyBullets: [], pickups: [], storageTowers: [] }, (e) => seen.push(e));
   assert.ok(seen.includes(orb));
 });
 

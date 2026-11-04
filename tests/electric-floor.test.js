@@ -298,8 +298,8 @@ test('電流の床は画面内だけ描く', () => {
     env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
     carrier: null, player: null, flag: null, grenadeTrajectory: null,
     enemies: [], landmines: [], barriers: [], electricFloors: [inView, far], storageTowers: [],
-    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-    missileKits: [], lifeKits: [], enemyBullets: [], smokeScreens: [],
+    projectiles: [], particles: [], pickups: [],
+    enemyBullets: [], smokeScreens: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
     _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
   };

@@ -7,6 +7,10 @@ import {
 } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
 import { rollAttackerDrop } from '../src/js/utils/drops.js';
+import { RepairKit } from '../src/js/entities/RepairKit.js';
+import { AutoAimUnit } from '../src/js/entities/AutoAimUnit.js';
+import { MissileKit } from '../src/js/entities/MissileKit.js';
+import { pickupsOf } from './helpers/pickups.js';
 
 const FLOOR_Y = 20 * 16 - 24;
 
@@ -48,25 +52,25 @@ test('ライバルは倒せば必ずリペアキットを落とす', () => {
   // 100% なので、最も外れやすい出目でも落ちること
   assert.equal(rollWith('rival', 0.999999), 'repair');
   const game = dieWithKind('rival', 'repair');
-  assert.equal(game.repairKits.length, 1, 'リペアキットが落ちていない');
+  assert.equal(pickupsOf(game, RepairKit).length, 1, 'リペアキットが落ちていない');
 });
 
 test('heavy は出目次第でミサイルキットを落とす', () => {
   assert.equal(rollWith('heavy', 0.5, 0), 'missile');
   assert.equal(rollWith('heavy', 0.7, 0), null);
-  assert.equal(dieWithKind('heavy', 'missile').missileKits.length, 1);
+  assert.equal(pickupsOf(dieWithKind('heavy', 'missile'), MissileKit).length, 1);
 });
 
 test('artillery は出目次第でオートエイムユニットを落とす（率は変えていない）', () => {
   assert.equal(rollWith('artillery', 0.4), 'autoaim');
   assert.equal(rollWith('artillery', 0.6), null);
-  assert.equal(dieWithKind('artillery', 'autoaim').autoAimUnits.length, 1);
+  assert.equal(pickupsOf(dieWithKind('artillery', 'autoaim'), AutoAimUnit).length, 1);
 });
 
 test('ライバルはミサイルキットもオートエイムも落とさない', () => {
   const game = dieWithKind('rival', 'repair');
-  assert.equal(game.missileKits.length, 0);
-  assert.equal(game.autoAimUnits.length, 0);
+  assert.equal(pickupsOf(game, MissileKit).length, 0);
+  assert.equal(pickupsOf(game, AutoAimUnit).length, 0);
 });
 
 test('rollAttackerDrop は該当しない型では乱数を引かずに null を返す', () => {

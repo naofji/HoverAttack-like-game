@@ -88,6 +88,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
   - `dsp.js` — A特性の音量測定
   - `weapon-render.js` — `WEAPON_SOUNDS` のオフライン再現
   - `enemy-world.js` — 敵のテスト用のマップ
+  - `pickups.js` — `pickupsOf(game, Cls)`。落ちているアイテムは `game.pickups` 1本なので、種類で取り出す（instanceof なので `MissileKit` ならオーバードライブも入る）
 - 音の呼び出しを確かめるときは `audioManager` のメソッドを差し替えて記録する（`tests/audio-wiring.test.js` の `spyAudio` が原型）。
 - **ソース文字列を grep するテストは避ける。** 呼び出しが存在しても到達不能なら通ってしまう。実際にそれで抜けたバグがある。
 

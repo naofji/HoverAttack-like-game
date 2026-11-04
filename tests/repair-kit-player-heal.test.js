@@ -10,7 +10,7 @@ import { PLAYER_MAX_HP, REPAIR_KIT_PLAYER_HEAL } from '../src/js/utils/Constants
 function makeGame() {
   return {
     map: makeMap(flatFloorRows()),
-    particles: [], projectiles: [], enemies: [], enemyBullets: [], repairKits: [],
+    particles: [], projectiles: [], enemies: [], enemyBullets: [], pickups: [],
     camera: { x: 0, y: 0 }, canvas: { width: 1024, height: 768 },
     input: {
       mouse: { x: 0, y: 0, left: false },

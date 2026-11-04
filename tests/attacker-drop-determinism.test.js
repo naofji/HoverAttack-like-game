@@ -10,6 +10,10 @@ import { stageSeed } from '../src/js/utils/WeekSeed.js';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { ATTACKER_HEAVY_DROP_CHANCE, TILE_SIZE } from '../src/js/utils/Constants.js';
 import { makeMap, makeGame, makeAttacker, flatFloorRows } from './helpers/enemy-world.js';
+import { RepairKit } from '../src/js/entities/RepairKit.js';
+import { AutoAimUnit } from '../src/js/entities/AutoAimUnit.js';
+import { MissileKit } from '../src/js/entities/MissileKit.js';
+import { pickupsOf } from './helpers/pickups.js';
 
 const FLOOR_Y = 20 * 16 - 24;
 
@@ -96,21 +100,21 @@ test('同じ位置に作った2体の EnemyAttacker は同じ dropKind を持ち
 
   switch (e1.dropKind) {
     case 'missile':
-      assert.equal(game1.missileKits.length, 1);
+      assert.equal(pickupsOf(game1, MissileKit).length, 1);
       break;
     case 'overdrive':
-      assert.equal(game1.missileKits.length, 1);
+      assert.equal(pickupsOf(game1, MissileKit).length, 1);
       break;
     case 'repair':
-      assert.equal(game1.repairKits.length, 1);
+      assert.equal(pickupsOf(game1, RepairKit).length, 1);
       break;
     case 'autoaim':
-      assert.equal(game1.autoAimUnits.length, 1);
+      assert.equal(pickupsOf(game1, AutoAimUnit).length, 1);
       break;
     case null:
-      assert.equal(game1.missileKits.length, 0);
-      assert.equal(game1.repairKits.length, 0);
-      assert.equal(game1.autoAimUnits.length, 0);
+      assert.equal(pickupsOf(game1, MissileKit).length, 0);
+      assert.equal(pickupsOf(game1, RepairKit).length, 0);
+      assert.equal(pickupsOf(game1, AutoAimUnit).length, 0);
       break;
     default:
       assert.fail(`未知の dropKind: ${e1.dropKind}`);

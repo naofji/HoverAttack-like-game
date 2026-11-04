@@ -17,6 +17,7 @@ import { assignExtraLives } from '../src/js/world/fortress.js';
 import {
   PLAYER_INITIAL_LIVES, EXTRA_LIFE_FLASH_FRAMES, FORTRESS_EXTRA_LIFE_SLOT, ITEM_PICKUP_SCORE,
 } from '../src/js/utils/Constants.js';
+import { pickupsOf } from './helpers/pickups.js';
 
 before(() => {
   const noopCtx = new Proxy({}, { get: () => () => ({ addColorStop: () => {} }) });
@@ -106,14 +107,14 @@ test('他の面（要塞なし）には残機が出ない', async () => {
   assert.deepEqual(m.storageTowerSpawns, []);
 });
 
-test('残機の入った格納塔を壊すと ExtraLifeKit が 1 個出て、lifeKits に入る', async () => {
+test('残機の入った格納塔を壊すと ExtraLifeKit が 1 個出て、pickups に入る', async () => {
   const [m] = await maps();
-  const game = { map: m, storageTowers: [], repairKits: [], missileKits: [], lifeKits: [], particles: [], spawnExplosion() {} };
+  const game = { map: m, storageTowers: [], pickups: [], particles: [], spawnExplosion() {} };
   new SpawnManager(game).spawnStorageTowers();
-  assert.equal(game.lifeKits.length, 0, '壊す前から出ている');
+  assert.equal(pickupsOf(game, ExtraLifeKit).length, 0, '壊す前から出ている');
   for (const t of game.storageTowers.filter((t) => t.kind === 'life')) t.damage(999);
-  assert.equal(game.lifeKits.length, 1);
-  assert.ok(game.lifeKits[0] instanceof ExtraLifeKit);
+  assert.equal(pickupsOf(game, ExtraLifeKit).length, 1);
+  assert.ok(pickupsOf(game, ExtraLifeKit)[0] instanceof ExtraLifeKit);
 });
 
 // ---------- 拾った効果 ----------
@@ -289,24 +290,24 @@ test('残機の音は 6 音で、1 音の頂点は拾得音(0.07)を超えない
 
 // ---------- game への配線 ----------
 
-test('毎 tick、lifeKits も更新され、拾われた（alive=false）ものは取り除かれる', () => {
+test('毎 tick、pickups が更新され、拾われた（alive=false）ものは取り除かれる', () => {
   const live = { alive: true, updated: 0, update() { this.updated++; } };
   const taken = { alive: true, update() { this.alive = false; } };
-  const fake = new Proxy({ lifeKits: [live, taken] }, {
+  const fake = new Proxy({ pickups: [live, taken], }, {
     get: (t, k) => (k in t ? t[k] : (k === '_updateAndPrune' ? Game._updateAndPrune : () => { })),
   });
-  Game._updateAndPrune.call(fake, fake.lifeKits);
+  Game._updateAndPrune.call(fake, fake.pickups);
   assert.equal(live.updated, 1);
-  assert.deepEqual(fake.lifeKits, [live]);
+  assert.deepEqual(fake.pickups, [live]);
 });
 
-test('_simulationTick が lifeKits を更新する（配線）', () => {
+test('_simulationTick が pickups を更新する（配線）', () => {
   const calls = [];
   const kit = { alive: true, update() { calls.push('update'); } };
   const noop = () => { };
   const fake = new Proxy({
-    lifeKits: [kit], orbs: [], barriers: [], electricFloors: [], landmines: [], projectiles: [], particles: [],
-    smokeScreens: [], repairKits: [], autoAimUnits: [], missileKits: [], enemies: [],
+    pickups: [kit], orbs: [], barriers: [], electricFloors: [], landmines: [], projectiles: [], particles: [],
+    smokeScreens: [], enemies: [],
     env: { update: noop }, map: { update: noop }, collisionManager: { update: noop },
   }, {
     get: (t, k) => (k in t ? t[k] : (k === '_updateAndPrune' ? Game._updateAndPrune : noop)),
@@ -315,7 +316,7 @@ test('_simulationTick が lifeKits を更新する（配線）', () => {
   assert.deepEqual(calls, ['update']);
 });
 
-test('_drawWorld が lifeKits を描く', () => {
+test('_drawWorld が pickups を描く', () => {
   const noop = () => { };
   const drawn = [];
   const kit = { alive: true, draw: () => drawn.push('kit') };
@@ -326,8 +327,8 @@ test('_drawWorld が lifeKits を描く', () => {
     env: { update: noop, drawBehindTerrain: noop, drawOverWorld: noop, drawOverlay: noop },
     carrier: null, player: null, flag: null, grenadeTrajectory: null,
     enemies: [], landmines: [], barriers: [], electricFloors: [],
-    projectiles: [], particles: [], repairKits: [], autoAimUnits: [],
-    missileKits: [], lifeKits: [kit], enemyBullets: [], smokeScreens: [], storageTowers: [],
+    projectiles: [], particles: [], 
+    pickups: [kit], enemyBullets: [], smokeScreens: [], storageTowers: [],
     _applyRenderInterpolation: noop, _restoreRenderInterpolation: noop,
     _drawHpBarIfDamaged: noop, _drawGrenadeTrajectory: noop,
   };
@@ -335,18 +336,18 @@ test('_drawWorld が lifeKits を描く', () => {
   assert.deepEqual(drawn, ['kit']);
 });
 
-test('補間の対象に lifeKits が入る（落下中にカメラに対してかくつかない）', () => {
+test('補間の対象に pickups が入る（落下中にカメラに対してかくつかない）', () => {
   const seen = [];
   const kit = { id: 'k' };
   const fake = {
     player: null, carrier: null, enemies: [], projectiles: [], enemyBullets: [],
-    repairKits: [], autoAimUnits: [], missileKits: [], lifeKits: [kit], storageTowers: [], map: {},
+    pickups: [kit], storageTowers: [], map: {},
   };
   Game._forEachMovingEntity.call(fake, (e) => seen.push(e));
   assert.deepEqual(seen, [kit]);
 });
 
-test('面を作り直すと前の面の lifeKits は消える', async () => {
+test('面を作り直すと前の面の pickups は消える', async () => {
   const { GameStateManager } = await import('../src/js/systems/GameStateManager.js');
   const stubCtx = new Proxy({}, {
     get: (t, prop) => (prop in t ? t[prop] : (typeof prop === 'string' ? () => ({ addColorStop() { } }) : undefined)),
@@ -357,7 +358,7 @@ test('面を作り直すと前の面の lifeKits は消える', async () => {
   try {
     const game = {
       score: 0, missionsCompleted: 1, debugStartMission: 0, totalTime: 0, stageResults: [], weekSeed: 1,
-      lifeKits: ['前の面の残機'],
+      pickups: ['前の面の残機'],
       spawnManager: {
         findSpawnPosition: () => ({ x: 0, y: 0 }), spawnLandmines() { }, spawnStorageTowers() { }, spawnOrbs() { },
         spawnBarriers() { }, spawnElectricFloors() { }, spawnEnemies() { },
@@ -365,7 +366,8 @@ test('面を作り直すと前の面の lifeKits は消える', async () => {
       camera: { follow() { }, snapToTarget() { } },
     };
     new GameStateManager(game).resetLevel(false);
-    assert.deepEqual(game.lifeKits, []);
+    // 種類で絞らずに配列そのものを見る（前の面の残りは文字列の偽物なので、種類で絞ると必ず空になる）
+    assert.deepEqual(game.pickups, []);
   } finally {
     globalThis.document = originalDocument;
   }

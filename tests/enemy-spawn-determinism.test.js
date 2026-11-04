@@ -62,7 +62,7 @@ test('同じ週・同じ面なら、敵の初期状態まで含めて毎回同�
     const game = {
       weekSeed: week.seed, missionsCompleted: lv,
       rng: new SeededRNG(stageSeed(week.seed, lv)),
-      enemies: [], enemyBullets: [], landmines: [], repairKits: [], missileKits: [],
+      enemies: [], enemyBullets: [], landmines: [], pickups: [],
     };
     game.map = new Map(game, lv);
     game.spawnManager = new SpawnManager(game);
@@ -88,7 +88,7 @@ test('敵の向きは全員同じにはならない（決定的だが単調で�
   const game = {
     weekSeed: week.seed, missionsCompleted: 6,
     rng: new SeededRNG(stageSeed(week.seed, 6)),
-    enemies: [], enemyBullets: [], landmines: [], repairKits: [], missileKits: [],
+    enemies: [], enemyBullets: [], landmines: [], pickups: [],
   };
   game.map = new Map(game, 6);
   game.spawnManager = new SpawnManager(game);
