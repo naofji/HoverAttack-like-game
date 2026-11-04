@@ -3,6 +3,7 @@
 // ============================================
 //
 // 洞窟を掘ったあとに、面の環境（STAGE_ENVIRONMENTS の kind / terrain）ごとに載せるもの。
+// _snowDressExposedBelow だけは生成後も、壊れたタイルごとに Map.js の damageBlock から呼ばれる（5面の積雪）。
 // ここのメソッドは **game.rng を直接は引かない**。乱数が要るものはすべて派生ストリーム
 // （new SeededRNG((this.game.rng.state ^ SALT) >>> 0)）を作って渡している。面ごとの飾りを
 // 足し引きしても、game.rng の消費（＝敵の構成）が変わらないようにするため

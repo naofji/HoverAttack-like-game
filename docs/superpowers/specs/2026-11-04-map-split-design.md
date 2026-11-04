@@ -42,7 +42,7 @@ world/
   Map.js                  constructor / _generate / damageBlock / destroyArea /
                           invalidateTileRegion / update / pixelToTile  （約500行）
   mapgen/
-    common.js             BORDER_THICKNESS / shuffleWith（2層以上が使うものだけ）
+    common.js             BORDER_THICKNESS（2層以上が使うものだけ。shuffleWith は spawns.js）
     carve.js              _isAreaEmpty … _carveTunnel / _generatePlatforms / _placeHardBlocks
     features.js           面ごとの飾り（下の表）
     spawns.js             湧き位置・基地の部屋・Orb 配置・形への着地
@@ -221,3 +221,9 @@ mixin のファイルは `Map.js` を import しない（`Map.js` が mixin を 
 - `main.js` が committed の状態のワークツリーで全テスト: 基準 3209 / 3208 pass / 0 fail → 後 3212 / 3211 / 0（+3 は map-mixins.test.js）
 - 設計からの変更: `mapgen/common.js` は段5で作った（spawns.js が最初に `BORDER_THICKNESS` を使う層のため）。
   「Block Destruction」の見出しは `_snowDressExposedBelow` の直前にあったが、`damageBlock` の見出しなので `Map.js` に残した
+- 最終レビュー（別エージェント）: Critical / Important なし。Minor のうち、指紋ツールの偽 ctx に `filter` を持たせて
+  Chrome の分岐も通すこと（基準を採り直して IDENTICAL）、`--compare` が after にだけある組も数えること、
+  冒頭コメント・CLAUDE.md・この設計書の細かいずれは直した。直していない Minor（実害なし）:
+  - 問い合わせは 21px 刻みの格子で当てているだけ。`game.env` が null なので `renderer.onBlockDestroyed` の経路も通らない。
+    今回は本文のバイト一致と `tools/trace-water.mjs` の一致（レビューで確認）で補った。中身を書き換えるリファクタで使うなら細かくする
+  - `tests/map-mixins.test.js` は、mixin のメソッド名とコンストラクタが立てるフィールド名の重なりを見ない（class のときも同じリスク）

@@ -28,7 +28,9 @@ if (process.argv[2] === '--compare') {
     const a = JSON.parse(readFileSync(process.argv[3], 'utf8'));
     const b = JSON.parse(readFileSync(process.argv[4], 'utf8'));
     let diffs = 0;
-    for (const key of Object.keys(a)) {
+    // b にだけある組も差として数える（a のキーだけ回すと、増えた組を見落とす）
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        if (!a[key] || !b[key]) { diffs++; console.log(`${key}: ${a[key] ? 'after に無い' : 'before に無い'}`); continue; }
         for (const field of Object.keys(a[key])) {
             const x = JSON.stringify(a[key][field]);
             const y = JSON.stringify(b[key] && b[key][field]);
@@ -56,7 +58,12 @@ if (process.argv[2] === '--compare') {
 function hashingCtx() {
     const h = createHash('sha1');
     let n = 0;
+    // 読み取りで分岐するプロパティは実物（Chrome）の値を持たせる。持たせないと、どのプロパティも
+    // 関数として返り、mapMiniMap の `typeof ctx.filter === 'string'` が偽になって、Chrome が通らない
+    // 側の分岐だけを確かめることになる（最終レビューの指摘）
     const own = {
+        filter: 'none',
+        imageSmoothingQuality: 'low',
         __digest: () => `${n}:${h.copy().digest('hex').slice(0, 16)}`,
     };
     return new Proxy(own, {
