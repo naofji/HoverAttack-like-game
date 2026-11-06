@@ -10,8 +10,11 @@ before(() => {
   globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => noopCtx }) };
 });
 
-// 段5の前（計画のコミット 971c93d）の本数。坂の上の木が「岩に埋まりすぎ」で消えないことの目安
-const BEFORE = { 1: { trees: 465, icicles: 164 }, 2: { trees: 440, icicles: 151 }, 3: { trees: 414, icicles: 179 } };
+// 坂の上の木が「岩に埋まりすぎ」で消えないことの目安の本数。もとは段5の前（計画のコミット 971c93d、
+// SNOWTREE_FILL_SCALE 3）の本数 465 / 440 / 414 で、段5の後も濃さ 3 で 465 / 440 / 413 と変わっていなかった。
+// 濃さを 2 に下げた（2026-11-06、ユーザー指定）ので、木は濃さ 2 の今の本数に取り直した。
+// **SNOWTREE_FILL_SCALE・SNOWTREE_GAP を変えたら、ここも取り直す**（つららは別の定数なので変わらない）
+const BEFORE = { 1: { trees: 402, icicles: 164 }, 2: { trees: 340, icicles: 151 }, 3: { trees: 332, icicles: 179 } };
 
 for (const seed of [1, 2, 3]) {
   test(`5面 seed ${seed}: 雪の木の根元は床から浮かず、つららの根元は天井から浮かない`, async () => {

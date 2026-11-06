@@ -918,13 +918,16 @@ export const Game = {
         for (const orb of this.orbs || []) {
             if (isInView(orb, this.camera, this.canvas, VIEW_CULL_MARGIN)) orb.draw(ctx);
         }
+        // ダメージバーは描く相手をここに集めて、町・パーティクル・水を描いたあとにまとめて描く（最前面。
+        // 町を前景にしたら建物の陰でバーまで隠れたため、ユーザー指定 2026-11-06）。煙幕だけはバーより上（隠すのが仕事）
+        const hpBars = [];
         // 格納塔は地形の直後・自機より奥に描く。自機は塔を通り抜けられるので、手前に描くと重なっている間
         // 自機が塔の陰に隠れる（最終レビューの指摘）。中身のアイテムもこれより後に描くので隠れない。
         // ダメージバーはバリアのユニットと同じく、削れたら出す（壊せる的だと分かるように）
         for (const tower of this.storageTowers) {
             if (!isInView(tower, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             tower.draw(ctx);
-            this._drawHpBarIfDamaged(ctx, tower);
+            hpBars.push(tower);
         }
         if (this.carrier) this.carrier.draw(ctx);
         if (this.player) this.player.draw(ctx);
@@ -940,8 +943,7 @@ export const Game = {
             // ユニットは他の敵と同じダメージバーを出す。**壊せる的だと分からないと
             // 撃ってもらえない**（実機の指摘）。ユニットが hp/maxHp/alive と矩形を
             // 1つのオブジェクトで持っているので、敵と同じ関数がそのまま使える
-            this._drawHpBarIfDamaged(ctx, barrier.units.top);
-            this._drawHpBarIfDamaged(ctx, barrier.units.bottom);
+            hpBars.push(barrier.units.top, barrier.units.bottom);
         }
         for (const floor of this.electricFloors) {
             if (!isInView(floor.rect, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
@@ -956,8 +958,7 @@ export const Game = {
         }
 
         // HP bars for player and carrier
-        this._drawHpBarIfDamaged(ctx, this.player);
-        this._drawHpBarIfDamaged(ctx, this.carrier);
+        hpBars.push(this.player, this.carrier);
 
         // Enemies and their HP bars
         for (const enemy of this.enemies) {
@@ -970,7 +971,7 @@ export const Game = {
             if (!isInView(enemy, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             enemy.draw(ctx);
             if (enemy.alive && enemy.constructor.name !== 'EnemyBase' && enemy.constructor.name !== 'Landmine') {
-                this._drawHpBarIfDamaged(ctx, enemy);
+                hpBars.push(enemy);
             }
         }
 
@@ -993,6 +994,9 @@ export const Game = {
         // パーティクルの後に描くのは、水中の爆発や破片にも水の色をかぶせたいから
         // （設計書は「パーティクルの前」と書いたが、こちらのほうが読める）
         this.env.drawOverWorld(ctx, camX, camY);
+
+        // ダメージバー（最前面。上の hpBars の説明）。水の色もかぶらない
+        for (const e of hpBars) this._drawHpBarIfDamaged(ctx, e);
 
         // 煙は敵とHPバーの上に重ねる（隠すのが仕事なので最後に描く）
         for (const screen of this.smokeScreens) screen.draw(ctx);

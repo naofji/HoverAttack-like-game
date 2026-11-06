@@ -47,6 +47,26 @@ test('町は機体・敵・弾のあと（前景）に描き、建物の範囲�
     assert.equal(overRects, rects);
 });
 
+test('ダメージバーは町・パーティクル・水のあと（最前面）にまとめて描き、煙幕だけはその上', () => {
+    const order = [];
+    const town = { draw: () => order.push('town'), visibleRects: () => [] };
+    const w = makeWorld(order, town);
+    w.map.drawTerrainOver = () => {};
+    const enemy = { name: 'enemy', x: 1100, y: 600, width: 10, height: 10, alive: true, draw: () => order.push('enemy') };
+    const player = { name: 'player', draw: () => order.push('player') };
+    const tower = { name: 'tower', x: 1100, y: 600, width: 10, height: 10, draw: () => order.push('tower') };
+    Object.assign(w, {
+        player, enemies: [enemy], storageTowers: [tower],
+        particles: [{ draw: () => order.push('particle') }],
+        smokeScreens: [{ draw: () => order.push('smoke') }],
+        _drawHpBarIfDamaged: (ctx, e) => { if (e) order.push(`hp:${e.name}`); },
+    });
+    w.env.drawOverWorld = () => order.push('water');
+    Game._drawWorld.call(w, makeFakeCtx());
+    assert.deepEqual(order.slice(order.indexOf('town')),
+        ['town', 'particle', 'water', 'hp:tower', 'hp:player', 'hp:enemy', 'smoke']);
+});
+
 test('町の無い面では何もしない', () => {
     const order = [];
     Game._drawWorld.call(makeWorld(order, null), makeFakeCtx());

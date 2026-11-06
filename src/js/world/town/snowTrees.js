@@ -16,6 +16,38 @@ import { SNOWTREE_HEIGHT } from '../../utils/Constants.js';
 import { newArt, finish, rand, GROUND } from './plants.js';
 
 const PI = Math.PI;
+// 積もった雪の量（描画専用のパラメータなのでモジュールに置く。CLAUDE.md）。
+// 木を前景に描くようにした試し（feat/town-foreground）で、ユーザーに「可視性を高めるために雪を少しだけ減らす」と
+// 言われて減らした（2026-11-06）。木が白い塊に見えて、手前を通る機体・弾の見分けを邪魔するため。
+// BARE_SNOW_THICK: 枯れ木の枝に積もる雪の厚み（px。横に寝た枝ほどこの値まで足す）。1.0 → 0.75
+const BARE_SNOW_THICK = 0.75;
+// 針葉樹の雪（buildFir）。経緯（2026-11-06、どれもユーザーの指摘）:
+//   1. 段ごとに「上の段のすぐ下から段の半分あたりまで」の横縞 → 「陰になる所に雪があり、積もるはずの葉先に無い」
+//   2. 段の左右の斜面に沿って枝先ほど厚い帯 → 「ちょっと違う」と、雪の積もった針葉樹の写真をもらった
+//   3. 今: 写真のとおり、雪は木全体の枝の上に**小さな塊で点々と**載り、塊の下は暗い緑。外側の枝先ほど塊が
+//      多く大きい。上の段の真下は陰
+// 塊の並びはゲームの乱数を引かずに、木の形（高さ・幅）から作る専用の乱数で決める。ゲームの乱数を余分に引くと、
+// 後に続く木の大きさ・並び（＝置ける本数）が変わってしまうため
+// FIR_SNOW_SHADE: 上の段の真下に落ちる陰の帯の高さ（段の高さ th に対する割合）
+// FIR_SNOW_CAP: 頂の雪帽子の深さ（th に対する割合）
+// FIR_CLUMP: 雪の塊。rowGap = 枝の列の間隔（px）、w / h = 塊の幅・高さ（px）、gap = 塊の間（px）、
+//   chance = 塊を置く確率（真ん中 → 枝先へ寄る）、edge = 枝先の塊を大きくする倍率、droop = 枝先で塊が下がる量（px。
+//   枝は先が垂れるので、列は真ん中が高く外が低い弧になる）。最初の値（幅 2.2〜5・高さ 1.5〜2.4・垂れ無し）は
+//   丸い粒が格子に並ぶ水玉模様になったので、横に長く、外ほど大きく下がる形にした
+const FIR_SNOW_SHADE = 0.14;
+const FIR_SNOW_CAP = 0.3;
+const FIR_CLUMP = { rowGap: 3.4, w: [2.5, 7], h: [1.3, 2.1], gap: [0.4, 3.5], chance: [0.2, 0.9], edge: 1.5, droop: 1.4 };
+/** 木の形から作る小さな乱数（mulberry32）。ゲームの乱数ストリームとは独立 */
+function localRng(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /** 描く順に色を並べた絵。足した順 = 塗る順なので、空の組を先に作って順を決める */
@@ -43,8 +75,23 @@ function treeRoot(art) {
 }
 
 /**
+ * 枝の上の雪の塊 1 つ。左端 x・上端 y・幅 cw・高さ h。上が丸く、下が平たい小山。
+ * 塊の下には針葉の暗い影を落とし（雪が枝を押さえて、その下が陰になる）、下半分は雪の影の色
+ */
+function clump(art, x, y, cw, h, skew = 0.5) {
+    // 頂の位置を左右に振って、塊ごとに形を変える（skew 0〜1）
+    const px = 0.3 + 0.4 * skew;
+    const top = [[x, y + h * 0.7], [x + cw * 0.12, y + h * 0.25], [x + cw * px, y], [x + cw * 0.88, y + h * 0.2], [x + cw, y + h * 0.7]];
+    art.add(COL.needle[0], [[x, y + h * 0.7], [x + cw, y + h * 0.7], [x + cw * 0.85, y + h + 1], [x + cw * 0.15, y + h + 1]]);
+    art.add(COL.snow[0], [...top, [x + cw * 0.85, y + h], [x + cw * 0.15, y + h]]);
+    art.add(COL.snow[1], [...top, [x + cw * 0.8, y + h * 0.7], [x + cw * 0.2, y + h * 0.7]]);
+    // 大きい塊だけ、左上に光
+    if (cw >= 3.5) art.add(COL.snow[2], [[x + cw * 0.15, y + h * 0.25], [x + cw * 0.45, y + 0.1], [x + cw * 0.5, y + h * 0.45], [x + cw * 0.2, y + h * 0.5]]);
+}
+
+/**
  * 針葉樹。幹の上に枝の段が重なり（背が高いほど段が多い）、段ごとに上の斜面へ雪が載って、縁が波打つ。
- * 下の段ほど広い円錐。雪は段の上側 6 割と頂だけで、段の下側は針葉の暗い影が見える
+ * 下の段ほど広い円錐。雪は頂の雪帽子と、枝の上に点々と載る小さな塊（枝先ほど多く大きい）。上の段の真下と段の下側は針葉の暗い影（FIR_SNOW_* / FIR_CLUMP）
  * @param {{maxH:number}} o 置ける高さ（px。根元の埋まる 4px を含む）
  */
 export function buildFir(rng, { maxH }) {
@@ -52,6 +99,7 @@ export function buildFir(rng, { maxH }) {
     if (Hv === null) return null;
     const art = newTreeArt();
     const hw0 = clamp(Hv * 0.3 + 1.5, 6, 22) * rand(rng, 0.92, 1.08);
+    const lr = localRng(Math.floor(Hv * 7919 + hw0 * 104729));   // 雪の塊の並び（ゲームの乱数は引かない）
     const trunkH = Math.max(4, Math.round(Hv * 0.12));
     const thw = Hv >= 40 ? 2 : 1.5;
     art.add(COL.trunk[0], [[-thw - 0.5, 0], [thw + 0.5, 0], [thw, GROUND - trunkH - 2], [-thw, GROUND - trunkH - 2]]);
@@ -76,23 +124,34 @@ export function buildFir(rng, { maxH }) {
         const yu = yb - th * 0.28;
         art.add(COL.needle[0], [[-w(yu), yu], [w(yu), yu], ...bottom]);
 
-        // 雪: 段の上側。頂の段は頂から、それ以外は上の段の下から見える所の 6 割まで
-        const ys0 = i === 0 ? yTop : yt + 0.3 * th;
-        const ys1 = yt + th * (i === 0 ? 0.62 : 0.55);
-        const W = (y) => (i === 0 && y <= yTop + 0.01 ? 0.4 : w(Math.max(y, yt + 0.3 * th)) - 0.5);   // 雪は枝より 0.5px 内側（縁に針葉の緑が見える）
-        const teeth = Math.max(2, Math.round(W(ys1) / 3));
-        const lip = [];   // 縁の波（右 → 左）。端は枝先に雪が垂れ、間は波打つ
-        for (let j = 0; j <= teeth; j++) {
-            const x = W(ys1) * (1 - 2 * j / teeth);
-            lip.push([x, ys1 + (j === 0 || j === teeth ? 1.4 : j % 2 === 0 ? 1.8 : 0)]);
+        // 上の段の真下の陰。上の段の垂れた縁が落とす影で、雪は載らない
+        const yv = i === 0 ? yTop : yt + 0.3 * th;   // 段が上の段の下から見え始める高さ
+        const ysh = i === 0 ? yTop + FIR_SNOW_CAP * th : yv + FIR_SNOW_SHADE * th;
+        if (i > 0) art.add(COL.needle[0], [[-w(yv), yv], [w(yv), yv], [w(ysh), ysh], [-w(ysh), ysh]]);
+        // 頂の雪帽子（頂の段だけ）。頂は真上から雪を受ける。下の縁は波打つ
+        if (i === 0) {
+            const cw = w(ysh) - 0.5;
+            art.add(COL.snow[0], [[0, yTop + 1.2], [cw, ysh + 1.2], [cw * 0.35, ysh + 0.4], [0, ysh + 1.4], [-cw * 0.35, ysh + 0.4], [-cw, ysh + 1.2]]);
+            art.add(COL.snow[1], [[0, yTop], [cw, ysh], [cw * 0.35, ysh - 0.8], [0, ysh + 0.2], [-cw * 0.35, ysh - 0.8], [-cw, ysh]]);
         }
-        const snowRing = [[-W(ys0), ys0], [W(ys0), ys0], ...lip];
-        art.add(COL.snow[0], snowRing.map(([x, y]) => [x, y + 1.6]));   // 縁の下に覗く影
-        art.add(COL.snow[1], snowRing);
-        // 左上の明るい面
-        const ya = ys0 + (i === 0 ? 1.5 : 0.5), yb2 = ys1 - 1.5;
-        if (yb2 - ya >= 2) {
-            art.add(COL.snow[2], [[-W(ya), ya], [-W(ya) * 0.35, ya], [-W(yb2) * 0.35, yb2], [-W(yb2), yb2]]);
+        // 枝の上の雪の塊。陰の下から段の下の縁の少し上まで、枝の列ごとに左から右へ並べる。
+        // 塊は針葉の輪郭の内側に収める（外へ出すと木の外寸が変わって、置ける本数が変わる）
+        for (let y = ysh + 0.6; y + 1.5 < yb; y += FIR_CLUMP.rowGap * (0.85 + 0.3 * lr())) {
+            const half = w(y + 1) - 0.4;   // 塊の下の縁の高さでの半幅（下ほど広いので上の縁は必ず内側）
+            let x = -half + lr() * 1.2;
+            while (x < half - 1.2) {
+                const out = Math.abs(x) / Math.max(1, half);          // 0 = 真ん中、1 = 枝先
+                const big = 1 + (FIR_CLUMP.edge - 1) * out;
+                const cw = Math.min(half - x, (FIR_CLUMP.w[0] + (FIR_CLUMP.w[1] - FIR_CLUMP.w[0]) * lr()) * big);
+                const ch = (FIR_CLUMP.h[0] + (FIR_CLUMP.h[1] - FIR_CLUMP.h[0]) * lr()) * big;
+                // 外ほど下げる。下げた分だけ輪郭が広がるので、下げた高さの半幅に収まるかを見直す
+                const yc = Math.min(yb - ch - 0.5, y + FIR_CLUMP.droop * out * out);
+                if (lr() < FIR_CLUMP.chance[0] + (FIR_CLUMP.chance[1] - FIR_CLUMP.chance[0]) * out && cw >= 1.5
+                    && Math.abs(x) <= w(yc + ch) && Math.abs(x + cw) <= w(yc + ch)) {
+                    clump(art, x, yc, cw, ch, lr());
+                }
+                x += cw + FIR_CLUMP.gap[0] + (FIR_CLUMP.gap[1] - FIR_CLUMP.gap[0]) * lr();
+            }
         }
         if (i === 0) art.add(COL.snow[3], [[0, yTop], [-1.6, yTop + 3.4], [1.6, yTop + 3.4]]);   // 頂の光
     }
@@ -134,7 +193,7 @@ function branch(art, rng, x0, y0, angle, len, w0, { depth = 0, limitY, topY, wan
     if (snow) {
         // 上を向く法線。雪の厚みは、横に寝た枝ほど厚い
         const up = pts.map((p) => { const nx = Math.sin(p.a), ny = -Math.cos(p.a); return ny <= 0 ? [nx, ny] : [-nx, -ny]; });
-        const thick = pts.map((p) => (Math.abs(Math.cos(p.a)) < 0.3 || Math.sin(p.a) > 0.45 ? 0 : 0.3 + 1.0 * Math.abs(Math.cos(p.a))));
+        const thick = pts.map((p) => (Math.abs(Math.cos(p.a)) < 0.3 || Math.sin(p.a) > 0.45 ? 0 : 0.3 + BARE_SNOW_THICK * Math.abs(Math.cos(p.a))));
         for (let k = 0; k < pts.length;) {
             if (thick[k] === 0) { k++; continue; }
             const k0 = k;
@@ -148,7 +207,7 @@ function branch(art, rng, x0, y0, angle, len, w0, { depth = 0, limitY, topY, wan
                 light.push([p.x + ux * (hw(j) + thick[j] * 0.45), Math.max(topY, p.y + uy * (hw(j) + thick[j] * 0.45))]);
             }
             art.add(COL.snow[1], [...outer, ...inner.reverse()]);
-            if (thick[k0] > 0.9) art.add(COL.snow[2], [...outer, ...light.reverse()]);
+            if (thick[k0] > 0.3 + BARE_SNOW_THICK * 0.6) art.add(COL.snow[2], [...outer, ...light.reverse()]);
         }
     }
 

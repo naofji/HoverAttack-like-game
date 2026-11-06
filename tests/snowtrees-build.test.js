@@ -82,7 +82,10 @@ for (const [name, build] of Object.entries(builds)) {
         assert.equal(build(new SeededRNG(1), { maxH: 20 }), null);
     });
 
-    test(`${name}: 雪が載っている（雪の輪の面積が絵の2割以上）`, () => {
+    // 下限は 8%。針葉樹の雪は段の横縞（30〜34%）→ 斜面の帯（19〜33%）→ 写真に合わせた枝の上の小さな塊
+    // （10〜28%、中央値 17%。400 本で測った）と描き直してきた（2026-11-06、ユーザー指摘）。
+    // ここで縛るのは「雪が載っている」ことだけ（割合の好みは実機で決める）
+    test(`${name}: 雪が載っている（雪の輪の面積が絵の8%以上）`, () => {
         const snow = new Set(SNOWTREE_COLORS.snow);
         each((rng) => {
             const b = build(rng, { maxH: 400 });
@@ -92,7 +95,7 @@ for (const [name, build] of Object.entries(builds)) {
                 all += a;
                 if (snow.has(p.color)) white += a;
             }
-            assert.ok(white / all >= 0.2, `${b.kind}: 雪 ${(100 * white / all).toFixed(0)}%`);
+            assert.ok(white / all >= 0.08, `${b.kind}: 雪 ${(100 * white / all).toFixed(0)}%`);
         });
     });
 
