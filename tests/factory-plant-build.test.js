@@ -105,3 +105,16 @@ test('同じ絵の機械はほとんど出ない', () => {
     for (let i = 0; i < 200; i++) seen.add(JSON.stringify(buildMachine(rng, { maxW: 48, maxH: 80 }).parts));
     assert.ok(seen.size >= 150, `${seen.size} 種類しかない`);
 });
+
+test('工場の爆発物（グレネード級）は3面の爆発物の2倍以上の大きさで、ひと目で違うと分かる', async () => {
+    // ユーザーの指定（2026-11-07）: 火力が大きいことを見て分かるよう、赤い爆発物を大きく描く
+    const { buildMiningExplosive } = await import('../src/js/world/town/mining.js');
+    const rng = new SeededRNG(12);
+    let townMax = 0;
+    for (let i = 0; i < 60; i++) { const b = buildMiningExplosive(rng); townMax = Math.max(townMax, b.w * b.h); }
+    for (let i = 0; i < 60; i++) {
+        const b = buildFactoryExplosive(rng);
+        assert.ok(b.w * b.h >= townMax * 2, `${b.kind} ${b.w}x${b.h} が小さい（3面の最大 ${townMax}px²）`);
+        assert.ok(b.h - 4 >= 20, `${b.kind} の見える高さ ${b.h - 4} が低い`);
+    }
+});
