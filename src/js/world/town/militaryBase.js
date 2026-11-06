@@ -236,44 +236,50 @@ export function buildControlRoom(rng, { maxReach }) {
 }
 
 /**
- * 天井クレーン。天井に埋めたレール（幅 = span）から、台車・ワイヤー・フックが下がる。荷を吊ったものもある。
- * レールの上端 4px が天井の岩に埋まる（支えのかけら）。maxHang が 24 未満なら吊るせない
+ * 天井クレーン。天井に埋めた桁（幅 = span）から、台車・ワイヤー・フックが下がる。荷を吊ったものもある。
+ * 桁の上端 4px が天井の岩に埋まる（支えのかけら）。
+ * 最初は桁 8px（見えるのは 4px）・ワイヤー 4px〜で作ったが、PNG で見ると天井の縁の細い線と小さな点にしか見えず
+ * クレーンと読めなかった。桁を 12px（見える 8px）にして両端に車輪の箱、ワイヤーは 12px〜、荷は大きめに
  */
+const CRANE_TOP = 16;   // 桁 12 + 台車 4
+const CRANE_HOOK = 6;   // フックの台 4 + 爪 2
 export function buildCrane(rng, { span, maxHang }) {
-    if (maxHang < 24) return null;
+    if (maxHang < CRANE_TOP + 12 + CRANE_HOOK) return null;
     const parts = [];
     const paint = pick(rng, BODY.paint);
-    rect(parts, 0, 0, span, 8, paint, MAT_METAL, true);   // 桁（上 4px は天井の中）
-    hazardStripe(parts, 0, 6, span);
-    const tx = step4(rng, 4, span - 16);   // 台車
-    rect(parts, tx, 8, 12, 4, pick(rng, BODY.steel), MAT_METAL, true);
-    // 荷はコンテナ 8 / 鉄骨 4 / 無し。天井が低ければ収まる荷だけにする（桁と台車 12 + ワイヤー 4〜 + フック 4）
+    const steel = pick(rng, BODY.steel);
+    rect(parts, 0, 0, span, 12, paint, MAT_METAL, true);   // 桁（上 4px は天井の中）
+    rect(parts, 0, 4, span, 1, shade(paint));
+    hazardStripe(parts, 0, 10, span);
+    rect(parts, 0, 4, 4, 8, steel, MAT_METAL, true);          // 両端の車輪の箱
+    rect(parts, span - 4, 4, 4, 8, steel, MAT_METAL, true);
+    const tx = step4(rng, 8, span - 20);                       // 台車
+    rect(parts, tx, 12, 12, 4, steel, MAT_METAL, true);
+    // 荷はコンテナ 12 / 鉄骨 4 / 無し。天井が低ければ収まる荷だけにする
     const loadRoll = rng.next();
-    let loadH = loadRoll < 0.35 ? 8 : loadRoll < 0.6 ? 4 : 0;
-    while (loadH > 0 && 12 + 4 + 4 + loadH > maxHang) loadH -= 4;
-    const wireMax = maxHang - 12 - 4 - loadH;
-    const wire = step4(rng, 4, Math.max(4, Math.min(48, wireMax)));
-    if (12 + wire + 4 + loadH > maxHang) return null;
+    let loadH = loadRoll < 0.5 ? 12 : loadRoll < 0.75 ? 4 : 0;
+    if (CRANE_TOP + 12 + CRANE_HOOK + loadH > maxHang) loadH = CRANE_TOP + 12 + CRANE_HOOK + 4 <= maxHang ? 4 : 0;
+    const wire = step4(rng, 12, Math.max(12, Math.min(56, maxHang - CRANE_TOP - CRANE_HOOK - loadH)));
     const wx = tx + 4;
-    rect(parts, wx, 12, 4, wire, null, MAT_METAL, false);   // ワイヤー（細い部品。かけらだけ）
-    rect(parts, wx + 1, 12, 1, wire, DETAIL.rail);
-    rect(parts, wx + 2, 12, 1, wire, DETAIL.rail);
-    const hy = 12 + wire;
-    rect(parts, wx - 1, hy, 6, 2, pick(rng, BODY.steel), MAT_METAL, false);   // フックの台
-    rect(parts, wx + 1, hy + 2, 2, 2, DETAIL.hazard);
-    if (loadH === 8) {   // コンテナ
-        const cw = 16;
+    rect(parts, wx, CRANE_TOP, 4, wire, null, MAT_METAL, false);   // ワイヤー（細い部品。かけらだけ）
+    rect(parts, wx + 1, CRANE_TOP, 1, wire, DETAIL.rail);
+    rect(parts, wx + 2, CRANE_TOP, 1, wire, DETAIL.rail);
+    const hy = CRANE_TOP + wire;
+    rect(parts, wx - 2, hy, 8, 4, paint, MAT_METAL, false);   // フックの台
+    rect(parts, wx + 1, hy + 4, 2, 2, DETAIL.rail);            // 爪
+    if (loadH === 12) {   // コンテナ（波板の筋）
+        const cw = Math.min(32, span - 8);
         const cx = Math.max(0, Math.min(span - cw, wx + 2 - cw / 2));
-        const col = pick(rng, [...BODY.blueSteel, ...BODY.paint]);
-        rect(parts, cx, hy + 4, cw, 8, col, MAT_METAL, true);
-        seams(parts, cx, hy + 4, cw, 8, col, 4);
-    } else if (loadH === 4) {   // 鉄骨
-        const bw = 24;
+        const col = pick(rng, [...BODY.blueSteel, ...BODY.paint, ...BODY.steel]);
+        rect(parts, cx, hy + CRANE_HOOK, cw, 12, col, MAT_METAL, true);
+        seams(parts, cx, hy + CRANE_HOOK, cw, 12, col, 4);
+    } else if (loadH === 4) {   // 鉄骨（H 形の筋）
+        const bw = Math.min(40, span - 8);
         const bx = Math.max(0, Math.min(span - bw, wx + 2 - bw / 2));
-        rect(parts, bx, hy + 4, bw, 4, pick(rng, BODY.steel), MAT_METAL, true);
-        rect(parts, bx, hy + 5, bw, 1, DETAIL.dark);
+        rect(parts, bx, hy + CRANE_HOOK, bw, 4, steel, MAT_METAL, true);
+        rect(parts, bx, hy + CRANE_HOOK + 1, bw, 2, DETAIL.dark);
     }
-    return { kind: 'crane', w: span, h: 12 + wire + 4 + loadH, parts };
+    return { kind: 'crane', w: span, h: hy + CRANE_HOOK + loadH, parts };
 }
 
 /** 工場の照明。天井から下がる棒（上端 4px が天井）と傘、暗い琥珀の灯り */

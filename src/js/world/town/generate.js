@@ -253,7 +253,7 @@ export function generateTown({
         const y = (run.r + 1) * T - 4;   // 綱の上端 4px を天井の岩に埋める
         let c = run.c0 + 1;
         while (c < run.c1 - 1) {
-            if (rng.next() > villageness(c, run.r)) { c += 3 + Math.floor(rng.next() * 4); continue; }
+            if (rng.next() > villageness(c, run.r) * (theme.ceilingBoost ?? 1)) { c += 3 + Math.floor(rng.next() * 4); continue; }
             const style = rng.next() < share ? theme.wide : theme.narrow;
             const room = (run.c1 - 1 - c) * T;
             const b = theme.ceiling(style, rng, { room, maxHang });

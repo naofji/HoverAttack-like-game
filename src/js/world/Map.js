@@ -329,6 +329,7 @@ export class Map {
         if (props === 'town') this._generateTown();
         else if (props === 'ferns') this._generatePlants();
         else if (props === 'snow') this._generateSnow();
+        else if (props === 'factory') this._generateFactory();   // 6面の工場と基地（3面と同じ置き方、絵柄だけ違う）
     }
 
     // ------------------------------------------

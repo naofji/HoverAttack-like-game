@@ -31,6 +31,7 @@ import { carveSnowStairs } from '../snowStairs.js';
 import { carveFortressZones } from '../fortress.js';
 import { pickFacilityAreas, metalizeFacilityBand } from '../facility.js';
 import { generateTown } from '../town/generate.js';
+import { FACTORY_THEME } from '../town/themes.js';
 import { generatePlants } from '../town/generatePlants.js';
 import { generateSnowTrees } from '../town/generateSnowTrees.js';
 import { generateIcicles } from '../town/generateIcicles.js';
@@ -121,6 +122,30 @@ export const MapFeatures = {
 
     _generateTown() {
         this.town = new Town(this._buildTownSpecs(), { isSolidTile: (r, c) => this.isSolid(r, c) });
+    },
+
+    /**
+     * 6面の工場と基地の設計図。置き方は3面の町と同じ（基地の部屋を避け、最後の敵基地の周りは建てない）で、
+     * 絵柄だけ FACTORY_THEME。乱数は3面と別の派生ストリーム（定数は3〜5面・7面のどれとも重ねない）。
+     * tools/render-town-scene.mjs も呼ぶ（町と同じ理由）
+     */
+    _buildFactorySpecs() {
+        return generateTown({
+            grid: this.grid, rows: this.rows, cols: this.cols,
+            excludeRects: [this._reservedRects()[1]],
+            rng: new SeededRNG((this.game.rng.state ^ 0xFAC70E) >>> 0),
+            explosiveRng: new SeededRNG((this.game.rng.state ^ 0xFAC7B0) >>> 0),
+            quietZones: [{
+                c: this.enemyBaseCenter.c, r: this.enemyBaseCenter.r,
+                inner: TOWN_BASE_QUIET_INNER, outer: TOWN_BASE_QUIET_OUTER,
+            }],
+            theme: FACTORY_THEME,
+        });
+    },
+
+    /** 6面: 金属は撃たれると縁が赤く焼ける（Town の metalHeat。3〜5面の金属は今のまま茶色の焦げ） */
+    _generateFactory() {
+        this.town = new Town(this._buildFactorySpecs(), { isSolidTile: (r, c) => this.isSolid(r, c), metalHeat: true });
     },
 
     /** 施設エリアを置き、縁の岩を金属にし、印（this.facility）を立てる */

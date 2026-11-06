@@ -49,7 +49,8 @@ const map = new GameMap({ rng: new SeededRNG(seed) }, MISSION);
 const t0 = performance.now();
 const specs = PROPS === 'ferns' ? map._buildPlantSpecs()
     : PROPS === 'snow' ? [...map._buildSnowTreeSpecs(), ...map._buildIcicleSpecs()]
-        : map._buildTownSpecs();
+        : PROPS === 'factory' ? map._buildFactorySpecs()
+            : map._buildTownSpecs();
 const t1 = performance.now();
 // 画素を持たない canvas で作る時間 ＝ かけらの表と支えの計算（実機の canvas の確保・塗りは別）
 const noPixels = () => ({ getContext: () => noopCtx });

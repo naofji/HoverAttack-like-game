@@ -38,7 +38,7 @@ test('狭い・低い所には建てない', () => {
     assert.equal(buildBaseBuilding(rng, { maxW: 12, maxH: 100 }), null);
     assert.equal(buildBaseBuilding(rng, { maxW: 60, maxH: 20 }), null);
     assert.equal(buildControlRoom(rng, { maxReach: 24 }), null);
-    assert.equal(buildCrane(rng, { span: 64, maxHang: 16 }), null);
+    assert.equal(buildCrane(rng, { span: 64, maxHang: 32 }), null);
 });
 
 test('床の建物の最下段は床に埋まる', () => {
@@ -83,7 +83,7 @@ test('クレーンは天井に埋まり、幅は span、高さは maxHang 以下
     const rng = new SeededRNG(6);
     for (let i = 0; i < 100; i++) {
         const span = 64 + 4 * Math.floor(rng.next() * 25);
-        const maxHang = 24 + Math.floor(rng.next() * 100);
+        const maxHang = 34 + Math.floor(rng.next() * 100);
         const b = buildCrane(rng, { span, maxHang });
         assert.ok(b, `span ${span} maxHang ${maxHang} で建たない`);
         assert.equal(b.w, span);

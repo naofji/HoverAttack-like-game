@@ -154,7 +154,9 @@ test('stage 4 builds plants (soft buildings); stage 3 keeps its town; mission 11
   assert.ok(ferns.buildings.every((b) => b.soft && b.style === 'P'));
   assert.ok(buildMap(Map, 42, 2).town.buildings.every((b) => !b.soft), '3面の町は soft でない');
   assert.ok(buildMap(Map, 42, 4).town.buildings.every((b) => b.soft && (b.flora === 'snow' || b.flora === 'ice')), '5面は雪の木とつらら');
-  assert.equal(buildMap(Map, 42, 5).town, null, '6面には何も置かない');
+  // 6面は工場と基地（2026-11-07）。town を assert.equal で null と比べると、落ちたときに Town（偽 ctx の Proxy を
+  // 抱えている）を表示しようとしてメモリを使い切り、ファイルごと SIGKILL で落ちた。中身の真偽で比べる
+  assert.ok(buildMap(Map, 42, 5).town.buildings.every((b) => !b.soft && (b.style === 'B' || b.style === 'F')), '6面は工場と基地');
   assert.ok(buildMap(Map, 42, 10).town.buildings.every((b) => b.soft && b.flora === 'leaf'), 'debugStartMission で面数を超えても剰余で4面');
 });
 
