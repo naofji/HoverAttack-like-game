@@ -67,10 +67,12 @@ export function rasterizeParts(parts, w, h) {
     // 色のある部品が1画素でも掛かっているのに空のかけらは、その部品の材料の細い部品で埋める。
     // 中心の規則だけだと梁・梯子・ランタン・軒・橋の手すりの画素の 3% がどのかけらにも入らず、
     // かけらを抜いて clearRect しても宙に残った（段1のレビュー指摘）。厚い壁の印は付けない
-    // （弾を止めるのは中心の規則で埋まった面だけ）。描くだけの部品（mat 0）は木にする
+    // （弾を止めるのは中心の規則で埋まった面だけ）。描くだけの部品（mat 0）は木にする。
+    // ただし looseMat を持つ部品はその材料にする（6面の手すり・筋交い・梯子は鉄。木にすると燃えてしまう。
+    // mat を付けると1回目の規則で下の厚い壁を上書きし、窓の所だけ弾がすり抜けるので、描くだけのまま材料だけ持たせる）
     for (const p of parts) {
         if (!p.color || p.rings) continue;
-        const v = p.mat || MAT_WOOD;
+        const v = p.mat || p.looseMat || MAT_WOOD;
         const i0 = Math.max(0, Math.floor(p.x / CHUNK));
         const i1 = Math.min(cw, Math.ceil((p.x + p.w) / CHUNK));
         const j0 = Math.max(0, Math.floor(p.y / CHUNK));

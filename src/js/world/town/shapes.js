@@ -22,6 +22,16 @@ export function rect(parts, x, y, w, h, color, mat = MAT_NONE, solid = false) {
 }
 
 /**
+ * rect と同じだが、描くだけの部品（mat 0）にかけらの材料 looseMat を持たせる版を返す（chunks.js の rasterizeParts）。
+ * 6面は木を使わない（spec 2章）ので、手すり・筋交い・窓の描き込みを鉄（MAT_METAL）として数えるのに使う
+ */
+export function rectWithLoose(looseMat) {
+    return (parts, x, y, w, h, color, mat = MAT_NONE, solid = false) => {
+        if (w > 0 && h > 0) parts.push(mat ? { x, y, w, h, color, mat, solid } : { x, y, w, h, color, mat, solid, looseMat });
+    };
+}
+
+/**
  * 多角形の部品（4面の植物）を積む。rings は頂点列 [[x, y], ...] の配列で、同じ色の輪を1回の fill にまとめる
  * （1枚ずつ塗ると、葉が数十枚ある植物 500 本で面の読み込みが重くなる）。
  * 面積のほぼ無い輪は捨てる。向きは時計回りに揃える（polygons.js の orient）
