@@ -7,14 +7,14 @@
 // Town と FireSystem が trigger() で知らせ、ここは順番待ちと爆発そのものだけを持つ。
 // 爆発は画面の近くなら playBlast（→ spawnExplosion → town.blast・地雷の誘爆・爆発音）、
 // 画面の外なら town.blast と地雷の誘爆だけ（粒と音は出さない。spec 2章「画面の外」）。
-// どちらも岩は壊さない（spawnExplosion は地形に触らない）。
+// 3面の町は岩を壊さない（spawnExplosion は地形に触らない）。6面の工場は爆発の種類（TOWN_EXPLOSIVE_PROFILES）で
+// グレネードと同じだけ地形を壊す（ユーザーの指定 2026-11-07）。
 
 import { MAT_MASK, MAT_EXPLOSIVE, CHUNK } from './chunks.js';
 import { playBlast, detonateNearbyMines } from '../../entities/destruction.js';
 import { applyBlastDamage } from '../../utils/blastDamage.js';
 import {
-    TOWN_EXPLOSIVE_DAMAGE, TOWN_EXPLOSIVE_RADIUS, TOWN_EXPLOSIVE_BLAST_COUNT,
-    LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX, VIEW_CULL_MARGIN,
+    TOWN_EXPLOSIVE_RADIUS, TOWN_EXPLOSIVE_PROFILES, TILE_SIZE, VIEW_CULL_MARGIN,
     TOWN_CHAIN_DELAY_MIN, TOWN_CHAIN_DELAY_RANGE, TOWN_EXPLOSIONS_PER_SECOND,
 } from '../../utils/Constants.js';
 
@@ -108,11 +108,17 @@ export class ExplosiveSystem {
         town.falling = town.falling.filter((p) => p.alive);
         town.consume(b);
         this.recent.push(this.frame);
+        const prof = TOWN_EXPLOSIVE_PROFILES[b.blast] || TOWN_EXPLOSIVE_PROFILES.town;
         if (this._near(view, x, y)) {
-            playBlast(game, x, y, 'townExplosive');
+            playBlast(game, x, y, prof.look, prof.count);
         } else {
-            town.blast(x, y, TOWN_EXPLOSIVE_BLAST_COUNT);
+            town.blast(x, y, prof.count);
             detonateNearbyMines(game, x, y);
+        }
+        // 6面の工場はグレネードと同じだけ地形も壊す（画面の外でも。地形は遊びに関わるので粒と音のように省かない）。
+        // 岩が壊れると Map が town.onBlockDestroyed を呼び、支えを失った建物が崩れる
+        if (prof.blockRadius > 0) {
+            game.map.destroyArea(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE), prof.blockRadius, prof.blockDamage);
         }
         // 爆風（機体へのダメージと同じ半径）の中の別の爆発物は、少し遅れて誘爆する。町を欠かせる半径
         // （約 30px）だけだと、建物 8 棟に1つの爆発物どうしにはほとんど届かない
@@ -120,8 +126,7 @@ export class ExplosiveSystem {
             if (o.explosive) this.trigger(o, this.chainDelay());
         }
         applyBlastDamage(game, x, y, {
-            radius: TOWN_EXPLOSIVE_RADIUS, damage: TOWN_EXPLOSIVE_DAMAGE,
-            knockVy: LANDMINE_KNOCKBACK_VY, knockVx: LANDMINE_KNOCKBACK_VX,
+            radius: prof.radius, damage: prof.damage, knockVy: prof.knockVy, knockVx: prof.knockVx,
         });
     }
 }

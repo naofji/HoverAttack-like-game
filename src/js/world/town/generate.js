@@ -125,7 +125,7 @@ function placeExplosives(specs, rng, { solid, fits, theme }) {
         // 引いた側が隣の建物で塞がっていれば、反対側を試す（建物が詰まった村で数が減りすぎないように）
         for (const side of [right, !right]) {
             const e = {
-                site: 'floor', style: s.style, kind: b.kind,
+                site: 'floor', style: s.style, kind: b.kind, ...(theme.explosiveBlast ? { blast: theme.explosiveBlast } : {}),
                 x: side ? foot1 + gap : foot0 - gap - b.w, y: s.y + s.h - b.h, w: b.w, h: b.h, parts: b.parts,
             };
             if (!fits(e) || placed.some((o) => overlaps(o, e)) || feet.some((f) => overlaps(f, e))

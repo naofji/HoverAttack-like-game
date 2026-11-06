@@ -128,6 +128,8 @@ export class Town {
                 burnt: new Set(),
                 // 段3b: 爆発物（かけらに爆発物の材料がある建物）。爆発したら exploded
                 explosive: cells.some((v) => (v & MAT_MASK) === MAT_EXPLOSIVE), exploded: false,
+                // 爆発の種類（TOWN_EXPLOSIVE_PROFILES のキー）。6面の工場は 'factory'（グレネードと同じ）
+                blast: spec.blast || 'town',
                 // 描く不透明度。機体が重なっている間は TOWN_OCCLUDE_ALPHA へ、離れたら 1 へ少しずつ寄る（updateOcclusion）
                 alpha: 1,
             };

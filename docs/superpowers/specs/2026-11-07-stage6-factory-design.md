@@ -206,3 +206,4 @@ CLAUDE.md の「違いは表の1行に出し、手順は1本」に合わせる�
 足元をメタルにするため、6面だけ町の設計図を地形のキャッシュを焼く前に作る（`Map._prepareFactoryGround`）。設計図は空きか岩かしか
 見ないのでメタルにしても並びは変わらず、乱数も引かない（trace-map の rng の指紋は同じ）。メタルは硬いので、工場の下は掘りにくくなる。
 地形の絵の基準線（`tests/terrain-shape-drawing-invariance.test.js`）からは6面を外した（2面・7面と同じ扱い）。
+| 爆発物の爆発 | **工場は可燃物が多いので派手に。グレネードと同様で周囲にダメージあり。** 粒 `GRENADE_EXPLOSION_COUNT`・半径 `GRENADE_DAMAGE_RADIUS` に `GRENADE_DAMAGE`（敵味方どちらにも）・地形も `GRENADE_BLAST_RADIUS` タイルを `GRENADE_BLOCK_DAMAGE` で壊す（画面の外でも）。爆発の種類は `Constants.js` の `TOWN_EXPLOSIVE_PROFILES` の1行、面は絵柄の表の `explosiveBlast`。3面の町は今のまま（岩は壊さない） |

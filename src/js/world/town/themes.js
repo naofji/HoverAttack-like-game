@@ -14,6 +14,7 @@
 //   ceiling(style, rng, { room, maxHang }) … 上端 4px が天井に埋まる。room は右の天井の残り（px）
 //   explosive(style, rng)                … 床の建物の脇に置く爆発物。下端 4px が床に埋まる
 //   ceilingBoost（省略可）               … 天井に吊るす数の倍率。村の濃さに掛ける（省略 = 1）
+//   explosiveBlast（省略可）             … 爆発物の爆発の種類（TOWN_EXPLOSIVE_PROFILES のキー。省略 = 'town'）
 //
 // **乱数を引く順は表に移す前と同じにしてある**（3面の町並みは実機で詰めた値。1回でも引く順が
 // 変わると週ごとの町が全部入れ替わる。tools/trace-map.mjs の指紋で IDENTICAL を確かめた）
@@ -67,4 +68,6 @@ export const FACTORY_THEME = {
         return buildFactoryLamp(rng, { maxHang });
     },
     explosive: (style, rng) => buildFactoryExplosive(rng),
+    // 爆発物の爆発の種類（Constants.js の TOWN_EXPLOSIVE_PROFILES）。工場は可燃物が多いのでグレネードと同じ派手な爆発
+    explosiveBlast: 'factory',
 };

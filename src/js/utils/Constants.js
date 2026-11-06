@@ -2381,6 +2381,26 @@ export const TOWN_EXPLOSIVE_RADIUS = 50;   // 機体へのダメージと誘爆�
 export const TOWN_EXPLOSIVE_BLAST_COUNT = 80;
 // 火が届いてから爆発するまで（フレーム）。燃えているのが見えてから爆発する（spec 3b章）。0.75秒
 export const TOWN_EXPLOSIVE_COOKOFF = 45;
+// 爆発物の爆発の種類（建物の blast。world/town/explosives.js）。誘爆の届く半径はどれも TOWN_EXPLOSIVE_RADIUS。
+//   look: 閃光と粒（entities/destruction.js の BLAST_PROFILES のキー）、count: 粒の数（町を欠かせる半径も決まる）
+//   radius / damage / knockVy / knockVx: 機体へのダメージ（敵味方どちらにも）
+//   blockRadius / blockDamage: 地形を壊す半径（タイル）とダメージ。0 なら岩は壊さない
+// town: 3面の町（spec 3b章「岩は壊さない」）。factory: 6面の工場。ユーザーの指定（2026-11-07「工場は可燃物が多いので、
+// タンクなどの爆発はもっと派手に。グレネードと同様で周囲にダメージあり」）でグレネードの値をそのまま使う
+export const TOWN_EXPLOSIVE_PROFILES = {
+    town: {
+        look: 'townExplosive', count: TOWN_EXPLOSIVE_BLAST_COUNT,
+        radius: TOWN_EXPLOSIVE_RADIUS, damage: TOWN_EXPLOSIVE_DAMAGE,
+        knockVy: LANDMINE_KNOCKBACK_VY, knockVx: LANDMINE_KNOCKBACK_VX,
+        blockRadius: 0, blockDamage: 0,
+    },
+    factory: {
+        look: 'grenade', count: GRENADE_EXPLOSION_COUNT,
+        radius: GRENADE_DAMAGE_RADIUS, damage: GRENADE_DAMAGE,
+        knockVy: GRENADE_KNOCKBACK_VY, knockVx: GRENADE_KNOCKBACK_VX,
+        blockRadius: GRENADE_BLAST_RADIUS, blockDamage: GRENADE_BLOCK_DAMAGE,
+    },
+};
 // 爆風の中の別の爆発物が爆発するまで 8〜15 フレーム。一斉に爆発させず、連鎖が見えるように
 export const TOWN_CHAIN_DELAY_MIN = 8;
 export const TOWN_CHAIN_DELAY_RANGE = 7;

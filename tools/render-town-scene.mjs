@@ -61,9 +61,11 @@ const t2 = performance.now();
 
 // 粒は出さない（camera が無いので注文は画面の中扱いで particles に積まれるだけ）。
 // 町の爆発物（段3b）の爆発は spawnExplosion → town.blast を通るので、本物を混ぜる
+// map は本物の Map の上に town だけ差し替える（6面の工場の爆発物はグレネードと同じだけ地形を壊す＝ map.destroyArea →
+// damageBlock → this.town.onBlockDestroyed を通る）。地形の変化は本物の grid に残る（道具なので構わない）
 const fakeGame = (town) => Object.assign({
     particles: [], projectiles: [], enemies: [], landmines: [], player: null, carrier: null,
-    camera: null, canvas: null, map: { town },
+    camera: null, canvas: null, map: Object.assign(Object.create(map), { town }),
 }, SpawnEffects);
 function applyBlasts(town, list, ticks) {
     const game = fakeGame(town);
