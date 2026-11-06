@@ -2334,6 +2334,9 @@ export const TOWN_MATERIALS = {
     5: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
     // つらら（5面）。燃えない・火を中継しない（植物と同じ行）
     6: { burns: false, bulletIgnite: 0, spread: 0, catch: 0, fuel: [0, 0], crumble: 0 },
+    // コンクリート（6面の倉庫・工場棟の壁）。燃えにくさは日干し煉瓦（1）と同じ行。材料の番号を分けたのは
+    // 瓦礫・破片の色（palette.js の TOWN_RUBBLE_COLORS）を土の茶色ではなく灰色にするため
+    7: { burns: true, bulletIgnite: 0.03, spread: 0.1, catch: 0.02, fuel: [300, 480], crumble: 0.004 },
 };
 // 火が隣へ進むとき、元の火元を残したまま新しい火元を増やす確率（それ以外は火元が移る）。
 // 増やしすぎると 1棟の上限 4 にすぐ届く
@@ -2342,6 +2345,10 @@ export const TOWN_FIRE_BRANCH = 0.15;
 export const TOWN_FIRE_JUMP_RANGE = 8;
 // 燃えている火元の隣の金属が熱で焦げる確率（燃え進みの1回）。焦げるだけで火元にはならない
 export const TOWN_METAL_SCORCH = 0.2;
+// 6面の金属が撃たれて赤く焼けた縁が、暗い焼け色へ冷めきるまでのフレーム数（Town の metalHeat）。
+// 90 = 実時間でおよそ 1.5 秒（固定タイムステップ 60/s）。撃ち続けている間は赤い縁が点々と残り、
+// 手を止めるとすぐ冷めて「撃った跡」だけになる長さとして置いた初期値。実機で見て調整する
+export const FACTORY_HEAT_COOL = 90;
 // 残り火（燃え尽きた所・燃えて砕けた破片の所）が細い煙と火の粉を出し続けるフレーム数と、同時の上限
 export const TOWN_EMBER_FRAMES = 480;   // 8秒
 export const TOWN_EMBERS_MAX = 40;
