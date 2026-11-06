@@ -15,7 +15,7 @@
 import { flagEmoji } from '../../utils/geo.js';
 import { formatClock } from '../../utils/formatTime.js';
 import { lerpColor } from '../../utils/color.js';
-import { drawStageScene } from '../StageScene.js';
+import { drawStageScene, stageTitle } from '../StageScene.js';
 import { TIER, ROW_HIGHLIGHT, SPACE, lineHeight, font, drawScanlines } from '../theme.js';
 import {
     RANKING_COLUMNS, RANKING_TABLE_WIDTH, RANKING_SLOTS,
@@ -253,7 +253,8 @@ export const RankingScreens = {
         this._metallicText(ctx, `STAGE ${stageNo}`, W / 2, 46, accent);
         ctx.fillStyle = lerpColor(palette.fill, '#ffffff', 0.35);
         ctx.font = font('small', true);
-        ctx.fillText('THIS WEEK · TOP 5', W / 2, 70);
+        // 面の名前（ユーザーの指定 2026-11-07）。見出しの下の小さな行に添える（行を足すとシーンの帯 sceneTop 84 に食い込む）
+        ctx.fillText(`${stageTitle(stageIndex)}  ·  THIS WEEK · TOP 5`, W / 2, 70);
 
         // Scene strip (full width)
         drawStageScene(ctx, 40, L.sceneTop, W - 80, L.sceneHeight, stageIndex, palette, Date.now());

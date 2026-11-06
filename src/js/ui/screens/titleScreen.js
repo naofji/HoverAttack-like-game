@@ -15,7 +15,7 @@
 import { STAGE_PALETTES } from '../../utils/Constants.js';
 import { lerpColor } from '../../utils/color.js';
 import { MODES, MODE_ORDER } from '../../utils/modes.js';
-import { drawStageScene, stageEnemyLabel } from '../StageScene.js';
+import { drawStageScene, stageTitle } from '../StageScene.js';
 import { UI, font, glow, drawFrame, drawScanlines } from '../theme.js';
 
 export const TitleScreen = {
@@ -192,7 +192,7 @@ export const TitleScreen = {
         ctx.textAlign = 'center';
         ctx.font = font('sub', true);
         ctx.fillStyle = UI.ink;
-        ctx.fillText(stageEnemyLabel(picked - 1), midX, 366);
+        ctx.fillText(stageTitle(picked - 1), midX, 366);
         ctx.font = font('small');
         ctx.fillStyle = UI.dim;
         ctx.fillText(MODES[this.game.mode].label, midX, 392);
@@ -229,7 +229,10 @@ export const TitleScreen = {
                 // 選択中の帯。面の色をそのまま敷くと暗すぎて読めないので、
                 // 黒へ寄せた帯＋左端に面の色の縦棒を立てる
                 ctx.fillStyle = lerpColor(STAGE_PALETTES[n - 1].fill, '#000000', 0.55);
-                ctx.fillRect(centerX - 150, y - 15, 300, 30);
+                // 幅 360: 面の名前（一番長い 'FORTRESS (CRUISE MISSILE)' 25字 × body 16px × 0.6 ≒ 240px）が
+                // 文字の始まり centerX-92 から収まるように 300 から広げた。右端 centerX+210 は 960 幅でも
+                // シーン（W*0.5 から）に掛からない（tests/stage-select.test.js）
+                ctx.fillRect(centerX - 150, y - 15, 360, 30);
                 ctx.fillStyle = accent;
                 ctx.fillRect(centerX - 150, y - 15, 4, 30);
             }
@@ -246,7 +249,7 @@ export const TitleScreen = {
                 ctx.fillText('- - -', centerX - 92, y);
             } else {
                 ctx.fillStyle = on ? UI.ink : UI.dim;
-                ctx.fillText(stageEnemyLabel(n - 1), centerX - 92, y);
+                ctx.fillText(stageTitle(n - 1), centerX - 92, y);
             }
         }
         ctx.restore();

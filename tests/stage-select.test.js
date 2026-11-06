@@ -114,7 +114,13 @@ test('面セレクトのランはトライ数 1', async () => {
 // 一覧は7行を必ず描き、未到達の面は番号も敵の名前も伏せる。
 // 未到達の面とその敵は驚きとして取っておく方針（面別ランキング画面の
 // 出現ゲートも同じ理由）なので、名前が漏れていないことも見る。
-test('面セレクト画面は到達した面だけ番号と敵の名前を出す', async () => {
+// 面の名前（ユーザーの指定 2026-11-07「場面（新敵）」の形、英語）。期待値は実装の表から導かず、ここに直に書く
+const STAGE_TITLES = [
+    'CAVE MOUTH (TANK)', 'ORE SLOPES (ATTACKER)', 'CAVERN TOWN (HEAVY)', 'UNDERGROUND LAKE (DRONE)',
+    'ICE CAVERN (RIVAL)', 'FOGGY FACTORY (ARTILLERY)', 'FORTRESS (CRUISE MISSILE)',
+];
+
+test('面セレクト画面は到達した面だけ番号と面の名前を出す', async () => {
     const game = makeGame({ storage: storageReached(4), stageSelectIndex: 2 });
     game.canvas = { width: 960, height: 720 };
     game.mode = 'normal';
@@ -124,12 +130,13 @@ test('面セレクト画面は到達した面だけ番号と敵の名前を出�
 
     for (const n of ['1', '2', '3', '4']) assert.ok(texts.includes(n), `${n} が無い: ${texts.join(' | ')}`);
     assert.ok(!texts.includes('5'), '未到達の面の番号が出ている');
-    for (const name of ['TANK', 'ATTACKER', 'HEAVY', 'DRONE']) {
+    for (const name of STAGE_TITLES.slice(0, 4)) {
         assert.ok(texts.includes(name), `${name} が無い: ${texts.join(' | ')}`);
     }
-    for (const name of ['RIVAL', 'ARTILLERY', 'CRUISE MISSILE']) {
-        assert.ok(!texts.includes(name), `未到達の敵 ${name} が漏れている`);
+    for (const name of STAGE_TITLES.slice(4)) {
+        assert.ok(!texts.some((t) => t.includes(name)), `未到達の面 ${name} が漏れている`);
     }
+    assert.equal(texts.filter((t) => t === STAGE_TITLES[1]).length, 2, '選んでいる面の名前が右の見出しにも出ていない');
     assert.equal(texts.filter((t) => t === '- - -').length, 3, '未到達の3面が伏せられていない');
     assert.ok(texts.some((t) => t.includes('STAGE RANKINGS ONLY')));
     assert.ok(texts.includes('STAGE 2'), '選んでいる面の見出しが無い');
@@ -201,4 +208,23 @@ test('面セレクトも ↑/↓ で選べる', async () => {
     game = makeGame({ storage, stageSelectIndex: 3, input: fakeInput(['ArrowUp']) });
     game._updateStageSelect();
     assert.equal(game.stageSelectIndex, 2);
+});
+
+test('面の名前は一覧の帯の中に収まり、右のシーンに掛からない（一番長い名前で、1366 と 960 の両方）', async () => {
+    const { extractTextsWithFont } = await import('./helpers/fake-ctx.js');
+    for (const width of [1366, 960]) {
+        const game = makeGame({ storage: storageReached(7), stageSelectIndex: 7 });
+        game.canvas = { width, height: 768 };
+        const ctx = makeFakeCtx();
+        new ScreenRenderer(game).drawStageSelect(ctx);
+        const sceneLeft = Math.round(width * 0.5);
+        const band = ctx.calls.find((c) => c.name === 'fillRect' && c.args[3] === 30);   // 選択中の帯
+        const bandRight = band.args[0] + band.args[2];
+        const listed = extractTextsWithFont(ctx.calls).filter((o) => STAGE_TITLES.includes(o.text) && o.x < sceneLeft);
+        assert.equal(listed.length, 7, `${width}: 一覧に面の名前が7つ無い`);
+        for (const t of listed) {
+            assert.ok(t.x + t.width <= bandRight, `${width}: ${t.text} が帯の右端 ${bandRight} を越える (${t.x + t.width})`);
+            assert.ok(t.x + t.width < sceneLeft, `${width}: ${t.text} がシーンに掛かる`);
+        }
+    }
 });

@@ -146,3 +146,15 @@ test('4つの表が満杯でも画面からはみ出さない', () => {
     assert.ok(maxY <= CANVAS.height - 20,
         `開始ヒント(${CANVAS.height - 20})より下に文字が出ている: ${maxY}`);
 });
+
+test('面別ランキングの見出しに面の名前が出る（ユーザーの指定 2026-11-07）', () => {
+    const names = ['CAVE MOUTH (TANK)', 'ORE SLOPES (ATTACKER)', 'CAVERN TOWN (HEAVY)', 'UNDERGROUND LAKE (DRONE)',
+        'ICE CAVERN (RIVAL)', 'FOGGY FACTORY (ARTILLERY)', 'FORTRESS (CRUISE MISSILE)'];
+    names.forEach((name, i) => {
+        const ctx = makeFakeCtx();
+        renderer().drawStageRankings(ctx, i, { local: { time: [], score: [] }, global: { time: [], score: [] }, online: true }, STAGE_PALETTES[i]);
+        const hit = texts(ctx).find((t) => t.text.includes(name));
+        assert.ok(hit, `${i + 1}面の見出しに ${name} が無い`);
+        assert.ok(hit.y < 84, '見出しの位置（シーンの帯より上）に無い');
+    });
+});

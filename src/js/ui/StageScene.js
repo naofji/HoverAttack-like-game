@@ -44,6 +44,22 @@ export function stageEnemyLabel(stageIndex) {
     return ENEMY_LABELS[STAGE_ENEMY_KEY[stageIndex]] || '';
 }
 
+// 面の場所の名前（index 0..6 = 1..7面）。ユーザーの指定（2026-11-07）で、面の名前は「場面（新敵）」の形・英語にし、
+// 面セレクトと面別ランキングの見出しに出す。括弧の中の敵は STAGE_ENEMY_KEY（シーンに描く敵）から引く
+// ＝シーンの絵と名前が食い違わない。7面は要塞で初めて出る敵がビーム砲台と巡航ミサイルの2つあるが、
+// シーンに描いているのが巡航ミサイルなので CRUISE MISSILE
+const STAGE_PLACES = ['CAVE MOUTH', 'ORE SLOPES', 'CAVERN TOWN', 'UNDERGROUND LAKE', 'ICE CAVERN', 'FOGGY FACTORY', 'FORTRESS'];
+
+/**
+ * 面の名前「場所 (敵)」。例: 'CAVERN TOWN (HEAVY)'。
+ * @param {number} stageIndex 0..6
+ * @returns {string} 未定義の面は空文字
+ */
+export function stageTitle(stageIndex) {
+    const place = STAGE_PLACES[stageIndex];
+    return place ? `${place} (${stageEnemyLabel(stageIndex)})` : '';
+}
+
 const ENEMY_LABELS = {
     tank: 'TANK',
     attacker: 'ATTACKER',
