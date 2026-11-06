@@ -18,8 +18,7 @@ import {
 } from '../../utils/Constants.js';
 import { findSites, chainFloors } from './placement.js';
 import { placeVillages, villageFill, quietFactor } from './villages.js';
-import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge, buildOilJarStore } from './adobe.js';
-import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack, buildMiningExplosive } from './mining.js';
+import { TOWN_THEME } from './themes.js';
 import { mirrorParts, rect, pick, step4 } from './shapes.js';
 import { MAT_WOOD } from './chunks.js';
 import { TOWN_BODY_COLORS, TOWN_DETAIL_COLORS } from './palette.js';
@@ -109,7 +108,7 @@ function onBareFloor(e, solid) {
  * 週ごとに全部入れ替わる（村の比率をユーザーが手で詰めた直後）。
  * 支えは岩だけなので、床の岩の上にしか置かない（足場の上の爆発物は、面に入った瞬間に落ちる）
  */
-function placeExplosives(specs, rng, { solid, fits }) {
+function placeExplosives(specs, rng, { solid, fits, theme }) {
     // 床の建物の足元（本体の幅 × 高さ）。爆発物はここに重ねない。重ねると壁に埋もれて見え、
     // 弾は手前に描いた爆発物ではなく奥の壁で止まる（最終レビュー指摘: 6割近くが隣の建物に重なり、
     // 4割は半分以上が隣の壁の上だった）。軒・バルコニーなど足元の外の張り出しには重なってよい
@@ -118,7 +117,7 @@ function placeExplosives(specs, rng, { solid, fits }) {
     const placed = [];
     for (const s of specs) {
         if (s.site !== 'floor' || rng.next() >= 1 / TOWN_EXPLOSIVE_EVERY) continue;
-        const b = s.style === 'A' ? buildOilJarStore(rng) : buildMiningExplosive(rng);
+        const b = theme.explosive(s.style, rng);
         const right = rng.next() < 0.5;
         const gap = step4(rng, 0, 4);
         const foot0 = s.x + s.footX;
@@ -142,10 +141,11 @@ function placeExplosives(specs, rng, { solid, fits }) {
  * villages を渡さなければ rng で村を置く（Map はこちら）。テストは村を指定して効き方を見る。
  * quietZones（[{c, r, inner, outer}]、タイル）は町を建てない区域。inner 以内に掛かる建物は置かず、
  * outer までは建てる確率を下げて、区域の縁で町が急に途切れないようにする。
- * explosiveRng を渡せば、床の建物の脇に爆発物を足す（設計図の後ろに。前の建物は変わらない）
+ * explosiveRng を渡せば、床の建物の脇に爆発物を足す（設計図の後ろに。前の建物は変わらない）。
+ * theme は絵柄の表（themes.js）。省略すると3面の町（TOWN_THEME）
  */
 export function generateTown({
-    grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [], explosiveRng = null,
+    grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [], explosiveRng = null, theme = TOWN_THEME,
 }) {
     const sites = findSites(grid, rows, cols);
     const fillAt = (c, r) => villageFill(villages, c, r) * quietFactor(quietZones, c, r);
@@ -203,10 +203,8 @@ export function generateTown({
             // 塔の幅ぶん先の低い天井に引っぱられて広い所が狭い扱いになる（広い所の A 64%）。
             // 高さの上限は5列の最小のまま（standsWell が最後に確かめる）
             const here = Math.min(...colHead.slice(ci, ci + 2));
-            const style = rng.next() < adobeShare(here) ? 'A' : 'C';
-            const b = style === 'A'
-                ? buildAdobeTower(rng, { maxW: xEnd - x, maxH })
-                : buildMiningShack(rng, { maxW: xEnd - x, maxH });
+            const style = rng.next() < adobeShare(here) ? theme.wide : theme.narrow;
+            const b = theme.floor(style, rng, { maxW: xEnd - x, maxH });
             if (!b) { x += 8; continue; }
             const spec = {
                 site: 'floor', style, kind: b.kind,
@@ -232,8 +230,8 @@ export function generateTown({
             if (rng.next() > TOWN_WALL_HOUSE_CHANCE) continue;
             const r = run.r0 + 1 + Math.floor(rng.next() * Math.max(1, len - 2));
             if (rng.next() > villageness(run.c, r)) continue;
-            const style = rng.next() < share ? 'A' : 'C';
-            const b = style === 'A' ? buildAdobeWallHouse(rng, { maxReach }) : buildScaffoldShack(rng, { maxReach });
+            const style = rng.next() < share ? theme.wide : theme.narrow;
+            const b = theme.wall(style, rng, { maxReach });
             if (!b) continue;
             // 組み立ては「壁の右側に張り付く」向き。壁の左側（side: 'left'）なら反転する。
             // どちらも壁側の 4px が壁のタイルに入る位置に置く（そこが支え）
@@ -256,16 +254,9 @@ export function generateTown({
         let c = run.c0 + 1;
         while (c < run.c1 - 1) {
             if (rng.next() > villageness(c, run.r)) { c += 3 + Math.floor(rng.next() * 4); continue; }
-            const style = rng.next() < share ? 'A' : 'C';
+            const style = rng.next() < share ? theme.wide : theme.narrow;
             const room = (run.c1 - 1 - c) * T;
-            let b;
-            if (style === 'A' && room >= 64 && rng.next() < 0.5) {
-                b = buildHangingBridge(rng, { span: step4(rng, 64, Math.min(160, room)), maxHang });
-            } else if (style === 'C' && rng.next() < 0.4) {
-                b = buildHangingShack(rng, { maxHang });
-            } else {
-                b = buildLantern(rng, { maxHang });
-            }
+            const b = theme.ceiling(style, rng, { room, maxHang });
             if (b) {
                 add({ site: 'ceiling', style, kind: b.kind, x: c * T + step4(rng, 0, 8), y, w: b.w, h: b.h, parts: b.parts });
             }
@@ -273,6 +264,6 @@ export function generateTown({
         }
     }
     // --- 爆発物（段3b）。建物の後ろに足すので、描く順でも建物より手前に出る（狙って撃てるように）
-    if (explosiveRng) specs.push(...placeExplosives(specs, explosiveRng, { solid, fits }));
+    if (explosiveRng) specs.push(...placeExplosives(specs, explosiveRng, { solid, fits, theme }));
     return specs;
 }
