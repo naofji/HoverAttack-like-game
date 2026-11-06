@@ -11,7 +11,11 @@ import { CHUNK, MAT_MASK } from './chunks.js';
 import { TOWN_FALL_GRAVITY, TOWN_FALL_MAX_SPEED } from '../../utils/Constants.js';
 
 export class FallingPiece {
-    constructor({ canvas, cells, cw, ch, x, y, vx = 0, vy = 0, spin = 0, sourceId = -1, fireFuel = 0 }) {
+    /**
+     * damage: 落ちている間に機体へ当たったときのダメージ（0 なら当たっても痛くない＝3面の破片）。
+     * 5面のつらら（IcicleFall）と6面のクレーンの荷が使う。knockVy: 当たった機体を下へ押す速さ
+     */
+    constructor({ canvas, cells, cw, ch, x, y, vx = 0, vy = 0, spin = 0, sourceId = -1, fireFuel = 0, damage = 0, knockVy = 0 }) {
         this.canvas = canvas;
         this.cells = cells;
         this.cw = cw;
@@ -30,6 +34,10 @@ export class FallingPiece {
         this.alive = true;
         // 1棟1回だけ欠かせる（同じ建物を毎 tick 削り続けないように）
         this.hitIds = new Set();
+        this.damage = damage;
+        this.knockVy = knockVy;
+        // 当てた機体（1塊が同じ機体を何度も当て続けないように）
+        this.hit = new Set();
     }
 
     get cx() { return this.x + this.width / 2; }
@@ -51,6 +59,22 @@ export class FallingPiece {
         this.x += this.vx;
         this.y += this.vy;
         this.angle += this.spin;
+    }
+
+    /**
+     * かけらの矩形が機体の矩形に重なるか。外接矩形ではなく、残っているかけらごとに見る
+     * （つららの先の尖った形・回る塊の空いた所には当たらない）。接しているだけ（面積が 0）は重ならない。
+     * 回転は見た目だけなので、回る前の形で見る（当たりは外接矩形と同じ考え）
+     */
+    touches(entity) {
+        const ex1 = entity.x + entity.width, ey1 = entity.y + entity.height;
+        for (let k = 0; k < this.cells.length; k++) {
+            if (!this.cells[k]) continue;
+            const i = k % this.cw, j = (k - i) / this.cw;
+            const rx = this.x + i * CHUNK, ry = this.y + j * CHUNK;
+            if (entity.x < rx + CHUNK && ex1 > rx && entity.y < ry + CHUNK && ey1 > ry) return true;
+        }
+        return false;
     }
 
     draw(ctx) {

@@ -267,19 +267,23 @@ export function buildCrane(rng, { span, maxHang }) {
     const hy = CRANE_TOP + wire;
     rect(parts, wx - 2, hy, 8, 4, paint, MAT_METAL, false);   // フックの台
     rect(parts, wx + 1, hy + 4, 2, 2, DETAIL.rail);            // 爪
+    // 荷の矩形（heavy）。落ちて機体に当たるとダメージ（Town の _detach が、落ちる塊に荷のかけらが入っているかで見る）
+    let heavy;
     if (loadH === 12) {   // コンテナ（波板の筋）
         const cw = Math.min(32, span - 8);
         const cx = Math.max(0, Math.min(span - cw, wx + 2 - cw / 2));
         const col = pick(rng, [...BODY.blueSteel, ...BODY.paint, ...BODY.steel]);
         rect(parts, cx, hy + CRANE_HOOK, cw, 12, col, MAT_METAL, true);
         seams(parts, cx, hy + CRANE_HOOK, cw, 12, col, 4);
+        heavy = { kind: 'container', x: cx, y: hy + CRANE_HOOK, w: cw, h: 12 };
     } else if (loadH === 4) {   // 鉄骨（H 形の筋）
         const bw = Math.min(40, span - 8);
         const bx = Math.max(0, Math.min(span - bw, wx + 2 - bw / 2));
         rect(parts, bx, hy + CRANE_HOOK, bw, 4, steel, MAT_METAL, true);
         rect(parts, bx, hy + CRANE_HOOK + 1, bw, 2, DETAIL.dark);
+        heavy = { kind: 'beam', x: bx, y: hy + CRANE_HOOK, w: bw, h: 4 };
     }
-    return { kind: 'crane', w: span, h: hy + CRANE_HOOK + loadH, parts };
+    return { kind: 'crane', w: span, h: hy + CRANE_HOOK + loadH, parts, ...(heavy ? { heavy } : {}) };
 }
 
 /** 工場の照明。天井から下がる棒（上端 4px が天井）と傘、暗い琥珀の灯り */

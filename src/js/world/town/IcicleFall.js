@@ -6,19 +6,18 @@
 // FallingPiece（支えを失って落ちる塊）の一種。回らず、横へも流れず、重力で真下へ落ちる（先が真下を向いたまま）。
 // 床・岩に触れたら砕ける処理（Town._shatter）と、下の建物を欠かす処理（Town._updateFalling）は
 // ふつうの破片と同じ。違うのは、落下中に機体へダメージを与えること。
-// ダメージは Town._icicleImpact が、この塊の touches() で機体に掛かったかを見て与える。
+// ダメージは Town._fallImpact が、この塊の touches() で機体に掛かったかを見て与える。
 // 当てた機体は hit に覚える（1 本のつららが同じ機体を何度も当て続けないように）。
 
 import { FallingPiece } from './FallingPiece.js';
 import { CHUNK } from './chunks.js';
+import { ICICLE_KNOCK_VY } from '../../utils/Constants.js';
 
 export class IcicleFall extends FallingPiece {
     /** @param {{damage:number}} opts damage: この 1 本が機体に与えるダメージ（建物の damage をそのまま持ってくる） */
     constructor({ damage, ...piece }) {
-        super({ ...piece, vx: 0, spin: 0 });
+        super({ ...piece, vx: 0, spin: 0, damage, knockVy: ICICLE_KNOCK_VY });
         this.icicle = true;
-        this.damage = damage;
-        this.hit = new Set();
         this.age = 0;           // 落ち始めてからの tick（Town が粉雪を舞わせる間隔に使う）
         // 先のかけら（一番下の段）の真ん中の x（塊の左端から px）。先が床に触れたかは、外接矩形の角ではなくここで見る
         let sum = 0, n = 0;
@@ -47,19 +46,5 @@ export class IcicleFall extends FallingPiece {
         if (visible <= 0) return;
         ctx.drawImage(this.canvas, 0, 0, this.width, visible, this.x, this.y, this.width, visible);
     }
-
-    /**
-     * かけらの矩形が機体の矩形に重なるか。外接矩形ではなく、残っているかけらごとに見る
-     * （先の尖った形なので、外接矩形の端の空いた所には当たらない）。接しているだけ（面積が 0）は重ならない
-     */
-    touches(entity) {
-        const ex1 = entity.x + entity.width, ey1 = entity.y + entity.height;
-        for (let k = 0; k < this.cells.length; k++) {
-            if (!this.cells[k]) continue;
-            const i = k % this.cw, j = (k - i) / this.cw;
-            const rx = this.x + i * CHUNK, ry = this.y + j * CHUNK;
-            if (entity.x < rx + CHUNK && ex1 > rx && entity.y < ry + CHUNK && ey1 > ry) return true;
-        }
-        return false;
-    }
+    // 機体との当たり（touches）は FallingPiece と共通（6面のクレーンの荷も同じものを使う）
 }

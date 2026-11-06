@@ -2357,6 +2357,11 @@ export const FACTORY_HEAT_COOL = 90;
 export const FACTORY_GROUND_MARGIN = 1;
 export const FACTORY_GROUND_DEPTH = 2;
 export const FACTORY_GROUND_GAP = 3;
+// 6面のクレーンの荷（コンテナ・鉄骨）が落ちて機体に当たったときのダメージ（ユーザーの指定 2026-11-07）。
+// 5面のつらら（ICICLE_DAMAGE 15〜35）と同じ仕組み・同じくらいの重さ。コンテナは大きく重いので、つららの重いほうに近く。
+// 落ちる塊に荷のかけらが1つでも入っていれば当たる（ワイヤーが切れて荷だけ・桁ごと全体のどちらでも）。1塊1機体1回
+export const FACTORY_LOAD_DAMAGE = { container: 30, beam: 20 };
+export const FACTORY_LOAD_KNOCK_VY = 2;   // 当たった機体を下へ押す速さ（つららの ICICLE_KNOCK_VY と同じ）
 // 残り火（燃え尽きた所・燃えて砕けた破片の所）が細い煙と火の粉を出し続けるフレーム数と、同時の上限
 export const TOWN_EMBER_FRAMES = 480;   // 8秒
 export const TOWN_EMBERS_MAX = 40;

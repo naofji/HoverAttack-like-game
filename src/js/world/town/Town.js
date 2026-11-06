@@ -37,7 +37,7 @@ import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import { audioManager } from '../../audio/AudioManager.js';
 import { isInView } from '../../utils/viewCull.js';
 import {
-    TOWN_OCCLUDE_ALPHA, TOWN_OCCLUDE_FADE_STEP, FACTORY_HEAT_COOL,
+    TOWN_OCCLUDE_ALPHA, TOWN_OCCLUDE_FADE_STEP, FACTORY_HEAT_COOL, FACTORY_LOAD_DAMAGE, FACTORY_LOAD_KNOCK_VY,
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
@@ -47,7 +47,7 @@ import {
     SNOWTREE_FLURRY_HIT, SNOWTREE_FLURRY_START, SNOWTREE_FLURRY_TRICKLE_EVERY, SNOWTREE_FLURRY_TRICKLE,
     SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_NEEDLE_EVERY, SNOWTREE_FLURRY_LIE_EVERY, SNOWTREE_FLURRY_LIE_PARTICLES, SNOWTREE_FLURRY_SPREAD,
     SNOWTREE_FLURRY_START_HEIGHT, SNOWTREE_FLURRY_TRICKLE_STEP, SNOWTREE_FLURRY_BIG_SHARE,
-    ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_KNOCK_VY, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
+    ICICLE_SHAKE_TICKS, ICICLE_SHAKE_AMPLITUDE, ICICLE_DRIP_EVERY, ICICLE_SHARDS,
     ICICLE_TRAIL_EVERY, ICICLE_TRAIL_COUNT, ICICLE_SINK_SPEED, ICICLE_POWDER, ICICLE_POWDER_SIZE, ICICLE_POWDER_BIG_SHARE,
 } from '../../utils/Constants.js';
 
@@ -118,6 +118,8 @@ export class Town {
                 // damage: 落ちたときに機体へ与える値。shakeLeft: 震えの残り tick（0 は震えていない）。shaken: 一度震えたら二度と震えない
                 brittle: spec.brittle === true,
                 damage: spec.damage || 0,
+                // 6面のクレーンの荷の矩形（建物の左上から px）と種類。落ちる塊に荷のかけらが入っていれば機体にダメージ（_detach）
+                heavy: spec.heavy || null,
                 shakeLeft: 0,
                 shaken: false,
                 x: spec.x, y: spec.y, width: spec.w, height: spec.h,
@@ -535,6 +537,7 @@ export class Town {
             if (p.topple) { this._updateTopple(p); continue; }
             if (p.icicle) { this._updateIcicle(p, game); continue; }
             p.step();
+            if (p.damage > 0) this._fallImpact(p, game);   // 6面のクレーンの荷
             const by = p.y + p.height;
             this._chipBelow(p, p.cx, by);
             // 下端の左・中・右のどれかが岩に入ったら砕ける。盤面の外は岩（Map.isSolid と同じ）なので
@@ -563,7 +566,7 @@ export class Town {
     _updateIcicle(p, game) {
         if (p.sinking) { this._sinkIcicle(p); return; }
         p.step();
-        this._icicleImpact(p, game);   // 触れる tick にも当てる
+        this._fallImpact(p, game);   // 触れる tick にも当てる
         const tx = p.tipX, ty = p.y + p.height;
         this._chipBelow(p, tx, ty);
         if (p.age % ICICLE_TRAIL_EVERY === 0) {
@@ -827,16 +830,28 @@ export class Town {
     }
 
     /**
-     * 落ちるつららが機体に当たる。かけらが機体の矩形に掛かったら、1 本につき 1 機体 1 回だけ。
+     * 落ちるもの（つらら・6面のクレーンの荷）が機体に当たる。かけらが機体の矩形に掛かったら、1 塊につき 1 機体 1 回だけ。
      * game が無い（道具・テストの引数なしの更新）ときは何もしない
      */
-    _icicleImpact(p, game) {
+    _fallImpact(p, game) {
         if (!game) return;
         for (const e of impactTargets(game)) {
             if (p.hit.has(e) || !p.touches(e)) continue;
             p.hit.add(e);
-            applyImpact(e, e.x + e.width / 2, p.y + p.height, p.damage, ICICLE_KNOCK_VY);
+            applyImpact(e, e.x + e.width / 2, p.y + p.height, p.damage, p.knockVy);
         }
+    }
+
+    /** 切り離す塊 group に、建物 b の荷（heavy）のかけらが入っているなら、その荷のダメージ。無ければ 0 */
+    _heavyDamage(b, group) {
+        const h = b.heavy;
+        if (!h) return 0;
+        for (const k of group) {
+            const i = k % b.cw, j = (k - i) / b.cw;
+            const cx = i * CHUNK + HALF, cy = j * CHUNK + HALF;
+            if (cx >= h.x && cx < h.x + h.w && cy >= h.y && cy < h.y + h.h) return FACTORY_LOAD_DAMAGE[h.kind] || 0;
+        }
+        return 0;
     }
 
     /**
@@ -1007,7 +1022,9 @@ export class Town {
             // 幹が切れた揺れで、木が雪を振るい落とす（塊の上半分あたり、幅いっぱいに）
             this._emit('leaf', piece.x + pw / 2, piece.y + ph * SNOWTREE_FLURRY_START_HEIGHT, { count: SNOWTREE_FLURRY_START, flora: 'snow', spread: pw / 2, mode: 'shake' });
         } else {
-            this.falling.push(new FallingPiece(piece));
+            // 6面のクレーンの荷を含む塊は、落ちている間に機体へ当たる（つららと同じ。荷の無い塊は3面と同じく痛くない）
+            const damage = this._heavyDamage(b, group);
+            this.falling.push(new FallingPiece(damage > 0 ? { ...piece, damage, knockVy: FACTORY_LOAD_KNOCK_VY } : piece));
         }
         this._trimFalling();
     }

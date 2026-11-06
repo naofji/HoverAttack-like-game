@@ -258,7 +258,10 @@ export function generateTown({
             const room = (run.c1 - 1 - c) * T;
             const b = theme.ceiling(style, rng, { room, maxHang });
             if (b) {
-                add({ site: 'ceiling', style, kind: b.kind, x: c * T + step4(rng, 0, 8), y, w: b.w, h: b.h, parts: b.parts });
+                add({
+                    site: 'ceiling', style, kind: b.kind, x: c * T + step4(rng, 0, 8), y, w: b.w, h: b.h, parts: b.parts,
+                    ...(b.heavy ? { heavy: b.heavy } : {}),   // 6面のクレーンの荷（落ちると機体にダメージ）
+                });
             }
             c += Math.max(3, Math.ceil((b ? b.w : 16) / T)) + Math.floor(rng.next() * 4);
         }
