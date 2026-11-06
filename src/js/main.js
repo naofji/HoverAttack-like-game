@@ -913,11 +913,6 @@ export const Game = {
         // 環境の「岩の奥」の描画（雪）。遠景の上、地形の下＝空洞の向こうで降っている
         this.env.drawBehindTerrain(ctx, camX, camY);
 
-        // 3面の町並み。遠景より手前・地形より奥（土台は岩の縁に隠れ、機体は必ず手前に出る）
-        if (this.map.town) {
-            this.map.town.draw(ctx, { x: camX, y: camY, w: this.canvas.width, h: this.canvas.height });
-        }
-
         this.map.draw(ctx);
         // Orb は地形の上、機体の下（機体が Orb の前に立って押す絵になる）
         for (const orb of this.orbs || []) {
@@ -935,7 +930,6 @@ export const Game = {
         if (this.player) this.player.draw(ctx);
 
         for (const proj of this.projectiles) proj.draw(ctx);
-        for (const particle of this.particles) particle.draw(ctx);
         for (const mine of this.landmines) {
             if (!isInView(mine, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             mine.draw(ctx);
@@ -982,6 +976,18 @@ export const Game = {
 
         for (const bullet of this.enemyBullets) bullet.draw(ctx);
         if (this.flag) this.flag.draw(ctx);
+
+        // 3〜5面の町並み（建物・植物・雪の木・つらら）は機体と弾より手前＝前景。建物に入ると陰に隠れる
+        // （重なる建物が外からの弾を止める当たり判定に、見た目を揃えた）。機体が重なる建物は Town が丸ごと
+        // 薄くする。そのあと建物の矩形の範囲だけ地形を重ね直して、土台・つららの根元を岩の縁の奥に戻す
+        if (this.map.town) {
+            const view = { x: camX, y: camY, w: this.canvas.width, h: this.canvas.height };
+            this.map.town.draw(ctx, view);
+            this.map.drawTerrainOver(ctx, this.map.town.visibleRects(view));
+        }
+        // パーティクル（爆発・破片・煙）は町より手前。建物の壁で起きた爆発が建物に隠れないように
+        // （町を前景にする前は弾の直後に描いていた。敵より手前になったのはこの移動の副作用）
+        for (const particle of this.particles) particle.draw(ctx);
 
         // 環境のワールド描画（水の塗りと水面）。機体と弾の上、煙幕の下。
         // パーティクルの後に描くのは、水中の爆発や破片にも水の色をかぶせたいから

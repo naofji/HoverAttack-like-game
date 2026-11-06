@@ -25,13 +25,26 @@ function makeWorld(order, town) {
     };
 }
 
-test('町は遠景と環境の奥の描画のあと、地形の前に、画面のワールド矩形で描く', () => {
+test('町は機体・敵・弾のあと（前景）に描き、建物の範囲だけ地形を重ね直し、パーティクルはその手前', () => {
     const order = [];
     let view = null;
-    const town = { draw: (ctx, v) => { order.push('town'); view = v; } };
-    Game._drawWorld.call(makeWorld(order, town), makeFakeCtx());
-    assert.deepEqual(order, ['backdrop', 'behind', 'town', 'map']);
+    let overRects = null;
+    const rects = [{ x: 1100, y: 600, w: 16, h: 16 }];
+    const town = {
+        draw: (ctx, v) => { order.push('town'); view = v; },
+        visibleRects: (v) => { order.push('rects'); assert.deepEqual(v, view); return rects; },
+    };
+    const w = makeWorld(order, town);
+    w.map.drawTerrainOver = (ctx, r) => { order.push('terrainOver'); overRects = r; };
+    w.player = { draw: () => order.push('player') };
+    w.enemies = [{ x: 1100, y: 600, width: 10, height: 10, alive: true, draw: () => order.push('enemy') }];
+    w.enemyBullets = [{ draw: () => order.push('enemyBullet') }];
+    w.particles = [{ draw: () => order.push('particle') }];
+    Game._drawWorld.call(w, makeFakeCtx());
+    assert.deepEqual(order, ['backdrop', 'behind', 'map', 'player', 'enemy', 'enemyBullet',
+        'town', 'rects', 'terrainOver', 'particle']);
     assert.deepEqual(view, { x: 1000, y: 500, w: 1024, h: 768 });
+    assert.equal(overRects, rects);
 });
 
 test('町の無い面では何もしない', () => {

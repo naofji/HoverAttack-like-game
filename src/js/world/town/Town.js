@@ -9,8 +9,11 @@
 // 段2で欠け・支え・落下を足した。壊れ方はどれも buildings の cells（かけらの表）だけを読み書きし、
 // 絵は消えたかけらを clearRect で抜くだけにする（建物全体は描き直さない）。
 //
-// 描く場所は main._drawWorld の「遠景のあと・地形の前」。土台は岩の縁の奥に隠れ、
-// 機体や弾は必ず建物より手前に出る。
+// 描く場所は main._drawWorld の「機体・弾のあと」（前景）。建物に入った機体は陰に隠れて見える
+// （当たり判定は前から「重なる建物が外からの弾を止める」ので、見た目をそれに揃えた）。
+// 機体が重なっている建物は丸ごと薄くする（occlusion。TOWN_OCCLUDE_ALPHA）ので、中の機体は見失わない。
+// 土台は、建物の矩形の範囲だけ地形を重ねて描き直して岩の縁に隠す（Map.drawTerrainOver。以前の
+// 「地形の奥に描く」と同じ見た目）。
 
 import { rasterizeParts, computeAnchors, chunkTouchesRock, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
 import { paintParts } from './shapes.js';
@@ -31,7 +34,9 @@ import { bounceOffTown } from '../../utils/grenadePhysics.js';
 import { surfaceNormal } from './surfaceNormal.js';
 import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import { audioManager } from '../../audio/AudioManager.js';
+import { isInView } from '../../utils/viewCull.js';
 import {
+    TOWN_OCCLUDE_ALPHA, TOWN_OCCLUDE_FADE_STEP,
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
@@ -117,6 +122,8 @@ export class Town {
                 burnt: new Set(),
                 // 段3b: 爆発物（かけらに爆発物の材料がある建物）。爆発したら exploded
                 explosive: cells.some((v) => (v & MAT_MASK) === MAT_EXPLOSIVE), exploded: false,
+                // 描く不透明度。機体が重なっている間は TOWN_OCCLUDE_ALPHA へ、離れたら 1 へ少しずつ寄る（updateOcclusion）
+                alpha: 1,
             };
         });
         // 建物は動かないので、外接矩形が掛かるマス目に1度だけ登録する
@@ -408,8 +415,33 @@ export class Town {
         }
     }
 
+    /**
+     * 機体が重なっている建物を薄くし、離れた建物を戻す。毎 tick 1回。
+     * 重なりの判定は弾の例外と同じ buildingsUnder（機体の円と建物の外接矩形）。外接矩形なので、
+     * 屋根の上に乗っているだけ・木の葉の脇をかすめるだけでも薄くなる（隠れていないものを隠すよりは安全側）
+     * @param {Array<{x:number,y:number,width:number,height:number}>} entities
+     */
+    updateOcclusion(entities) {
+        const under = this.buildingsUnder(entities);
+        for (const b of this.buildings) {
+            const target = under.has(b.id) ? TOWN_OCCLUDE_ALPHA : 1;
+            if (b.alpha === target) continue;
+            b.alpha = b.alpha < target
+                ? Math.min(target, b.alpha + TOWN_OCCLUDE_FADE_STEP)
+                : Math.max(target, b.alpha - TOWN_OCCLUDE_FADE_STEP);
+        }
+    }
+
     /** 毎 tick。main._simulationTick が map.update() のあとに呼ぶ */
     update(game) {
+        // 前景に描くので、隠れて見失うと困るもの（機体・アイテム・地雷）が重なる建物を薄くする。
+        // 敵は画面の近くだけ見る（平均100体いて、遠くの敵が重なる建物は描かれない）
+        const cam = game.camera, cv = game.canvas;
+        const near = (e) => !cam || !cv || isInView(e, cam, cv, VIEW_CULL_MARGIN);
+        const seen = [game.player, game.carrier, ...(game.enemies || []).filter(near),
+            ...(game.pickups || []), ...(game.landmines || [])];
+        this.updateOcclusion(seen.filter((e) => e && e.alive !== false));
+
         // game.projectiles の弾（自機のミサイル・グレネード・マシンガンと、敵のミサイル・グレネード）。
         // 敵のマシンガン・ホーミング・巡航・ビームは game.enemyBullets で、CollisionManager が更新の直後に見る。
         // 持ち主による違い（敵は当たるが無傷。自機・母艦が重なる建物だけ例外）は sweepProjectile の中で決まる
@@ -420,7 +452,6 @@ export class Town {
         }
         this._updateShaking();
         this._updateFalling(game);
-        const cam = game.camera, cv = game.canvas;
         const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
         this.fire.update(view);
         // 炎のループ（spec 4章）。画面に近い火元が無くなったら引いて止める。
@@ -942,12 +973,30 @@ export class Town {
      * 縦長の塔では余分に描く。数百棟を毎フレーム見るので矩形で足りる）。
      * @param {{x:number, y:number, w:number, h:number}} view 画面のワールド矩形
      */
+    /** 画面に掛かる建物の外接矩形（draw と同じ選び方）。main がこの範囲だけ地形を重ねて土台を隠す */
+    visibleRects(view) {
+        const x1 = view.x + view.w;
+        const y1 = view.y + view.h;
+        const rects = [];
+        for (const b of this.buildings) {
+            if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
+            rects.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+        }
+        return rects;
+    }
+
     draw(ctx, view) {
         const x1 = view.x + view.w;
         const y1 = view.y + view.h;
         for (const b of this.buildings) {
             if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
-            ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
+            if (b.alpha < 1) {
+                ctx.globalAlpha = b.alpha;
+                ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
+                ctx.globalAlpha = 1;
+            } else {
+                ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
+            }
         }
         // 火（煙 → 炎 → 残り火）。建物の直後＝瓦礫・破片より奥、岩の縁よりも奥。煙が無いときは絵を焼かない
         this.fire.draw(ctx, view, this.fire.smoke.length > 0 ? this.smokeSprites() : null);

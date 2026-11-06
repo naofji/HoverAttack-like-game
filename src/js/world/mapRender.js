@@ -62,6 +62,24 @@ export const MapRender = {
     },
 
     /**
+     * 地形を矩形の範囲だけ描き直して上に重ねる。町（建物・木・つらら）を機体より手前に描いたあと、
+     * 床に埋めた土台・天井に刺さったつららの根元を岩の縁の奥に戻すためのもの。
+     * 地形の絵はタイルのキャッシュ1枚で、空のタイルは透明なので、岩のある所だけが上書きされる
+     * （draw と同じ drawImage を矩形ごとに1回。建物の外は描かないので機体の足元は変わらない）
+     * @param {Array<{x:number,y:number,w:number,h:number}>} rects ワールド座標
+     */
+    drawTerrainOver(ctx, rects) {
+        const W = this.width, H = this.height;
+        for (const r of rects) {
+            // drawImage は元の矩形がキャンバスの外に出ると描かないブラウザがあるので、盤面の内側に切る
+            const x0 = Math.max(0, Math.floor(r.x)), y0 = Math.max(0, Math.floor(r.y));
+            const x1 = Math.min(W, Math.ceil(r.x + r.w)), y1 = Math.min(H, Math.ceil(r.y + r.h));
+            if (x1 <= x0 || y1 <= y0) continue;
+            ctx.drawImage(this.tileCacheCanvas, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+        }
+    },
+
+    /**
      * タイル (r, c) を ctx の (c*S, r*S) に描く。種類ごとの絵の振り分けはここ1か所
      * （全面の描き直しと、壊れた周りの描き直しの両方がこれを呼ぶ）。
      * 要塞のパネル（金属と、要塞の中の硬い岩）は岩と別の絵（world/panelBlocks.js）。
