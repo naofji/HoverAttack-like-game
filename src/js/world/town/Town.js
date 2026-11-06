@@ -292,6 +292,18 @@ export class Town {
         this._heatIndex.set(key, e);
     }
 
+    /** 建物 b の焼けたかけらを、冷め具合の色で重ねる。建物が薄い間は同じだけ薄く */
+    _drawHeat(ctx, b, hot) {
+        ctx.globalAlpha = b.alpha;
+        for (const { k, age } of hot) {
+            if (!b.cells[k]) continue;   // 欠けた tick の描画（_updateHeat の前）でも穴の上に描かない
+            const i = k % b.cw;
+            ctx.fillStyle = lerpColor(FACTORY_HEAT_COLORS.hot, FACTORY_HEAT_COLORS.burnt, age / FACTORY_HEAT_COOL);
+            ctx.fillRect(b.x + i * CHUNK, b.y + ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
+        }
+        ctx.globalAlpha = 1;
+    }
+
     /**
      * 焼けたかけらを1 tick 冷ます。冷めきったら焼け色を建物の canvas に焼き込んで外す。
      * 欠けた・崩れて落ちた・爆発で消えたかけらは描かずに外す（穴の上に赤い四角が浮かないように）。
@@ -1031,6 +1043,15 @@ export class Town {
     draw(ctx, view) {
         const x1 = view.x + view.w;
         const y1 = view.y + view.h;
+        // 6面の金属の焼けた縁は、その建物を描いた直後に重ねる（建物の canvas は描き直さない）。全部の建物のあとに
+        // まとめて重ねると、重なった手前の建物の上に奥の建物の赤い点が浮いた（最終レビュー指摘。6面 5シードで 77 組）
+        const hotOf = this.hot.length > 0 ? new Map() : null;
+        if (hotOf) {
+            for (const h of this.hot) {
+                if (!hotOf.has(h.b)) hotOf.set(h.b, []);
+                hotOf.get(h.b).push(h);
+            }
+        }
         for (const b of this.buildings) {
             if (b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
             if (b.alpha < 1) {
@@ -1040,16 +1061,9 @@ export class Town {
             } else {
                 ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
             }
+            const hot = hotOf && hotOf.get(b);
+            if (hot) this._drawHeat(ctx, b, hot);
         }
-        // 6面の金属の焼けた縁。建物の上に毎フレーム重ねる（建物の canvas は描き直さない）。建物が薄い間は同じだけ薄く
-        for (const { b, k, age } of this.hot) {
-            if (!b.cells[k] || b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
-            const i = k % b.cw;
-            ctx.globalAlpha = b.alpha;
-            ctx.fillStyle = lerpColor(FACTORY_HEAT_COLORS.hot, FACTORY_HEAT_COLORS.burnt, age / FACTORY_HEAT_COOL);
-            ctx.fillRect(b.x + i * CHUNK, b.y + ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
-        }
-        if (this.hot.length > 0) ctx.globalAlpha = 1;
         // 火（煙 → 炎 → 残り火）。建物の直後＝瓦礫・破片より奥、岩の縁よりも奥。煙が無いときは絵を焼かない
         this.fire.draw(ctx, view, this.fire.smoke.length > 0 ? this.smokeSprites() : null);
         // 瓦礫の山: 下に広い段、上に狭い段の2つの四角（fillRect だけで描く決まり）

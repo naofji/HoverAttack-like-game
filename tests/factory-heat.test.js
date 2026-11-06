@@ -114,3 +114,24 @@ test('熱は火も誘爆も起こさない', () => {
     assert.equal(town.buildings[1].exploded, false, '熱で爆発物が爆発した');
     assert.equal(town.fire.fires.length, 0, '熱で火がついた');
 });
+
+test('焼けた縁はその建物の直後に描き、重なる後ろの番号の建物に隠れる', () => {
+    // 床の建物どうしは重なってよい（generate.js）。後ろの番号の建物ほど手前に描くので、奥の建物の焼けた縁を
+    // 全部の建物のあとに重ねると、手前の建物の上に赤い点が浮いた（最終レビュー指摘: 6面 5シードで 77 組）
+    const town = makeTown([slab(0, MAT_METAL), slab(16, MAT_METAL)]);
+    const [a, b] = town.buildings;
+    town.chip(a, 20, 16, 3);
+    assert.ok(town.hot.some((h) => h.b === a), '奥の建物が焼けていない');
+    const ctx = makeFakeCtx();
+    town.draw(ctx, VIEW);
+    let style = '';
+    let lastHotOfA = -1;
+    let drawB = -1;
+    ctx.calls.forEach((c, n) => {
+        if (c.name === 'set:fillStyle') style = c.args[0];
+        if (c.name === 'fillRect' && style === FACTORY_HEAT_COLORS.hot && c.args[0] < 32) lastHotOfA = n;
+        if (c.name === 'drawImage' && c.args[0] === b.canvas) drawB = n;
+    });
+    assert.ok(lastHotOfA >= 0 && drawB >= 0);
+    assert.ok(lastHotOfA < drawB, '奥の建物の焼けた縁が手前の建物の上に描かれた');
+});
