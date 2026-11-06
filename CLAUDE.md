@@ -27,6 +27,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 壊せる背景の植物の種類（4面） | `src/js/world/town/plants.js` に build 関数 ＋ `generatePlants.js` の置き方（燃えず誘爆しない。`soft: true` で崩壊の演出なし） | `Town.js`（町と同じ仕組み） |
 | 壊せる背景の木の種類（5面の雪の木） | `src/js/world/town/snowTrees.js` に build 関数 ＋ `generateSnowTrees.js` の置き方、色は `palette.js` の `SNOWTREE_COLORS`（燃えず誘爆しない。雪は岩より明るく、地形の雪のふちより暗い） | `Town.js`（4面の植物と同じ。置けるかの判定は `placer.js` を共有） |
 | 壊せる背景の「もろい」建物（5面のつらら） | `src/js/world/town/icicles.js` に build 関数 ＋ `generateIcicles.js` の置き方、色は `palette.js` の `ICICLE_COLORS`（`brittle: true` の設計図は当たると欠けずに震え、全体が `IcicleFall` になって落ちて機体にダメージ） | `Town.js`（`_shake` / `_updateShaking` / `_icicleImpact`） |
+| 壊せる背景の工場・基地（6面） | 絵柄は `src/js/world/town/themes.js` の `FACTORY_THEME` の1行（床・壁・天井・爆発物の build 関数）。絵は `factory.js`（工場 F）と `militaryBase.js`（基地 B）、色は `palette.js` の `FACTORY_COLORS`。置き方は3面と共用（`generate.js` は表を引くだけ。3面の行は `TOWN_THEME`）。描くだけの部品を鉄として数えるには `shapes.js` の `rectWithLoose(MAT_METAL)`（木にすると燃える） | `Town.js`（金属の焼けた縁は `metalHeat` ＝ `_heat` / `_updateHeat`、冷める速さは `FACTORY_HEAT_COOL`） |
 | 画面（新しい1画面） | `src/js/ui/screens/` に1ファイル ＋ `ScreenRenderer.js` 末尾の `Object.assign` に1語。更新側は `src/js/ui/flows/` | `ScreenRenderer.js` の Mixins 節 |
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
