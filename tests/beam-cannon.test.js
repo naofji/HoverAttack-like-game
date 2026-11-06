@@ -12,7 +12,7 @@ import {
   COLOR_BEAM_CANNON_LAMP_DIM, COLOR_BEAM_CANNON_LAMP_BRIGHT,
   COLOR_BEAM_CANNON_LAMP_BACK, COLOR_BEAM_CANNON_FIN, COLOR_BEAM_CANNON_PIVOT,
   BEAM_LAMP_RING_OUTER, BEAM_LAMP_RING_INNER,
-  REFLECT_BEAM_SECOND_SHOT_OFFSET, REFLECT_BEAM_SECOND_SHOT_JITTER,
+  REFLECT_BEAM_SECOND_SHOT_OFFSET, REFLECT_BEAM_SECOND_SHOT_JITTER, ENEMY_TURRET_AIM_TOLERANCE,
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
 
@@ -184,7 +184,11 @@ test('gun 型は視線が通らないと撃たない', () => {
 // あと自機を動かしてから2発目を撃たせ、角度が「動いた後の自機の方向 ± ずれ」に
 // なっていることを縛る。`_updateAiming()` を1発目の角度で固定してしまう回帰や、
 // ずれが狙い直しを上書きしてしまう回帰が起きれば、この一致が崩れて失敗する
-test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範囲で）', () => {
+test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範囲で）', (tc) => {
+  // ブレの乱数を最大の側に固定する（ブレは (Math.random() - 0.5) * 2 * JITTER）。乱数のままだと、ブレが
+  // 大きすぎる回帰（例: 4倍）を小さく出た回に見逃す（10回中4回見逃した）。充填の長さも同じ乱数を使うが、
+  // 撃つまで回すので結果は変わらない
+  tc.mock.method(Math, 'random', () => 0.999999);
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
   fireOnce(t, game);
@@ -196,34 +200,36 @@ test('2発目は撃つ瞬間の自機の位置へ狙い直す（± ずれの範�
   game.player.y = 150;
 
   // 砲身は一定の速さで回る（以前は即時照準）。2発目は砲身が動いた後の自機を向くまで待ってから
-  // 撃つので、間隔（REFLECT_BEAM_BURST_DELAY）ちょうどではなく、向くまで回して待つ
+  // 撃つので、間隔（REFLECT_BEAM_BURST_DELAY）ちょうどではなく、向くまで回して待つ。
+  // 撃った瞬間の砲身の向きと左右の向きを記録する（_executeAttack を包む。中身は本物のまま）
+  let aimed = null;
+  let side = null;
+  const fire = t._executeAttack.bind(t);
+  t._executeAttack = () => { aimed = t.currentAngle; side = t.secondShotSide; fire(); };
   for (let i = 0; i < REFLECT_BEAM_BURST_DELAY + 120 && game.enemyBullets.length < 2; i++) t.update();
   assert.equal(game.enemyBullets.length, 2, '2発目が出ていない');
 
   const secondAngle = Math.atan2(game.enemyBullets[1].vy, game.enemyBullets[1].vx);
   assert.notEqual(firstAngle, secondAngle, '2発とも同じ角度のまま（狙い直していない）');
 
-  // 動いた後の自機の方向 ± REFLECT_BEAM_SECOND_SHOT_OFFSET のどちらかと一致すること
-  // （狙い直しが、ずれに置き換わっていないことを縛る）
+  // (1) 狙い直し: 撃った瞬間の砲身は、動いた後の自機を ENEMY_TURRET_AIM_TOLERANCE 以内で向いている。
+  // 以前は「2発目の角度 = 自機の方向 ± ずれ ± ブレ」の一致を見ていたが、砲身を回してから撃つようにしてから
+  // （2982b65）は砲身が向きの許容の分だけずれたまま撃つので、ブレの乱数しだいで許容を 0.001〜0.006rad 超え、
+  // 5回に1回ほど落ちていた。砲身の向きとずれを分けて縛る
   const cx = t.x + t.width / 2;
   const cy = t.y + t.height / 2;
   const expected = Math.atan2(
     game.player.y + game.player.height / 2 - cy,
     game.player.x + game.player.width / 2 - cx,
   );
-  const diff = Math.abs(secondAngle - expected);
-  // REFLECT_BEAM_SECOND_SHOT_JITTER ぶんのランダムなブレが乗るようになったので、
-  // 厳密な一致ではなく、そのブレの範囲に収まっていることを縛る（性質は変えず、
-  // ブレのぶんだけ許容を広げる）
-  assert.ok(
-    Math.abs(diff - REFLECT_BEAM_SECOND_SHOT_OFFSET) <= REFLECT_BEAM_SECOND_SHOT_JITTER + 1e-9,
-    `2発目が「動いた後の自機 ± ずれ」を向いていない: diff=${diff}`,
-  );
+  assert.ok(Math.abs(aimed - expected) <= ENEMY_TURRET_AIM_TOLERANCE + 1e-9,
+    `撃った瞬間の砲身が動いた後の自機を向いていない: ${aimed} / ${expected}`);
+  // (2) 2発目は、その砲身の向き ＋ 左右のずれ ± ブレ（ずれが狙い直しを上書きしていない）
+  const fromBarrel = secondAngle - (aimed + REFLECT_BEAM_SECOND_SHOT_OFFSET * side);
+  assert.ok(Math.abs(fromBarrel) <= REFLECT_BEAM_SECOND_SHOT_JITTER + 1e-9,
+    `2発目が「砲身の向き ＋ ずれ ± ブレ」になっていない: ${fromBarrel}`);
 });
 
-// 今回の要望の本体: 自機が止まっていて狙い直しが効かなくても、2発目には
-// REFLECT_BEAM_SECOND_SHOT_OFFSET ぶんのずれが乗るので2発の角度は違う。
-// オフセットを0にする回帰（あるいは足し忘れ）が起きれば失敗する
 test('自機が動かなくても、2発目には小さな角度のずれが乗る', () => {
   const game = makeGame();
   const t = new EnemyTurret(game, 32, 40, false, 'beam');
