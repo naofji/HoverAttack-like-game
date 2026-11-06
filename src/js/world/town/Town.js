@@ -15,13 +15,14 @@
 // 土台は、建物の矩形の範囲だけ地形を重ねて描き直して岩の縁に隠す（Map.drawTerrainOver。以前の
 // 「地形の奥に描く」と同じ見た目）。
 
-import { rasterizeParts, computeAnchors, chunkTouchesRock, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE } from './chunks.js';
+import { rasterizeParts, computeAnchors, chunkTouchesRock, chunkHash, CHUNK, CHARRED, SOLID, MAT_MASK, MAT_EXPLOSIVE, MAT_PLANT, MAT_ICE, MAT_METAL } from './chunks.js';
 import { paintParts } from './shapes.js';
 import { centerOf } from '../../utils/Physics.js';
 import {
     TOWN_CHAR_EDGE, TOWN_RUIN_SHADE, TOWN_RUBBLE_COLORS, TOWN_DUST_COLOR, PLANT_CHAR_EDGE, PLANT_LEAF_PARTICLE_COLORS,
-    SNOWTREE_CHAR_EDGE, SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS, ICE_PARTICLE_COLORS,
+    SNOWTREE_CHAR_EDGE, SNOWTREE_PARTICLE_COLORS, SNOWTREE_FLURRY_COLORS, ICE_PARTICLE_COLORS, FACTORY_HEAT_COLORS,
 } from './palette.js';
+import { lerpColor } from '../../utils/color.js';
 import { createExplosion, Particle, SnowFlurryParticle } from '../../entities/Particle.js';
 import { supportedMask, detachedGroups } from './structure.js';
 import { FallingPiece } from './FallingPiece.js';
@@ -36,7 +37,7 @@ import { getSmokeSprites } from '../../entities/smokeSprites.js';
 import { audioManager } from '../../audio/AudioManager.js';
 import { isInView } from '../../utils/viewCull.js';
 import {
-    TOWN_OCCLUDE_ALPHA, TOWN_OCCLUDE_FADE_STEP,
+    TOWN_OCCLUDE_ALPHA, TOWN_OCCLUDE_FADE_STEP, FACTORY_HEAT_COOL,
     TOWN_CHIP_JAGGED, TOWN_COLLAPSE_FRACTION, TOWN_RUIN_DEPTH, TOWN_BLAST_RADIUS_K,
     TOWN_FALLING_MAX, TOWN_FALL_SPIN_MAX, TOWN_FALL_DRIFT_MAX,
     TILE_SIZE, VIEW_CULL_MARGIN, TOWN_COLLAPSE_PARTICLES,
@@ -71,8 +72,13 @@ export class Town {
      *   createCanvas?: (w:number, h:number) => object}} [opts]
      */
     constructor(specs, { isSolidTile = () => false, rockAt = null, createCanvas = defaultCreateCanvas, random = Math.random,
-        smokeSprites = getSmokeSprites } = {}) {
+        smokeSprites = getSmokeSprites, metalHeat = false } = {}) {
         this.isSolidTile = isSolidTile;
+        // 6面だけ: 金属の穴の縁を茶色く焦がさず、赤く焼けてから冷める（spec 2026-11-07-stage6-factory 2章）。
+        // hot は焼けているかけら [{ b, k, age }]。_heatIndex は同じかけらを二重に積まないための索引
+        this.metalHeat = metalHeat;
+        this.hot = [];
+        this._heatIndex = new Map();
         // 5面だけ: ワールド座標の点がタイルの形の岩の中か（Map.isSolidPoint）。支えをタイルでなく形で見る。
         // 隣のブロックが壊れると根元のタイルが坂・面取りに削れて、タイルは岩のままでも木の根元の下が宙になる
         // （段5の実測で、木・つららの約1割が 8〜10px 浮いたまま立っていた）。null はタイル単位（3面・4面は今までどおり）
@@ -268,10 +274,46 @@ export class Town {
             for (const n of nb) {
                 if (!b.cells[n] || done.has(n)) continue;
                 done.add(n);
+                // 6面の金属は焦がさず赤く焼く（冷めきったら _updateHeat が焼け色を焼き込む）
+                if (this.metalHeat && (b.cells[n] & MAT_MASK) === MAT_METAL) { this._heat(b, n); continue; }
                 const ni = n % b.cw;
                 b.ctx.fillRect(ni * CHUNK, ((n - ni) / b.cw) * CHUNK, CHUNK, CHUNK);
             }
         }
+    }
+
+    /** かけら k を焼けたばかりにする（もう焼けていれば熱を戻す） */
+    _heat(b, k) {
+        const key = b.id * 0x10000 + k;
+        const h = this._heatIndex.get(key);
+        if (h) { h.age = 0; return; }
+        const e = { b, k, age: 0 };
+        this.hot.push(e);
+        this._heatIndex.set(key, e);
+    }
+
+    /**
+     * 焼けたかけらを1 tick 冷ます。冷めきったら焼け色を建物の canvas に焼き込んで外す。
+     * 欠けた・崩れて落ちた・爆発で消えたかけらは描かずに外す（穴の上に赤い四角が浮かないように）。
+     * 熱は見た目だけで、火も誘爆も起こさない（金属は燃えない。ユーザー決定）
+     */
+    _updateHeat() {
+        if (this.hot.length === 0) return;
+        const keep = [];
+        for (const h of this.hot) {
+            const { b, k } = h;
+            if (!b.cells[k] || ++h.age >= FACTORY_HEAT_COOL) {
+                if (b.cells[k]) {
+                    const i = k % b.cw;
+                    b.ctx.fillStyle = FACTORY_HEAT_COLORS.burnt;
+                    b.ctx.fillRect(i * CHUNK, ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
+                }
+                this._heatIndex.delete(b.id * 0x10000 + k);
+                continue;
+            }
+            keep.push(h);
+        }
+        this.hot = keep;
     }
 
     /**
@@ -452,6 +494,7 @@ export class Town {
         }
         this._updateShaking();
         this._updateFalling(game);
+        this._updateHeat();
         const view = cam && cv ? { x: cam.x, y: cam.y, w: cv.width, h: cv.height } : null;
         this.fire.update(view);
         // 炎のループ（spec 4章）。画面に近い火元が無くなったら引いて止める。
@@ -998,6 +1041,15 @@ export class Town {
                 ctx.drawImage(b.canvas, b.x + this._shakeOffset(b), b.y);
             }
         }
+        // 6面の金属の焼けた縁。建物の上に毎フレーム重ねる（建物の canvas は描き直さない）。建物が薄い間は同じだけ薄く
+        for (const { b, k, age } of this.hot) {
+            if (!b.cells[k] || b.x >= x1 || b.x + b.width <= view.x || b.y >= y1 || b.y + b.height <= view.y) continue;
+            const i = k % b.cw;
+            ctx.globalAlpha = b.alpha;
+            ctx.fillStyle = lerpColor(FACTORY_HEAT_COLORS.hot, FACTORY_HEAT_COLORS.burnt, age / FACTORY_HEAT_COOL);
+            ctx.fillRect(b.x + i * CHUNK, b.y + ((k - i) / b.cw) * CHUNK, CHUNK, CHUNK);
+        }
+        if (this.hot.length > 0) ctx.globalAlpha = 1;
         // 火（煙 → 炎 → 残り火）。建物の直後＝瓦礫・破片より奥、岩の縁よりも奥。煙が無いときは絵を焼かない
         this.fire.draw(ctx, view, this.fire.smoke.length > 0 ? this.smokeSprites() : null);
         // 瓦礫の山: 下に広い段、上に狭い段の2つの四角（fillRect だけで描く決まり）

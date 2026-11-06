@@ -177,6 +177,7 @@ const town = new Town(specs, {
     isSolidTile: (r, c) => map.isSolid(r, c),
     createCanvas: (w, h) => new PixelCanvas(w, h),
     smokeSprites: noSmoke,
+    metalHeat: PROPS === 'factory',   // 6面の金属の焼けた縁（Map._generateFactory と同じ）
 });
 
 if (args.boom) {
