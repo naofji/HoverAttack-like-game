@@ -8,30 +8,34 @@ import { backdropColors } from '../src/js/world/CaveBackdrop.js';
 import { STAGE_PALETTES, TOWN_MATERIALS } from '../src/js/utils/Constants.js';
 import { luminance } from '../src/js/utils/color.js';
 
-// 6面（霧）の工場。3面の町と同じ考え方（遠景より手前・地形の岩より奥）を、6面の暗い岩 Cafe Noir で当てる
+// 6面（霧）の工場。最初は3面と同じ「岩の 0.85 倍以下」だったが、ユーザーの指定（2026-11-07「全体的にもっと明るく」）で
+// 岩（57.9）・足元のメタルの床より明るく、弾の黄色（輝度 200 前後）より十分暗い範囲にした（palette.js のコメント）
 const FILL = STAGE_PALETTES[5].fill;
 const back = backdropColors(FILL, 'fog');
-const MAX = luminance(FILL) * 0.85;
+const MIN = luminance(FILL) * 1.4;   // 81
+const MAX = 130;
+const DETAIL_MAX = 150;
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
-test('本体は rockLight 以上、岩の 0.85 倍以下（影は空洞以上）', () => {
+test('本体は岩の 1.4 倍以上・130 以下（影は空洞以上）', () => {
     for (const [name, list] of Object.entries(FACTORY_COLORS)) {
         assert.ok(list.length > 0);
         for (const hex of list) {
             const l = luminance(hex);
-            assert.ok(l >= luminance(back.rockLight), `${name} ${hex} が暗すぎる (${l.toFixed(1)})`);
+            assert.ok(l >= MIN, `${name} ${hex} が暗すぎる (${l.toFixed(1)} < ${MIN.toFixed(1)})`);
             assert.ok(l <= MAX, `${name} ${hex} が明るすぎる (${l.toFixed(1)} > ${MAX.toFixed(1)})`);
             const s = luminance(shade(hex));
             assert.ok(s >= luminance(back.voidColor) && s <= MAX, `${name} の影 ${shade(hex)} (${s.toFixed(1)})`);
+            assert.ok(s > luminance(FILL), `${name} の影 ${shade(hex)} が岩より暗い (${s.toFixed(1)})`);
         }
     }
 });
 
-test('差し色は空洞以上、岩の輝度以下', () => {
+test('差し色は空洞以上、150 以下', () => {
     for (const [name, hex] of Object.entries(FACTORY_DETAIL_COLORS)) {
         const l = luminance(hex);
         assert.ok(l >= luminance(back.voidColor), `${name} ${hex} が空洞より暗い (${l.toFixed(1)})`);
-        assert.ok(l <= luminance(FILL), `${name} ${hex} が岩より明るい (${l.toFixed(1)})`);
+        assert.ok(l <= DETAIL_MAX, `${name} ${hex} が明るすぎる (${l.toFixed(1)})`);
     }
 });
 

@@ -14,15 +14,19 @@
 //
 // **2面（level 1）は 2026-11-01 に外した**（2面の縁を坂・面取りにし、長い坂を盛ったため。設計 2026-11-01-stage2-orb-design.md）。
 // cache と damaged は、その変更の前のコード（9b60939）で levels = [0, 2, 3, 5] を記録したもの。2面の絵は tests/stage2-slopes.test.js が縛る
+//
+// **6面（level 5）は 2026-11-07 に外した**（工場が建つ地面をメタルにしたため。ユーザーの指定）。cache と damaged は、
+// その変更の前のコード（95cf046）で levels = [0, 2, 3] を記録したもの。変更の後のコードでも一致する。
+// 6面の地面は tests/factory-ground.test.js が縛る
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { digestDrawing } from '../tools/record-terrain-baseline.mjs';
 
 const BASELINE = {
-  cache: '2ae684dc2d5ace0d1da70f9c9036a3afa1f6db2fe261614c2d68298dd046ce24',
-  damaged: 'c32ab5bd504092eca1130408a25f66e15b471ee254ed17a6442f27b5814a7878',
+  cache: 'b19d022f678d72db9b869febe978fccea1540240adfff008fb96caeb26a546ba',
+  damaged: 'efbc857f45e8b66a0e16f297ba9e076a51d4495d60c983caa67a3632671035ec',
 };
 
 test('5面以外の面では、地形のキャッシュに焼く絵も、壊した後の焼き直しも段5の前と同じ', async () => {
-  assert.deepEqual(await digestDrawing(), BASELINE);
+  assert.deepEqual(await digestDrawing([0, 2, 3]), BASELINE);
 });

@@ -303,6 +303,10 @@ export class Map {
         // 2面の Orb（押せて転がる鉱物）。形を焼いた後に置く（平らな床を形で選ぶため）。派生ストリーム
         this.orbSpawns = this._findOrbPositions();
 
+        // 6面: 工場の設計図を先に作り、建物の足元の地面をメタルにしてから地形を焼く（設計図は空きか岩かしか見ないので、
+        // メタルにしても並びは変わらない。ここより後に game.rng を引く処理は無く、Step 13 で作っても同じ設計図になる）
+        if (STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].props === 'factory') this._prepareFactoryGround();
+
         this._initTileCache();
         this._generateMiniMap();
 

@@ -32,6 +32,7 @@ import { carveFortressZones } from '../fortress.js';
 import { pickFacilityAreas, metalizeFacilityBand } from '../facility.js';
 import { generateTown } from '../town/generate.js';
 import { FACTORY_THEME } from '../town/themes.js';
+import { metalizeFactoryGround } from '../town/factoryGround.js';
 import { generatePlants } from '../town/generatePlants.js';
 import { generateSnowTrees } from '../town/generateSnowTrees.js';
 import { generateIcicles } from '../town/generateIcicles.js';
@@ -143,9 +144,17 @@ export const MapFeatures = {
         });
     },
 
+    /** 6面: 工場の設計図を作り、建物の足元の地面をメタルにする（地形を焼く前に Map._generate が呼ぶ） */
+    _prepareFactoryGround() {
+        this._factorySpecs = this._buildFactorySpecs();
+        metalizeFactoryGround(this.grid, this.blockHP, this._factorySpecs, this.rows, this.cols);
+    },
+
     /** 6面: 金属は撃たれると縁が赤く焼ける（Town の metalHeat。3〜5面の金属は今のまま茶色の焦げ） */
     _generateFactory() {
-        this.town = new Town(this._buildFactorySpecs(), { isSolidTile: (r, c) => this.isSolid(r, c), metalHeat: true });
+        const specs = this._factorySpecs || this._buildFactorySpecs();
+        this._factorySpecs = null;
+        this.town = new Town(specs, { isSolidTile: (r, c) => this.isSolid(r, c), metalHeat: true });
     },
 
     /** 施設エリアを置き、縁の岩を金属にし、印（this.facility）を立てる */

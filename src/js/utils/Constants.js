@@ -2351,6 +2351,12 @@ export const TOWN_METAL_SCORCH = 0.2;
 // 90 = 実時間でおよそ 1.5 秒（固定タイムステップ 60/s）。撃ち続けている間は赤い縁が点々と残り、
 // 手を止めるとすぐ冷めて「撃った跡」だけになる長さとして置いた初期値。実機で見て調整する
 export const FACTORY_HEAT_COOL = 90;
+// 6面の工場が建つ地面をメタル（BLOCK_METAL）にする範囲（world/town/factoryGround.js。ユーザーの指定 2026-11-07）。
+// MARGIN: 建物の外接矩形から左右に広げるタイル数。DEPTH: 床の上面から何段をメタルに（1段だと撃って1枚剥がすと
+// すぐ岩が出る）。GAP: 同じ高さの床でこのタイル数以内のすき間はつなぐ（建物の並ぶ所が1枚の床に見えるように）
+export const FACTORY_GROUND_MARGIN = 1;
+export const FACTORY_GROUND_DEPTH = 2;
+export const FACTORY_GROUND_GAP = 3;
 // 残り火（燃え尽きた所・燃えて砕けた破片の所）が細い煙と火の粉を出し続けるフレーム数と、同時の上限
 export const TOWN_EMBER_FRAMES = 480;   // 8秒
 export const TOWN_EMBERS_MAX = 40;
