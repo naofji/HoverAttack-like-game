@@ -103,6 +103,9 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+        // 反動のばらつき（utils/mgSpread.js）。続けて撃った発数と、前の発から経った tick 数
+        this.mgStreak = 0;
+        this.mgSinceShot = Infinity;
         // 「立てる」のは入力処理、「消す」のは読んだ側（シミュレーションティック）。
         // gameSpeed 0.8 では 1 フレームに 0 ティックのことがあるので、立てた
         // フレームで消すとティックに届かないことがある
@@ -167,6 +170,7 @@ export class Player {
         if (this.lifeUpTimer > 0) this.lifeUpTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
         if (this.mgFireTimer > 0) this.mgFireTimer--;
+        this.mgSinceShot++;
         if (this.mgReloadTimer > 0) {
             this.mgReloadTimer--;
             if (this.mgReloadTimer === 0) {
@@ -936,6 +940,8 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+        this.mgStreak = 0;
+        this.mgSinceShot = Infinity;
         this.mgSwitchedToMG = false;
         this.mgManualReload = false;
     }

@@ -295,6 +295,15 @@ export const PLAYER_MG_BURST_SIZE = 16;
 export const PLAYER_MG_BURST_DELAY = 4; // Frames between shots in a burst
 export const PLAYER_MG_RELOAD_TIME = 60; // Frames after a burst
 export const PLAYER_MG_SPREAD = 0.12; // Spread angle in radians (approx ±7 degrees)
+// 反動のばらつき（utils/mgSpread.js）。連射の1発目は照準どおりに飛び、2発目から反動でばらつく（ユーザー指定 2026-11-07）。
+// 以前は1発目から毎発 ±PLAYER_MG_SPREAD/2 でばらけていた。ばらつきの幅は連射の発数で 0 から
+// PLAYER_MG_SPREAD まで RAMP 発かけて広がる（2発目 1/3・3発目 2/3・4発目から全幅）。いきなり全幅にすると
+// 1発目との差が唐突で反動に見えないため。初期値で、実機で見て詰める
+export const PLAYER_MG_RECOIL_RAMP = 3;
+// 引き金を離して（撃たずに）この tick 数たつと反動が収まり、次の1発はまた照準どおりに飛ぶ。
+// 押しっぱなしの連射の間隔は PLAYER_MG_BURST_DELAY（4）なので、それより長い間が空いたら「撃ち直し」とみなす。
+// 8 は撃ち終わりから約 0.13 秒（1.0x）。指切りで2〜3発ずつ撃てば1発目の精度を保てる
+export const PLAYER_MG_RECOIL_RECOVER = 8;
 
 // オートリロードが発動する残弾（発）。既定 8 は従来の PLAYER_MG_RELOAD_THRESHOLD 0.5
 // ×弾倉 16 発と同じ値で、設定を触らない人の挙動を変えないため。

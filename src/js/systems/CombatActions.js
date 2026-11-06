@@ -15,7 +15,7 @@
 import { sweepProjectileAgainstOrbs } from './orbInteractions.js';
 import {
     GRENADE_SPEED_MIN, GRENADE_SPEED_MAX, GRENADE_SPEED_MAX_DIST,
-    MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY, PLAYER_MG_SPREAD,
+    MISSILE_MAX_ON_SCREEN, PLAYER_MG_BURST_DELAY,
     GRENADE_LIFETIME, TOWN_PROJECTILE_IMPACT,
 } from '../utils/Constants.js';
 import { Missile } from '../entities/Missile.js';
@@ -25,6 +25,7 @@ import { REPAIR_KIT_HEAL } from '../entities/RepairKit.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { motionFor } from '../world/StageEnvironment.js';
 import { stepGrenade } from '../utils/grenadePhysics.js';
+import { nextMgShotIndex, mgShotSpread } from '../utils/mgSpread.js';
 
 export const CombatActions = {
     // ==========================================
@@ -205,7 +206,11 @@ export const CombatActions = {
     _fireMachineGun(player, px, py, angle) {
         if (player.mgReloadTimer > 0 || player.mgFireTimer > 0) return;
 
-        const finalAngle = angle + (Math.random() - 0.5) * PLAYER_MG_SPREAD;
+        // 反動: 連射の1発目は照準どおり、2発目から広がる（utils/mgSpread.js）
+        const shot = nextMgShotIndex(player.mgStreak, player.mgSinceShot);
+        const finalAngle = angle + (Math.random() - 0.5) * mgShotSpread(shot);
+        player.mgStreak = shot + 1;
+        player.mgSinceShot = 0;
         this.projectiles.push(new PlayerBullet(this, px + Math.cos(angle) * 12, py + Math.sin(angle) * 12, finalAngle));
         this.spawnCasing(px, py, player.facingRight);
 
