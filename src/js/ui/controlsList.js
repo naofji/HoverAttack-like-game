@@ -42,6 +42,8 @@ export const CONTROLS_ROWS = [
     { key: 'S', label: 'DOCK / HOLD: CROUCH & REFUEL' },
     // ここから下は表示・設定。ゲームの操作ではないので後ろにまとめる
     { key: 'R', label: 'TOGGLE MINI-MAP' },
+    // 置き場所の自動移動を撤去した代わりの手段。載せないと「左上から動かせない」になる
+    { key: 'TAB', label: 'MOVE MINI-MAP TO NEXT CORNER' },
     // ゲーム開始時に自動で全画面へ入るので普段は押さずに済むが、
     // 抜けたい／戻したいときの手段として要る
     { key: 'M', label: 'TOGGLE FULLSCREEN' },
@@ -74,6 +76,9 @@ export const LEFT_HAND_KEYS = [
     { cap: 'W', ux: 1.75, gy: 0, w: 1, rowKey: 'W' },
     // R はミニマップ。W と同じ段の右にあり、左手のまま押せることが図から読める
     { cap: 'R', ux: 3.75, gy: 0, w: 1, rowKey: 'R' },
+    // Tab は Q の左＝この段の左端。下の段の Shift と左端が揃うのも実物どおり。
+    // 幅 1.5 は実物の比率で、W（1.75 から）の手前で終わる
+    { cap: 'TAB', ux: 0, gy: 0, w: 1.5, rowKey: 'TAB' },
     { cap: 'A', ux: 0.75, gy: 1, w: 1, rowKey: 'A / D' },
     { cap: 'S', ux: 1.75, gy: 1, w: 1, rowKey: 'S' },
     { cap: 'D', ux: 2.75, gy: 1, w: 1, rowKey: 'A / D' },

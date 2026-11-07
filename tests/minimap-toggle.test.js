@@ -77,3 +77,51 @@ test('開いた状態で R をもう一度押すと閉じる', () => {
   g.update(16);
   assert.equal(g.showMiniMap, false);
 });
+
+// ---- Tab で置き場所を回す（自動で隅を選ぶ作りを撤去した代わり） ----
+// R と同じく update() 経由で確かめる。
+
+// 1つの偽ゲームで update() を続けて呼ぶと、アキュムレータが溜まって物理の tick
+// （偽ゲームには世界が無い）まで進んで落ちるので、1回押すごとに作り直して隅を引き継ぐ
+test('Tab を押すたびに 左上→右上→左下→右下→左上 と回る', () => {
+  const seen = [];
+  let corner = 'topLeft';
+  for (let i = 0; i < 4; i++) {
+    const g = makeGame({ showMiniMap: true, input: fakeInput({ pressed: ['Tab'] }) });
+    g.settings.miniMapCorner = corner;
+    g.update(16);
+    assert.equal(g.showMiniMap, true, 'Tab で閉じてしまった');
+    corner = g.settings.miniMapCorner;
+    seen.push(corner);
+  }
+  assert.deepEqual(seen, ['topRight', 'bottomLeft', 'bottomRight', 'topLeft']);
+});
+
+test('閉じているときに Tab を押すと、次の隅で開く', () => {
+  const g = makeGame({ input: fakeInput({ pressed: ['Tab'] }) });
+  g.update(16);
+  assert.equal(g.showMiniMap, true);
+  assert.equal(g.settings.miniMapCorner, 'topRight');
+});
+
+test('Tab で選んだ隅は保存される（次に遊ぶときも同じ隅）', () => {
+  const store = new Map();
+  const prev = globalThis.localStorage;
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  try {
+    const g = makeGame({ input: fakeInput({ pressed: ['Tab'] }) });
+    g.update(16);
+    const saved = JSON.parse([...store.values()][0]);
+    assert.equal(saved.miniMapCorner, 'topRight');
+  } finally {
+    if (prev === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = prev;
+  }
+});
+
+test('Tab はクロスヘアのロックも表示／非表示も触らない（R・Shift と独立）', () => {
+  const g = makeGame({ showMiniMap: true, input: fakeInput({ pressed: ['Tab'] }) });
+  g.update(16);
+  assert.equal(g.input.crosshairLocked, false);
+  assert.equal(g.showMiniMap, true);
+});

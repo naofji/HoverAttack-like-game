@@ -190,7 +190,7 @@ test('凡例の見出しが左手と右手それぞれの色で描かれる', ()
 test('一覧のキー名が群ごとの色で描かれる', () => {
     const { texts } = drawDiagram();
     const expected = {
-        leftHand: ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R'],
+        leftHand: ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R', 'TAB'],
         rightHand: ['L-CLICK', 'R-CLICK'],
         offMouse: ['M', 'P', '- / +'],
     };

@@ -41,6 +41,17 @@ test('既定値は「今の挙動」に一致する（触らない人には何�
   assert.equal(DEFAULT_SETTINGS.autoFullscreen, true, '今は開始時に全画面へ入る');
   assert.equal(DEFAULT_SETTINGS.autoAimHoldTenths, AUTO_AIM_HOLD_TENTHS_DEFAULT);
   assert.equal(DEFAULT_SETTINGS.autoAimResumeOnPickup, true, '拾ったら再開するのが既定');
+  assert.equal(DEFAULT_SETTINGS.miniMapCorner, 'topLeft', '自動で選んでいた頃も、何も無ければ左上だった');
+});
+
+test('ミニマップの隅は保存して読み直せ、知らない値は左上に落ちる', () => {
+  for (const corner of ['topLeft', 'topRight', 'bottomLeft', 'bottomRight']) {
+    const st = fakeStorage();
+    saveSettings({ ...DEFAULT_SETTINGS, miniMapCorner: corner }, st);
+    assert.equal(loadSettings(st).miniMapCorner, corner);
+  }
+  const broken = fakeStorage({ [SETTINGS_STORAGE_KEY]: JSON.stringify({ miniMapCorner: 'center' }) });
+  assert.equal(loadSettings(broken).miniMapCorner, 'topLeft');
 });
 
 test('保存して読み直すと同じ値', () => {

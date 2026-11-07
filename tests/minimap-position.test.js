@@ -1,4 +1,4 @@
-// drawMiniMap() の枠色・置き場所（四隅から自機/クロスヘアを避けて選ぶ）を縛るテスト。
+// drawMiniMap() の枠色・置き場所（設定の隅＝Tab で選んだ隅に出す。自機/クロスヘアは避けない）を縛るテスト。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ScreenRenderer } from '../src/js/ui/ScreenRenderer.js';
@@ -14,12 +14,9 @@ const CANVAS_H = 768;
 const MM_W = 300;
 const MM_H = 150;
 
-// mouse の既定値は「画面中央」。(-999,-999) のような画面外の値は
-// crosshairScreenPos() の HUD 帯クランプで結局スクリーン端（左上付近）に
-// 丸められてしまい、「クロスヘアを避ける」対象が無いテストのつもりでも
-// 実際には左上隅のすぐそばに点が来ていた。MINIMAP_AVOID_PADDING を導入すると
-// その丸められた点が左上隅の当たり判定に入ってしまうため、本当に「避けるものが
-// 無い」状態を表す画面中央に変更した。
+// mouse の既定値は「画面中央」。自動で隅を選んでいた頃の名残（画面外の値は
+// HUD 帯クランプで左上付近に丸められ、避ける対象になってしまった）。今は
+// ミニマップがクロスヘアを見ないので値は何でもよいが、中立な位置のままにしてある。
 function makeGame({ playerPos = null, carrierPos = null, mouse = { x: CANVAS_W / 2, y: CANVAS_H / 2 }, mmW = MM_W, mmH = MM_H } = {}) {
     return {
         canvas: { width: CANVAS_W, height: CANVAS_H },
@@ -53,22 +50,46 @@ test('外枠(strokeRect)は描かない', () => {
     assert.equal(strokeRects.length, 0, '枠線(strokeRect)が描かれている');
 });
 
-test('何も避けるものが無ければ左上に置かれる', () => {
+test('設定に隅が無ければ左上に置かれる', () => {
     const calls = draw(makeGame());
     const drawImageCall = calls.find((c) => c.name === 'drawImage');
     assert.equal(drawImageCall.args[1], MINIMAP_MARGIN);
     assert.equal(drawImageCall.args[2], HUD_TOP_HEIGHT + MINIMAP_MARGIN);
 });
 
-test('自機が左上にいれば、ミニマップは他の空いている角へ移る（左上ではなくなる）', () => {
-    // ミニマップのピクセル空間で (mmX+10, mmY+10) 付近に来るよう、ワールド座標を逆算する。
-    // px = mmX + (worldX/TILE_SIZE)*scale なので、オフセット10には worldX = 5*TILE_SIZE でよい
-    // (scale=2 のため)。
-    const calls = draw(makeGame({ playerPos: { x: 5 * TILE_SIZE, y: 5 * TILE_SIZE } }));
-    const drawImageCall = calls.find((c) => c.name === 'drawImage');
-    const mmX = drawImageCall.args[1];
-    const mmY = drawImageCall.args[2];
-    assert.notEqual(mmY, HUD_TOP_HEIGHT + MINIMAP_MARGIN, '自機のいる左上のままになっている');
+// Tab で選んだ隅（settings.miniMapCorner）にそのまま出る。4隅それぞれで、左右・上下の
+// どちらの端に寄っているかを見る（座標の式は minimap-placement.test.js が縛っている）。
+for (const [corner, right, bottom] of [
+    ['topLeft', false, false], ['topRight', true, false],
+    ['bottomLeft', false, true], ['bottomRight', true, true],
+]) {
+    test(`設定の隅（${corner}）に置かれる`, () => {
+        const game = makeGame();
+        game.settings = { miniMapCorner: corner };
+        const d = draw(game).find((c) => c.name === 'drawImage');
+        const [x, y, dw, dh] = d.args.slice(1, 5);
+        assert.equal(right ? CANVAS_W - MINIMAP_MARGIN - dw : MINIMAP_MARGIN, x, '左右が違う');
+        assert.equal(bottom ? CANVAS_H - HUD_BOTTOM_HEIGHT - MINIMAP_MARGIN - dh : HUD_TOP_HEIGHT + MINIMAP_MARGIN, y, '上下が違う');
+    });
+}
+
+// 自動で隅を選ぶ作りは「チラチラ動いて邪魔」との苦情で撤去した。以前のテストは
+// 「自機が左上にいれば他の隅へ移る」だったので、ちょうど逆を縛る。
+// 自機・クロスヘアの両方を左上の矩形の真ん中に置く（どちらかを避ける処理が
+// 残っていれば必ず動く位置）。
+test('自機とクロスヘアが左上に重なっても、ミニマップは動かない（自動移動は廃止）', () => {
+    const game = makeGame({
+        playerPos: { x: 5 * TILE_SIZE, y: 5 * TILE_SIZE },
+        mouse: { x: MINIMAP_MARGIN + 20, y: HUD_TOP_HEIGHT + MINIMAP_MARGIN + 20 },
+    });
+    const renderer = new ScreenRenderer(game);
+    for (let i = 0; i < 30; i++) {
+        const ctx = makeFakeCtx();
+        renderer.drawMiniMap(ctx);
+        const d = ctx.calls.find((c) => c.name === 'drawImage');
+        assert.equal(d.args[1], MINIMAP_MARGIN, `${i} フレーム目に左右へ動いた`);
+        assert.equal(d.args[2], HUD_TOP_HEIGHT + MINIMAP_MARGIN, `${i} フレーム目に上下へ動いた`);
+    }
 });
 
 test('点（母艦）の座標は、選ばれたミニマップの位置(mmX/mmY)に追随する（中央固定式が残っていない）', () => {
@@ -281,18 +302,16 @@ test('点（母艦）は開閉フェード(miniMapAlpha)を受ける。地形の
 // フェード中の挙動は purely-functional な advanceMiniMapTransition() のテストでしか
 // 裏付けられていなかった。
 test('隅の切り替え中は、旧位置に据え置かれたまま globalAlpha に遷移フェードが積まれる（点も含めて）', () => {
-    // 「避ける」対象は操作中の機体（自機がいればそれ、いなければ母艦）なので、
-    // 母艦は avoid には使わず、carrierPos は「点が正しく描かれるか」を見るための
-    // ものとして別に置く。自機の位置を画面中央（何も避けない）→左上寄り
-    // （左上を避けて bottomLeft が望ましくなる）と動かして隅の切り替えを起こす。
+    // 隅の切り替えは Tab で設定の隅（settings.miniMapCorner）が変わったときに起きる。
+    // 母艦は「点が正しく描かれるか」を見るために置く。
     const game = makeGame({
         playerPos: { x: CANVAS_W / 2, y: CANVAS_H / 2 },
     });
+    game.settings = { miniMapCorner: 'topLeft' };
     game.carrier = { alive: true, x: 100, y: 100, width: 0, height: 0 };
     const renderer = new ScreenRenderer(game);
 
-    // 1回目: 自機が画面中央付近にいて何も避けないので左上に置かれ、
-    // 初回描画は fade=1（フェード無し）。
+    // 1回目: 設定は左上。初回描画は fade=1（フェード無し）。
     const calls1 = (() => {
         const ctx = makeFakeCtx();
         renderer.drawMiniMap(ctx);
@@ -303,11 +322,10 @@ test('隅の切り替え中は、旧位置に据え置かれたまま globalAlph
     const topLeftY = drawImage1.args[2];
     assert.equal(topLeftY, HUD_TOP_HEIGHT + MINIMAP_MARGIN, 'テストの前提が崩れている（1回目が左上ではない）');
 
-    // 2回目: 自機を左上へ動かして、望ましい隅を bottomLeft に変える。
+    // 2回目: Tab を押した後と同じく、設定の隅を topRight に変える。
     // まだフェードアウトの途中（1歩ぶんしか進んでいない）なので、corner は
     // topLeft のまま・fade は 1 - MINIMAP_FADE_SPEED になっているはず。
-    game.player.x = 5 * TILE_SIZE;
-    game.player.y = 5 * TILE_SIZE;
+    game.settings = { miniMapCorner: 'topRight' };
     const calls2 = (() => {
         const ctx = makeFakeCtx();
         renderer.drawMiniMap(ctx);

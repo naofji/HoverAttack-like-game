@@ -2,7 +2,7 @@
 // MiniMap
 // ============================================
 //
-// プレイ中に M キーで出るミニマップ。Map 側が焼いたキャッシュを縮小して敷き、
+// プレイ中に R キーで出るミニマップ。置き場所は Tab で回す四隅のどれか（設定の miniMapCorner）。Map 側が焼いたキャッシュを縮小して敷き、
 // その上に自機・母艦・敵を点で重ねる。
 //
 // **ScreenRenderer.prototype へ Object.assign で混ぜる前提**のオブジェクト
@@ -12,13 +12,11 @@
 
 import {
     TILE_SIZE, MINIMAP_ALPHA, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
-    MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED, MINIMAP_AVOID_PADDING,
-    MINIMAP_SIDE_HYSTERESIS, MINIMAP_AVOID_PADDING_UNIT,
-    MINIMAP_VIEWPORT_HIGHLIGHT, COLOR_MINIMAP_VIEWPORT,
+    MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
+    MINIMAP_VIEWPORT_HIGHLIGHT, COLOR_MINIMAP_VIEWPORT, MINIMAP_CORNER_ORDER,
 } from '../../utils/Constants.js';
-import { pickStickyMiniMapCorner, miniMapCornerPositions } from '../minimapPlacement.js';
+import { miniMapCornerPositions } from '../minimapPlacement.js';
 import { advanceMiniMapTransition } from '../minimapTransition.js';
-import { crosshairScreenPos } from '../Crosshair.js';
 
 export const MiniMap = {
     drawMiniMap(ctx) {
@@ -32,27 +30,6 @@ export const MiniMap = {
         const mm = game.map.miniMapCanvas;
 
         if (!mm) return;
-
-        // 表示位置は「操作している側」（ドッキング中でなければ自機、そうでなければ母艦）と
-        // クロスヘアを避ける。母艦の方向矢印（HUD.drawCarrierArrow）はミニマップより
-        // 上の面に描くようになったため、もう避ける必要が無い（重なっても矢印側が
-        // 前面に出るので位置の問題が起きない）。
-        // 自機／母艦とクロスヘアは性質が違うので別々に持つ:
-        //   - 自機／母艦: 余白(MINIMAP_AVOID_PADDING_UNIT)の外にあれば OK。
-        //     クロスヘアより大きく取るのは、隅の切り替えがフェードを挟むぶん
-        //     早く動き始めないと、動いている最中に重なってしまうため
-        //   - クロスヘア: 余白(MINIMAP_AVOID_PADDING)の外にあれば OK
-        // （詳しくは pickStickyMiniMapCorner のコメント）
-        // どちらを操作中かで避けるべき対象が変わるため、両方は見ずに操作している方だけを見る。
-        let unitPoint = null;
-        if (game.player && game.player.alive && !game.player.docked) {
-            unitPoint = { x: game.player.x + game.player.width / 2 - game.camera.x, y: game.player.y + game.player.height / 2 - game.camera.y };
-        } else if (game.carrier && game.carrier.alive) {
-            unitPoint = { x: game.carrier.x + game.carrier.width / 2 - game.camera.x, y: game.carrier.y + game.carrier.height / 2 - game.camera.y };
-        }
-        // クロスヘアは「実際に描かれる位置」と一致させる必要があるため、Crosshair.draw() と
-        // 共有の関数を呼ぶ（計算を二重に持つと避ける位置と描画位置がずれる）。
-        const crosshairPoint = crosshairScreenPos(game);
 
         // 焼く解像度（cols*2 x rows*2）はマップの広さに比例するが、**画面に出す
         // 大きさはマップの広さによらず一定**にする。以前は「上限より小さければ
@@ -70,11 +47,8 @@ export const MiniMap = {
         const destW = mm.width * shrink;
         const destH = mm.height * shrink;
 
-        // 四隅の座標は先に1回だけ求めて、避ける隅を選ぶのにも実際に描く座標を
-        // 引くのにも使い回す（以前は pickMiniMapCorner の内部と、直後の座標取得とで
-        // 同じ引数の miniMapCornerPositions を2回呼んでいた）。
         // mapW/mapH には「実際に見える大きさ」＝縮小後の値を渡すこと。ここを
-        // 元サイズのままにすると、置き場所の当たり判定が見た目とずれる。
+        // 元サイズのままにすると、右・下の隅で画面端からはみ出す。
         const positions = miniMapCornerPositions({
             canvasW: w,
             canvasH: h,
@@ -84,28 +58,22 @@ export const MiniMap = {
             hudTop: HUD_TOP_HEIGHT,
             hudBottom: HUD_BOTTOM_HEIGHT,
         });
-        // 「カーソルがいる側の反対側」ルールで隅を選ぶ（詳しくは pickStickyMiniMapCorner）。
-        // 「今の隅」は miniMapTransition.corner にある。まだ何も無い（初回描画）ときは
-        // 'topLeft' を仮の今の隅として渡す。中心線の不感帯の中にカーソルがいるときは
-        // 「今の隅」がそのまま答えになるので、初回の既定値がそこで効く
-        // （＝画面中央にカーソルがある状態で開いたら左上に出る、という従来の見た目）。
-        const currentCorner = this.miniMapTransition ? this.miniMapTransition.corner : 'topLeft';
-        const desired = pickStickyMiniMapCorner({
-            positions, mapW: destW, mapH: destH,
-            currentCorner, unitPoint, crosshairPoint,
-            padding: MINIMAP_AVOID_PADDING,
-            unitPadding: MINIMAP_AVOID_PADDING_UNIT,
-            hysteresis: MINIMAP_SIDE_HYSTERESIS,
-        });
+        // 隅はプレイヤーが Tab で選んだもの（設定の miniMapCorner）。自機・クロスヘアを
+        // 避けて自動で選ぶ作りは「チラチラ動いて邪魔」との苦情で撤去した
+        // （経緯は Constants.js の MINIMAP_CORNER_ORDER）。知らない値は左上に落とす
+        // （settings.js の読み込みが検証済みだが、テストの game は settings を持たないことがある）。
+        const saved = game.settings && game.settings.miniMapCorner;
+        const desired = MINIMAP_CORNER_ORDER.includes(saved) ? saved : 'topLeft';
 
-        // 隅の切り替えをフェードでつなぐ。初回描画（このインスタンスでまだ何も
-        // 選んでいない）は、望ましい隅をそのまま完全に見える状態で採用する
+        // Tab で隅を替えたときはフェードでつなぐ（瞬間移動すると、どこへ行ったか
+        // 目で追えない）。初回描画（このインスタンスでまだ何も
+        // 選んでいない）は、設定の隅をそのまま完全に見える状態で採用する
         // （開いた瞬間に一度フェードインさせる必要は無い＝0.85→0.55等と同じ独立した
         // 開閉フェードは game.miniMapAlpha が別に受け持っている）。
         if (!this.miniMapTransition) {
-            this.miniMapTransition = { corner: desired.corner, fade: 1, phase: 'idle' };
+            this.miniMapTransition = { corner: desired, fade: 1, phase: 'idle' };
         } else {
-            this.miniMapTransition = advanceMiniMapTransition(this.miniMapTransition, desired.corner, MINIMAP_FADE_SPEED);
+            this.miniMapTransition = advanceMiniMapTransition(this.miniMapTransition, desired, MINIMAP_FADE_SPEED);
         }
 
         const { x: mmX, y: mmY } = positions[this.miniMapTransition.corner];

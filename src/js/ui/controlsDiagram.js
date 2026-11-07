@@ -82,7 +82,7 @@ function metrics(s) {
 }
 
 /** 左の列（キーボード）に出す行。並びは絵の上から下へ。 */
-const LEFT_LIST = ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R'];
+const LEFT_LIST = ['W', 'A / D', 'S', 'F', 'SHIFT', 'SPACE', 'R', 'TAB'];
 
 // 一覧の開始位置（metrics().listTop）は**左右で同じ**にする。絵の高さは左右で
 // 違う（キーボードは4段、マウスは1つ）ので、それに合わせて一覧の高さをずらすと

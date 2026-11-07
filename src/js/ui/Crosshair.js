@@ -11,10 +11,11 @@ import { UI } from './theme.js';
 /**
  * クロスヘアが実際に描かれるスクリーン座標（クランプ後）を返す。
  *
- * ミニマップの置き場所選びで「クロスヘアを避ける」ために、Crosshair.draw() の
- * 3分岐（オートエイム中／ロック中／マウス）＋ HUD 帯クランプと同じ計算が要る。
- * 計算を二重に持つと、避ける位置と実際に描かれる位置がずれてしまい
- * （どちらかを直し忘れると再び食い違う）、切り出して両方から呼ぶ形にした。
+ * Crosshair.draw() の 3分岐（オートエイム中／ロック中／マウス）＋ HUD 帯クランプ。
+ * 元はミニマップの置き場所選びで「クロスヘアを避ける」ために切り出した
+ * （計算を二重に持つと避ける位置と描く位置がずれるため）。ミニマップの自動移動は
+ * 2026-11-07 に撤去したが、描画側とテスト（crosshair-screen-pos.test.js）が
+ * 使っているので関数として残してある。
  *
  * @param {object} game
  * @returns {{x:number, y:number, clampedLeft:boolean, clampedRight:boolean, clampedUp:boolean, clampedDown:boolean}}

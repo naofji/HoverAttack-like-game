@@ -15,6 +15,7 @@ import {
     MG_RELOAD_THRESHOLD_DEFAULT, MG_RELOAD_THRESHOLD_MIN, MG_RELOAD_THRESHOLD_MAX,
     AUTO_AIM_CANCEL_THRESHOLD_DEFAULT, AUTO_AIM_RELEASE_MIN, AUTO_AIM_RELEASE_MAX,
     AUTO_AIM_HOLD_TENTHS_DEFAULT, AUTO_AIM_HOLD_TENTHS_MIN, AUTO_AIM_HOLD_TENTHS_MAX,
+    MINIMAP_CORNER_ORDER,
 } from './Constants.js';
 import { clampVolume } from './bgmVolume.js';
 
@@ -29,6 +30,8 @@ import { clampVolume } from './bgmVolume.js';
  * - autoFullscreen true      … 今もゲーム開始時に全画面へ入る
  * - autoAimHoldTenths 3      … 0.3 秒。長押しは新機能なので「取り違えない最短」を既定に
  * - autoAimResumeOnPickup true … 拾って何も起きないと壊れて見えるため
+ * - miniMapCorner topLeft    … 自動で隅を選んでいた頃も、何も避けないときは左上だった。
+ *   設定画面の行は無く、プレイ中の Tab で回す。音量の -/+ と同じく押した時点で保存する
  */
 export const DEFAULT_SETTINGS = Object.freeze({
     masterVolume: 1.0,
@@ -41,6 +44,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     autoFullscreen: true,
     autoAimHoldTenths: AUTO_AIM_HOLD_TENTHS_DEFAULT,
     autoAimResumeOnPickup: true,
+    miniMapCorner: 'topLeft',
 });
 
 /**
@@ -69,6 +73,7 @@ const KINDS = {
     autoAimRelease:    { kind: 'int', min: AUTO_AIM_RELEASE_MIN, max: AUTO_AIM_RELEASE_MAX },
     autoAimResumeOnPickup: { kind: 'flag' },
     autoAimHoldTenths: { kind: 'int', min: AUTO_AIM_HOLD_TENTHS_MIN, max: AUTO_AIM_HOLD_TENTHS_MAX },
+    miniMapCorner:     { kind: 'choice', values: MINIMAP_CORNER_ORDER },
 };
 
 /** 掛け算の丸め。0.3*0.3 が 0.09000000000000001 になるのを避ける。 */

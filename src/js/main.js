@@ -33,6 +33,7 @@ import {
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, stepSetting } from './utils/settings.js';
+import { nextMiniMapCorner } from './ui/minimapPlacement.js';
 import { SeededRNG } from './utils/SeededRNG.js';
 import { getCurrentWeek, stageSeed } from './utils/WeekSeed.js';
 import { toggleFullscreen } from './utils/fullscreen.js';
@@ -595,6 +596,17 @@ export const Game = {
 
     _updateMiniMap() {
         if (this.input.isKeyPressed('KeyR')) this.showMiniMap = !this.showMiniMap;
+        // Tab で置き場所を左上→右上→左下→右下と回す（自動で隅を選ぶ作りを撤去した代わり。
+        // 経緯は Constants.js の MINIMAP_CORNER_ORDER）。
+        // 閉じているときに押したら開く。見えないまま隅だけ変わっても、押した手応えが無い。
+        // キーは最初 Shift+R の案だったが、Shift は単独で「短押し＝ロック／長押し＝
+        // Auto Aim」を持っていて、R と組むとロックが道連れになるので Tab にした
+        // （Tab は Input.js でブラウザのフォーカス移動を既に止めてあり、他の用途も無い）
+        if (this.input.isKeyPressed('Tab')) {
+            this.settings = { ...this.settings, miniMapCorner: nextMiniMapCorner(this.settings?.miniMapCorner) };
+            this.showMiniMap = true;
+            this._saveSettings();
+        }
 
         const fadeSpeed = 0.08;
         this.miniMapAlpha = this.showMiniMap
