@@ -14,9 +14,11 @@ import {
     TILE_SIZE, MINIMAP_ALPHA, MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT,
     MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
     MINIMAP_VIEWPORT_HIGHLIGHT, COLOR_MINIMAP_VIEWPORT, MINIMAP_CORNER_ORDER,
+    MINIMAP_OVERLAP_ALPHA, MINIMAP_OVERLAP_FADE_SPEED,
 } from '../../utils/Constants.js';
-import { miniMapCornerPositions } from '../minimapPlacement.js';
+import { miniMapCornerPositions, miniMapOverlaps, stepMiniMapOverlapFade } from '../minimapPlacement.js';
 import { advanceMiniMapTransition } from '../minimapTransition.js';
+import { crosshairScreenPos } from '../Crosshair.js';
 
 export const MiniMap = {
     drawMiniMap(ctx) {
@@ -80,10 +82,28 @@ export const MiniMap = {
 
         const alpha = game.miniMapAlpha || 0;
 
+        // 操作中の機体（ドッキング中でなければ自機、そうなら母艦）かクロスヘアが
+        // ミニマップの下に入っている間は、全体を薄くして下の本編を見せる
+        // （隅を自動で避ける作りを撤去したかわり。MINIMAP_OVERLAP_ALPHA のコメント参照）。
+        // 見るのは「今出ている隅」の矩形。隅の切り替え中に、行き先ではなく
+        // まだ見えている旧位置で判定するため。
+        // クロスヘアは Crosshair.draw() と同じ crosshairScreenPos で取る（描く位置とずれないように）。
+        const unit = (game.player && game.player.alive && !game.player.docked) ? game.player
+            : (game.carrier && game.carrier.alive) ? game.carrier : null;
+        const unitRect = unit
+            ? { x: unit.x - game.camera.x, y: unit.y - game.camera.y, w: unit.width, h: unit.height }
+            : null;
+        const overlapping = miniMapOverlaps(
+            { x: mmX, y: mmY, w: destW, h: destH }, unitRect, crosshairScreenPos(game));
+        this.miniMapOverlapFade = stepMiniMapOverlapFade(
+            this.miniMapOverlapFade ?? 1, overlapping, MINIMAP_OVERLAP_ALPHA, MINIMAP_OVERLAP_FADE_SPEED);
+        // 隅の切り替えフェードと重なりの倍率は、地形・ハイライト・点のどれにも同じだけ掛かる
+        const fade = this.miniMapTransition.fade * this.miniMapOverlapFade;
+
         ctx.save();
-        // 最終的な濃さは3つの独立したフェードの積: 地形の上に重ねる基本濃度 ×
-        // 開閉フェード(miniMapAlpha) × 隅の切り替えフェード(transition.fade)
-        ctx.globalAlpha = MINIMAP_ALPHA * alpha * this.miniMapTransition.fade;
+        // 最終的な濃さは4つの独立したフェードの積: 地形の上に重ねる基本濃度 ×
+        // 開閉フェード(miniMapAlpha) × 隅の切り替えフェード(transition.fade) × 重なりの倍率
+        ctx.globalAlpha = MINIMAP_ALPHA * alpha * fade;
 
         // Draw the cached static map, shrunk to destW/destH
         ctx.drawImage(mm, mmX, mmY, destW, destH);
@@ -119,7 +139,7 @@ export const MiniMap = {
         if (clipW > 0 && clipH > 0) {
             // 濃さは地形と同じフェードに追随させるが、MINIMAP_ALPHA は掛けない
             // （あれは地形を背景に沈めるための値。ハイライトは沈める対象ではない）
-            ctx.globalAlpha = MINIMAP_VIEWPORT_HIGHLIGHT * alpha * this.miniMapTransition.fade;
+            ctx.globalAlpha = MINIMAP_VIEWPORT_HIGHLIGHT * alpha * fade;
             ctx.fillStyle = COLOR_MINIMAP_VIEWPORT;
             ctx.fillRect(clipX, clipY, clipW, clipH);
         }
@@ -130,7 +150,7 @@ export const MiniMap = {
         // 同じだけ薄めると一番目を引くはずの自機・敵の位置が読みにくくなる。
         // 掛け直さず 1.0 に固定していた版は、隅の切り替え中に点だけフルオパシティの
         // まま瞬間移動して見える不具合になっていた。
-        ctx.globalAlpha = alpha * this.miniMapTransition.fade;
+        ctx.globalAlpha = alpha * fade;
 
         // Helper to draw a dot。点は miniMapScale だけでなく縮小率(shrink)にも
         // 追随させる必要がある。ここを忘れると、地形は縮むのに点だけ元の位置に

@@ -1793,6 +1793,18 @@ export const MINIMAP_VIEWPORT_HIGHLIGHT = 0.15;
 // 選んだ隅は設定（utils/settings.js の miniMapCorner）として保存する
 export const MINIMAP_CORNER_ORDER = Object.freeze(['topLeft', 'topRight', 'bottomLeft', 'bottomRight']);
 
+// 自動移動を撤去したかわりに、操作中の機体（自機／ドッキング中は母艦）の矩形か
+// クロスヘアがミニマップの矩形に入っている間だけ、ミニマップ全体（地形・可視範囲の
+// ハイライト・点）をこの倍率まで薄くする（ユーザー提案。隅を手動にしたら
+// 「重なることが多く見づらい」となったため）。
+// 0.3 で地形は 0.75×0.3 ≒ 0.23。下の本編が読めて、ミニマップの形はまだ残る濃さ。
+// 実機で見て決める値（まだ未調整）。0 にすると重なっている間は完全に消える
+export const MINIMAP_OVERLAP_ALPHA = 0.3;
+// 薄くなる／戻る速さ（描画1フレームあたりの倍率の変化）。隅の切り替え（0.08）より
+// 速くするのは、重なった瞬間に下が見えないと意味が無いため。0.15 で約7フレーム。
+// 一瞬で切り替えないのは、矩形の縁を出入りするたびにパカパカするのを避けるため
+export const MINIMAP_OVERLAP_FADE_SPEED = 0.15;
+
 // --- Far cave backdrop (parallax) ---
 // 遠景がカメラに追従する割合。0 = 完全固定、1 = 前景と等速。
 // 見た目が弱すぎ/強すぎる場合はこの1値だけを調整する。

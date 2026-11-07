@@ -6,7 +6,7 @@ import { makeFakeCtx, extractSets, extractFillRectsWithColor } from './helpers/f
 import {
     MINIMAP_MARGIN, HUD_TOP_HEIGHT, HUD_BOTTOM_HEIGHT, TILE_SIZE,
     MINIMAP_ALPHA, MINIMAP_MAX_WIDTH_RATIO, MINIMAP_FADE_SPEED,
-    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS,
+    MINIMAP_SATURATION, MINIMAP_BRIGHTNESS, MINIMAP_OVERLAP_ALPHA,
 } from '../src/js/utils/Constants.js';
 
 const CANVAS_W = 1024;
@@ -14,9 +14,9 @@ const CANVAS_H = 768;
 const MM_W = 300;
 const MM_H = 150;
 
-// mouse の既定値は「画面中央」。自動で隅を選んでいた頃の名残（画面外の値は
-// HUD 帯クランプで左上付近に丸められ、避ける対象になってしまった）。今は
-// ミニマップがクロスヘアを見ないので値は何でもよいが、中立な位置のままにしてある。
+// mouse の既定値は「画面中央」＝どの隅のミニマップにも掛からない位置。画面外の値は
+// crosshairScreenPos() の HUD 帯クランプで左上付近に丸められ、左上のミニマップに
+// 重なって薄くなってしまうので使わない。
 function makeGame({ playerPos = null, carrierPos = null, mouse = { x: CANVAS_W / 2, y: CANVAS_H / 2 }, mmW = MM_W, mmH = MM_H } = {}) {
     return {
         canvas: { width: CANVAS_W, height: CANVAS_H },
@@ -273,7 +273,9 @@ function alphaAtEachFillRect(calls) {
 }
 
 test('点（母艦）は開閉フェード(miniMapAlpha)を受ける。地形の MINIMAP_ALPHA は掛からない', () => {
-    const game = makeGame({ carrierPos: { x: 100, y: 100 } });
+    // 自機がいないので母艦が「操作中の機体」になる。左上のミニマップに掛かると
+    // 重なりで薄くなって別の倍率が混ざるので、画面の右下（どこにも掛からない）に置く
+    const game = makeGame({ carrierPos: { x: CANVAS_W - 40, y: CANVAS_H - 40 } });
     game.miniMapAlpha = 0.4;
     const calls = draw(game);
 
@@ -351,4 +353,77 @@ test('隅の切り替え中は、旧位置に据え置かれたまま globalAlph
     assert.ok(Math.abs(carrierAlpha2 - expectedDotAlpha) < 0.0001,
         `点の globalAlpha に遷移フェードが積まれていない: got ${carrierAlpha2}, expected ${expectedDotAlpha}`);
     assert.notEqual(carrierAlpha2, 1, '点が隅の切り替え中もフルオパシティのままになっている');
+});
+
+// ---- 重なったら薄くする（自動移動のかわり） ----
+// drawImage の直前に設定された globalAlpha（＝地形の濃さ）を、描画を何フレームか
+// 進めて読む。期待値は定数から組み立てる（重なりの倍率は MINIMAP_OVERLAP_ALPHA）。
+function terrainAlphaAfter(renderer, frames) {
+    let alpha = null;
+    for (let i = 0; i < frames; i++) {
+        const ctx = makeFakeCtx();
+        renderer.drawMiniMap(ctx);
+        const idx = ctx.calls.findIndex((c) => c.name === 'drawImage');
+        alpha = extractSets(ctx.calls.slice(0, idx), 'globalAlpha').at(-1);
+    }
+    return alpha;
+}
+const FULL = MINIMAP_ALPHA * 1;
+const DIM = MINIMAP_ALPHA * MINIMAP_OVERLAP_ALPHA;
+// 左上のミニマップの中に入る位置（左上の隅は x=MARGIN, y=HUD_TOP+MARGIN から）
+const INSIDE_TOP_LEFT = { x: MINIMAP_MARGIN + 30, y: HUD_TOP_HEIGHT + MINIMAP_MARGIN + 30 };
+
+test('自機がミニマップの下に入ると薄くなり、出ると戻る', () => {
+    const game = makeGame({ playerPos: INSIDE_TOP_LEFT });
+    game.player.width = 16; game.player.height = 24;
+    const r = new ScreenRenderer(game);
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - DIM) < 1e-9, '重なっているのに薄くならない');
+    game.player.x = CANVAS_W / 2; game.player.y = CANVAS_H / 2;
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - FULL) < 1e-9, '外れたのに戻らない');
+});
+
+test('薄くなるのは一瞬ではなく少しずつ（1フレーム目はまだ濃い）', () => {
+    const game = makeGame({ playerPos: INSIDE_TOP_LEFT });
+    const r = new ScreenRenderer(game);
+    const first = terrainAlphaAfter(r, 1);
+    assert.ok(first < FULL && first > DIM, `1フレーム目: ${first}`);
+});
+
+test('クロスヘアがミニマップの中にあると薄くなる', () => {
+    const game = makeGame({ mouse: INSIDE_TOP_LEFT });
+    const r = new ScreenRenderer(game);
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - DIM) < 1e-9);
+});
+
+test('ドッキング中は母艦が重なると薄くなる（自機は見ない）', () => {
+    const game = makeGame({ playerPos: { x: CANVAS_W / 2, y: CANVAS_H / 2 } });
+    game.player.docked = true;
+    game.carrier = { alive: true, x: INSIDE_TOP_LEFT.x, y: INSIDE_TOP_LEFT.y, width: 64, height: 32 };
+    const r = new ScreenRenderer(game);
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - DIM) < 1e-9);
+});
+
+test('何も重なっていなければ濃さはそのまま', () => {
+    const r = new ScreenRenderer(makeGame({ playerPos: { x: CANVAS_W / 2, y: CANVAS_H / 2 } }));
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - FULL) < 1e-9);
+});
+
+test('隅を変えたら、判定も新しい隅の矩形で行う（左上に自機がいても右上なら濃いまま）', () => {
+    const game = makeGame({ playerPos: INSIDE_TOP_LEFT });
+    game.settings = { miniMapCorner: 'topRight' };
+    const r = new ScreenRenderer(game);
+    assert.ok(Math.abs(terrainAlphaAfter(r, 30) - FULL) < 1e-9);
+});
+
+test('点にも同じ倍率が掛かる（自機の下で点だけ濃く残らない）', () => {
+    const game = makeGame({ playerPos: INSIDE_TOP_LEFT });
+    const r = new ScreenRenderer(game);
+    terrainAlphaAfter(r, 30);
+    const ctx = makeFakeCtx();
+    r.drawMiniMap(ctx);
+    const alphas = alphaAtEachFillRect(ctx.calls);
+    const colored = extractFillRectsWithColor(ctx.calls);
+    const i = colored.findIndex((c) => c.color === '#FFFFFF' && c.w === 4);
+    assert.ok(i >= 0, '自機の点が無い');
+    assert.ok(Math.abs(alphas[i] - MINIMAP_OVERLAP_ALPHA) < 1e-9, `点の濃さ: ${alphas[i]}`);
 });

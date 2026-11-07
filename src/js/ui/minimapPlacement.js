@@ -54,3 +54,41 @@ export function nextMiniMapCorner(corner) {
     if (i < 0) return MINIMAP_CORNER_ORDER[0];
     return MINIMAP_CORNER_ORDER[(i + 1) % MINIMAP_CORNER_ORDER.length];
 }
+
+/**
+ * ミニマップの矩形に、操作中の機体の矩形かクロスヘアの点が掛かっているか。
+ * 掛かっている間だけミニマップを薄くする（MINIMAP_OVERLAP_ALPHA）。
+ * 機体を点ではなく矩形で見るのは、中心が外にあっても体の半分が下に隠れていると
+ * 見づらさは同じだから。クロスヘアは狙う1点が見えればよいので点で見る。
+ * 辺の上（ちょうど接している）は掛かっていない扱い。
+ *
+ * @param {{x:number,y:number,w:number,h:number}} rect ミニマップの矩形（スクリーン座標）
+ * @param {{x:number,y:number,w:number,h:number}|null} unitRect 機体の矩形（スクリーン座標）
+ * @param {{x:number,y:number}|null} point クロスヘアの点
+ * @returns {boolean}
+ */
+export function miniMapOverlaps(rect, unitRect, point) {
+    if (unitRect &&
+        unitRect.x < rect.x + rect.w && unitRect.x + unitRect.w > rect.x &&
+        unitRect.y < rect.y + rect.h && unitRect.y + unitRect.h > rect.y) {
+        return true;
+    }
+    if (point &&
+        point.x > rect.x && point.x < rect.x + rect.w &&
+        point.y > rect.y && point.y < rect.y + rect.h) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 重なりの倍率を1フレーム進める。重なっていれば low へ、いなければ 1 へ、speed ずつ近づく。
+ * @param {number} current 今の倍率（low〜1）
+ * @param {boolean} overlapping
+ * @param {number} low 重なっている間の倍率（MINIMAP_OVERLAP_ALPHA）
+ * @param {number} speed 1フレームの変化量（MINIMAP_OVERLAP_FADE_SPEED）
+ * @returns {number}
+ */
+export function stepMiniMapOverlapFade(current, overlapping, low, speed) {
+    return overlapping ? Math.max(low, current - speed) : Math.min(1, current + speed);
+}
