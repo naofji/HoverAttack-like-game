@@ -1,3 +1,10 @@
+/**
+ * 権限を「このスクリプトが付いているスプレッドシートだけ」に絞る（2026-11-07）。
+ * 使うのは getActiveSpreadsheet() だけなので、Drive 上の他のシートへの権限は要らない。
+ * 付ける前は自動判定で「あなたのすべてのスプレッドシート」の権限で動いていた。
+ * これを変えると再承認が要る（gas-setup.md の 3c 節）。
+ * @OnlyCurrentDoc
+ */
 // gas/Code.gs — Hover Attack online leaderboard backend (Google Apps Script).
 // Deploy as a Web App (execute as: me, access: anyone). See gas-setup.md.
 // NOTE: Plain JS only (function declarations, no import/export). Google globals
@@ -14,6 +21,7 @@ var RATE_LIMIT_MS = 10000;   // reject same-name resubmit within 10s
 var STAGE_SCORES_SHEET = 'StageScores';
 var STAGE_TOP = 5;
 var STAGE_COUNT = 7;
+var CLEAR_TIME_RE = /^\d{2,4}:\d{2}\.\d{2}$/; // formatClock の "mm:ss.xx"
 
 // ---------- Pure helpers (unit-tested in Node) ----------
 
@@ -56,6 +64,11 @@ function sanitizeName(raw) {
   var s = (raw == null ? '' : String(raw));
   s = s.replace(/[\x00-\x1F\x7F]/g, '');
   s = s.toUpperCase().substring(0, 10).trim();
+  // 数式の注入対策。名前は appendRow でシートに書かれ、先頭が = + - @ だと Sheets が
+  // 数式として評価する（10文字では外へ送る式は組めないが、自分のシートで他人の式が
+  // 動くこと自体を断つ）。先頭だけ落とすのは、途中の記号は数式にならず名前として
+  // あり得るため。10文字に切ってから落とすので、落とした分だけ短くなる
+  s = s.replace(/^[=+\-@\s]+/, '');
   return s.length ? s : 'AAA';
 }
 
@@ -70,7 +83,10 @@ function validateEntry(entry) {
   if (!isFinite(score) || Math.floor(score) !== score) return { ok: false, reason: 'bad-score' };
   if (score <= MIN_SCORE || score > SCORE_CAP) return { ok: false, reason: 'score-range' };
   var mission = Math.min(7, Math.max(1, Math.floor(Number(entry.mission) || 1)));
-  var clearTime = (typeof entry.clearTime === 'string' && entry.clearTime) ? entry.clearTime : null;
+  // clearTime はクライアントの formatClock が作る "mm:ss.xx"（分は2桁以上）だけを通す。
+  // 以前は任意の文字列を長さ制限なしでそのままシートに書いていて、"=IMPORTDATA(...)" の
+  // ような式を入れられた。形が違えば null（タイム無し）に落とし、スコアは捨てない
+  var clearTime = (typeof entry.clearTime === 'string' && CLEAR_TIME_RE.test(entry.clearTime)) ? entry.clearTime : null;
   // トライ数は同点時のタイブレークにしか使わないので、壊れていても弾かず 1 に落とす。
   // ここで reject すると、送れないクライアントのスコアが丸ごと失われる
   var tries = Math.min(999, Math.max(1, Math.floor(Number(entry.tries) || 1)));

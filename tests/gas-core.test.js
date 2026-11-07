@@ -67,6 +67,34 @@ test('sanitizeName strips control chars, uppercases, caps length, defaults', () 
   assert.equal(ctx.sanitizeName('ab'), 'AB'); // control char removed
 });
 
+// 名前は appendRow でそのままシートに書かれる。先頭が = + - @ だと Sheets は数式として
+// 評価するので、先頭のこれらを落とす（数式の注入対策）
+test('sanitizeName は先頭の = + - @ を落として数式として評価されないようにする', () => {
+  assert.equal(ctx.sanitizeName('=1+1'), '1+1');
+  assert.equal(ctx.sanitizeName('+SUM(A1)'), 'SUM(A1)');
+  assert.equal(ctx.sanitizeName('-A1'), 'A1');
+  assert.equal(ctx.sanitizeName('@A1'), 'A1');
+  assert.equal(ctx.sanitizeName('=+-@=NOW()'), 'NOW()'); // 重ねても全部落ちる
+  assert.equal(ctx.sanitizeName(' =NOW()'), 'NOW()');   // 先頭の空白で隠しても落ちる
+  assert.equal(ctx.sanitizeName('==='), 'AAA');         // 全部落ちたら既定名
+  // 効きすぎていないこと: 途中の記号は名前の一部として残す
+  assert.equal(ctx.sanitizeName('A-B=C'), 'A-B=C');
+});
+
+// clearTime はクライアントの formatClock が作る "mm:ss.xx" だけ。以前は任意の文字列を
+// 長さ制限なしでシートに書いていた（名前より大きい注入の入口）
+test('validateEntry は formatClock 形式以外の clearTime を null にする', () => {
+  const base = { name: 'AAA', score: 50000, mission: 7 };
+  for (const good of ['05:12.34', '00:00.00', '123:59.99']) {
+    assert.equal(ctx.validateEntry({ ...base, clearTime: good }).value.clearTime, good, good);
+  }
+  for (const bad of ['=IMPORTDATA("https://x")', '5:12.34', '05:12', '05:12.345', 'x05:12.34', 12, {}]) {
+    const v = ctx.validateEntry({ ...base, clearTime: bad });
+    assert.equal(v.ok, true, String(bad)); // スコア自体は捨てない
+    assert.equal(v.value.clearTime, null, String(bad));
+  }
+});
+
 test('validateEntry accepts a valid entry and rejects bad ones', () => {
   const ok = ctx.validateEntry({ name: 'zz', score: 12345, mission: 4, clearTime: null, country: 'jp' });
   assert.equal(ok.ok, true);
