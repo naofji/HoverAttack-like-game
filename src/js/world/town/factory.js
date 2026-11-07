@@ -12,7 +12,7 @@
 
 import { MAT_METAL, MAT_EXPLOSIVE } from './chunks.js';
 import { rectWithLoose, step4, pick, normalizeUp } from './shapes.js';
-import { FACTORY_COLORS as BODY, FACTORY_DETAIL_COLORS as DETAIL, TOWN_EXPLOSIVE_COLORS, shade } from './palette.js';
+import { FACTORY_COLORS as BODY, FACTORY_DETAIL_COLORS as DETAIL, FACTORY_EXPLOSIVE_COLORS, shade } from './palette.js';
 
 // 描くだけの部品も鉄として数える（militaryBase.js と同じ理由）
 const rect = rectWithLoose(MAT_METAL);
@@ -264,56 +264,59 @@ export function buildPipeBundle(rng, { room, maxHang }) {
 const EXPLOSIVE_KINDS = ['chemTank', 'gasRack', 'drum'];
 
 /**
- * 「！」の警告の印（描くだけ）。左上 (x, y)、幅 2・高さ 8。爆発物の赤の上に灰白で。
- * 最初はひし形にしたが、PNG で「＋」に見え、赤地と合わせて救急箱（回復アイテム）と読み違えそうだった
+ * 「！」の警告の印（描くだけ）。左上 (x, y)、幅 2・高さ 8。爆発物の紫の上に白っぽい藤色で。
+ * 最初はひし形にしたが、PNG で「＋」に見え、赤地（当時）と合わせて救急箱（回復アイテム）と読み違えそうだった
  */
 function warningMark(parts, x, y, color) {
     rect(parts, x, y, 2, 5, color);
     rect(parts, x, y + 6, 2, 2, color);
 }
 
-// 大きさ: ユーザーの指定（2026-11-07）「グレネード級の威力があることを明示するため、赤い爆発物を大きめに」。
-// 3面の爆発物（最大 12x12・8x16）の2倍以上の面積、見える高さ 20px 以上（tests/factory-plant-build.test.js）。
-// 自機（16x24）と同じくらいの背丈にして、遠目にも「大きな赤い塊＝危ない」と読めるように
+// 大きさ: ユーザーの指定（2026-11-07）「グレネード級の威力があることを明示するため、爆発物を大きめに」で
+// 3面（最大 12x12・8x16）の2倍以上・自機（16x24）と同じ背丈（28x24 / 16x28 / 16x24）にした。
+// 同日に実機で「少し大きすぎ」→ 24x20 / 12x24 / 16x20 に縮めて、見える背丈 16〜20（自機より低い）、面積は3面の約2〜3倍に。
+// 色を紫（FACTORY_EXPLOSIVE_COLORS）にして3面と見分けられるようになったので、大きさで差を付けなくてよくなった。
+// 範囲は tests/factory-plant-build.test.js
 export function buildFactoryExplosive(rng) {
-    const C = TOWN_EXPLOSIVE_COLORS;
+    const C = FACTORY_EXPLOSIVE_COLORS;
     const kind = pick(rng, EXPLOSIVE_KINDS);
     const parts = [];
-    if (kind === 'chemTank') {   // 横置きの化学タンク 28x24（見えるのは 28x20）。肩を詰めて丸く、帯2本と警告の印、台
-        rect(parts, 0, 0, 28, 24, null, MAT_EXPLOSIVE, true);
-        rect(parts, 4, 0, 20, 2, C.chemTank);
-        rect(parts, 2, 2, 24, 2, C.chemTank);
-        rect(parts, 0, 4, 28, 12, C.chemTank);
-        rect(parts, 2, 16, 24, 2, C.chemTank);
-        rect(parts, 6, 4, 2, 12, C.chemBand);
-        rect(parts, 20, 4, 2, 12, C.chemBand);
-        rect(parts, 24, 4, 2, 12, shade(C.chemTank));
-        warningMark(parts, 13, 6, C.chemBand);
-        rect(parts, 12, 0, 4, 1, C.gasCap);   // 上の口
-        rect(parts, 2, 18, 4, 6, DETAIL.dark);    // 台（左右の脚）
-        rect(parts, 22, 18, 4, 6, DETAIL.dark);
-        rect(parts, 2, 18, 24, 2, DETAIL.dark);
-        return { kind, w: 28, h: 24, parts };
+    if (kind === 'chemTank') {   // 横置きの化学タンク 24x20（見えるのは 24x16）。肩を詰めて丸く、帯2本と警告の印、台
+        // 幅は 4（TOWN_CHUNK）の倍数にする。22 にしたら右端のかけらが半分だけ掛かり、爆発物でないかけらになった
+        rect(parts, 0, 0, 24, 20, null, MAT_EXPLOSIVE, true);
+        rect(parts, 3, 0, 18, 2, C.chemTank);
+        rect(parts, 1, 2, 22, 2, C.chemTank);
+        rect(parts, 0, 4, 24, 9, C.chemTank);
+        rect(parts, 1, 13, 22, 2, C.chemTank);
+        rect(parts, 5, 4, 2, 9, C.chemBand);
+        rect(parts, 17, 4, 2, 9, C.chemBand);
+        rect(parts, 20, 4, 2, 9, shade(C.chemTank));
+        warningMark(parts, 11, 5, C.chemBand);
+        rect(parts, 10, 0, 4, 1, C.gasCap);   // 上の口
+        rect(parts, 2, 15, 3, 5, DETAIL.dark);    // 台（左右の脚）
+        rect(parts, 19, 15, 3, 5, DETAIL.dark);
+        rect(parts, 2, 15, 20, 2, DETAIL.dark);
+        return { kind, w: 24, h: 20, parts };
     }
-    if (kind === 'gasRack') {   // ガスボンベ4本の束 16x28（見えるのは 16x24）。白い帯、束ねる鎖
-        rect(parts, 0, 0, 16, 28, null, MAT_EXPLOSIVE, true);
-        for (const x of [0, 4, 8, 12]) {
+    if (kind === 'gasRack') {   // ガスボンベ3本の束 12x24（見えるのは 12x20）。白い帯、束ねる鎖
+        rect(parts, 0, 0, 12, 24, null, MAT_EXPLOSIVE, true);
+        for (const x of [0, 4, 8]) {
             rect(parts, x + 1, 0, 2, 3, C.gasCap);
-            rect(parts, x, 3, 3, 25, C.gas);
-            rect(parts, x, 8, 3, 2, C.gasBand);
+            rect(parts, x, 3, 3, 21, C.gas);
+            rect(parts, x, 7, 3, 2, C.gasBand);
         }
-        rect(parts, 0, 16, 16, 1, DETAIL.rail);
-        rect(parts, 0, 22, 16, 1, DETAIL.rail);
-        return { kind, w: 16, h: 28, parts };
+        rect(parts, 0, 13, 12, 1, DETAIL.rail);
+        rect(parts, 0, 19, 12, 1, DETAIL.rail);
+        return { kind, w: 12, h: 24, parts };
     }
-    // 燃料のドラム缶2本 16x24（見えるのは 16x20）。たが2本、縁
-    rect(parts, 0, 0, 16, 24, null, MAT_EXPLOSIVE, true);
+    // 燃料のドラム缶2本 16x20（見えるのは 16x16）。たが2本、縁
+    rect(parts, 0, 0, 16, 20, null, MAT_EXPLOSIVE, true);
     for (const x of [0, 9]) {
-        rect(parts, x, 0, 7, 24, C.drum);
+        rect(parts, x, 0, 7, 20, C.drum);
         rect(parts, x, 0, 7, 1, C.drumRim);
-        rect(parts, x, 6, 7, 1, C.drumBand);
-        rect(parts, x, 13, 7, 1, C.drumBand);
-        rect(parts, x + 5, 1, 2, 18, shade(C.drum));
+        rect(parts, x, 5, 7, 1, C.drumBand);
+        rect(parts, x, 11, 7, 1, C.drumBand);
+        rect(parts, x + 5, 1, 2, 15, shade(C.drum));
     }
-    return { kind, w: 16, h: 24, parts };
+    return { kind, w: 16, h: 20, parts };
 }
