@@ -22,6 +22,14 @@ var STAGE_SCORES_SHEET = 'StageScores';
 var STAGE_TOP = 5;
 var STAGE_COUNT = 7;
 var CLEAR_TIME_RE = /^\d{2,4}:\d{2}\.\d{2}$/; // formatClock の "mm:ss.xx"
+// doGet の結果をスクリプトキャッシュに置く秒数（2026-11-07）。doGet は毎回3シートの
+// 全行を読んでいて、実測で1回3〜6秒かかり、クライアントの待ち時間（当時5秒）を超える
+// ことがあった。記録は週をまたいで溜まり続けるので放っておくと遅くなる一方。
+// 登録があれば世代（GEN_KEY）を変えてすぐ読み直すので、この秒数が効くのは
+// 「他人の登録が見えるまでの遅れ」だけ。それなら1分遅れても困らない
+var GET_CACHE_SEC = 60;
+var GEN_KEY = 'gen';
+var GEN_CACHE_SEC = 21600; // CacheService の上限（6時間）
 
 // ---------- Pure helpers (unit-tested in Node) ----------
 
@@ -206,18 +214,52 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// キャッシュの鍵は「週＋世代」。登録のたびに世代を変える（bumpGen_）。
+// 単に鍵を消す作りだと、doGet がシートを読み終えてから書き込むまでの間に登録が
+// 挟まったとき、登録前の古い結果が書き戻されて最大 GET_CACHE_SEC 残る（登録した
+// 本人が直後に取り直しても自分の記録が出ない）。世代を鍵に入れておけば、古い結果は
+// もう誰も読まない鍵に書かれるだけで済む
+function getCacheKey_(weekId, gen) {
+  return 'get:' + weekId + ':' + gen;
+}
+
+function bumpGen_() {
+  // 世代は時刻で十分。足し算（読んで+1して書く）にすると、ロックの外の doGet と
+  // 食い違う余地が増えるだけ。gen が追い出されて消えても既定の '0' に戻るだけで、
+  // その頃には '0' の結果は GET_CACHE_SEC で期限切れになっている
+  try { CacheService.getScriptCache().put(GEN_KEY, String(Date.now()), GEN_CACHE_SEC); } catch (err) { /* キャッシュが使えなくても登録は成功させる */ }
+}
+
 function doGet(e) {
   var weekId = isoWeekId(new Date());
+  // キャッシュは速くするためのものなので、使えないときは黙ってシートを読む
+  // （CacheService の障害や 100KB 超えで、ランキングごと止めない）
+  var cache = null, key = null;
+  try {
+    cache = CacheService.getScriptCache();
+    key = getCacheKey_(weekId, cache.get(GEN_KEY) || '0');
+    var hit = cache.get(key);
+    if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) { cache = null; }
+  var body = buildGetBody_(weekId);
+  var text = JSON.stringify(body);
+  if (cache) {
+    try { cache.put(key, text, GET_CACHE_SEC); } catch (err) { /* 大きすぎる等。次回もシートを読むだけ */ }
+  }
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildGetBody_(weekId) {
   var scores = readRows_(getSheet_(SCORES_SHEET));
   var fame = readRows_(getSheet_(FAME_SHEET));
   var stageRows = readStageRows_();
-  return jsonOut_({
+  return {
     ok: true,
     weekId: weekId,
     ranking: topNForWeek(scores, weekId, MAX_RANKING),
     fame: groupFame(fame),
     stageRankings: topStagesForWeek(stageRows, weekId, STAGE_TOP),
-  });
+  };
 }
 
 function doPost(e) {
@@ -247,6 +289,7 @@ function doPost(e) {
         var st = sv.value.stages[sj];
         stageSheet.appendRow([nowS, weekS, sv.value.name, st.stage, st.timeMs, st.score, sv.value.country || '']);
       }
+      bumpGen_();
       return jsonOut_({ ok: true });
     }
 
@@ -267,6 +310,7 @@ function doPost(e) {
     var weekId = resolveWeekId(body.weekId, now);
     var row = [now, weekId, entry.name, entry.score, entry.mission, entry.clearTime || '', entry.country || '', entry.tries];
     sheet.appendRow(row);
+    bumpGen_();
     rows.push(row);
     var top = topNForWeek(rows, weekId, MAX_RANKING);
     var rank = -1;
@@ -293,6 +337,8 @@ function weeklySnapshot() {
     for (var r = 0; r < top.length; r++) {
       fameSheet.appendRow([prev, r + 1, top[r].name, top[r].score, top[r].mission, top[r].clearTime || '', top[r].country || '', top[r].tries]);
     }
+    // 殿堂も doGet の返り値に入るので、書いたら世代を変える（でないと最大1分古い殿堂）
+    if (top.length) bumpGen_();
   } finally {
     lock.releaseLock();
   }

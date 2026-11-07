@@ -2,12 +2,14 @@
 // OnlineLeaderboard - GAS Web App network client (fail-safe, no throws)
 // ============================================
 
+import { ONLINE_TIMEOUT_MS } from '../utils/Constants.js';
+
 export class OnlineLeaderboard {
     constructor(url) {
         this.url = url || '';
     }
 
-    async fetchData(timeoutMs = 5000) {
+    async fetchData(timeoutMs = ONLINE_TIMEOUT_MS) {
         if (!this.url) return { ok: false, error: 'not-configured' };
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -24,7 +26,7 @@ export class OnlineLeaderboard {
         }
     }
 
-    async submit(entry, timeoutMs = 5000) {
+    async submit(entry, timeoutMs = ONLINE_TIMEOUT_MS) {
         if (!this.url) return { ok: false, error: 'not-configured' };
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -46,7 +48,7 @@ export class OnlineLeaderboard {
         }
     }
 
-    async submitStages(payload, timeoutMs = 5000) {
+    async submitStages(payload, timeoutMs = ONLINE_TIMEOUT_MS) {
         if (!this.url) return { ok: false, error: 'not-configured' };
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), timeoutMs);

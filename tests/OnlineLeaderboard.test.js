@@ -54,6 +54,25 @@ test('fetchData returns timeout when aborted', async () => {
   assert.deepEqual(res, { ok: false, error: 'timeout' });
 });
 
+// GAS の /exec は実測 3.0〜5.8 秒（2026-11-07）。既定の待ち時間がこれを下回ると、混んで
+// いなくても時々「オフライン」になる（以前の 5 秒がそうだった）。3つの通信すべてで縛る
+test('既定の待ち時間は GAS の実測（最大 5.8 秒）より十分長い', async () => {
+  const realSetTimeout = globalThis.setTimeout;
+  const delays = [];
+  globalThis.setTimeout = (fn, ms) => { delays.push(ms); return realSetTimeout(() => {}, 0); };
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true }) });
+  try {
+    const lb = new OnlineLeaderboard('https://example.test/exec');
+    await lb.fetchData();
+    await lb.submit({ name: 'A', score: 1 });
+    await lb.submitStages({ name: 'A', stages: [] });
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+  assert.equal(delays.length, 3);
+  for (const ms of delays) assert.ok(ms >= 8000, `待ち時間 ${ms}ms`);
+});
+
 test('submit posts as text/plain and returns rank', async () => {
   let seen = null;
   globalThis.fetch = async (url, opts) => {

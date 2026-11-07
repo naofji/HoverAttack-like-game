@@ -70,7 +70,7 @@ export const AttractFlow = {
      * 「デモ画面に入ったら」に紐づけるのが正しく、放置時間には依存しない。
      *
      * 'offline'（前回失敗）も取り直す。デモは10秒ごとに画面が変わるので、
-     * これがそのまま再挑戦の間隔になる（1回のリクエストは5秒で諦める）。
+     * これがそのまま再挑戦の間隔になる（1回のリクエストは ONLINE_TIMEOUT_MS で諦め、その間は 'loading' なので重ねて取りに行かない）。
      */
     _ensureOnlineData() {
         if (this.onlineStatus === 'loading' || this.onlineStatus === 'ok') return;

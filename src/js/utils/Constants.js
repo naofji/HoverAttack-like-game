@@ -1862,6 +1862,12 @@ export const AUTO_AIM_HOLD_TENTHS_MAX = 20;
 // --- Online leaderboard (GAS Web App). Paste your deployed /exec URL here. ---
 // Leave empty to run fully offline (local ranking only). See docs gas-setup.md.
 export const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbyVQ4loEQENSOV3f6zv4lZ-_Z4HxDT3xDh4IJjQiW1INdtTt6qOaLsN5FdJTI7FjWHD/exec';
+// オンラインランキングの1回の通信で待つ上限（ms）。5000 → 10000（2026-11-07）。
+// GAS の /exec は実測 3.0 / 4.3 / 5.8 秒で、5秒だと混んでいなくても時々打ち切られて
+// 「オフライン」扱いになっていた（GAS の起動の遅さと、doGet が全行を読むため。
+// 後者はサーバー側のキャッシュで軽くした）。取得は裏で走り、取れなければ
+// オンラインの画面を飛ばすだけなので、延ばしても画面は止まらない
+export const ONLINE_TIMEOUT_MS = 10000;
 
 // --- Enemy missile hit knockback (smaller than a grenade) ---
 // --- ホバー音の音作り ---
