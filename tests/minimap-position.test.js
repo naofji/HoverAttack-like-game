@@ -471,9 +471,42 @@ test('アイテムは敵より先に描く（重なったら敵の赤が上）',
     assert.ok(gi >= 0 && ri >= 0 && gi < ri, `緑 ${gi} / 赤 ${ri}`);
 });
 
-test('pickups / storageTowers を持たない game でも落ちない', () => {
+test('pickups / storageTowers / orbs を持たない game でも落ちない', () => {
     const game = makeGame();
     delete game.pickups;
     delete game.storageTowers;
+    delete game.orbs;
     assert.doesNotThrow(() => draw(game));
+});
+
+// ---- Orb を紫の点で出す（ユーザー指定） ----
+const ORB_PURPLE = '#CC66FF';
+
+test('Orb が紫の点で出て、大きい Orb ほど点も大きい', () => {
+    const game = makeGame();
+    game.orbs = [box(160, 160, 16, 16), box(640, 320, 24, 24)];
+    const purples = extractFillRectsWithColor(draw(game)).filter((r) => r.color === ORB_PURPLE);
+    assert.equal(purples.length, 2);
+    assert.ok(purples[1].w > purples[0].w, `大 ${purples[1].w} が小 ${purples[0].w} より大きくない`);
+});
+
+test('Orb の点は中心のミニマップ上の位置に出る', () => {
+    const game = makeGame();
+    game.orbs = [box(1000, 600, 24, 24)];
+    const calls = draw(game);
+    const d = calls.find((c) => c.name === 'drawImage');
+    const scale = game.map.miniMapScale * (d.args[3] / MM_W);
+    const p = extractFillRectsWithColor(calls).find((r) => r.color === ORB_PURPLE);
+    assert.ok(Math.abs(p.x + p.w / 2 - (d.args[1] + (1012 / TILE_SIZE) * scale)) < 1e-9);
+    assert.ok(Math.abs(p.y + p.h / 2 - (d.args[2] + (612 / TILE_SIZE) * scale)) < 1e-9);
+});
+
+test('Orb はアイテムより先に描く（重なったら拾える緑が上）', () => {
+    const game = makeGame();
+    game.orbs = [box(160, 160, 16, 16)];
+    game.pickups = [box(160, 160, 16, 16)];
+    const colored = extractFillRectsWithColor(draw(game));
+    const pi = colored.findIndex((r) => r.color === ORB_PURPLE);
+    const gi = colored.findIndex((r) => r.color === ITEM_GREEN);
+    assert.ok(pi >= 0 && gi >= 0 && pi < gi, `紫 ${pi} / 緑 ${gi}`);
 });

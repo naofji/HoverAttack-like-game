@@ -24,6 +24,9 @@ import { crosshairScreenPos } from '../Crosshair.js';
 // 彩度の高い緑なら沈まない。敵の赤（#FF3333）・自機の白・母艦の青と色相で分かれる
 // （描画専用の値なので Constants.js ではなくここに置く。点の他の色と同じ扱い）
 const MINIMAP_ITEM_COLOR = '#33FF66';
+// Orb の点の色（紫）。敵の赤（#FF3333）・母艦の青（#0088FF）のどちらとも色相で
+// 離すため、赤寄りでも青寄りでもない明るい紫にした
+const MINIMAP_ORB_COLOR = '#CC66FF';
 
 export const MiniMap = {
     drawMiniMap(ctx) {
@@ -172,6 +175,13 @@ export const MiniMap = {
         // Carrier (Blue square)
         if (game.carrier && game.carrier.alive) {
             drawDot(game.carrier.x + game.carrier.width / 2, game.carrier.y + game.carrier.height / 2, '#0088FF', 5);
+        }
+
+        // 2面の Orb（紫。ユーザー指定）。壊せないので常に alive だが、作法に合わせて見る。
+        // 大小2種（直径 16 / 24）を点の大きさでも分ける。アイテムより先に描くのは、
+        // Orb は動かせる障害物で、重なったら拾える緑のほうを上に見せたいため
+        for (const orb of game.orbs || []) {
+            if (orb.alive) drawDot(orb.x + orb.width / 2, orb.y + orb.height / 2, MINIMAP_ORB_COLOR, orb.width >= 24 ? 4 : 3);
         }
 
         // アイテム（緑）。種類は問わず game.pickups の1本を全部（ユーザー指定）。
