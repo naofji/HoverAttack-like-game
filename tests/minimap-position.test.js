@@ -427,3 +427,53 @@ test('点にも同じ倍率が掛かる（自機の下で点だけ濃く残ら�
     assert.ok(i >= 0, '自機の点が無い');
     assert.ok(Math.abs(alphas[i] - MINIMAP_OVERLAP_ALPHA) < 1e-9, `点の濃さ: ${alphas[i]}`);
 });
+
+// ---- アイテムと格納塔を緑の点で出す（ユーザー指定） ----
+// 色はここに直接書く（実装の定数から導くと、色を変えても恒真になる）
+const ITEM_GREEN = '#33FF66';
+const box = (x, y, w, h, alive = true) => ({ alive, x, y, width: w, height: h });
+
+test('落ちているアイテムが緑の点で出る（取られたものは出ない）', () => {
+    const game = makeGame();
+    game.pickups = [box(160, 160, 16, 16), box(800, 320, 16, 16), box(480, 480, 16, 16, false)];
+    const greens = extractFillRectsWithColor(draw(game)).filter((r) => r.color === ITEM_GREEN);
+    assert.equal(greens.length, 2);
+});
+
+test('格納塔も緑の点で出て、アイテムより一回り大きい（壊したものは出ない）', () => {
+    const game = makeGame();
+    game.pickups = [box(160, 160, 16, 16)];
+    game.storageTowers = [box(640, 320, 40, 64), box(960, 320, 40, 64, false)];
+    const greens = extractFillRectsWithColor(draw(game)).filter((r) => r.color === ITEM_GREEN);
+    assert.equal(greens.length, 2);
+    const [item, tower] = greens;
+    assert.ok(tower.w > item.w, `塔 ${tower.w} がアイテム ${item.w} より大きくない`);
+});
+
+test('緑の点はアイテムの中心のミニマップ上の位置に出る', () => {
+    const game = makeGame();
+    game.pickups = [box(1000, 600, 16, 16)];
+    const calls = draw(game);
+    const d = calls.find((c) => c.name === 'drawImage');
+    const scale = game.map.miniMapScale * (d.args[3] / MM_W);
+    const g = extractFillRectsWithColor(calls).find((r) => r.color === ITEM_GREEN);
+    assert.ok(Math.abs(g.x + g.w / 2 - (d.args[1] + (1008 / TILE_SIZE) * scale)) < 1e-9);
+    assert.ok(Math.abs(g.y + g.h / 2 - (d.args[2] + (608 / TILE_SIZE) * scale)) < 1e-9);
+});
+
+test('アイテムは敵より先に描く（重なったら敵の赤が上）', () => {
+    const game = makeGame();
+    game.pickups = [box(160, 160, 16, 16)];
+    game.enemies = [box(160, 160, 16, 16)];
+    const colored = extractFillRectsWithColor(draw(game));
+    const gi = colored.findIndex((r) => r.color === ITEM_GREEN);
+    const ri = colored.findIndex((r) => r.color === '#FF3333');
+    assert.ok(gi >= 0 && ri >= 0 && gi < ri, `緑 ${gi} / 赤 ${ri}`);
+});
+
+test('pickups / storageTowers を持たない game でも落ちない', () => {
+    const game = makeGame();
+    delete game.pickups;
+    delete game.storageTowers;
+    assert.doesNotThrow(() => draw(game));
+});

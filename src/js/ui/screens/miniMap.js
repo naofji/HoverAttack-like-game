@@ -20,6 +20,11 @@ import { miniMapCornerPositions, miniMapOverlaps, stepMiniMapOverlapFade } from 
 import { advanceMiniMapTransition } from '../minimapTransition.js';
 import { crosshairScreenPos } from '../Crosshair.js';
 
+// アイテムと格納塔の点の色。地形は彩度を 0.55 に落としてあるので、4面の苔の緑の上でも
+// 彩度の高い緑なら沈まない。敵の赤（#FF3333）・自機の白・母艦の青と色相で分かれる
+// （描画専用の値なので Constants.js ではなくここに置く。点の他の色と同じ扱い）
+const MINIMAP_ITEM_COLOR = '#33FF66';
+
 export const MiniMap = {
     drawMiniMap(ctx) {
         const game = this.game;
@@ -167,6 +172,18 @@ export const MiniMap = {
         // Carrier (Blue square)
         if (game.carrier && game.carrier.alive) {
             drawDot(game.carrier.x + game.carrier.width / 2, game.carrier.y + game.carrier.height / 2, '#0088FF', 5);
+        }
+
+        // アイテム（緑）。種類は問わず game.pickups の1本を全部（ユーザー指定）。
+        // 格納塔（壊すとお宝が出る入れ物）も同じ緑で出す。中身は分からないままにする
+        // という塔の狙い（StorageTower.js 冒頭）はそのままで、「何かある」場所だけ分かる。
+        // 塔は機体より大きいので点も一回り大きく（4）して、落ちているアイテム（3）と見分ける。
+        // 敵より先に描くのは、重なったときに危ないほう（赤）を上に見せるため
+        for (const item of game.pickups || []) {
+            if (item.alive) drawDot(item.x + item.width / 2, item.y + item.height / 2, MINIMAP_ITEM_COLOR, 3);
+        }
+        for (const tower of game.storageTowers || []) {
+            if (tower.alive) drawDot(tower.x + tower.width / 2, tower.y + tower.height / 2, MINIMAP_ITEM_COLOR, 4);
         }
 
         // Enemies (Red squares)
