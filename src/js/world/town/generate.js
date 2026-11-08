@@ -146,6 +146,7 @@ function placeExplosives(specs, rng, { solid, fits, theme }) {
  */
 export function generateTown({
     grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols), quietZones = [], explosiveRng = null, theme = TOWN_THEME,
+    includeRects = null, accept = null,
 }) {
     const sites = findSites(grid, rows, cols);
     const fillAt = (c, r) => villageFill(villages, c, r) * quietFactor(quietZones, c, r);
@@ -160,8 +161,14 @@ export function generateTown({
         return Math.hypot(nx / T - (z.c + 0.5), ny / T - (z.r + 0.5)) < z.inner;
     });
     const specs = [];
+    // includeRects（7面の施設エリア）: 外接矩形がどれかの矩形に**収まる**ものだけ置く。村の濃さは村の外でも
+    // 0 にならない（TOWN_VILLAGE_OUTSIDE_FILL。3面で岩壁にぽつぽつ家が付く分）ので、濃さだけでは範囲を絞れない。
+    // accept（7面の足元の判定）: 置く直前に呼ぶ。どちらも乱数を引かないので、省略した3〜6面の町並みは変わらない
+    const inInclude = (s) => !includeRects || includeRects.some((rc) => s.x >= rc.c0 * T && s.y >= rc.r0 * T
+        && s.x + s.w <= (rc.c1 + 1) * T && s.y + s.h <= (rc.r1 + 1) * T);
     const fits = (s) => s.x >= 0 && s.y >= 0 && s.x + s.w <= cols * T && s.y + s.h <= rows * T
-        && !excludeRects.some((rc) => touchesRect(s, rc)) && !inQuiet(s);
+        && !excludeRects.some((rc) => touchesRect(s, rc)) && !inQuiet(s)
+        && inInclude(s) && (!accept || accept(s));
     const add = (s) => {
         if (!fits(s)) return false;
         if (s.site !== 'floor' && specs.some((o) => overlaps(o, s))) return false;
