@@ -194,16 +194,15 @@ export const MapFeatures = {
         const c0 = Math.floor(spec.x / T), c1 = Math.floor((spec.x + spec.w - 1) / T);
         const r0 = Math.floor(spec.y / T), r1 = Math.floor((spec.y + spec.h - 1) / T);
         if (spec.site === 'floor') {
-            // 足の行（土台を床に埋めるので外接矩形の最下行）とその下の行
-            for (let c = c0; c <= c1; c++) if (!full(r1, c) || !full(r1 + 1, c)) return false;
+            // 外接矩形の全行とその下の行。床の区間は1段の段差までつながる（chainFloors）ので、段の上の列では
+            // 足元が最下行の1つ上の金属の斜面になる。最下行と下の行だけ見ていたときは床の建物の約1割が
+            // 階段の1段目に根元を食われていた（最終レビューの実測、30シードで 4950棟中 497棟）
+            for (let r = r0; r <= r1 + 1; r++) for (let c = c0; c <= c1; c++) if (!full(r, c)) return false;
             return true;
         }
-        if (spec.site === 'wall') {
-            for (let r = r0; r <= r1; r++) if (!full(r, c0) || !full(r, c1)) return false;
-            return true;
-        }
-        // 天井: 吊り元の行（上端 4px が天井に埋まる）
-        for (let c = c0; c <= c1; c++) if (!full(r0, c)) return false;
+        // 壁・天井: 外接矩形に重なる固いタイル全部（張り付く壁の列・吊り元の天井の行と、張り出しが重なる所）。
+        // 張り付く列だけ見ていたときは、張り出した監視所が隣の斜面に重なった（最終レビューの指摘）
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (!full(r, c)) return false;
         return true;
     },
 

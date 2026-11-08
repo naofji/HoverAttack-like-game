@@ -75,6 +75,7 @@ import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
 import { Missile } from '../src/js/entities/Missile.js';
 import { fakeCanvas, block } from './helpers/town-fixtures.js';
 import { BASE_TOWN_CHIP_SCALE } from '../src/js/utils/Constants.js';
+import { MAT_METAL } from '../src/js/world/town/chunks.js';
 
 function airWorld() {
   const game = {
@@ -126,14 +127,55 @@ test('倍率 0.75 の町は、弾・ミサイル1発で欠けるかけらが倍�
   }
 });
 
-test('倍率は爆風（chip の blast）には掛からない', () => {
+test('倍率は爆風（Town.blast）には掛からない（グレネード・爆発は今までどおり）', () => {
   const removed = (chipScale) => {
     const t = new Town([block(200, 0, 32, 200)], { createCanvas: fakeCanvas, chipScale, isSolidTile: () => true });
     const b = t.buildings[0];
-    t.chip(b, 216, 100, 12, 'blast');
+    t.blast(216, 100, 150);   // グレネードの粒の数
     return b.total - b.remaining;
   };
+  assert.ok(removed(1) > 0);
   assert.equal(removed(BASE_TOWN_CHIP_SCALE), removed(1));
+});
+
+/** 帯（ビーム）を左から右へ、高さを変えて通し、欠けたかけらの合計 */
+function beamChipped(chipScale) {
+  let sum = 0;
+  for (let y = 20; y < 180; y += 7) {
+    const t = new Town([block(200, 0, 32, 200)], { createCanvas: fakeCanvas, chipScale, isSolidTile: () => true });
+    const beam = { townKind: 'beam', isPlayerOwned: true, alive: true, exploded: false, segments: () => [{ x1: 150, y1: y, x2: 260, y2: y }] };
+    t.sweepProjectile(beam);
+    const b = t.buildings[0];
+    sum += b.total - b.remaining;
+  }
+  return sum;
+}
+
+test('倍率は反射ビームの欠け方にも掛かる', () => {
+  const normal = beamChipped(1), hard = beamChipped(BASE_TOWN_CHIP_SCALE);
+  assert.ok(hard > 0 && hard < normal, `倍率 1 で ${normal}、0.75 で ${hard}`);
+});
+
+/** 細い部品だけの建物（弾が欠かして抜ける）に、高さを変えて弾を通し、欠けたかけらの合計 */
+function thinChipped(chipScale) {
+  let sum = 0;
+  for (let y = 20; y < 180; y += 7) {
+    const game = airWorld();
+    const thin = { site: 'floor', style: 'K', kind: 'rail', x: 200, y: 0, w: 32, h: 200,
+      parts: [{ x: 0, y: 0, w: 32, h: 200, color: '#5e6672', mat: MAT_METAL, solid: false }] };
+    const t = new Town([thin], { createCanvas: fakeCanvas, chipScale, isSolidTile: () => true });
+    game.map.town = t;
+    const p = new PlayerBullet(game, 150, y, 0);
+    for (let i = 0; i < 40 && p.alive; i++) { p._prevX = p.x; p._prevY = p.y; p.update(); t.sweepProjectile(p); }
+    const b = t.buildings[0];
+    sum += b.total - b.remaining;
+  }
+  return sum;
+}
+
+test('倍率は細い部品を抜ける弾の欠け方にも掛かる', () => {
+  const normal = thinChipped(1), hard = thinChipped(BASE_TOWN_CHIP_SCALE);
+  assert.ok(hard > 0 && hard < normal, `倍率 1 で ${normal}、0.75 で ${hard}`);
 });
 
 // ---------- 7面に組み込む（実際の地図、8シード） ----------
@@ -172,9 +214,11 @@ test('実際の7面: 床の建物の足元・壁の支え・天井の吊り元�
   for (const m of await sevenMaps()) {
     for (const b of m.town.buildings) {
       const t = tilesOf(b);
-      // 根元の固いタイルは、どれも四角い。床は足の行（土台を埋めた最下行）とその下の行、
-      // 壁・天井は外接矩形に重なる固いタイル（張り付く壁・吊り元の天井）。建物の外の行は根元ではないので見ない
-      const rows = b.site === 'floor' ? [t.r1, t.r1 + 1] : Array.from({ length: t.r1 - t.r0 + 1 }, (_, i) => t.r0 + i);
+      // 根元・建物に重なる固いタイルは、どれも四角い
+      // 床は外接矩形の全行（段の上の列では足元が r1-1 行の斜面になる。最終レビューの指摘）と、その下の行。
+      // 壁・天井は外接矩形の全行。建物の外の行は根元ではないので見ない
+      const span = Array.from({ length: t.r1 - t.r0 + 1 }, (_, i) => t.r0 + i);
+      const rows = b.site === 'floor' ? [...span, t.r1 + 1] : span;
       for (const r of rows) {
         for (let c = t.c0; c <= t.c1; c++) {
           if (!m.isSolid(r, c)) continue;
