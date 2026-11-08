@@ -23,6 +23,7 @@ import { buildAdobeTower, buildAdobeWallHouse, buildHangingBridge, buildOilJarSt
 import { buildMiningShack, buildScaffoldShack, buildLantern, buildHangingShack, buildMiningExplosive } from './mining.js';
 import { buildBaseBuilding, buildControlRoom, buildCrane, buildFactoryLamp } from './militaryBase.js';
 import { buildMachine, buildWallPipes, buildPipeBundle, buildFactoryExplosive } from './factory.js';
+import { buildFortressBuilding, buildFortressHut, buildFortressWall, buildFortressCeiling } from './fortressBase.js';
 import { step4 } from './shapes.js';
 
 /** 3面: A（日干し煉瓦の塔の町）と C（坑道の町） */
@@ -70,4 +71,18 @@ export const FACTORY_THEME = {
     explosive: (style, rng) => buildFactoryExplosive(rng),
     // 爆発物の爆発の種類（Constants.js の TOWN_EXPLOSIVE_PROFILES）。工場は可燃物が多いのでグレネードと同じ派手な爆発
     explosiveBlast: 'factory',
+};
+
+/**
+ * 7面: K（広い所の大きな棟。格納庫・司令塔・大型レーダー・研究室）と H（狭い所の小屋・設備。兵舎・通信鉄塔・
+ * 発電設備・フェンス）。どちらも基地（ユーザー「7面は基地がベース」）。K = keep、H = hut（3面 A/C・4面 P・6面 B/F と重ねない）。
+ * 爆発物の列は無い（ユーザー「工場ではないので爆発物は無いのが良い」。generateTown に explosiveRng も渡さない）。
+ * 置くのは施設エリアの中だけ（Map の _buildBaseSpecs が includeRects で絞る）
+ */
+export const BASE_THEME = {
+    wide: 'K',
+    narrow: 'H',
+    floor: (style, rng, size) => (style === 'K' ? buildFortressBuilding(rng, size) : buildFortressHut(rng, size)),
+    wall: (style, rng, size) => buildFortressWall(style, rng, size),
+    ceiling: (style, rng, size) => buildFortressCeiling(style, rng, size),
 };
