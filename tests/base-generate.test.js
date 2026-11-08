@@ -135,3 +135,132 @@ test('倍率は爆風（chip の blast）には掛からない', () => {
   };
   assert.equal(removed(BASE_TOWN_CHIP_SCALE), removed(1));
 });
+
+// ---------- 7面に組み込む（実際の地図、8シード） ----------
+
+import { SHAPE_FULL } from '../src/js/utils/tileShape.js';
+
+const SEVEN_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+let sevenCache = null;
+async function sevenMaps() {
+  if (sevenCache) return sevenCache;
+  const { Map } = await import('../src/js/world/Map.js');
+  sevenCache = SEVEN_SEEDS.map((s) => new Map({ rng: new SeededRNG(s) }, 6));
+  return sevenCache;
+}
+const tilesOf = (b) => ({
+  r0: Math.floor(b.y / T), r1: Math.floor((b.y + b.height - 1) / T),
+  c0: Math.floor(b.x / T), c1: Math.floor((b.x + b.width - 1) / T),
+});
+const within = (t, a) => t.r0 >= a.r0 && t.r1 <= a.r1 && t.c0 >= a.c0 && t.c1 <= a.c1;
+const touches = (t, a) => t.r0 <= a.r1 && t.r1 >= a.r0 && t.c0 <= a.c1 && t.c1 >= a.c0;
+
+test('実際の7面: 建物はすべて施設エリアの中で、区画・開始の部屋・敵基地の部屋に掛からない', async () => {
+  for (const m of await sevenMaps()) {
+    assert.ok(m.town && m.town.buildings.length > 0, '7面に建物が無い');
+    for (const b of m.town.buildings) {
+      const t = tilesOf(b);
+      assert.ok(m.facilityAreas.some((a) => within(t, a)), `施設エリアの外 ${b.kind} (${b.x},${b.y})`);
+      for (const z of m.fortressZones) assert.ok(!touches(t, z), `区画に掛かる ${b.kind}`);
+      for (const rc of m._reservedRects()) assert.ok(!touches(t, rc), `開始・敵基地の部屋に掛かる ${b.kind}`);
+    }
+  }
+});
+
+test('実際の7面: 床の建物の足元・壁の支え・天井の吊り元は、すべて四角いタイル（斜面の上に浮かない）', async () => {
+  let floors = 0;
+  for (const m of await sevenMaps()) {
+    for (const b of m.town.buildings) {
+      const t = tilesOf(b);
+      // 根元の固いタイルは、どれも四角い。床は足の行（土台を埋めた最下行）とその下の行、
+      // 壁・天井は外接矩形に重なる固いタイル（張り付く壁・吊り元の天井）。建物の外の行は根元ではないので見ない
+      const rows = b.site === 'floor' ? [t.r1, t.r1 + 1] : Array.from({ length: t.r1 - t.r0 + 1 }, (_, i) => t.r0 + i);
+      for (const r of rows) {
+        for (let c = t.c0; c <= t.c1; c++) {
+          if (!m.isSolid(r, c)) continue;
+          assert.equal(m.tileShapeAt(r, c), SHAPE_FULL, `${b.site} ${b.kind} の根元 (${r},${c}) が斜面`);
+        }
+      }
+      if (b.site === 'floor') floors++;
+    }
+  }
+  assert.ok(floors > 0);
+});
+
+test('実際の7面: 建物の数、爆発物なし、Town は焼ける金属で若干硬い', async () => {
+  const { BASE_TOWN_CHIP_SCALE } = await import('../src/js/utils/Constants.js');
+  let total = 0, areas = 0;
+  for (const m of await sevenMaps()) {
+    total += m.town.buildings.length;
+    areas += m.facilityAreas.length;
+    assert.ok(m.town.buildings.every((b) => !b.explosive), '爆発物がある');
+    assert.ok(m.town.buildings.every((b) => b.style === 'K' || b.style === 'H'), '7面の系統ではない建物');
+    assert.equal(m.town.metalHeat, true);
+    assert.equal(m.town.chipScale, BASE_TOWN_CHIP_SCALE);
+  }
+  assert.ok(total >= areas, `8シードで ${total} 棟（施設エリア ${areas} 個）`);
+});
+
+test('実際の7面: 8シードのどこかでフェンスと研究室が建つ', async () => {
+  const kinds = new Set();
+  for (const m of await sevenMaps()) for (const b of m.town.buildings) kinds.add(b.kind);
+  assert.ok(kinds.has('fence'), `フェンスが無い: ${[...kinds]}`);
+  assert.ok(kinds.has('lab'), `研究室が無い: ${[...kinds]}`);
+});
+
+test('施設エリアが 0 個なら建物も 0 棟（例外にならない）', async () => {
+  const [m] = await sevenMaps();
+  const saved = m.facilityAreas;
+  m.facilityAreas = [];
+  try {
+    assert.deepEqual(m._buildBaseSpecs(), []);
+  } finally {
+    m.facilityAreas = saved;
+  }
+});
+
+test('建物を作っても game.rng を消費しない（このあと SpawnManager が使う）', async () => {
+  const { Map } = await import('../src/js/world/Map.js');
+  const g = { rng: new SeededRNG(5) };
+  const m = new Map(g, 6);
+  const state = g.rng.state;
+  m._buildBaseSpecs();
+  m._generateBase();
+  assert.equal(g.rng.state, state);
+});
+
+test('縁の金属の帯を壊して支えを失った壁の建物は落ちる', async () => {
+  for (const m of await sevenMaps()) {
+    const wall = m.town.buildings.find((b) => b.site === 'wall');
+    if (!wall) continue;
+    // 壁の建物が張り付いているタイル（外接矩形の左端か右端の列で、固い所）を全部壊す
+    const t = tilesOf(wall);
+    const cols = [t.c0, t.c1].filter((c) => m.isSolid(Math.floor((wall.y + 2) / T), c));
+    for (const c of cols) {
+      for (let r = t.r0; r <= t.r1; r++) {
+        while (m.isSolid(r, c) && m.blockHP[r][c] > 0 && m.blockHP[r][c] !== Infinity) m.damageBlock(r, c, m.blockHP[r][c]);
+      }
+    }
+    const game = { particles: [], projectiles: [], enemyBullets: [], enemies: [], landmines: [], pickups: [], player: null, carrier: null, camera: null, canvas: null, map: m, spawnExplosion() {}, spawnSparks() {} };
+    for (let i = 0; i < 5; i++) m.town.update(game);
+    assert.ok(m.town.falling.length > 0 || wall.remaining < wall.total, '支えを失っても建物が残っている');
+    return;
+  }
+  assert.fail('前提: 8シードのどこにも壁の建物が無い');
+});
+
+test('足元の判定: 左右どちらの端の列でも、根元が斜面なら置かない（左の壁に張り付く建物は右端の列が根元）', async () => {
+  const [m] = await sevenMaps();
+  // 斜面のタイル（固いが四角くない）で、左隣が空洞のものを探す
+  let hit = null;
+  for (let r = 1; r < m.rows - 1 && !hit; r++) {
+    for (let c = 1; c < m.cols - 1; c++) {
+      if (m.isSolid(r, c) && m.tileShapeAt(r, c) !== SHAPE_FULL && !m.isSolid(r, c - 1)) { hit = { r, c }; break; }
+    }
+  }
+  assert.ok(hit, '前提: 斜面のタイルがある');
+  const left = { site: 'wall', x: (hit.c - 1) * T, y: hit.r * T, w: 2 * T, h: T };   // 右端の列 = 斜面
+  const right = { site: 'wall', x: hit.c * T, y: hit.r * T, w: 2 * T, h: T };        // 左端の列 = 斜面
+  assert.equal(m._baseFootingOk(left), false, '右端の列の斜面を見ていない');
+  assert.equal(m._baseFootingOk(right), false, '左端の列の斜面を見ていない');
+});

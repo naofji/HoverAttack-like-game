@@ -6,6 +6,7 @@
 //   node tools/render-town-scene.mjs --seed 3 --x 1200 --y 300 --w 1366 --h 768 --scale 1 --out a.png
 //   node tools/render-town-scene.mjs --stage 4 --out ferns.png            # 4面の苔とシダ（既定は3面の町）
 //   node tools/render-town-scene.mjs --stage 5 --out snow.png             # 5面の雪の木と天井のつらら（地形の雪のふちは 5px の帯で近似）
+//   node tools/render-town-scene.mjs --stage 7 --x 1200 --y 300 --out base.png   # 7面の基地（施設エリアの中だけ）
 //   node tools/render-town-scene.mjs --stats                              # 棟数・種類・生成時間・壊す時間
 //   node tools/render-town-scene.mjs --x 1200 --y 300 --blast "1300,420,150;1340,400,36" --ticks 120 --out b.png
 //       # 壊した後（段2）。--blast は「x,y,粒の数」を ; 区切りで何発でも（グレネード 150・ミサイル 36）。
@@ -22,7 +23,7 @@
 // （遠景の空洞の色 → 町 → 地形）。
 
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
-import { TILE_SIZE as T, STAGE_ENVIRONMENTS, SNOW_CAP_COLOR, SNOW_CAP_THICKNESS } from '../src/js/utils/Constants.js';
+import { TILE_SIZE as T, STAGE_ENVIRONMENTS, SNOW_CAP_COLOR, SNOW_CAP_THICKNESS, BASE_TOWN_CHIP_SCALE } from '../src/js/utils/Constants.js';
 import { getCurrentWeek, stageSeed } from '../src/js/utils/WeekSeed.js';
 import { PixelCanvas, writePng } from './lib/pixel-canvas.mjs';
 import { shapeCornerCuts, shapeTriangle } from '../src/js/utils/tileShape.js';
@@ -50,6 +51,7 @@ const t0 = performance.now();
 const specs = PROPS === 'ferns' ? map._buildPlantSpecs()
     : PROPS === 'snow' ? [...map._buildSnowTreeSpecs(), ...map._buildIcicleSpecs()]
         : PROPS === 'factory' ? map._buildFactorySpecs()
+        : PROPS === 'base' ? map._buildBaseSpecs()
             : map._buildTownSpecs();
 const t1 = performance.now();
 // 画素を持たない canvas で作る時間 ＝ かけらの表と支えの計算（実機の canvas の確保・塗りは別）
@@ -179,7 +181,8 @@ const town = new Town(specs, {
     isSolidTile: (r, c) => map.isSolid(r, c),
     createCanvas: (w, h) => new PixelCanvas(w, h),
     smokeSprites: noSmoke,
-    metalHeat: PROPS === 'factory',   // 6面の金属の焼けた縁（Map._generateFactory と同じ）
+    metalHeat: PROPS === 'factory' || PROPS === 'base',   // 6面・7面の金属の焼けた縁（Map._generateFactory / _generateBase と同じ）
+    chipScale: PROPS === 'base' ? BASE_TOWN_CHIP_SCALE : 1,   // 7面は若干硬い
 });
 
 if (args.boom) {

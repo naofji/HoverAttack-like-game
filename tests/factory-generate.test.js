@@ -31,7 +31,7 @@ test('6面に工場と基地が建ち、町の無い面には無い', async () =
         assert.ok(map.town.buildings.every((b) => b.style === 'B' || b.style === 'F'), 'style は B / F だけ');
     }
     // town を assert.equal で null と比べない（落ちると Town を表示しようとしてメモリを使い切る。MapDeterminism のコメント）
-    for (const mission of [0, 1, 6]) assert.ok((await makeMap(11, mission)).town === null, `${mission + 1}面に町がある`);
+    for (const mission of [0, 1]) assert.ok((await makeMap(11, mission)).town === null, `${mission + 1}面に町がある`);   // 7面は基地（2026-11-08）
 });
 
 test('基地の部屋と最後の敵基地の周りには建てない', async () => {

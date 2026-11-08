@@ -334,6 +334,7 @@ export class Map {
         else if (props === 'ferns') this._generatePlants();
         else if (props === 'snow') this._generateSnow();
         else if (props === 'factory') this._generateFactory();   // 6面の工場と基地（3面と同じ置き方、絵柄だけ違う）
+        else if (props === 'base') this._generateBase();   // 7面の基地（施設エリアの中だけ。爆発物なし）
     }
 
     // ------------------------------------------

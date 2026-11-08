@@ -23,7 +23,7 @@ import {
     FORTRESS_GARRISON_TANKS, FORTRESS_BARRIER_CLEARANCE, ELECTRIC_FLOOR_MIN_LEN, ELECTRIC_FLOOR_BARRIER_GAP,
     ELECTRIC_FLOOR_H, FORTRESS_GATE_GUARD_TYPE, FORTRESS_GATE_GUARD_INSET, FORTRESS_CORRIDOR_H,
     FORTRESS_ROOM_MARGIN, FORTRESS_ROOM_W, FORTRESS_CORRIDOR_MIN_W, MAX_WATER_MASS, WATER_SPRING_COUNT,
-    WATER_SPRING_MAX_ROW_RATIO, TOWN_BASE_QUIET_INNER, TOWN_BASE_QUIET_OUTER,
+    WATER_SPRING_MAX_ROW_RATIO, TOWN_BASE_QUIET_INNER, TOWN_BASE_QUIET_OUTER, BASE_TOWN_CHIP_SCALE, BASE_TOWN_VILLAGE_PEAK,
 } from '../../utils/Constants.js';
 import { SeededRNG } from '../../utils/SeededRNG.js';
 import { generateWaterPools, generateWaterSprings } from '../waterPools.js';
@@ -31,7 +31,8 @@ import { carveSnowStairs } from '../snowStairs.js';
 import { carveFortressZones } from '../fortress.js';
 import { pickFacilityAreas, metalizeFacilityBand } from '../facility.js';
 import { generateTown } from '../town/generate.js';
-import { FACTORY_THEME } from '../town/themes.js';
+import { FACTORY_THEME, BASE_THEME } from '../town/themes.js';
+import { SHAPE_FULL } from '../../utils/tileShape.js';
 import { metalizeFactoryGround } from '../town/factoryGround.js';
 import { generatePlants } from '../town/generatePlants.js';
 import { generateSnowTrees } from '../town/generateSnowTrees.js';
@@ -155,6 +156,62 @@ export const MapFeatures = {
         const specs = this._factorySpecs || this._buildFactorySpecs();
         this._factorySpecs = null;
         this.town = new Town(specs, { isSolidTile: (r, c) => this.isSolid(r, c), metalHeat: true });
+    },
+
+    /**
+     * 7面の基地の設計図（設計 2026-11-08-stage7-base-facilities-design.md）。置き方は3面・6面と同じ generateTown で、
+     * 絵柄は BASE_THEME（爆発物なし）。**建つのは施設エリアの中だけ**: 村は施設エリアに1つずつ置き（全体が密）、
+     * includeRects で外接矩形がエリアに収まるものだけ残す（村の外の濃さ TOWN_VILLAGE_OUTSIDE_FILL は 0 ではないため）。
+     * 根元が金属の斜面・階段に掛かるものは accept で外す（_baseFootingOk）。乱数は派生ストリーム（定数は既存と重ねない）。
+     * tools/render-town-scene.mjs・tools/trace-map.mjs も呼ぶ（町と同じ理由）
+     */
+    _buildBaseSpecs() {
+        const areas = this.facilityAreas || [];
+        if (areas.length === 0) return [];
+        return generateTown({
+            grid: this.grid, rows: this.rows, cols: this.cols,
+            // 施設エリアはもともと区画・開始の部屋・敵基地の部屋を避けているが、念のため除外にも入れる
+            excludeRects: [...this._reservedRects(), ...this.fortressZones],
+            includeRects: areas,
+            rng: new SeededRNG((this.game.rng.state ^ 0xBA5E07) >>> 0),
+            // 村の濃さは中心から半径の半分まで最大（villageFill）。半径をエリアの対角にして、エリアの隅まで密にする
+            villages: areas.map((a) => ({
+                c: (a.c0 + a.c1) / 2, r: (a.r0 + a.r1) / 2,
+                radius: Math.hypot(a.c1 - a.c0, a.r1 - a.r0), peak: BASE_TOWN_VILLAGE_PEAK,
+            })),
+            theme: BASE_THEME,
+            accept: (spec) => this._baseFootingOk(spec),
+        });
+    },
+
+    /**
+     * 建物の根元（床なら足の下の行、壁なら張り付く列、天井なら吊り元の行）の固いタイルが、すべて四角いか。
+     * 7面の施設エリアには45度の金属の斜面があり、斜面の上に建つと根元が浮いて見える（設計 2章）
+     */
+    _baseFootingOk(spec) {
+        const T = TILE_SIZE;
+        const full = (r, c) => !this.isSolid(r, c) || this.tileShapeAt(r, c) === SHAPE_FULL;
+        const c0 = Math.floor(spec.x / T), c1 = Math.floor((spec.x + spec.w - 1) / T);
+        const r0 = Math.floor(spec.y / T), r1 = Math.floor((spec.y + spec.h - 1) / T);
+        if (spec.site === 'floor') {
+            // 足の行（土台を床に埋めるので外接矩形の最下行）とその下の行
+            for (let c = c0; c <= c1; c++) if (!full(r1, c) || !full(r1 + 1, c)) return false;
+            return true;
+        }
+        if (spec.site === 'wall') {
+            for (let r = r0; r <= r1; r++) if (!full(r, c0) || !full(r, c1)) return false;
+            return true;
+        }
+        // 天井: 吊り元の行（上端 4px が天井に埋まる）
+        for (let c = c0; c <= c1; c++) if (!full(r0, c)) return false;
+        return true;
+    },
+
+    /** 7面: 基地の建物。金属は撃たれると縁が赤く焼け（6面と同じ）、欠ける量は 0.75 倍（ユーザー「若干硬め」） */
+    _generateBase() {
+        this.town = new Town(this._buildBaseSpecs(), {
+            isSolidTile: (r, c) => this.isSolid(r, c), metalHeat: true, chipScale: BASE_TOWN_CHIP_SCALE,
+        });
     },
 
     /** 施設エリアを置き、縁の岩を金属にし、印（this.facility）を立てる */

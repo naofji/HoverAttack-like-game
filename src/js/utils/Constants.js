@@ -1088,7 +1088,7 @@ export const STAGE_ENVIRONMENTS = [
     { kind: 'water', backdrop: 'wet',     terrain: 'cave', props: 'ferns' }, // 4: 地底湖（苔とシダ）
     { kind: 'snow',  backdrop: 'snow',    terrain: 'cave', props: 'snow', tileShape: 'snowSlope', stairs: 'snow' }, // 5: 雪と氷（雪をかぶった木・天井のつらら）
     { kind: 'fog',   backdrop: 'fog',     terrain: 'cave', props: 'factory' }, // 6: 霧（砲兵の煙幕と見分けにくくする）・工場と基地
-    { kind: 'none',  backdrop: 'machine', terrain: 'fortress', tileShape: 'metalSlope' }, // 7: 洞窟を改造した要塞（施設エリアの金属の斜面）
+    { kind: 'none',  backdrop: 'machine', terrain: 'fortress', tileShape: 'metalSlope', props: 'base' }, // 7: 洞窟を改造した要塞（施設エリアの金属の斜面・基地の建物）
 ];
 
 // --- 7面の要塞区画（terrain: 'fortress'）---
@@ -2366,6 +2366,9 @@ export const FACTORY_HEAT_COOL = 90;
 // 0.75 で弾・ミサイルの半径 4px → 3px（欠ける面積はおよそ半分強）。ユーザー「6面より若干硬め」の初期値。
 // 爆風・落ちてくる破片には掛けない（Town の chipScale）。実機で見て調整する
 export const BASE_TOWN_CHIP_SCALE = 0.75;
+// 7面の基地を建てる村の濃さ（施設エリアの中心に1つずつ置く村の peak）。3面の密集した村（TOWN_VILLAGE_DENSE_FILL 0.8）と同じ
+// 初期値。施設エリアは基地なので建物が並んで見えるように密にする。実機で見て調整する
+export const BASE_TOWN_VILLAGE_PEAK = 0.8;
 // 6面の工場が建つ地面をメタル（BLOCK_METAL）にする範囲（world/town/factoryGround.js。ユーザーの指定 2026-11-07）。
 // MARGIN: 建物の外接矩形から左右に広げるタイル数。DEPTH: 床の上面から何段をメタルに（1段だと撃って1枚剥がすと
 // すぐ岩が出る）。GAP: 同じ高さの床でこのタイル数以内のすき間はつなぐ（建物の並ぶ所が1枚の床に見えるように）
