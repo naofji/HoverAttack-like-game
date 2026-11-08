@@ -67,3 +67,71 @@ test('accept が false を返した建物は置かれない', () => {
   }
   assert.ok(walls > 0, '前提: 渡さなければ壁の建物がある');
 });
+
+// ---------- 欠ける量の倍率（7面は若干硬め） ----------
+
+import { Town } from '../src/js/world/town/Town.js';
+import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
+import { Missile } from '../src/js/entities/Missile.js';
+import { fakeCanvas, block } from './helpers/town-fixtures.js';
+import { BASE_TOWN_CHIP_SCALE } from '../src/js/utils/Constants.js';
+
+function airWorld() {
+  const game = {
+    particles: [], landmines: [], enemies: [], projectiles: [], enemyBullets: [],
+    spawnSparks() {}, spawnExplosion() {}, addScore() {},
+    camera: { x: 0, y: 0, shake() {} }, canvas: { width: 800, height: 600 }, player: null, carrier: null,
+  };
+  game.map = {
+    width: 4000, height: 4000, rows: 250, cols: 250,
+    isSolid: () => false, isSolidAtPixel: () => false,
+    isSolidPoint: () => false, slopeHitAlong: () => null, popOutOfRock: () => null, hasShapedTileIn: () => false,
+    pixelToTile: (x, y) => ({ r: Math.floor(y / 16), c: Math.floor(x / 16) }),
+    damageBlock: () => {}, destroyArea: () => 0, isWaterAtPixel: () => false,
+  };
+  return game;
+}
+
+/**
+ * 厚い壁 x=200〜232 の町に、左から弾を1発ずつ、高さを変えて撃ち込み、抜けたかけらの合計を返す。
+ * かけらは 4px 角なので、1か所だけだと半径 4px と 3px で同じ数になることがある（当たった位置しだい）。
+ * 高さを変えた合計で比べる（実測: 1発あたり平均 2.65 個 → 0.75 倍で 1.73 個）
+ */
+function chippedBy(Cls, chipScale, ...rest) {
+  let sum = 0;
+  for (let y = 20; y < 180; y += 7) {
+    const game = airWorld();
+    const t = new Town([block(200, 0, 32, 200)], { createCanvas: fakeCanvas, chipScale, isSolidTile: () => true });
+    game.map.town = t;
+    const p = new Cls(game, 150, y, 0, ...rest);
+    for (let i = 0; i < 60 && p.alive && !p.exploded; i++) {
+      p._prevX = p.x; p._prevY = p.y; p.update(); t.sweepProjectile(p);
+    }
+    const b = t.buildings[0];
+    sum += b.total - b.remaining;
+  }
+  return sum;
+}
+
+test('7面の欠ける倍率は 0.75（半径 4px → 3px。ユーザー「若干硬め」）', () => {
+  assert.equal(BASE_TOWN_CHIP_SCALE, 0.75);
+});
+
+test('倍率 0.75 の町は、弾・ミサイル1発で欠けるかけらが倍率 1 より少ない（0 ではない）', () => {
+  for (const [Cls, rest] of [[PlayerBullet, []], [Missile, [true]]]) {
+    const normal = chippedBy(Cls, 1, ...rest);
+    const hard = chippedBy(Cls, BASE_TOWN_CHIP_SCALE, ...rest);
+    assert.ok(hard > 0, `${Cls.name}: 1つも欠けない`);
+    assert.ok(hard < normal, `${Cls.name}: 倍率 1 で ${normal}、0.75 で ${hard}`);
+  }
+});
+
+test('倍率は爆風（chip の blast）には掛からない', () => {
+  const removed = (chipScale) => {
+    const t = new Town([block(200, 0, 32, 200)], { createCanvas: fakeCanvas, chipScale, isSolidTile: () => true });
+    const b = t.buildings[0];
+    t.chip(b, 216, 100, 12, 'blast');
+    return b.total - b.remaining;
+  };
+  assert.equal(removed(BASE_TOWN_CHIP_SCALE), removed(1));
+});

@@ -72,8 +72,11 @@ export class Town {
      *   createCanvas?: (w:number, h:number) => object}} [opts]
      */
     constructor(specs, { isSolidTile = () => false, rockAt = null, createCanvas = defaultCreateCanvas, random = Math.random,
-        smokeSprites = getSmokeSprites, metalHeat = false } = {}) {
+        smokeSprites = getSmokeSprites, metalHeat = false, chipScale = 1 } = {}) {
         this.isSolidTile = isSolidTile;
+        // 弾・ミサイル・ビームで欠ける半径に掛ける倍率（TOWN_PROJECTILE_IMPACT の chip）。7面の基地だけ 0.75
+        // （BASE_TOWN_CHIP_SCALE。ユーザー「若干硬め」）。爆風と落ちてくる破片の欠け方には掛けない（「若干」なので弾だけ）
+        this.chipScale = chipScale;
         // 6面だけ: 金属の穴の縁を茶色く焦がさず、赤く焼けてから冷める（spec 2026-11-07-stage6-factory 2章）。
         // hot は焼けているかけら [{ b, k, age }]。_heatIndex は同じかけらを二重に積まないための索引
         this.metalHeat = metalHeat;
@@ -432,7 +435,7 @@ export class Town {
                         return;
                     }
                     if (!harmless(b)) {
-                        if (spec.chip > 0) this.chip(b, px, py, spec.chip);
+                        if (spec.chip > 0) this.chip(b, px, py, spec.chip * this.chipScale);
                         if (spec.ignite) this.fire.igniteByBullet(b, px, py);
                     }
                     p.onTownWall(px, py);
@@ -441,7 +444,7 @@ export class Town {
                 if (spec.thin === 'chip' && !st.thin.has(b.id)) {
                     st.thin.add(b.id);
                     if (!harmless(b)) {
-                        this.chip(b, px, py, spec.chip);
+                        this.chip(b, px, py, spec.chip * this.chipScale);
                         if (spec.ignite) this.fire.igniteByBullet(b, px, py);
                     }
                 }
@@ -467,7 +470,7 @@ export class Town {
                     const k = this.cellAt(b, px, py);
                     if (k < 0 || !b.cells[k]) continue;
                     st.chipped.add(b.id);
-                    this.chip(b, px, py, spec.chip);
+                    this.chip(b, px, py, spec.chip * this.chipScale);
                 }
             }
         }
