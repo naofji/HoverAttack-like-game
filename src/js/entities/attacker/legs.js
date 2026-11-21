@@ -77,8 +77,9 @@ const LEG_POSES = [
  * ときの前後の踏ん張り）。歩行フレームには依存しない＝滑走中は脚が止まって見える。
  */
 const ROLLER_POSE = {
-    near: { kdx: 3, kdy: 2, fdx: 3, fdy: 6 },
-    far: { kdx: 0, kdy: 3, fdx: -3, fdy: 6 },
+    // 体を ROLLER_BODY_DROP(2px) 下げるのに合わせて膝を前へ深めに出す（かがんだ形）
+    near: { kdx: 4, kdy: 2, fdx: 3, fdy: 6 },
+    far: { kdx: 1, kdy: 2, fdx: -3, fdy: 6 },
 };
 
 /** 空中で股関節を中心に回転させる基準ポーズ（Player._drawSingleLeg 準拠）。 */
@@ -329,7 +330,8 @@ export const AttackerLegs = {
         const style = this._legStyle();
         // draw() が既に crouchOffset ぶん下へ平行移動しているので、
         // 股関節を同じだけ上げると足の接地位置が変わらない。
-        for (const j of this._legJoints(16 - crouchOffset, style, crouchOffset > 0)) {
+        // しゃがみの脚にするかは状態から（下げる量からだと、滑走中の 2px でもしゃがみの脚になる）
+        for (const j of this._legJoints(16 - crouchOffset, style, isCrouched(this))) {
             this._drawJointedLeg(ctx, { ...j, ...paintFor(j.isNear, style) });
         }
     },

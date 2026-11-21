@@ -440,7 +440,9 @@ test('artillery: 空中で vx の符号を反転すると足先が逆側に流�
 
 test('artillery: しゃがみ時は接地時より足が左右に広く張り出す', () => {
   const stand = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2 }), 0);
-  const crouch = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2 }), 4);
+  // しゃがみの脚の形は状態（isCrouched）から選ぶ。下げる量だけでは選ばない（滑走中の 2px で
+  // しゃがみの脚になってしまうため、2026-11-22）。draw() は常に状態と量をそろえて渡す
+  const crouch = drawArtilleryAndExtract(makeArtillery({ vx: 0, walkFrame: 2, crouching: true }), 4);
 
   const width = (lines) => {
     const xs = lines.map((l) => l[2].x);
@@ -530,4 +532,50 @@ test('滑走中は walkFrame が進まない', () => {
   a.walkFrame = 1; a.walkTimer = 0;
   for (let i = 0; i < 10; i++) a._updateWalkAnimation();
   assert.equal(a.walkFrame, 1);
+});
+
+// --- 滑走中は若干かがむ（実機の指摘 2026-11-22）---
+import { bodyDrop, ROLLER_BODY_DROP, CROUCH_BODY_DROP } from '../src/js/entities/attacker/stance.js';
+
+test('滑走中は体を少し下げる（しゃがみより浅く）', () => {
+  const a = makeAttacker({ config: { name: 'rival' } });
+  assert.equal(bodyDrop(a), 0, '立っているときは下げない');
+  a.rollerPhase = 'glide';
+  assert.equal(bodyDrop(a), ROLLER_BODY_DROP);
+  assert.ok(ROLLER_BODY_DROP > 0 && ROLLER_BODY_DROP < CROUCH_BODY_DROP, '「若干」＝しゃがみより浅い');
+  a.rollerPhase = null; a.crouching = true;
+  assert.equal(bodyDrop(a), CROUCH_BODY_DROP, 'しゃがみは今までどおり');
+});
+
+test('滑走中の draw() は体を下げ、足は地面（立ち姿勢と同じ高さ）に着いたまま', () => {
+  const a = makeAttacker({ config: { name: 'rival' } });
+  a.rollerPhase = 'glide';
+  const ctx = makeFakeCtx();
+  a.draw(ctx);
+  const t = ctx.calls.filter((c) => c.name === 'translate').map((c) => c.args);
+  assert.ok(t.some(([x, y]) => x === 0 && y === ROLLER_BODY_DROP), `体を下げていない: ${JSON.stringify(t)}`);
+  // 足裏の translate（_drawJointedLeg）は 体の下げ ＋ 足首の高さ ＝ 地面（立ち姿勢の 22）
+  const feet = t.filter(([, y]) => y + ROLLER_BODY_DROP === 22 || y === 22 - ROLLER_BODY_DROP);
+  assert.equal(feet.length, 2, `足が地面に着いていない: ${JSON.stringify(t)}`);
+});
+
+test('滑走中に少し下げても、しゃがみの脚（股を開く形）にはならない', () => {
+  const a = makeAttacker({ config: { name: 'rival' } });
+  a.rollerPhase = 'glide';
+  const style = a._legStyle();
+  const ctx = makeFakeCtx();
+  a._drawLegs(ctx, ROLLER_BODY_DROP);
+  const expected = a._bipedRollerJoints(16 - ROLLER_BODY_DROP, style);
+  // 足先はしゃがみの脚とたまたま同じ位置なので、膝（lineTo の1点目）で比べる
+  const knees = ctx.calls.filter((c) => c.name === 'lineTo').map((c) => c.args).filter((_, i) => i % 2 === 0);
+  assert.deepEqual(knees, expected.map((j) => [j.kneeX, j.kneeY]));
+});
+
+test('滑走中の破片も体を下げた位置から出る', async () => {
+  const { attackerBodyParts } = await import('../src/js/entities/debris/attackerParts.js');
+  const a = makeAttacker({ config: { name: 'rival' } });
+  const standing = attackerBodyParts(a).map((p) => p.y);
+  a.rollerPhase = 'glide';
+  const rolling = attackerBodyParts(a).map((p) => p.y);
+  assert.deepEqual(rolling, standing.map((y) => y + ROLLER_BODY_DROP));
 });
