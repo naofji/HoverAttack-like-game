@@ -70,6 +70,17 @@ const LEG_POSES = [
     { kdx: 4, kdy: 1, fdx: 3, fdy: 3 },
 ];
 
+/**
+ * ローラーダッシュの構え（attacker/rollerDash.js）。股関節からの相対座標で、LEG_POSES と同じ形。
+ * 足首の高さ fdy は直立（LEG_POSES[2]）と同じ 6 ＝両足とも地面に着いたまま。
+ * 膝を前へ出して腰を落とした形にし、手前足を前・奥足を後ろへ開く（車輪で滑る
+ * ときの前後の踏ん張り）。歩行フレームには依存しない＝滑走中は脚が止まって見える。
+ */
+const ROLLER_POSE = {
+    near: { kdx: 3, kdy: 2, fdx: 3, fdy: 6 },
+    far: { kdx: 0, kdy: 3, fdx: -3, fdy: 6 },
+};
+
 /** 空中で股関節を中心に回転させる基準ポーズ（Player._drawSingleLeg 準拠）。 */
 const AIR_BASE_POSE = {
     near: { kdx: 1, kdy: 3, fdx: 0, fdy: 6 },
@@ -162,8 +173,22 @@ export const AttackerLegs = {
             return spider ? this._spiderAirJoints(hipY, style)
                           : this._bipedAirJoints(hipY, style);
         }
+        if (!spider && this.isRollerDashing()) return this._bipedRollerJoints(hipY, style);
         return spider ? this._spiderWalkJoints(hipY, style)
                       : this._bipedWalkJoints(hipY, style);
+    },
+
+    /** 2足・滑走中: 両足を着けたまま前後に開いた構えで固定（ROLLER_POSE）。 */
+    _bipedRollerJoints(hipY, style) {
+        const s = style.strideScale;
+        return [[false, ROLLER_POSE.far], [true, ROLLER_POSE.near]].map(([isNear, p]) => {
+            const hipX = isNear ? style.hipNear : style.hipFar;
+            return {
+                isNear, hipX, hipY,
+                kneeX: hipX + p.kdx * s, kneeY: hipY + p.kdy,
+                footX: hipX + p.fdx * s, footY: hipY + p.fdy,
+            };
+        });
     },
 
     /** 4脚・接地時: 対角トロット。group 0 は walkFrame、group 1 は半周期ずれ。 */

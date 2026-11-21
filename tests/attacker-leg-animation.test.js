@@ -500,3 +500,34 @@ test('回帰: 左向きでも脚が2本（artillery は4本）描かれる', () 
   // 腿と下腿の2ストロークを1本へ組み直したうえで4本
   assert.equal(drawArtilleryAndExtract(art, 0).length, 4);
 });
+
+// --- ローラーダッシュの構え（attacker/rollerDash.js）---
+// 滑走中は脚を踏み出さず、両足を地面に着けたまま前後に開いて固定する
+
+test('滑走中は両足が地面に着いたまま、歩行フレームが変わっても脚は動かない', () => {
+  const a = makeAttacker({ config: { name: 'rival' } });
+  const style = a._legStyle();
+  const standingFootY = (() => {
+    a.walkFrame = 2;
+    return a._legJoints(16, style, false).map((j) => j.footY);
+  })();
+  a.rollerPhase = 'glide';
+  const poses = [0, 1, 2, 3].map((f) => { a.walkFrame = f; return JSON.stringify(a._legJoints(16, style, false)); });
+  assert.equal(new Set(poses).size, 1, '歩行フレームで脚が動いている');
+  const joints = a._legJoints(16, style, false);
+  assert.deepEqual(joints.map((j) => j.footY), standingFootY, '足が地面から浮いた／沈んだ');
+  const [far, near] = joints;
+  assert.ok(Math.abs(near.footX - far.footX) >= 3, `足が前後に開いていない: ${far.footX} / ${near.footX}`);
+  // 歩きの直立（walkFrame 2）とは別の形であること
+  a.rollerPhase = null; a.walkFrame = 2;
+  assert.notEqual(JSON.stringify(a._legJoints(16, style, false)), poses[0], '直立と同じ形');
+});
+
+test('滑走中は walkFrame が進まない', () => {
+  const a = makeAttacker({ config: { name: 'rival' } });
+  a.rollerPhase = 'glide';
+  a.vx = 2.4; a.onGround = true; a.facingRight = false;
+  a.walkFrame = 1; a.walkTimer = 0;
+  for (let i = 0; i < 10; i++) a._updateWalkAnimation();
+  assert.equal(a.walkFrame, 1);
+});
