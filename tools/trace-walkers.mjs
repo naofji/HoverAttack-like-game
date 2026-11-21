@@ -11,6 +11,10 @@
 // 自機の入力は SeededRNG で決めた台本（20フレームごとに左右・ホバー・しゃがみを引き直す）。
 // Math.random も種つきの LCG に差し替える（粒子や煙の散らばりが物理に混ざらないことは
 // 保証されていないので、混ざっても前後で同じになるようにしておく）。
+// 指紋は型ごとに分けて取る（キーは seed/面/型。1つの run にはその型の敵だけを入れる）。
+// 以前は全型を1つの面に混ぜて1本のハッシュにしていたが、Math.random を全機体で共有して
+// いるので、1体が乱数を余分に引くと他の型の指紋まで動き、「rival だけ変えた」ことを
+// 示せなかった（2026-11-22、rival のローラーダッシュで）。
 // 敵は撃たない（fireInterval を潰す）。弾の当たりはここで測りたいものではなく、弾が地形を
 // 壊すとマップが変わって指紋が別の理由で揺れるため。
 import { createHash } from 'node:crypto';
@@ -111,37 +115,39 @@ function makeGame(seed, mission) {
 const result = {};
 for (const seed of SEEDS) {
     for (const mission of MISSIONS) {
-        lcg = seed * 7919 + mission;
-        const key = `seed${seed}/m${mission}`;
-        const h = createHash('sha1');
-        let error = null;
-        let frame = 0;
-        try {
-            const game = makeGame(seed, mission);
-            const spawns = game.map.enemyAttackerSpawns.slice(0, WALKERS_PER_MAP);
-            const input = makeInput(new SeededRNG(seed * 31 + mission));
-            game.input = input;
-            // 自機は最初の湧き位置の少し上から落とす（着地・段差・天井を通す）
-            const p0 = spawns[0] || { x: 10 * TILE_SIZE, y: 10 * TILE_SIZE };
-            game.player = new Player(game, p0.x, p0.y - TILE_SIZE);
-            spawns.forEach((pos, i) => {
-                const cfg = { ...ENEMY_ATTACKER_TYPES[TYPE_KEYS[i % TYPE_KEYS.length]], fireInterval: 1e9 };
-                game.enemies.push(new EnemyAttacker(game, pos.x, pos.y, cfg));
-            });
-            for (frame = 0; frame < FRAMES; frame++) {
-                input.step(frame);
-                game.player.update();
-                for (const e of game.enemies) if (e.alive) e.update();
-                game.particles.length = 0;
-                game.enemyBullets.length = 0;
-                game.projectiles.length = 0;
-                digestBody(h, 'P', game.player);
-                game.enemies.forEach((e, i) => digestBody(h, `E${i}`, e));
+        TYPE_KEYS.forEach((type, typeIndex) => {
+            lcg = seed * 7919 + mission * 31 + typeIndex;
+            const key = `seed${seed}/m${mission}/${type}`;
+            const h = createHash('sha1');
+            let error = null;
+            let frame = 0;
+            try {
+                const game = makeGame(seed, mission);
+                const spawns = game.map.enemyAttackerSpawns.slice(0, WALKERS_PER_MAP);
+                const input = makeInput(new SeededRNG(seed * 31 + mission));
+                game.input = input;
+                // 自機は最初の湧き位置の少し上から落とす（着地・段差・天井を通す）
+                const p0 = spawns[0] || { x: 10 * TILE_SIZE, y: 10 * TILE_SIZE };
+                game.player = new Player(game, p0.x, p0.y - TILE_SIZE);
+                for (const pos of spawns) {
+                    const cfg = { ...ENEMY_ATTACKER_TYPES[type], fireInterval: 1e9 };
+                    game.enemies.push(new EnemyAttacker(game, pos.x, pos.y, cfg));
+                }
+                for (frame = 0; frame < FRAMES; frame++) {
+                    input.step(frame);
+                    game.player.update();
+                    for (const e of game.enemies) if (e.alive) e.update();
+                    game.particles.length = 0;
+                    game.enemyBullets.length = 0;
+                    game.projectiles.length = 0;
+                    digestBody(h, 'P', game.player);
+                    game.enemies.forEach((e, i) => digestBody(h, `E${i}`, e));
+                }
+            } catch (err) {
+                error = `${err && err.message} @frame ${frame}`;
             }
-        } catch (err) {
-            error = `${err && err.message} @frame ${frame}`;
-        }
-        result[key] = { trace: h.digest('hex').slice(0, 20), frames: frame, error };
+            result[key] = { trace: h.digest('hex').slice(0, 20), frames: frame, error };
+        });
     }
 }
 console.log(JSON.stringify(result, null, 1));
