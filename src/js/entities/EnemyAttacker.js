@@ -32,6 +32,7 @@ import { AttackerCollision } from './attacker/collision.js';
 import { AttackerCombat } from './attacker/combat.js';
 import { AttackerMovement } from './attacker/movement.js';
 import { AttackerAfterimage } from './attacker/afterimage.js';
+import { AttackerRollerDash } from './attacker/rollerDash.js';
 import { SlopeBody } from './slopeBody.js';
 import { WalkerBody } from './walkerBody.js';
 import { isCrouched } from './attacker/stance.js';
@@ -107,6 +108,13 @@ export class EnemyAttacker {
         this.evadeTimer = 0;
         this.evadeGoalX = 0;
         this.evadeVertical = 0; // -1 = go up, +1 = drop, 0 = horizontal only
+
+        // ローラーダッシュ（attacker/rollerDash.js。rollerDash を持つ型だけが使う）
+        this.rollerPhase = null;
+        this.rollerTimer = 0;
+        this.rollerDir = 0;
+        this.rollerGlideFrames = 0;
+        this.rollerCooldown = 0;
 
         // Artillery cover-seeking state
         this.coverCheckTimer = 0;
@@ -229,6 +237,9 @@ export class EnemyAttacker {
             this._applyGroundSlide(this.vx);
             // 坂の上の加速（押せば上り、止まれば滑り落ちる。自機と同じ規則。attacker/collision.js）
             this._applyAttackerSlope();
+        } else if (this.isRollerDashing()) {
+            // 反動中は _updateMovement が来ないので、ここで終わらせないと反動明けに続きを滑る
+            this._endRollerDash();
         }
 
         // --- Hover Fuel Recovery ---
@@ -384,6 +395,12 @@ export class EnemyAttacker {
      * 陸上（slide 0）では目標がそのまま出るので、雪以外の面の挙動は変わらない。
      */
     _applyGroundSlide(desiredVx) {
+        // ローラーダッシュは車輪が噛んでいる扱い（rival が出る5面は氷 0.94 なので、
+        // 通すと加速が16フレームほど鈍って「一気に乗る」が消える）
+        if (this.isRollerDashing()) {
+            this.vx = desiredVx;
+            return;
+        }
         this.vx = approachVx(this.vx, desiredVx, groundSlide(this, this.game));
     }
 
@@ -428,7 +445,7 @@ export class EnemyAttacker {
 Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
-    AttackerAfterimage, SlopeBody, WalkerBody,
+    AttackerAfterimage, AttackerRollerDash, SlopeBody, WalkerBody,
 );
 
 // プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で

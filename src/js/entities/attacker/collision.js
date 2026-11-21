@@ -105,6 +105,11 @@ export const AttackerCollision = {
     /** 壁に当たって止まった。跳べるなら跳び越えにかかり、跳べなければ（巡回・行き来する型は）折り返す */
     _reactToWall() {
         this.vx = 0;
+        // 滑走中は跳び越えにかからず、その場で終わる（滑走中は跳ばない、が設計の約束）
+        if (this.isRollerDashing()) {
+            this._endRollerDash();
+            return;
+        }
         const mType = this.config.movementType || 'stop_and_shoot';
         // Try to jump over the wall
         if (this.onGround && this.jumpCooldown <= 0) {
@@ -152,7 +157,10 @@ export const AttackerCollision = {
         const desired = this.vx;
         const held = Math.sign(desired);
         this.vx = desired + this.slopeVx;
-        this._applySlope(held, Math.min(Math.abs(desired), this.maxSpeed * SLOPE_UPHILL_SCALE));
+        // 上りの上限は「平地の速さ × SLOPE_UPHILL_SCALE」。滑走中は平地の速さが滑走の速さなので
+        // そちらから取る（歩きの上限 0.72 に押さえると、坂の多い5面で滑りが歩きより遅く失速する）
+        const flatSpeed = this.isRollerDashing() ? Math.abs(desired) : this.maxSpeed;
+        this._applySlope(held, Math.min(Math.abs(desired), flatSpeed * SLOPE_UPHILL_SCALE));
         this.slopeVx = (this.slopeDir === 0 || held === this.slopeDir) ? 0 : this.vx - desired;
     },
 };

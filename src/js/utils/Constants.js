@@ -239,6 +239,25 @@ export const RIVAL_AFTERIMAGE_INTERVAL = 2;   // 何フレーム前をたどる�
 export const RIVAL_AFTERIMAGE_ALPHA = 0.30;
 export const RIVAL_AFTERIMAGE_COLOR = '#CC3333'; // 機体の赤と同じ。別の色にすると「分身」ではなく「エフェクト」に見えてしまう
 
+// --- Rival roller dash（ローラーダッシュ）---
+// 設計: docs/superpowers/specs/2026-11-22-rival-roller-dash-design.md
+// 近づかれた rival が、自機の方を向いたまま後ろへ高速で滑って距離を取る（撃ちながら）。
+// 型の行の `rollerDash: true` で付く。手順は entities/attacker/rollerDash.js。
+//
+// 最高速 1.20 の2倍。残像のしきい値 RIVAL_AFTERIMAGE_SPEED(1.6) を超えるので滑走中は
+// 尾が出る。回避ダッシュの初速 3.6 より遅い＝「横へ消える」ではなく「後ろへ滑る」に見せる
+export const ROLLER_SPEED = 2.4;            // px/frame
+export const ROLLER_ACCEL_FRAMES = 6;       // 止まった状態から ROLLER_SPEED まで線形に乗せるフレーム数（短いほど「一気に」）
+// 一定速で滑るフレーム数。始めるときに MIN..MAX から乱数で決める＝**どこで止まるか
+// 読めない**のはここ。移動量は加速・減速込みでおよそ 60〜135px。近すぎ(60px)から
+// zigzag の推奨距離 80px の外まで確実に出る
+export const ROLLER_GLIDE_FRAMES_MIN = 20;
+export const ROLLER_GLIDE_FRAMES_MAX = 50;
+export const ROLLER_STOP_FRAMES = 8;        // 急停止で ROLLER_SPEED → 0 に落とすフレーム数
+// 連発防止（約4秒）。滑りっぱなしで近接戦が成り立たなくなるのが一番の失敗なので、
+// 一度下がったら暫くは歩きのジグザグで相手をさせる
+export const ROLLER_COOLDOWN = 240;
+
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps
@@ -630,6 +649,8 @@ export const ENEMY_ATTACKER_TYPES = {
         // 回避の立ち上がりで瞬間加速する（RIVAL_DASH_*）。上の afterimage と
         // 対で効く ── 加速で残像のしきい値を超えるから尾が出る
         dashOnEvade: true,
+        // 近づかれたら後ろへ滑って距離を取る（ROLLER_*、手順は entities/attacker/rollerDash.js）
+        rollerDash: true,
     },
     artillery: {
         name: 'artillery',

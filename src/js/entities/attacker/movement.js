@@ -29,6 +29,8 @@ import { audioManager } from '../../audio/AudioManager.js';
 export const AttackerMovement = {
     /** Apply movement velocity for the current frame. */
     _updateMovement(target) {
+        // 滑走中は移動を乗っ取る（ジグザグ・ジャンプ・回避を止める。attacker/rollerDash.js）
+        if (this._updateRollerDash()) return;
         // 連射中は足を止める。artillery はしゃがんで、MG 持ちの standard は立ったまま
         // （しゃがみは attacker/stance.js）。MG 持ちも止めるのは、連射のあいだ
         // 位置が決まる＝自機が弾の筋を読んで避けられるようにするため
@@ -56,6 +58,8 @@ export const AttackerMovement = {
 
     /** Advance the walk animation frame. */
     _updateWalkAnimation() {
+        // 滑走中は脚を踏み出さない（構えは attacker/legs.js の _bipedRollerJoints）
+        if (this.isRollerDashing()) return;
         if (this.onGround && Math.abs(this.vx) > 0.3) {
             this.walkTimer++;
             if (this.walkTimer >= 5) {
@@ -464,6 +468,8 @@ export const AttackerMovement = {
                 // Approaching: combine bias with oscillation
                 this.vx = (moveDir * 0.7 + zigzagPhase * 0.5) * this.maxSpeed;
             } else if (absDx < preferredDist - 20) {
+                // 近すぎる: ローラーダッシュで下がれるならそちら（以降のジグザグ・跳躍は飛ばす）
+                if (this._tryStartRollerDash(dx)) return;
                 // Too close: retreat with zigzag
                 this.vx = (-moveDir * 0.8 + zigzagPhase * 0.4) * this.maxSpeed;
             } else {
