@@ -27,6 +27,11 @@ import {
     RIVAL_DASH_SND_RISE_AT, RIVAL_DASH_SND_KNEE, RIVAL_DASH_SND_HOLD,
     RIVAL_DASH_SND_FILTER_Q, RIVAL_DASH_SND_FILTER_MULT, RIVAL_DASH_SND_DETUNE,
     RIVAL_DASH_SND_GAIN, RIVAL_DASH_SND_SUB_GAIN, RIVAL_DASH_SND_ATTACK,
+    ROLLER_SND_FREQ_FROM, ROLLER_SND_FREQ_TO, ROLLER_SND_SPINUP, ROLLER_SND_GRIND_FREQ,
+    ROLLER_SND_GRIND_Q, ROLLER_SND_GRIND_MIX, ROLLER_SND_GAIN, ROLLER_SND_ATTACK,
+    ROLLER_SND_RELEASE, ROLLER_SND_DEFAULT_DURATION,
+    ROLLER_STOP_SND_DURATION, ROLLER_STOP_SND_FREQ_FROM, ROLLER_STOP_SND_FREQ_TO, ROLLER_STOP_SND_Q,
+    ROLLER_STOP_SND_TONE_FROM, ROLLER_STOP_SND_TONE_TO, ROLLER_STOP_SND_TONE_MIX, ROLLER_STOP_SND_GAIN,
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
     ENEMY_LANDING_THUMP_HARD, ENEMY_LANDING_THUMP_SOFT,
 } from '../../utils/Constants.js';
@@ -308,6 +313,92 @@ export const AudioEnemySounds = {
         voices.push(sub);
 
         for (const v of voices) { v.start(t); v.stop(end); }
+    },
+
+    /**
+     * rival のローラーダッシュの滑走音（entities/attacker/rollerDash.js）。始めた瞬間に1回。
+     * 回り上がるモーター（三角波）＋接地の擦れ（帯域ノイズ）を、保ってから終わり際に抜く。
+     * **変えたら tests/rival-roller-sound.test.js のオフライン再現も合わせること。**
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     * @param {number} [durationSec] 鳴らす長さ（滑走の実時間）
+     */
+    playRollerDash(x, y, durationSec = ROLLER_SND_DEFAULT_DURATION) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        // 抜きの区間より短いと包絡が逆転するので、最低でも ATTACK＋RELEASE は取る
+        const dur = Math.max(durationSec, ROLLER_SND_ATTACK + ROLLER_SND_RELEASE);
+        const end = t + dur;
+        const peak = ROLLER_SND_GAIN * level;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(peak, t + ROLLER_SND_ATTACK);
+        gain.gain.setValueAtTime(peak, end - ROLLER_SND_RELEASE);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+        gain.connect(this._out(x));
+
+        const motor = this.ctx.createOscillator();
+        motor.type = 'triangle';
+        motor.frequency.setValueAtTime(ROLLER_SND_FREQ_FROM, t);
+        motor.frequency.exponentialRampToValueAtTime(ROLLER_SND_FREQ_TO, t + ROLLER_SND_SPINUP);
+        motor.connect(gain);
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        noise.loop = true;   // 滑走はノイズバッファより長くなりうる
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = ROLLER_SND_GRIND_FREQ;
+        bp.Q.value = ROLLER_SND_GRIND_Q;
+        const mix = this.ctx.createGain();
+        mix.gain.value = ROLLER_SND_GRIND_MIX;
+        noise.connect(bp); bp.connect(mix); mix.connect(gain);
+
+        for (const s of [motor, noise]) { s.start(t); s.stop(end); }
+    },
+
+    /**
+     * ローラーダッシュの急停止の「キィッ」。滑り切ったときだけ鳴る（壁・落下・被弾で
+     * 途中で終わったときは鳴らさない）。掃引する帯域ノイズ＋下がる鳴きのサイン波。
+     * **変えたら tests/rival-roller-sound.test.js のオフライン再現も合わせること。**
+     * @param {number} x 音源のワールドX
+     * @param {number} y 音源のワールドY
+     */
+    playRollerStop(x, y) {
+        if (!this._prepare()) return;
+        const level = this._positionalGain(x, y);
+        if (level <= 0) return;
+
+        const t = this.ctx.currentTime;
+        const end = t + ROLLER_STOP_SND_DURATION;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(ROLLER_STOP_SND_GAIN * level, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+        gain.connect(this._out(x));
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = ROLLER_STOP_SND_Q;
+        bp.frequency.setValueAtTime(ROLLER_STOP_SND_FREQ_FROM, t);
+        bp.frequency.exponentialRampToValueAtTime(ROLLER_STOP_SND_FREQ_TO, end);
+        noise.connect(bp); bp.connect(gain);
+
+        const tone = this.ctx.createOscillator();
+        tone.type = 'sine';
+        tone.frequency.setValueAtTime(ROLLER_STOP_SND_TONE_FROM, t);
+        tone.frequency.exponentialRampToValueAtTime(ROLLER_STOP_SND_TONE_TO, end);
+        const toneMix = this.ctx.createGain();
+        toneMix.gain.value = ROLLER_STOP_SND_TONE_MIX;
+        tone.connect(toneMix); toneMix.connect(gain);
+
+        for (const s of [noise, tone]) { s.start(t); s.stop(end); }
     },
 
     /**

@@ -271,6 +271,40 @@ export const ROLLER_SPARK_LIFE_MIN = 6;      // frames
 export const ROLLER_SPARK_LIFE_MAX = 12;
 export const ROLLER_SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500']; // 被弾の火花（Particle.js の SPARK_COLORS）と同じ黄〜橙
 
+// 滑走音（playRollerDash）。始めた瞬間に1回、滑走の長さぶん鳴る単発音。
+// ループ音にしなかったのは、長さが始める時点で決まっているから（ループにすると、
+// 撃破・面の移動での止め忘れの面倒を全部抱える）。途中で終わると尾が少し残るのは許容。
+// 中身は「回り上がるモーター（三角波）」と「接地の擦れ（帯域ノイズ）」。
+// 三角波にしたのは、鋸波だと倍音が回避ダッシュ音（鋸波＋共鳴ローパス）と重なって
+// 聞き分けにくくなるため
+export const ROLLER_SND_FREQ_FROM = 110;    // Hz: 回り始め
+export const ROLLER_SND_FREQ_TO = 180;      // Hz: 回りきった音程（そこで保つ）
+export const ROLLER_SND_SPINUP = 0.12;      // 秒: 回り上がる時間（加速 ROLLER_ACCEL_FRAMES=6 ≒ 0.1秒に合わせた）
+export const ROLLER_SND_GRIND_FREQ = 2200;  // Hz: 擦れのノイズの帯域の中心
+export const ROLLER_SND_GRIND_Q = 1.2;      // バンドパス（WebAudio でも線形の Q）。広めにしてザラつきを出す
+export const ROLLER_SND_GRIND_MIX = 0.6;    // モーターに対する擦れの混ぜ量
+export const ROLLER_SND_ATTACK = 0.02;      // 秒。短すぎるとクリックノイズ
+export const ROLLER_SND_RELEASE = 0.08;     // 秒: 終わり際に抜く長さ（急停止の「キィッ」に場所を譲る）
+export const ROLLER_SND_DEFAULT_DURATION = 0.8; // 秒: 長さを渡されなかったとき（加速6＋滑走35＋減速8 ≒ 49フレームの中ほど）
+// A特性の transientLevel で実測して決めた値（tests/rival-roller-sound.test.js）。
+// 回避ダッシュ音（playRivalDash）に対して **-3.95dB**。滑っているあいだ鳴り続けるので
+// 一瞬の回避ダッシュ音より控えめにした。0.03 では -13.3dB で埋もれた（モーターが
+// 110〜180Hz と低く、A特性で大きく削られるため）
+export const ROLLER_SND_GAIN = 0.088;
+
+// 急停止の「キィッ」（playRollerStop）。滑り切って stop 相に入った瞬間だけ鳴る
+export const ROLLER_STOP_SND_DURATION = 0.18;    // 秒
+export const ROLLER_STOP_SND_FREQ_FROM = 3200;   // Hz: 擦れの帯域が高い所から
+export const ROLLER_STOP_SND_FREQ_TO = 1600;     // Hz: 下がって止まる（速度が落ちていく）
+export const ROLLER_STOP_SND_Q = 3;              // バンドパス。狭めにして「キィ」の芯を出す
+export const ROLLER_STOP_SND_TONE_FROM = 1700;   // Hz: 鳴きのサイン波
+export const ROLLER_STOP_SND_TONE_TO = 1100;
+export const ROLLER_STOP_SND_TONE_MIX = 0.3;
+// 同じく実測で回避ダッシュ音に対して **-0.62dB**（一瞬なので同じくらいにした）。
+// 0.05 では -18.0dB。Q 3 のバンドパスで帯域外のノイズが大半捨てられ、しかも頭から
+// 減衰するので、数字の見た目より大きく取らないと聞こえない（ピークは 0.19 で歪まない）
+export const ROLLER_STOP_SND_GAIN = 0.37;
+
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;
 export const PLAYER_RESPAWN_INVINCIBLE_FRAMES = 90; // 1.5 seconds at 60fps

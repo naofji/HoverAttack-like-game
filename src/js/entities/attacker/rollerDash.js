@@ -32,6 +32,7 @@ import {
 import { isRecoiling } from '../../utils/Recoil.js';
 import { floorSlide } from '../../utils/surface.js';
 import { isInView } from '../../utils/viewCull.js';
+import { audioManager } from '../../audio/AudioManager.js';
 
 export const AttackerRollerDash = {
     /** 滑走中か。 */
@@ -65,6 +66,10 @@ export const AttackerRollerDash = {
         const span = ROLLER_GLIDE_FRAMES_MAX - ROLLER_GLIDE_FRAMES_MIN + 1;
         this.rollerGlideFrames = ROLLER_GLIDE_FRAMES_MIN
             + Math.min(span - 1, Math.floor(Math.random() * span));
+        // 音は滑走の実時間ぶん。物理は 60×gameSpeed フレーム/秒で進む（main.js の固定タイムステップ）
+        const frames = ROLLER_ACCEL_FRAMES + this.rollerGlideFrames + ROLLER_STOP_FRAMES;
+        audioManager.playRollerDash(this.x + this.width / 2, this.y + this.height / 2,
+            frames / (60 * (this.game.gameSpeed ?? 1)));
         this._stepRoller();
         return true;
     },
@@ -124,6 +129,7 @@ export const AttackerRollerDash = {
     /** 滑り切って急停止に入った瞬間。途中で終わったとき（_endRollerDash）は来ない。 */
     _onRollerStop() {
         this._emitRollerSparks(ROLLER_SPARK_STOP_COUNT);
+        audioManager.playRollerStop(this.x + this.width / 2, this.y + this.height / 2);
     },
 
     /**
