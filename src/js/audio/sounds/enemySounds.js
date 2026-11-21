@@ -29,7 +29,7 @@ import {
     RIVAL_DASH_SND_GAIN, RIVAL_DASH_SND_SUB_GAIN, RIVAL_DASH_SND_ATTACK,
     ROLLER_SND_FREQ_FROM, ROLLER_SND_FREQ_TO, ROLLER_SND_SPINUP, ROLLER_SND_GRIND_FREQ,
     ROLLER_SND_GRIND_Q, ROLLER_SND_GRIND_MIX, ROLLER_SND_GAIN, ROLLER_SND_ATTACK,
-    ROLLER_SND_RELEASE, ROLLER_SND_DEFAULT_DURATION,
+    ROLLER_SND_RELEASE, ROLLER_SND_DEFAULT_DURATION, ROLLER_SND_CUT,
     ROLLER_STOP_SND_DURATION, ROLLER_STOP_SND_FREQ_FROM, ROLLER_STOP_SND_FREQ_TO, ROLLER_STOP_SND_Q,
     ROLLER_STOP_SND_TONE_FROM, ROLLER_STOP_SND_TONE_TO, ROLLER_STOP_SND_TONE_MIX, ROLLER_STOP_SND_GAIN,
     ENEMY_LANDING_NOISE_HARD, ENEMY_LANDING_NOISE_SOFT,
@@ -322,6 +322,7 @@ export const AudioEnemySounds = {
      * @param {number} x 音源のワールドX
      * @param {number} y 音源のワールドY
      * @param {number} [durationSec] 鳴らす長さ（滑走の実時間）
+     * @returns {(() => void)|undefined} 途中で止める関数（滑走が途中で終わったとき用）。鳴らさなかったときは undefined
      */
     playRollerDash(x, y, durationSec = ROLLER_SND_DEFAULT_DURATION) {
         if (!this._prepare()) return;
@@ -359,6 +360,19 @@ export const AudioEnemySounds = {
         noise.connect(bp); bp.connect(mix); mix.connect(gain);
 
         for (const s of [motor, noise]) { s.start(t); s.stop(end); }
+
+        // 途中で止める: 予定していた包絡を捨て、今の音量から短く抜いて音源も止める。
+        // いきなり 0 にするとクリックノイズになるので ROLLER_SND_CUT だけかける
+        let stopped = false;
+        return () => {
+            if (stopped) return;
+            stopped = true;
+            const now = this.ctx.currentTime;
+            if (now >= end) return;
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setTargetAtTime(0, now, ROLLER_SND_CUT / 4);
+            for (const s of [motor, noise]) s.stop(now + ROLLER_SND_CUT);
+        };
     },
 
     /**

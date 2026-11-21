@@ -68,7 +68,8 @@ export const AttackerRollerDash = {
             + Math.min(span - 1, Math.floor(Math.random() * span));
         // 音は滑走の実時間ぶん。物理は 60×gameSpeed フレーム/秒で進む（main.js の固定タイムステップ）
         const frames = ROLLER_ACCEL_FRAMES + this.rollerGlideFrames + ROLLER_STOP_FRAMES;
-        audioManager.playRollerDash(this.x + this.width / 2, this.y + this.height / 2,
+        // 返ってくる「止める関数」は途中で終わったときに使う（_endRollerDash）
+        this._rollerSoundStop = audioManager.playRollerDash(this.x + this.width / 2, this.y + this.height / 2,
             frames / (60 * (this.game.gameSpeed ?? 1)));
         this._stepRoller();
         return true;
@@ -84,7 +85,13 @@ export const AttackerRollerDash = {
             return false;
         }
         // 足が離れたら、vx はそのままにして空中の処理へ渡す（段差から落ちた・吹き飛ばされた）
-        if (!this.onGround || this.aiState !== 'chase') {
+        // 前のフレームに出した速さが衝突で 0 に潰されていたら、何かに止められている。
+        // 壁は _reactToWall が終わらせるが、崖のふちの踏みとどまり（collision.js）と
+        // 機体どうしの当たり（_checkHorizontalEntities）は vx を 0 にするだけなので、
+        // ここで拾わないと止まったまま glide を続けた（最終レビューで再現、崖で約36フレーム）。
+        // stop 相は自分で 0 へ落とすので見ない
+        const blocked = this.rollerPhase !== 'stop' && this.vx === 0;
+        if (!this.onGround || this.aiState !== 'chase' || blocked) {
             this._endRollerDash();
             return false;
         }
@@ -145,8 +152,15 @@ export const AttackerRollerDash = {
         this.game.spawnRollerSparks(this.x + this.width / 2, this.y + this.height, count, -this.rollerDir);
     },
 
-    /** 滑走を終わらせてクールダウンを掛ける。音・火花は出さない。 */
+    /**
+     * 滑走を終わらせてクールダウンを掛ける。急停止の音・火花は出さない。
+     * 滑走音は始めた時点の全長で鳴っているので、ここで止める（壁や被弾で数フレーム目に
+     * 終わると、止まった後も1秒以上モーター音が残っていた）。滑り切ったときは音も
+     * ちょうど抜け終わる頃なので、止めても聞こえ方は変わらない
+     */
     _endRollerDash() {
+        if (typeof this._rollerSoundStop === 'function') this._rollerSoundStop();
+        this._rollerSoundStop = null;
         this.rollerPhase = null;
         this.rollerTimer = 0;
         this.rollerCooldown = ROLLER_COOLDOWN;

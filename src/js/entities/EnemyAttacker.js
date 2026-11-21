@@ -115,6 +115,7 @@ export class EnemyAttacker {
         this.rollerDir = 0;
         this.rollerGlideFrames = 0;
         this.rollerCooldown = 0;
+        this._rollerSoundStop = null; // playRollerDash が返す「止める関数」
 
         // Artillery cover-seeking state
         this.coverCheckTimer = 0;
@@ -413,6 +414,8 @@ export class EnemyAttacker {
     }
 
     die() {
+        // 滑走中に倒されたら滑走音を止める（attacker/rollerDash.js）
+        if (this.isRollerDashing()) this._endRollerDash();
         this.alive = false;
         playDestruction(this.game, this, 'attacker');
         const cx = this.x + this.width / 2;

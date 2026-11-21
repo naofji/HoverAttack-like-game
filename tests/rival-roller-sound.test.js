@@ -202,3 +202,52 @@ test('壁・落下・反動で終わったときは急停止の音が鳴らな�
     }));
     assert.equal(recoil.playRollerStop.length, 0, '反動');
 });
+
+// --- 途中で終わったら滑走音も止める（最終レビューの指摘）---
+// 音の長さは始めた時点の全長なので、放っておくと壁や被弾で止まった後も1秒以上鳴り続ける
+
+/** playRollerDash を「止める関数を返す」偽物に差し替え、止められた回数を数える */
+function spyCut(fn) {
+    const saved = audioManager.playRollerDash;
+    let cuts = 0;
+    audioManager.playRollerDash = () => () => { cuts++; };
+    try { fn(); } finally { audioManager.playRollerDash = saved; }
+    return cuts;
+}
+
+test('壁・落下・反動・撃破で途中で終わると、滑走音を止める', () => {
+    const rows = flatFloorRows().map((s, r) => (r < 20 ? s.slice(0, 8) + '#' + s.slice(9) : s));
+    const { e: w } = world(rows, 170);
+    assert.equal(spyCut(() => withRandom(0, () => {
+        w._tryStartRollerDash(40);
+        for (let i = 0; i < 200 && w.isRollerDashing(); i++) w.update();
+    })), 1, '壁');
+    const { e: f } = world();
+    assert.equal(spyCut(() => withRandom(0, () => {
+        f._tryStartRollerDash(40); f.onGround = false; f._updateRollerDash();
+    })), 1, '落下');
+    const { e: r } = world();
+    assert.equal(spyCut(() => withRandom(0, () => {
+        r._tryStartRollerDash(40); r.recoilTimer = 5; r.update();
+    })), 1, '反動');
+    const { game: dg, e: d } = world();
+    // 撃破の演出が呼ぶもの（ここで測りたいものではない）
+    dg.spawnDebris = () => {};
+    assert.equal(spyCut(() => withRandom(0, () => {
+        d._tryStartRollerDash(40); d.die();
+    })), 1, '撃破');
+});
+
+test('止める関数は一度しか呼ばない（終わった後に重ねて止めない）', () => {
+    const { e } = world();
+    assert.equal(spyCut(() => withRandom(0, () => {
+        e._tryStartRollerDash(40);
+        e._endRollerDash();
+        e._endRollerDash();
+    })), 1);
+});
+
+test('playRollerDash は鳴らせない環境でも例外を投げず、止める関数を返しても返さなくてもよい', () => {
+    const stop = audioManager.playRollerDash();
+    assert.ok(stop === undefined || typeof stop === 'function');
+});

@@ -309,3 +309,38 @@ test('spawnRollerSparks は指定した数の粒を、指定した向きに飛�
     assert.equal(game.particles.length, 5);
     for (const p of game.particles) assert.ok(p.vx < 0, `vx=${p.vx}`);
 });
+
+// --- 壁以外に止められたとき（最終レビューの指摘）---
+// 崖のふちの踏みとどまり（collision.js）と機体どうしの当たり（_checkHorizontalEntities）は
+// vx を 0 にするだけで _reactToWall を通らない。そこで止まったまま glide を続けないこと
+
+test('崖のふちで止められたら、その場で終わる', () => seeded(() => {
+    // 背後 1タイル先（列12）には床があるので始まるが、3タイル先（列10）から左は崖
+    const rows = flatFloorRows().map((s, r) => (r >= 20 ? '.'.repeat(11) + s.slice(11) : s));
+    const { e } = world(rows);
+    assert.equal(e._tryStartRollerDash(40), true);
+    let stuck = 0;
+    for (let i = 0; i < 120 && e.isRollerDashing(); i++) {
+        const x0 = e.x;
+        e.update();
+        if (e.isRollerDashing() && Math.abs(e.x - x0) < 1e-9) stuck++;
+    }
+    assert.equal(e.isRollerDashing(), false, '滑走が終わっていない');
+    assert.ok(stuck <= 1, `止まったまま ${stuck} フレーム滑走を続けた`);
+}));
+
+test('真後ろの機体に止められたら、その場で終わる', () => seeded(() => {
+    const { game, e } = world();
+    // rival（x=200）の左に heavy を置いて塞ぐ
+    const blocker = makeAttacker(game, 170, FLOOR_Y - 24, 'heavy');
+    blocker.update = () => {};
+    assert.equal(e._tryStartRollerDash(40), true);
+    let stuck = 0;
+    for (let i = 0; i < 120 && e.isRollerDashing(); i++) {
+        const x0 = e.x;
+        e.update();
+        if (e.isRollerDashing() && Math.abs(e.x - x0) < 1e-9) stuck++;
+    }
+    assert.equal(e.isRollerDashing(), false, '滑走が終わっていない');
+    assert.ok(stuck <= 1, `止まったまま ${stuck} フレーム滑走を続けた`);
+}));

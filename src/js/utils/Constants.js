@@ -285,6 +285,7 @@ export const ROLLER_SND_GRIND_Q = 1.2;      // バンドパス（WebAudio でも
 export const ROLLER_SND_GRIND_MIX = 0.6;    // モーターに対する擦れの混ぜ量
 export const ROLLER_SND_ATTACK = 0.02;      // 秒。短すぎるとクリックノイズ
 export const ROLLER_SND_RELEASE = 0.08;     // 秒: 終わり際に抜く長さ（急停止の「キィッ」に場所を譲る）
+export const ROLLER_SND_CUT = 0.06;           // 秒: 滑走が途中で終わったときに滑走音を抜く長さ（0 だとクリックノイズ）
 export const ROLLER_SND_DEFAULT_DURATION = 0.8; // 秒: 長さを渡されなかったとき（加速6＋滑走35＋減速8 ≒ 49フレームの中ほど）
 // A特性の transientLevel で実測して決めた値（tests/rival-roller-sound.test.js）。
 // 回避ダッシュ音（playRivalDash）に対して **-3.95dB**。滑っているあいだ鳴り続けるので
