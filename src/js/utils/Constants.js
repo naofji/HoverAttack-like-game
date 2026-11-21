@@ -244,15 +244,20 @@ export const RIVAL_AFTERIMAGE_COLOR = '#CC3333'; // 機体の赤と同じ。別�
 // 近づかれた rival が、自機の方を向いたまま後ろへ高速で滑って距離を取る（撃ちながら）。
 // 型の行の `rollerDash: true` で付く。手順は entities/attacker/rollerDash.js。
 //
-// 最高速 1.20 の2倍。残像のしきい値 RIVAL_AFTERIMAGE_SPEED(1.6) を超えるので滑走中は
-// 尾が出る。回避ダッシュの初速 3.6 より遅い＝「横へ消える」ではなく「後ろへ滑る」に見せる
-export const ROLLER_SPEED = 2.4;            // px/frame
+// 最高速 1.20 の3倍＝回避ダッシュの初速と同じ。2.4（2倍）から上げた（2026-11-22、実機の
+// 指摘「残像が出現するくらいのスピードに」）。2.4 でも残像のしきい値 1.6 は超えていたが、
+// 残像は2フレームおきなので間隔が 4.8px しかなく、手前の残像が幅16pxの本体に隠れて
+// 見えなかった。3.6 なら間隔 7.2px・尾の長さ約43px で、回避ダッシュの残像と同じに見える。
+// 上り坂（×0.6−0.06）でも 2.1 でしきい値を超える（2.4 のときは 1.38 で坂では出なかった）
+export const ROLLER_SPEED = 3.6;            // px/frame
 export const ROLLER_ACCEL_FRAMES = 6;       // 止まった状態から ROLLER_SPEED まで線形に乗せるフレーム数（短いほど「一気に」）
 // 一定速で滑るフレーム数。始めるときに MIN..MAX から乱数で決める＝**どこで止まるか
-// 読めない**のはここ。移動量は加速・減速込みでおよそ 60〜135px。近すぎ(60px)から
+// 読めない**のはここ。移動量は加速・減速込みでおよそ 68〜137px。近すぎ(60px)から
 // zigzag の推奨距離 80px の外まで確実に出る
-export const ROLLER_GLIDE_FRAMES_MIN = 20;
-export const ROLLER_GLIDE_FRAMES_MAX = 50;
+// 速さを 2.4 → 3.6 に上げたとき、距離を変えないよう 20〜50 から縮めた（距離を取りすぎて
+// 近接戦が成り立たなくなるのを避けるため。距離ごと延ばすならここを戻す）
+export const ROLLER_GLIDE_FRAMES_MIN = 12;
+export const ROLLER_GLIDE_FRAMES_MAX = 31;
 export const ROLLER_STOP_FRAMES = 8;        // 急停止で ROLLER_SPEED → 0 に落とすフレーム数
 // 連発防止（約4秒）。滑りっぱなしで近接戦が成り立たなくなるのが一番の失敗なので、
 // 一度下がったら暫くは歩きのジグザグで相手をさせる
@@ -286,9 +291,9 @@ export const ROLLER_SND_GRIND_MIX = 0.6;    // モーターに対する擦れの
 export const ROLLER_SND_ATTACK = 0.02;      // 秒。短すぎるとクリックノイズ
 export const ROLLER_SND_RELEASE = 0.08;     // 秒: 終わり際に抜く長さ（急停止の「キィッ」に場所を譲る）
 export const ROLLER_SND_CUT = 0.06;           // 秒: 滑走が途中で終わったときに滑走音を抜く長さ（0 だとクリックノイズ）
-export const ROLLER_SND_DEFAULT_DURATION = 0.8; // 秒: 長さを渡されなかったとき（加速6＋滑走35＋減速8 ≒ 49フレームの中ほど）
+export const ROLLER_SND_DEFAULT_DURATION = 0.6; // 秒: 長さを渡されなかったとき（加速6＋滑走22＋減速8 ≒ 36フレームの中ほど）
 // A特性の transientLevel で実測して決めた値（tests/rival-roller-sound.test.js）。
-// 回避ダッシュ音（playRivalDash）に対して **-3.95dB**。滑っているあいだ鳴り続けるので
+// 回避ダッシュ音（playRivalDash）に対して **-2.44dB**（測る長さを 0.8→0.6秒にした後。0.8秒では -3.95dB）。滑っているあいだ鳴り続けるので
 // 一瞬の回避ダッシュ音より控えめにした。0.03 では -13.3dB で埋もれた（モーターが
 // 110〜180Hz と低く、A特性で大きく削られるため）
 export const ROLLER_SND_GAIN = 0.088;

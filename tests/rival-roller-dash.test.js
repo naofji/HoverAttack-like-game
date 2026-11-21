@@ -15,7 +15,7 @@ import {
     TILE_SIZE as T, ICE_SLIDE, SLOPE_UPHILL_SCALE, SLOPE_DOWNHILL_ACCEL,
     ROLLER_SPEED, ROLLER_ACCEL_FRAMES, ROLLER_GLIDE_FRAMES_MIN, ROLLER_GLIDE_FRAMES_MAX,
     ROLLER_STOP_FRAMES, ROLLER_COOLDOWN,
-    RIVAL_AFTERIMAGE_SPEED, RIVAL_DASH_MULT, RIVAL_ALIGN_TRIGGER_FRAMES,
+    RIVAL_AFTERIMAGE_SPEED, RIVAL_AFTERIMAGE_INTERVAL, RIVAL_ALIGN_TRIGGER_FRAMES,
     ENEMY_ATTACKER_TYPES, ROLLER_SPARK_COUNT, ROLLER_SPARK_STOP_COUNT,
 } from '../src/js/utils/Constants.js';
 import { SpawnEffects } from '../src/js/systems/SpawnEffects.js';
@@ -119,10 +119,27 @@ test('滑る長さは乱数で MIN..MAX に散る（止まる位置が読めな�
     assert.deepEqual(lengths, [fixed + ROLLER_GLIDE_FRAMES_MIN, fixed + ROLLER_GLIDE_FRAMES_MAX]);
 });
 
-test('滑る速さは残像の尾が出る速さで、回避ダッシュの初速よりは遅い', () => {
-    // 設計上の主張: 滑走中は尾が出る（しきい値超え）が、「消える」回避ダッシュとは区別がつく
+test('滑走中の残像が本体の陰から見える間隔で並ぶ', () => {
+    // 2.4px/frame のときは間隔 4.8px で、手前の残像が幅16pxの本体にほぼ隠れて
+    // 「残像が出ていない」と見えた（実機の指摘 2026-11-22）。見えていた回避ダッシュの
+    // 初速 3.6 の間隔（7.2px）以上を求める
     assert.ok(ROLLER_SPEED > RIVAL_AFTERIMAGE_SPEED);
-    assert.ok(ROLLER_SPEED < ENEMY_ATTACKER_TYPES.rival.speed * RIVAL_DASH_MULT);
+    assert.ok(ROLLER_SPEED * RIVAL_AFTERIMAGE_INTERVAL >= 7,
+        `残像の間隔 ${(ROLLER_SPEED * RIVAL_AFTERIMAGE_INTERVAL).toFixed(1)}px が狭い`);
+});
+
+test('上り坂でも残像のしきい値を超える速さで滑る', () => {
+    const uphill = ROLLER_SPEED * SLOPE_UPHILL_SCALE - SLOPE_DOWNHILL_ACCEL;
+    assert.ok(uphill > RIVAL_AFTERIMAGE_SPEED, `上り坂で ${uphill.toFixed(2)}px/frame`);
+});
+
+test('速さを上げても、滑る距離はおよそ 60〜135px のまま（距離を取りすぎない）', () => {
+    // 加速・減速はどちらも線形なので、その区間の距離は ROLLER_SPEED × フレーム数 / 2
+    const ramp = ROLLER_SPEED * (ROLLER_ACCEL_FRAMES + ROLLER_STOP_FRAMES) / 2;
+    const min = ramp + ROLLER_SPEED * ROLLER_GLIDE_FRAMES_MIN;
+    const max = ramp + ROLLER_SPEED * ROLLER_GLIDE_FRAMES_MAX;
+    assert.ok(min >= 55 && min <= 75, `最短 ${min.toFixed(0)}px`);
+    assert.ok(max >= 125 && max <= 145, `最長 ${max.toFixed(0)}px`);
 });
 
 test('update() で近づくと滑り始める（zigzag の近すぎる分岐から呼ばれている）', () => seeded(() => {
