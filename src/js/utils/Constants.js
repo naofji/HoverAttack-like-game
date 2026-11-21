@@ -257,6 +257,19 @@ export const ROLLER_STOP_FRAMES = 8;        // 急停止で ROLLER_SPEED → 0 �
 // 連発防止（約4秒）。滑りっぱなしで近接戦が成り立たなくなるのが一番の失敗なので、
 // 一度下がったら暫くは歩きのジグザグで相手をさせる
 export const ROLLER_COOLDOWN = 240;
+// 足元の火花。滑走中は ROLLER_SPARK_INTERVAL フレームおきに ROLLER_SPARK_COUNT 粒、
+// 急停止の瞬間に ROLLER_SPARK_STOP_COUNT 粒。粒は進行と逆（後ろ）へ低く飛ぶ。
+// 被弾の火花（createSparks: 3〜5粒、1.5〜4.0px/f、寿命10〜19）より小さく短くして、
+// 「被弾した」と取り違えない擦れの火花にする（実機で調整する前提の初期値）
+export const ROLLER_SPARK_INTERVAL = 3;
+export const ROLLER_SPARK_COUNT = 2;
+export const ROLLER_SPARK_STOP_COUNT = 10;
+export const ROLLER_SPARK_SPEED_MIN = 0.8;   // px/frame（横）
+export const ROLLER_SPARK_SPEED_MAX = 2.2;
+export const ROLLER_SPARK_RISE_MAX = 1.2;    // px/frame（上向きの最大）。低く飛ばすため横より小さい
+export const ROLLER_SPARK_LIFE_MIN = 6;      // frames
+export const ROLLER_SPARK_LIFE_MAX = 12;
+export const ROLLER_SPARK_COLORS = ['#FFFFE0', '#FFD700', '#FFA500']; // 被弾の火花（Particle.js の SPARK_COLORS）と同じ黄〜橙
 
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_INITIAL_LIVES = 3;

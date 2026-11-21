@@ -20,8 +20,10 @@ import {
     WATERFALL_SPLASH_MIST_MAX, WATERFALL_SPLASH_MIST_SPREAD, WATERFALL_BAND_WIDTH,
     BUBBLE_BURSTS, BLAST_BUBBLES_PER_PARTICLE, BLAST_BUBBLES_MAX,
     TILE_SIZE,
+    ROLLER_SPARK_SPEED_MIN, ROLLER_SPARK_SPEED_MAX, ROLLER_SPARK_RISE_MAX,
+    ROLLER_SPARK_LIFE_MIN, ROLLER_SPARK_LIFE_MAX, ROLLER_SPARK_COLORS,
 } from '../utils/Constants.js';
-import { createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
+import { Particle, createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -84,6 +86,24 @@ export const SpawnEffects = {
     /** 破片の同時存在数を上限内に収める。古い破片から落とす。 */
     _trimDebris() {
         trimDebris(this.particles, DEBRIS_MAX_ACTIVE);
+    },
+
+    /**
+     * ローラーダッシュの足元の火花（entities/attacker/rollerDash.js）。粒は dir の向き
+     * （進行と逆＝後ろ）へ横に飛び、上へは少しだけ跳ねる。
+     * @param {number} dir -1 = 左へ、+1 = 右へ
+     */
+    spawnRollerSparks(x, y, count, dir) {
+        for (let i = 0; i < (count | 0); i++) {
+            const speed = ROLLER_SPARK_SPEED_MIN + Math.random() * (ROLLER_SPARK_SPEED_MAX - ROLLER_SPARK_SPEED_MIN);
+            const life = ROLLER_SPARK_LIFE_MIN + Math.floor(Math.random() * (ROLLER_SPARK_LIFE_MAX - ROLLER_SPARK_LIFE_MIN + 1));
+            const color = ROLLER_SPARK_COLORS[Math.floor(Math.random() * ROLLER_SPARK_COLORS.length)];
+            this.particles.push(new Particle(
+                x + (Math.random() - 0.5) * 4, y,
+                dir * speed, -Math.random() * ROLLER_SPARK_RISE_MAX,
+                color, 1 + Math.floor(Math.random() * 2), life,
+            ));
+        }
     },
 
     /** Spawn damage sparks at position */

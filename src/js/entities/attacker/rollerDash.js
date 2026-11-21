@@ -26,8 +26,12 @@ import {
     TILE_SIZE,
     ROLLER_SPEED, ROLLER_ACCEL_FRAMES, ROLLER_GLIDE_FRAMES_MIN, ROLLER_GLIDE_FRAMES_MAX,
     ROLLER_STOP_FRAMES, ROLLER_COOLDOWN,
+    ROLLER_SPARK_INTERVAL, ROLLER_SPARK_COUNT, ROLLER_SPARK_STOP_COUNT,
+    VIEW_CULL_MARGIN,
 } from '../../utils/Constants.js';
 import { isRecoiling } from '../../utils/Recoil.js';
+import { floorSlide } from '../../utils/surface.js';
+import { isInView } from '../../utils/viewCull.js';
 
 export const AttackerRollerDash = {
     /** 滑走中か。 */
@@ -96,6 +100,9 @@ export const AttackerRollerDash = {
             this._onRollerStop();
         }
         this.vx = this.rollerDir * this._rollerSpeedNow();
+        if (this.rollerPhase !== 'stop' && this.rollerTimer % ROLLER_SPARK_INTERVAL === 0) {
+            this._emitRollerSparks(ROLLER_SPARK_COUNT);
+        }
         if (this.rollerPhase === 'stop' && this.rollerTimer >= ROLLER_STOP_FRAMES) {
             this._endRollerDash();
         }
@@ -114,8 +121,23 @@ export const AttackerRollerDash = {
         }
     },
 
-    /** 滑り切って急停止に入った瞬間（火花・音はここから出す）。 */
-    _onRollerStop() {},
+    /** 滑り切って急停止に入った瞬間。途中で終わったとき（_endRollerDash）は来ない。 */
+    _onRollerStop() {
+        this._emitRollerSparks(ROLLER_SPARK_STOP_COUNT);
+    },
+
+    /**
+     * 足元（両足の間の接地点）から後ろへ火花。雪の床では出さない ── 雪の上を速く
+     * 動けば _kickSnow の雪煙が自動で上がるので、そちらが擦れの見た目を担う。
+     * 粒は画面内の敵だけ（_kickSnow と同じ。画面外で撒くと particles を食い潰す）。
+     */
+    _emitRollerSparks(count) {
+        if (!this.game.spawnRollerSparks) return;
+        if (floorSlide(this, this.game) > 0) return;
+        if (this.game.camera && this.game.canvas
+            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
+        this.game.spawnRollerSparks(this.x + this.width / 2, this.y + this.height, count, -this.rollerDir);
+    },
 
     /** 滑走を終わらせてクールダウンを掛ける。音・火花は出さない。 */
     _endRollerDash() {

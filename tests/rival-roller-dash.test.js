@@ -16,8 +16,9 @@ import {
     ROLLER_SPEED, ROLLER_ACCEL_FRAMES, ROLLER_GLIDE_FRAMES_MIN, ROLLER_GLIDE_FRAMES_MAX,
     ROLLER_STOP_FRAMES, ROLLER_COOLDOWN,
     RIVAL_AFTERIMAGE_SPEED, RIVAL_DASH_MULT, RIVAL_ALIGN_TRIGGER_FRAMES,
-    ENEMY_ATTACKER_TYPES,
+    ENEMY_ATTACKER_TYPES, ROLLER_SPARK_COUNT, ROLLER_SPARK_STOP_COUNT,
 } from '../src/js/utils/Constants.js';
+import { SpawnEffects } from '../src/js/systems/SpawnEffects.js';
 
 const SNOW = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
 const FLOOR_Y = 20 * T;
@@ -245,3 +246,66 @@ test('上り坂でも滑走の速さ × SLOPE_UPHILL_SCALE まで出る（歩き
     for (const v of glide) assert.ok(Math.abs(v - expected) < 0.02, `上りの vx ${v}（期待 ${expected}）`);
     assert.ok(expected > e.maxSpeed * SLOPE_UPHILL_SCALE + 0.3, '前提: 歩きの上限より速いこと');
 }));
+
+// --- 火花（Task 4）---
+
+/** game.spawnRollerSparks の呼び出しを記録する */
+function spySparks(game) {
+    const calls = [];
+    game.spawnRollerSparks = (x, y, count, dir) => calls.push({ x, y, count, dir, phase: null });
+    return calls;
+}
+
+test('滑走中は数フレームおきに後ろ向きの火花が出る', () => {
+    const { game, e } = world();
+    const calls = spySparks(game);
+    withRandom(0, () => {
+        e._tryStartRollerDash(40);
+        while (e.isRollerDashing() && e.rollerPhase !== 'stop') e._updateRollerDash();
+    });
+    // 最後の1回は stop 相に入った呼び出しの急停止の火花なので除く
+    const rolling = calls.slice(0, -1);
+    assert.equal(calls.at(-1).count, ROLLER_SPARK_STOP_COUNT);
+    assert.ok(rolling.length >= 3, `火花が少ない: ${rolling.length}`);
+    for (const c of rolling) {
+        assert.equal(c.count, ROLLER_SPARK_COUNT);
+        assert.equal(c.dir, -e.rollerDir, '火花が進む向きに飛んでいる');
+    }
+});
+
+test('急停止の瞬間にまとめて火花が出る', () => {
+    const { game, e } = world();
+    const calls = spySparks(game);
+    withRandom(0, () => {
+        e._tryStartRollerDash(40);
+        while (e.isRollerDashing()) e._updateRollerDash();
+    });
+    assert.equal(calls.filter((c) => c.count === ROLLER_SPARK_STOP_COUNT).length, 1);
+});
+
+test('壁で終わったときは急停止の火花が出ない', () => seeded(() => {
+    const rows = flatFloorRows().map((s, r) => (r < 20 ? s.slice(0, 8) + '#' + s.slice(9) : s));
+    const { game, e } = world(rows, { x: 170 });
+    const calls = spySparks(game);
+    e._tryStartRollerDash(40);
+    for (let i = 0; i < 200 && e.isRollerDashing(); i++) e.update();
+    assert.ok(calls.length > 0, '前提: 滑走中の火花は出ている');
+    assert.equal(calls.filter((c) => c.count === ROLLER_SPARK_STOP_COUNT).length, 0);
+}));
+
+test('雪の床では火花を出さない（雪煙が代わり）', () => {
+    const { game, e } = world(undefined, { env: SNOW });
+    const calls = spySparks(game);
+    withRandom(0, () => {
+        e._tryStartRollerDash(40);
+        while (e.isRollerDashing()) e._updateRollerDash();
+    });
+    assert.equal(calls.length, 0);
+});
+
+test('spawnRollerSparks は指定した数の粒を、指定した向きに飛ばす', () => {
+    const game = { particles: [] };
+    SpawnEffects.spawnRollerSparks.call(game, 0, 0, 5, -1);
+    assert.equal(game.particles.length, 5);
+    for (const p of game.particles) assert.ok(p.vx < 0, `vx=${p.vx}`);
+});
