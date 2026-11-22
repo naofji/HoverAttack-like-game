@@ -2623,6 +2623,13 @@ export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
 //   puff  横たわったとき（PUFF_PARTICLES を PUFFS 回）と、そのあと消えるまで LIE_EVERY tick ごとに（LIE_PARTICLES）。倒れた木から
 //         舞い上がる主役。勢いは最初の版と同じ桁で、上半分の向き
 // 1 本が倒れきるまでに合わせて約 110 粒、寿命は 50〜90 tick。角度は画面座標の rad（真上 = -π/2、真下 = +π/2）
+// 5面で弾が雪の積もった上面に当たったときに舞う雪（ユーザー提案 2026-11-22「マシンガンの弾が地面に当たった際にも
+// 積もった雪が舞い上がる方が自然」）。雪面かどうかは Map.snowSurfaceY（描画の積雪の帯と同じ定義）。粒と動きは
+// 雪の木が欠けたとき（MODES.hit）と同じ。自機・敵どちらの弾でも出す（ユーザー承認）。MG は連射で、1 発ごとに
+// 木の欠け（HIT 5 粒）と同じだけ出すと雪だらけになるので少なめの 3 粒から。SPREAD は出る位置の散らばり（px）。
+// どちらも出発点で、実機で見て調整する
+export const SNOW_BULLET_PUFF_COUNT = 3;
+export const SNOW_BULLET_PUFF_SPREAD = 2;
 export const SNOWTREE_FLURRY_HIT = 5;
 export const SNOWTREE_FLURRY_START = 14;
 export const SNOWTREE_FLURRY_TRICKLE_EVERY = 3;

@@ -22,8 +22,11 @@ import {
     TILE_SIZE,
     ROLLER_SPARK_SPEED_MIN, ROLLER_SPARK_SPEED_MAX, ROLLER_SPARK_RISE_MAX,
     ROLLER_SPARK_LIFE_MIN, ROLLER_SPARK_LIFE_MAX, ROLLER_SPARK_COLORS,
+    SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD,
+    SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_BIG_SHARE,
 } from '../utils/Constants.js';
-import { Particle, createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
+import { SNOWTREE_FLURRY_COLORS } from '../world/town/palette.js';
+import { Particle, createExplosion, createSparks, SplashParticle, SnowKickParticle, SnowFlurryParticle, SnowMistParticle, WaterMistParticle, CasingParticle } from '../entities/Particle.js';
 import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
@@ -226,6 +229,39 @@ export const SpawnEffects = {
                 (Math.random() - 0.5) * 2, -(1 + Math.random() * 1.5),
             ));
         }
+    },
+
+    /**
+     * 雪面から舞う雪（5面の着弾・爆発）。粒は雪の木が欠ける・倒れるときと同じ SnowFlurryParticle
+     * （空気抵抗で止まって揺れながら落ち、地面に触れたら消える）で、動きは SNOWTREE_FLURRY_MODES の行。
+     * 出る位置は横 ±spread・上へ 0〜spread だけ。(x, y) は雪面の線上なので、下へ散らすと岩の中で生まれて
+     * 最初の更新で消える（Town._spawnSnowFlurry と同じ理由）
+     * @param {string} [mode] SNOWTREE_FLURRY_MODES のキー
+     */
+    spawnSnowPuff(x, y, count, spread, mode = 'hit') {
+        const m = SNOWTREE_FLURRY_MODES[mode] || SNOWTREE_FLURRY_MODES.hit;
+        for (let i = 0; i < (count | 0); i++) {
+            const a = m.angle[0] + Math.random() * (m.angle[1] - m.angle[0]);
+            const sp = m.speed[0] + Math.random() * (m.speed[1] - m.speed[0]);
+            const life = SNOWTREE_FLURRY_LIFE[0] + Math.floor(Math.random() * (SNOWTREE_FLURRY_LIFE[1] - SNOWTREE_FLURRY_LIFE[0] + 1));
+            this.particles.push(new SnowFlurryParticle(this,
+                x + (Math.random() - 0.5) * 2 * spread, y - Math.random() * spread,
+                Math.cos(a) * sp, Math.sin(a) * sp,
+                SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length],
+                Math.random() < SNOWTREE_FLURRY_BIG_SHARE ? m.size[1] : m.size[0], life));
+        }
+    },
+
+    /**
+     * 弾が地形に当たった（Bullet.update）。移動の始点 yFrom から当たった点 yTo までに雪の積もった上面を
+     * 上から割ったときだけ雪を舞わせる（側面・天井・雪の無い面からは出さない。判定は Map.snowSurfaceY）。
+     * 雪の無い面でも毎発呼ばれるので、問い合わせの無い地図（テストの偽地図）では黙って何もしない
+     */
+    spawnBulletSnowPuff(x, yFrom, yTo) {
+        const map = this.map;
+        if (!map || !map.snowSurfaceY) return;
+        const y = map.snowSurfaceY(x, yFrom, yTo);
+        if (y !== null) this.spawnSnowPuff(x, y, SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD);
     },
 
     /**

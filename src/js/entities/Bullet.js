@@ -67,6 +67,7 @@ export class Bullet {
                 this.game.particles.push(new TrailParticle(this.x, this.y, PARTICLE_LIFETIME));
             }
         }
+        const prevY = this.y;   // 着弾で雪面を上から割ったかを見る始点（spawnBulletSnowPuff）
         this.x += this.vx;
         this.y += this.vy;
         this.lifetime--;
@@ -79,6 +80,8 @@ export class Bullet {
         // 壁に当たったら消える。弾はブロックを壊さない。5面の坂と面取りは形で当てる（削れた空中は素通り）
         if (this.game.map.isSolidPoint(this.x, this.y)) {
             this.alive = false;
+            // 5面の雪面なら雪を舞わせる（自機・敵の弾とも）。雪かどうかの判定は向こう
+            if (this.game.spawnBulletSnowPuff) this.game.spawnBulletSnowPuff(this.x, prevY, this.y);
         }
     }
 
