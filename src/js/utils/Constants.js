@@ -853,6 +853,10 @@ export const SPIDER_SHELL_BURST_DX = 40;
 export const SPIDER_SHELL_FRAGMENTS = 5;
 export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
 export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;
+// 撃ち落とし。MG は跳ね返す（壊れない）、自機のミサイル・グレネードで壊れる（ユーザー指定）。
+// 当たりの距離² は誘導ミサイルの迎撃と同じ流儀。点は誘導ミサイルの撃ち落とし（HOMING_INTERCEPT_SCORE）と同じ
+export const SPIDER_SHELL_INTERCEPT_RADIUS_SQ = 100;
+export const SPIDER_SHELL_SCORE = 20;
 
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles

@@ -5,10 +5,14 @@ import { EnemyBurstShell, ShellFragment } from '../src/js/entities/EnemyBurstShe
 import { solveLaunch, simulateShell } from '../src/js/utils/shellBallistics.js';
 import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { audioManager } from '../src/js/audio/AudioManager.js';
+import { Missile } from '../src/js/entities/Missile.js';
+import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
+import { Grenade } from '../src/js/entities/Grenade.js';
+import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
 import {
   SPIDER_SHELL_SPEED as V, SPIDER_SHELL_GRAVITY as G, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD,
-  ENEMY_BULLET_DAMAGE, TILE_SIZE,
+  ENEMY_BULLET_DAMAGE, TILE_SIZE, SPIDER_SHELL_SCORE,
 } from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
@@ -173,4 +177,90 @@ test('破裂音は1回、破片の発射音は鳴らない', () => {
   } finally {
     spy.restore();
   }
+});
+
+// ------------------------------------------
+// 撃ち落とし
+// ------------------------------------------
+
+/** 宙に止めた弾（破裂の条件に掛からないよう狙いは遠く・寿命は長く） */
+function hangingShell(game, x, y) {
+  const shell = new EnemyBurstShell(game, x, y, 0, { x: 0, y: 0, frames: 9999 });
+  shell.vx = 0; shell.vy = 0; shell.lifetime = 9999;
+  game.enemyBullets.push(shell);
+  return shell;
+}
+
+/** グレネードの爆発が地図・格納塔に触る分の偽物 */
+function grenadeReady(game) {
+  game.map.pixelToTile = () => ({ r: 0, c: 0 });
+  game.map.destroyArea = () => [];
+  game.storageTowers = [];
+}
+
+test('MG の弾は跳ね返され、弾は飛び続ける', () => {
+  const spy = spyWeapon();
+  try {
+    const game = openWorld();
+    addPlayer(game, 900, 600);
+    const shell = hangingShell(game, 300, 200);
+    const mg = new PlayerBullet(game, 300, 200, 0);
+    mg.vx = 0; mg.vy = 0;
+    game.projectiles.push(mg);
+    spy.calls.length = 0;
+    new CollisionManager(game).update();
+    assert.equal(shell.alive, true);
+    assert.equal(mg.alive, false);
+    assert.ok(spy.calls.includes('armorRicochet'));
+  } finally {
+    spy.restore();
+  }
+});
+
+test('ミサイルで壊れ、破片を出さず、点が入る', () => {
+  const game = openWorld();
+  addPlayer(game, 900, 600);
+  let score = 0;
+  game.addScore = (n) => { score += n; };
+  const shell = hangingShell(game, 300, 200);
+  const m = new Missile(game, 300, 200, 0, true);
+  m.vx = 0; m.vy = 0;
+  game.projectiles.push(m);
+  new CollisionManager(game).update();
+  assert.equal(shell.alive, false);
+  assert.equal(m.alive, false);
+  assert.equal(fragments(game).length, 0);
+  assert.equal(score, SPIDER_SHELL_SCORE);
+});
+
+test('自機のグレネードの爆風で壊れる', () => {
+  const game = openWorld();
+  addPlayer(game, 900, 600);
+  grenadeReady(game);
+  const shell = hangingShell(game, 300, 200);
+  const g = new Grenade(game, 310, 210, 0);
+  g._explode();
+  assert.equal(shell.alive, false);
+  assert.equal(fragments(game).length, 0);
+});
+
+test('グレネードは普通の敵弾を消さない', () => {
+  const game = openWorld();
+  addPlayer(game, 900, 600);
+  grenadeReady(game);
+  const b = new EnemyBullet(game, 300, 200, 0);
+  game.enemyBullets.push(b);
+  new Grenade(game, 305, 205, 0)._explode();
+  assert.equal(b.alive, true);
+});
+
+test('敵のグレネードではスパイダーの弾は消えない', () => {
+  const game = openWorld();
+  addPlayer(game, 900, 600);
+  grenadeReady(game);
+  const shell = hangingShell(game, 300, 200);
+  const g = new Grenade(game, 305, 205, 0);
+  g.isPlayerOwned = false;
+  g._explode();
+  assert.equal(shell.alive, true);
 });

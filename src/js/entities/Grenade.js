@@ -15,6 +15,7 @@ import { recordHit } from '../utils/hitPoint.js';
 import { motionFor } from '../world/StageEnvironment.js';
 import { stepGrenade } from '../utils/grenadePhysics.js';
 import { damageTowersInRadius } from './StorageTower.js';
+import { destroyShellsInRadius } from './EnemyBurstShell.js';
 
 export class Grenade {
     constructor(game, x, y, angle, speed = GRENADE_SPEED) {
@@ -93,6 +94,8 @@ export class Grenade {
             }
             // 格納塔（敵ではないので上の一覧に入っていない）。敵のグレネードでは壊れない
             damageTowersInRadius(this.game, this.x, this.y, GRENADE_DAMAGE_RADIUS, GRENADE_DAMAGE);
+            // 6面のスパイダーの弾は自機のグレネードで壊せる（ユーザー指定）。他の敵弾は消さない
+            destroyShellsInRadius(this.game, this.x, this.y, GRENADE_DAMAGE_RADIUS);
         } else {
             // Enemy grenade: Damages player and carrier only (No friendly fire for enemies)
             const player = this.game.player;

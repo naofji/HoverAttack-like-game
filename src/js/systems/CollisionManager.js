@@ -14,7 +14,7 @@ import {
     ENEMY_MISSILE_DAMAGE_PLAYER, ENEMY_MISSILE_DAMAGE_CARRIER,
     HOMING_INTERCEPT_RADIUS_SQ, CRUISE_INTERCEPT_RADIUS_SQ,
     HOMING_INTERCEPT_SCORE, CRUISE_MISSILE_SCORE,
-    REFLECT_BEAM_DAMAGE,
+    REFLECT_BEAM_DAMAGE, SPIDER_SHELL_INTERCEPT_RADIUS_SQ,
 } from '../utils/Constants.js';
 import { playBlast } from '../entities/destruction.js';
 import { playRicochet } from '../entities/ricochet.js';
@@ -158,6 +158,18 @@ export class CollisionManager {
                     if (proj instanceof Missile) proj.exploded = true;
                     playBlast(game, bullet.x, bullet.y, 'homingHit');   // 自機が撃ち落とした爆発は誘爆させてよい
                     game.addScore(HOMING_INTERCEPT_SCORE);
+                    return true;
+                }
+            } else if (bullet.isBurstShell) {
+                // スパイダーの弾。MG では壊れず跳ね返す（弾は飛び続ける）、ミサイルなら一撃で壊れる（ユーザー指定）
+                if (this._distSq(proj, bullet) < SPIDER_SHELL_INTERCEPT_RADIUS_SQ) {
+                    proj.alive = false;
+                    if (proj instanceof Missile) {
+                        proj.exploded = true;
+                        bullet.destroyByPlayer();
+                    } else {
+                        playRicochet(game, proj.x, proj.y, proj.vx, proj.vy);
+                    }
                     return true;
                 }
             } else if (bullet.constructor.name === 'EnemyCruiseMissile') {

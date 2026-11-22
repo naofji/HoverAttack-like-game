@@ -17,11 +17,13 @@ import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
     COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
     SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
+    SPIDER_SHELL_SCORE,
     ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS, ENEMY_BULLET_LIFETIME,
 } from '../utils/Constants.js';
 import { Bullet } from './Bullet.js';
 import { ImpactFlash } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { playBlast } from './destruction.js';
 
 /** 破裂して飛ぶ5発。普通の敵弾と同じ速さ・ダメージで、発射音は鳴らさない */
 export class ShellFragment extends Bullet {
@@ -105,6 +107,14 @@ export class EnemyBurstShell extends Bullet {
         }
     }
 
+    /** 自機が撃ち落とした（ミサイル・グレネード）。割れずに消え、5発は出ない */
+    destroyByPlayer() {
+        if (!this.alive) return;
+        this.alive = false;
+        playBlast(this.game, this.x, this.y, 'homingHit');
+        this.game.addScore(SPIDER_SHELL_SCORE);
+    }
+
     /** 町の建物に当たった。消えるのではなく、そこで割れる（建物の多い6面で弾が効かなくならないように） */
     onTownWall(x, y) {
         this.x = x;
@@ -118,4 +128,20 @@ export class EnemyBurstShell extends Bullet {
         if (left <= SPIDER_SHELL_BLINK_FRAMES && Math.floor(this.age / 3) % 2 === 0) return COLOR_SPIDER_SHELL_BLINK;
         return COLOR_SPIDER_SHELL;
     }
+}
+
+/**
+ * 自機のグレネードの爆風の半径に入ったスパイダーの弾を壊す。他の敵弾には効かせない（範囲を広げない）。
+ * @returns {number} 壊した数
+ */
+export function destroyShellsInRadius(game, x, y, radius) {
+    let n = 0;
+    for (const b of game.enemyBullets) {
+        if (!b.isBurstShell || !b.alive) continue;
+        if (Math.hypot(b.x - x, b.y - y) < radius) {
+            b.destroyByPlayer();
+            n++;
+        }
+    }
+    return n;
 }
