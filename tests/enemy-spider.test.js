@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import { EnemySpider } from '../src/js/entities/EnemySpider.js';
 import { boxHitsSolid } from '../src/js/utils/surfaceCrawl.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
-import { SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE, TILE_SIZE } from '../src/js/utils/Constants.js';
+import {
+  SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE, TILE_SIZE,
+  SPIDER_FIRE_WINDUP, SPIDER_FIRE_RETRY, SPIDER_SHELL_AIM_ABOVE,
+} from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
 const S = SPIDER_SIZE;
@@ -196,4 +199,79 @@ test(`HP ${SPIDER_HP} で壊れ、点が入り alive が落ちる`, () => {
   s.takeDamage(1);
   assert.equal(s.alive, false);
   assert.equal(score, SPIDER_SCORE);
+});
+
+// ------------------------------------------
+// 撃つ
+// ------------------------------------------
+
+/** 床（row の上面）に立つ自機 */
+function playerOnFloor(game, row, x) {
+  game.player = { x, y: row * T - 24, width: 16, height: 24, alive: true, docked: false };
+  return game.player;
+}
+
+const shells = (game) => game.enemyBullets.filter((b) => b.isBurstShell);
+
+test('見通しのよい自機には撃ち、弾が狙いの点へ向かう', () => {
+  const { game } = world(roomRows(40, 14));
+  const s = onFloor(game, 13, 5);
+  const p = playerOnFloor(game, 13, s.x + 250);
+  s.fireTimer = 0;
+  s.update();
+  assert.equal(s.mode, 'windup');
+  for (let i = 0; i < SPIDER_FIRE_WINDUP + 1; i++) s.update();
+  const list = shells(game);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].target.x, p.x + p.width / 2);
+  assert.equal(list[0].target.y, p.y + p.height / 2 - SPIDER_SHELL_AIM_ABOVE);
+  assert.ok(list[0].target.frames > 0);
+});
+
+test('軌道が岩に当たるなら撃たない', () => {
+  // 高さ 2 タイルの低い通路（row 10 が天井）。まっすぐの見通しはあるが、狙いの点が岩の中
+  const rows = roomRows(40, 14).map((r, i) => (i === 10 ? '#' + '#'.repeat(38) + '#' : r));
+  const { game } = world(rows);
+  const s = onFloor(game, 13, 5);
+  playerOnFloor(game, 13, s.x + 250);
+  s.fireTimer = 0;
+  s.update();
+  assert.equal(shells(game).length, 0);
+  assert.notEqual(s.mode, 'windup');
+  assert.equal(s.fireTimer, SPIDER_FIRE_RETRY);
+});
+
+test('射程の外には撃たない', () => {
+  const { game } = world(roomRows(120, 14));
+  const s = onFloor(game, 13, 5);
+  playerOnFloor(game, 13, s.x + 1200);
+  s.fireTimer = 0;
+  for (let i = 0; i < 60; i++) s.update();
+  assert.equal(shells(game).length, 0);
+});
+
+test('ドック中の自機には撃たない', () => {
+  const { game } = world(roomRows(40, 14));
+  const s = onFloor(game, 13, 5);
+  playerOnFloor(game, 13, s.x + 250).docked = true;
+  s.fireTimer = 0;
+  for (let i = 0; i < 60; i++) s.update();
+  assert.equal(shells(game).length, 0);
+});
+
+test('糸にぶら下がっている間は撃たず、張り付いたら撃つ', () => {
+  const { game } = world(roomRows(40, 10));
+  const s = onFloor(game, 9, 10);
+  playerOnFloor(game, 9, s.x + 200);
+  s._startThread();
+  s.fireTimer = 0;
+  let frames = 0;
+  while (s.mode === 'thread' && frames < 400) {
+    s.update();
+    frames++;
+    if (s.mode === 'thread') assert.equal(shells(game).length, 0, `frame ${frames}`);
+  }
+  assert.equal(s.surface, 'ceiling');
+  for (let i = 0; i < SPIDER_FIRE_WINDUP + 3; i++) s.update();
+  assert.equal(shells(game).length, 1);
 });

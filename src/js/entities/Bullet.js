@@ -26,7 +26,7 @@ export class Bullet {
      * @param {number} spec.speed 1フレームに進む距離
      * @param {number} spec.radius 当たり・見た目の半径
      * @param {number} spec.lifetime 消えるまでのフレーム数
-     * @param {string} spec.sound WEAPON_SOUNDS のキー
+     * @param {string} [spec.sound] WEAPON_SOUNDS のキー。無ければ鳴らさない
      */
     constructor(game, x, y, angle, spec) {
         this.game = game;
@@ -41,7 +41,8 @@ export class Bullet {
         this.lifetime = spec.lifetime;
         this.frameCounter = 0;
 
-        audioManager.playWeapon(spec.sound, this.x, this.y);
+        // 音なしの弾もある（スパイダーの弾が破裂した5発。同時に5つ鳴ると重なって大きくなるので、破裂音1つで代える）
+        if (spec.sound) audioManager.playWeapon(spec.sound, this.x, this.y);
     }
 
     update() {

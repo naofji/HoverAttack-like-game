@@ -828,6 +828,21 @@ export const SPIDER_FALL_GRAVITY = 0.25;
 export const SPIDER_FALL_MAX = 6;
 // 糸の色。霧の面（6面）で見えるよう白に寄せ、背景の工場の線と紛れないよう半透明にした
 export const COLOR_SPIDER_THREAD = 'rgba(235, 240, 255, 0.7)';
+// 撃つ。自機が見えていて（霧の倍率込み）、弧が途中で岩に当たらないとき。撃つ前に一瞬止まって予備動作を見せる
+export const SPIDER_SIGHT_RANGE = 500;        // 横半径（sightScaleFor を掛ける）。弧の平地の最大到達距離 640 より内側
+export const SPIDER_FIRE_INTERVAL = 180;      // 3秒（ドローンは2秒。弾1発の圧が大きいので長めにした）
+export const SPIDER_FIRE_RETRY = 30;          // 撃てなかったときのやり直し
+export const SPIDER_FIRE_WINDUP = 20;         // 撃つ前に止まる
+export const SPIDER_MUZZLE_OFFSET = 6;        // 発射点＝体の中心から面と反対側へ何 px
+// 弾（ブラグ・ザカートのような弾）。グレネード（最大 5・重力 0.20）より速く、緩やかな放物線（ユーザー指定）
+export const SPIDER_SHELL_SPEED = 8;
+export const SPIDER_SHELL_GRAVITY = 0.10;
+// 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）
+export const SPIDER_SHELL_AIM_ABOVE = 80;
+export const SPIDER_SHELL_LIFETIME = 240;
+// 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした
+export const SPIDER_SHELL_RADIUS = 4;
+export const COLOR_SPIDER_SHELL = '#66FFEE';
 
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles

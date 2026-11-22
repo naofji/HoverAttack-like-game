@@ -21,11 +21,17 @@ import {
     SPIDER_LEAP_CHANCE, SPIDER_LEAP_MAX_TILES, SPIDER_LEAP_SPEED,
     SPIDER_AIRBORNE_MAX_FRAMES, SPIDER_FALL_GRAVITY, SPIDER_FALL_MAX,
     COLOR_SPIDER_THREAD,
+    SPIDER_SIGHT_RANGE, SPIDER_FIRE_INTERVAL, SPIDER_FIRE_RETRY, SPIDER_FIRE_WINDUP, SPIDER_MUZZLE_OFFSET,
+    SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_AIM_ABOVE,
 } from '../utils/Constants.js';
 import { stepCrawl, hasSupport, boxHitsSolid, downOf } from '../utils/surfaceCrawl.js';
 import { spawnStateRng } from '../utils/spawnState.js';
 import { applyDamage } from '../utils/damage.js';
 import { playDestruction } from './destruction.js';
+import { withinSight, hasLineOfSight } from '../utils/Physics.js';
+import { sightScaleFor } from '../world/StageEnvironment.js';
+import { solveLaunch, simulateShell } from '../utils/shellBallistics.js';
+import { EnemyBurstShell } from './EnemyBurstShell.js';
 import {
     SPIDER_LEG_COLOR, SPIDER_BODY_COLOR, SPIDER_PLATE_COLOR, SPIDER_EYE_COLOR,
 } from './debris/spiderParts.js';
@@ -84,6 +90,9 @@ export class EnemySpider {
         this.threadShoot = 0;     // 糸が伸びきるまでの残りフレーム
 
         this.walkPhase = 0;
+
+        // 最初の発射までの時間も湧いた場所から決める（全員が同じ瞬間に撃ち始めないように）
+        this.fireTimer = Math.floor(this.rng.next() * SPIDER_FIRE_INTERVAL);
     }
 
     _isSolid() {
@@ -97,6 +106,7 @@ export class EnemySpider {
 
     update() {
         if (!this.alive) return;
+        if (this._updateFire()) return;
         switch (this.mode) {
             case 'crawl': this._updateCrawl(); break;
             case 'pause': this._updatePause(); break;
@@ -331,6 +341,73 @@ export class EnemySpider {
         this.vy = this.threadDir * speed;
         const contact = this._moveAndCollide(0, this.vy);
         if (contact) this._attach(contact);
+    }
+
+    // ------------------------------------------
+    // 撃つ
+    // ------------------------------------------
+    /**
+     * 撃つ準備と発射。予備動作（windup）の間は移動を止めるので true を返す。
+     * 面に張り付いていないとき（糸・小ジャンプ・跳び移り・落下）は撃たず、タイマーは 0 で待つ
+     */
+    _updateFire() {
+        if (this.mode === 'windup') {
+            if (!hasSupport(this._isSolid(), this._body())) {
+                this._startFall();
+                return true;
+            }
+            if (--this.modeTimer > 0) return true;
+            // 止まっている間に自機が動いたので、狙いは撃つ瞬間に計算し直す
+            const aim = this._aim();
+            if (aim) {
+                this.game.enemyBullets.push(new EnemyBurstShell(this.game, aim.x, aim.y, aim.angle, aim.target));
+                this.fireTimer = SPIDER_FIRE_INTERVAL;
+            } else {
+                this.fireTimer = SPIDER_FIRE_RETRY;
+            }
+            this._startPause();
+            return true;
+        }
+        if (this.fireTimer > 0) {
+            this.fireTimer--;
+            return false;
+        }
+        if (!this.surface || (this.mode !== 'crawl' && this.mode !== 'pause')) return false;
+        if (!this._aim()) {
+            this.fireTimer = SPIDER_FIRE_RETRY;
+            return false;
+        }
+        this.mode = 'windup';
+        this.modeTimer = SPIDER_FIRE_WINDUP;
+        return true;
+    }
+
+    /**
+     * 自機の頭上の点を通る低い弧。撃てない（見えない・遠い・届かない・途中に岩）なら null
+     * @returns {{x:number, y:number, angle:number, target:{x:number, y:number, frames:number}}|null}
+     */
+    _aim() {
+        const p = this.game.player;
+        if (!p || !p.alive || p.docked) return null;
+        const half = SPIDER_SIZE / 2;
+        const cx = this.x + half;
+        const cy = this.y + half;
+        const pcx = p.x + p.width / 2;
+        const pcy = p.y + p.height / 2;
+        if (!withinSight(pcx - cx, pcy - cy, SPIDER_SIGHT_RANGE * sightScaleFor(this.game))) return null;
+        const map = this.game.map;
+        if (!hasLineOfSight(cx, cy, pcx, pcy, map)) return null;
+        const away = this._away();
+        const mx = cx + away.x * SPIDER_MUZZLE_OFFSET;
+        const my = cy + away.y * SPIDER_MUZZLE_OFFSET;
+        const tx = pcx;
+        const ty = pcy - SPIDER_SHELL_AIM_ABOVE;
+        const sol = solveLaunch(tx - mx, ty - my, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY);
+        if (!sol) return null;
+        // 弧が途中で岩に当たるなら撃たない（無駄撃ちを避ける。建物は見ない＝当たれば破裂する）
+        const pts = simulateShell(mx, my, sol.angle, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, sol.frames);
+        if (pts.some((q) => map.isSolidAtPixel(q.x, q.y))) return null;
+        return { x: mx, y: my, angle: sol.angle, target: { x: tx, y: ty, frames: sol.frames } };
     }
 
     // ------------------------------------------
