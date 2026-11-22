@@ -39,8 +39,13 @@
 | `SPIDER_TURN_CHANCE` | 0.35 | 止まったあと向きを変える確率 |
 | `SPIDER_HOP_CHANCE` | 0.3 | 走り終わりに小ジャンプする確率 |
 | `SPIDER_HOP_SPEED` / `SPIDER_HOP_GRAVITY` | 2.4 / 0.18 | 面から離れる初速と面へ戻す重力（高さ ≈ 16px） |
-| `SPIDER_LEAP_CHANCE` | 0.25 | 走り終わりに向かいの面へ跳び移る確率（小ジャンプより先に引く） |
-| `SPIDER_LEAP_MAX_TILES` | 5 | 跳び移れる向かいの面までの距離 |
+| `SPIDER_THREAD_CHANCE` | 0.25 | 床・天井で走り終わりに糸で向かいの面へ移る確率（小ジャンプより先に引く） |
+| `SPIDER_THREAD_MAX_TILES` | 10 | 糸が届く真上・真下の面までの距離 |
+| `SPIDER_THREAD_SHOOT_FRAMES` | 8 | 糸が伸びて届くまで（この間は動かない） |
+| `SPIDER_THREAD_CLIMB_SPEED` / `SPIDER_THREAD_DESCEND_SPEED` | 1.2 / 1.6 | 糸をたぐって登る／垂らして降りる速さ |
+| `COLOR_SPIDER_THREAD` | 半透明の白 | 糸の色 |
+| `SPIDER_LEAP_CHANCE` | 0.25 | 壁で走り終わりに向かいの壁へ跳び移る確率（小ジャンプより先に引く） |
+| `SPIDER_LEAP_MAX_TILES` | 5 | 跳び移れる向かいの壁までの距離 |
 | `SPIDER_LEAP_SPEED` | 4 | 跳び移りの速さ（直線） |
 | `SPIDER_FALL_GRAVITY` / `SPIDER_FALL_MAX` | 0.25 / 6 | 足場を失ったときの落下 |
 | `SPIDER_SIGHT_RANGE` | 500 | 撃つ距離（`sightScaleFor(game)` を掛ける） |
@@ -61,7 +66,7 @@
 ## Review Focus
 
 1. **地形の隙間・薄い柱・1タイルの段差で体が岩にめり込む／宙に浮いたまま止まる** — どんな格子でも、張り付いている間は箱が岩と重ならず、足元（`down` 側 1px）に岩がある。→ Task 1 の「乱数の格子で不変条件」テスト
-2. **跳んでいる途中に斜め上の角に当たる・天井で小ジャンプ** — 空中で何かに触れたら、触れた側の面に張り付く（めり込まない）。→ Task 2 の「天井で小ジャンプして天井に戻る」「跳び移りで向かいの天井に張り付く」
+2. **跳んでいる途中に斜め上の角に当たる・天井で小ジャンプ・糸の途中で支点が壊れる** — 空中で何かに触れたら、触れた側の面に張り付く（めり込まない）。支点が消えたら落ちる。→ Task 2 の「天井で小ジャンプして天井に戻る」「壁から向かいの壁へ跳び移る」「糸の支点が壊れると落ちる」
 3. **自機が真下・真上・射程の外にいるとき** — 解が無い・軌道が岩に当たるなら撃たず `SPIDER_FIRE_RETRY` 後にやり直す。真下（dx≈0）でも角度が NaN にならない。→ Task 3 の「真下の狙い」「届かない」
 4. **破裂した5発が同じフレームに自機に当たる／破裂が `enemyBullets` の走査を壊す** — 走査中に push された破片はそのフレームに処理されず、次のフレームから飛ぶ。直撃では破片を出さない。→ Task 4 の「直撃では破片を出さない」「走査中の破裂」
 5. **グレネードの爆風が他の敵弾まで消す／敵のグレネードがスパイダーの弾を消す** — 消えるのは自機のグレネードの半径内のスパイダーの弾だけ。→ Task 5 の「グレネード」テスト
@@ -109,7 +114,7 @@ git add src/js/utils/surfaceCrawl.js src/js/utils/Constants.js tests/spider-craw
 git commit -m "feat: スパイダーが面に沿って這う規則（surfaceCrawl）"
 ```
 
-### Task 2: スパイダーの体（這う・止まる・小ジャンプ・跳び移り・落ちる・被弾・撃破）
+### Task 2: スパイダーの体（這う・止まる・小ジャンプ・糸で登る/降りる・跳び移り・落ちる・被弾・撃破）
 
 **Files:**
 - Create: `src/js/entities/EnemySpider.js`
@@ -122,14 +127,15 @@ git commit -m "feat: スパイダーが面に沿って這う規則（surfaceCraw
 **Interfaces:**
 - Consumes: Task 1 の `stepCrawl` / `hasSupport` / `boxHitsSolid` / `downOf`
 - Produces:
-  - `new EnemySpider(game, x, y, surface)` — `width = height = SPIDER_SIZE`、`hp = maxHp = SPIDER_HP`、`alive`、`surface`（落下中・空中は `null`）、`fwd`、`mode: 'crawl' | 'pause' | 'hop' | 'leap' | 'fall' | 'windup'`
+  - `new EnemySpider(game, x, y, surface)` — `width = height = SPIDER_SIZE`、`hp = maxHp = SPIDER_HP`、`alive`、`surface`（落下中・空中は `null`）、`fwd`、`mode: 'crawl' | 'pause' | 'hop' | 'thread' | 'leap' | 'fall' | 'windup'`、糸の支点 `threadAnchor: {x, y} | null`（`thread` の間だけ。描画と Task 3 が読む）
   - `this.rng = spawnStateRng(game, x, y)` を判断（走る長さ・止まる長さ・向き・跳ぶか）すべてに使う（`Math.random` は使わない）
   - `update()`、`takeDamage(amount)`（`applyDamage` に委ねる）、`die()`（`playDestruction(game, this, 'spider')` と `game.addScore(SPIDER_SCORE)`）、`draw(ctx)`
   - 撃つ処理は Task 3 で `update()` に足す。この Task では `_updateFire()` を呼ぶ場所だけ置かず、移動だけ作る
 - `isSolid` は `(r, c) => game.map.isSolid(r, c)`。`mgDamageMult` と `recoilProfile` は持たない
 
 振る舞い（テストが縛る）:
-- crawl: `SPIDER_CRAWL_SPEED` で `stepCrawl`。長さ `SPIDER_RUN_FRAMES` の範囲で引く。走り終わったら順に `SPIDER_LEAP_CHANCE`（向かいの面が `SPIDER_LEAP_MAX_TILES` 以内にあるときだけ）→ `SPIDER_HOP_CHANCE` → それ以外は pause
+- crawl: `SPIDER_CRAWL_SPEED` で `stepCrawl`。長さ `SPIDER_RUN_FRAMES` の範囲で引く。走り終わったら順に、床・天井なら `SPIDER_THREAD_CHANCE`（真上・真下の面が `SPIDER_THREAD_MAX_TILES` 以内で、箱の幅の通り道が空いているときだけ）、壁なら `SPIDER_LEAP_CHANCE`（向かいの壁が `SPIDER_LEAP_MAX_TILES` 以内のときだけ）→ `SPIDER_HOP_CHANCE` → それ以外は pause
+- thread: 床からは支点＝真上の天井の下面、天井からは支点＝今の天井の下面。`SPIDER_THREAD_SHOOT_FRAMES` は止まって糸が伸びる（描画は支点まで伸びていく線）。その後、床からは `SPIDER_THREAD_CLIMB_SPEED` で真上へ、天井からは `SPIDER_THREAD_DESCEND_SPEED` で真下へ動き、着いた面に張り付いて `threadAnchor = null`。途中で支点のタイルが壊れたら（`isSolid` が false）fall。糸は当たり判定を持たない
 - pause: `SPIDER_PAUSE_FRAMES` 止まる。明けに `SPIDER_TURN_CHANCE` で `fwd` を反転
 - hop: 速度 `-down × SPIDER_HOP_SPEED`、毎フレーム `down × SPIDER_HOP_GRAVITY` を足す。箱が岩に当たる手前で止めて、当たった側の面に張り付く（元の面に戻るのがふつう）
 - leap: `-down` 方向へ `SPIDER_LEAP_SPEED` で直進し、当たった面に張り付く（`down` が反転）
@@ -140,7 +146,11 @@ git commit -m "feat: スパイダーが面に沿って這う規則（surfaceCraw
   - `床に置くと動き出し、2000フレームのあいだ岩にめり込まない` — 毎フレーム `boxHitsSolid(…) === false`、少なくとも1回は x が初期値から 32px 以上動く
   - `部屋の中で十分動かすと床以外の面にも張り付く` — 閉じた部屋で 6000 フレーム。見た `surface` の集合に `'floor'` 以外が1つ以上
   - `天井で小ジャンプしても天井に戻る` — 天井に置き、`mode` を強制的に hop にして 120 フレーム → `surface === 'ceiling'`、途中で y が初期値より大きくなった（下へ跳んだ）
-  - `跳び移りで向かいの天井に張り付く` — 高さ 4 タイルの通路の床に置き、leap を強制 → `surface === 'ceiling'`
+  - `床から糸で天井へ登る` — 高さ 8 タイルの通路の床に置き、thread を強制 → 途中は `surface === null` で y が単調に減り、`threadAnchor.y` が天井の下面。最後は `surface === 'ceiling'`、`threadAnchor === null`
+  - `天井から糸で床へ降りる` — 同じ通路の天井に置き、thread を強制 → y が単調に増え、`surface === 'floor'`
+  - `糸の支点が壊れると落ちる` — 登っている途中で支点のタイルを格子から消す → `mode === 'fall'`、その後 `surface === 'floor'`
+  - `真上が遠すぎる・塞がっていれば糸を使わない` — 天井が 12 タイル上の床で 3000 フレーム → `mode` が一度も `'thread'` にならない
+  - `壁から向かいの壁へ跳び移る` — 幅 4 タイルの縦穴の壁に置き、leap を強制 → 反対側の壁に張り付く（`wallL` ⇄ `wallR`）
   - `足場を壊すと落ちて床に張り付く` — 宙の台の上に置き、台のタイルを格子から消す → 数十フレームで下の床に `surface === 'floor'`
   - `同じ場所に置いた2体は同じ動きをする` — 同じ `weekSeed`・同じ位置で2体作り、300 フレーム後の `x, y, surface` が一致（決定性）
   - `HP 8 で、MG 相当のダメージで壊れ、点が入り alive が落ちる` — `takeDamage` を `SPIDER_HP` ぶん → `alive === false`、`addScore` に `SPIDER_SCORE`
@@ -154,7 +164,7 @@ git commit -m "feat: スパイダーが面に沿って這う規則（surfaceCraw
 ```bash
 git add src/js/entities/EnemySpider.js src/js/entities/debris/spiderParts.js src/js/entities/debris/index.js \
   src/js/entities/destruction.js src/js/utils/Constants.js tests/enemy-spider.test.js tests/debris-static-parts-match-draw.test.js
-git commit -m "feat: スパイダーの体（這う・小ジャンプ・跳び移り・落下・撃破）"
+git commit -m "feat: スパイダーの体（這う・小ジャンプ・糸で登る/降りる・跳び移り・落下・撃破）"
 ```
 
 ### Task 3: 弾の軌道の逆算と、スパイダーが撃つ処理
@@ -179,6 +189,7 @@ git commit -m "feat: スパイダーの体（這う・小ジャンプ・跳び�
 - `fireTimer` が 0 で、自機が生きていてドック中でなく、`withinSight(dx, dy, SPIDER_SIGHT_RANGE * sightScaleFor(game))` かつ `hasLineOfSight(スパイダーの中心, 自機の中心)` のとき
 - 狙いの点 = `(自機の中心x, 自機の中心y − SPIDER_SHELL_AIM_ABOVE)`。発射点 = スパイダーの中心から `-down × 6`
 - `solveLaunch` が `null`、または `simulateShell` の点のどれかが `game.map.isSolidAtPixel` → 撃たずに `fireTimer = SPIDER_FIRE_RETRY`
+- `mode` が `thread` / `hop` / `leap` / `fall` の間は撃たない（タイマーは 0 で待つ）
 - 撃てるなら `mode = 'windup'` で `SPIDER_FIRE_WINDUP` フレーム止まってから、`game.enemyBullets.push(new EnemyBurstShell(...))`、`fireTimer = SPIDER_FIRE_INTERVAL`。windup が明けた時点で狙いは計算し直す
 - 初回の `fireTimer` は `this.rng` から `[0, SPIDER_FIRE_INTERVAL)` で引く
 
@@ -192,6 +203,7 @@ git commit -m "feat: スパイダーの体（這う・小ジャンプ・跳び�
     - `見通しのよい自機には撃ち、弾が狙いの点へ向かう` — 床のスパイダー、横 250px の自機、`fireTimer = 0` → `SPIDER_FIRE_WINDUP` 後に `enemyBullets` に `isBurstShell` が1つ、その `target` が自機の中心の 80px 上
     - `軌道が岩に当たるなら撃たない` — 間に低い天井を置く → 撃たれず、`fireTimer === SPIDER_FIRE_RETRY`
     - `射程の外・ドック中には撃たない`
+    - `糸にぶら下がっている間は撃たず、張り付いたら撃つ` — thread の途中で `fireTimer = 0`・自機が見える → 弾は出ない。張り付いた後の windup を経て1発
 - [ ] **Step 2: 走らせて落ちることを確かめる**
 - [ ] **Step 3: 実装する** — `solveLaunch` は連続の式（`tanθ = (v² − √(v⁴ − g(g·dx² + 2·dy·v²))) / (g·dx)`。y 下向きなので符号に注意し、`dx < 0` は左右反転で扱う）で角度を出し、`frames = |dx| / (v·cosθ)`。離散の誤差はテストの 6px で受ける。`spiderLaunch` の音は軽い「ポン」（`grenade` の行より短く高め）。重さは `weapon-sounds.test.js` の基準比 −14〜+3dB の枠に入れる
 - [ ] **Step 4: 走らせて通ることを確かめる** — 3ファイル → PASS、`npm test` → 全部 PASS（`weapon-sounds.test.js` が新しい行を自動で測る）
@@ -328,5 +340,5 @@ git commit -m "feat: 6面の右半分にスパイダーを置く"
 
 - [ ] **Step 1: `npm test` 全部 PASS を確かめる**
 - [ ] **Step 2: ブランチ全体をレビューに出す**（別のエージェント。設計書と計画を渡す）
-- [ ] **Step 3: ユーザーに引き渡す** — 確認ポイントと定数の対応表（弾の弧＝`SPIDER_SHELL_SPEED`/`GRAVITY`、狙う高さ＝`SPIDER_SHELL_AIM_ABOVE`、破裂の横の距離＝`SPIDER_SHELL_BURST_DX`、扇＝`SPIDER_SHELL_SPREAD`、霧の中の見え方＝`COLOR_SPIDER_SHELL`/`SPIDER_SHELL_RADIUS`、這う速さ・止まる・跳ぶ＝`SPIDER_CRAWL_SPEED`/`RUN_FRAMES`/`PAUSE_FRAMES`/`HOP_*`/`LEAP_*`、数＝`SPIDER_COUNT`、撃つ間隔＝`SPIDER_FIRE_INTERVAL`）と、**ハードリロード（Cmd+Shift+R）が要ること**を伝える。6面へは `debugStartMission` で行ける
+- [ ] **Step 3: ユーザーに引き渡す** — 確認ポイントと定数の対応表（弾の弧＝`SPIDER_SHELL_SPEED`/`GRAVITY`、狙う高さ＝`SPIDER_SHELL_AIM_ABOVE`、破裂の横の距離＝`SPIDER_SHELL_BURST_DX`、扇＝`SPIDER_SHELL_SPREAD`、霧の中の見え方＝`COLOR_SPIDER_SHELL`/`SPIDER_SHELL_RADIUS`、這う速さ・止まる・跳ぶ・糸＝`SPIDER_CRAWL_SPEED`/`RUN_FRAMES`/`PAUSE_FRAMES`/`HOP_*`/`THREAD_*`/`LEAP_*`、数＝`SPIDER_COUNT`、撃つ間隔＝`SPIDER_FIRE_INTERVAL`）と、**ハードリロード（Cmd+Shift+R）が要ること**を伝える。6面へは `debugStartMission` で行ける
 - [ ] **Step 4: memory の phase plan の「現在地」を更新する**
