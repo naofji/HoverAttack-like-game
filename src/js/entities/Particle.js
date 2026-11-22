@@ -313,7 +313,11 @@ export class SnowFlurryParticle {
         const nextX = this.x + this.vx + sway;
         const nextY = this.y + this.vy;
         const map = this.game && this.game.map;
-        if (map && map.isSolidAtPixel && map.isSolidAtPixel(nextX, nextY)) {
+        // 形（isSolidPoint）で当てる。タイル単位（isSolidAtPixel）だと、5面の坂のマスはまるごと岩なので、
+        // 坂の雪面の着弾・爆発で生まれた粒が最初の更新で消えた（2026-11-22 最終レビューの指摘。坂では 3 粒中 0〜2 粒しか
+        // 残らなかった）。形の問い合わせを持たない地図（テストの偽地図）はタイル単位のまま
+        const solidAt = map && (map.isSolidPoint || map.isSolidAtPixel);
+        if (solidAt && solidAt.call(map, nextX, nextY)) {
             this.alive = false;
             return;
         }

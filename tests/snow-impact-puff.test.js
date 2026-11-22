@@ -114,3 +114,33 @@ test('雪の面でない地図の爆発は雪を出さない', () => {
     game.spawnExplosion(5 * T + 8, FLOOR_Y - 10, 36);
     assert.equal(flurries(game).length, 0);
 });
+
+// --- 坂（5面の階段は snowSlope で坂になる） ---
+// 坂のマスはタイル単位では岩なので、粒の当たりがタイル単位だと、坂の雪の線で生まれた粒は最初の更新で消えた
+// （最終レビューの指摘: 坂の 3 粒のうち 0〜2 粒しか残らない）。粒の当たりは形（isSolidPoint）で見る
+
+/** row 20 から下が床、列 8〜11 は 1 段ずつ上がる階段 */
+function stairRows() {
+    const rows = [];
+    for (let r = 0; r < 24; r++) {
+        let s = '';
+        for (let c = 0; c < 24; c++) s += (r >= 20 || (c >= 8 && c <= 11 && r >= 19 - (c - 8))) ? '#' : '.';
+        rows.push(s);
+    }
+    return rows;
+}
+
+test('坂の雪面に当たった弾の雪は、最初の更新で消えずに舞う', (t) => {
+    // 乱数を真ん中に固定: 散らばり無し・真上へ飛ぶ。坂の線の真上で生まれ、上へ離れるので岩に触れないはず
+    t.mock.method(Math, 'random', () => 0.5);
+    const game = makeGame(makeMap(stairRows(), null, { envKind: 'snow', snowCaps: true, tileShape: 'snowSlope' }));
+    Object.assign(game, SpawnEffects);
+    const x = 9 * T + 5;
+    const top = game.map.terrainTopY(x, 10 * T, 22 * T);
+    assert.notEqual(top % T, 0, '坂ではなく平らな面を拾っている（fixture を見直す）');
+    fly(new PlayerBullet(game, x, top - 20, Math.PI / 2));
+    const f = flurries(game);
+    assert.equal(f.length, SNOW_BULLET_PUFF_COUNT);
+    for (const p of f) p.update();
+    assert.equal(f.filter((p) => p.alive).length, SNOW_BULLET_PUFF_COUNT);
+});
