@@ -155,6 +155,22 @@ export const MapShapes = {
     },
 
     /**
+     * 列 x を yFrom から下へ yTo まで見て、雪の積もった上面があればその y（terrainTopY と同じ値）。無ければ null。
+     * 弾の着弾・爆発で雪を舞わせるか（SpawnEffects）の判定。雪面の定義は描画（mapRender の積雪の帯）と同じ
+     * 「5面で積雪ビット exposedAtGen が立つマスの上面」にして、見た目に雪が無い所から雪が出ないようにする。
+     * 見つけた y のすぐ上が岩なら、始点がもう岩の中＝側面に横から・天井に下から当たったので雪面ではない
+     * （terrainTopY は始点が岩の中だと始点そのものを返すため）。
+     */
+    snowSurfaceY(x, yFrom, yTo) {
+        if (this.envKind !== 'snow' || !this.exposedAtGen) return null;
+        const y = this.terrainTopY(x, yFrom, yTo);
+        if (y === null || this.isSolidPoint(x, y - 0.5)) return null;
+        const r = Math.floor(y / TILE_SIZE), c = Math.floor(x / TILE_SIZE);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return null;
+        return this.exposedAtGen[r * this.cols + c] ? y : null;
+    },
+
+    /**
      * 列 x を yFrom から上へ yTo（≦ yFrom）まで見て、最初に岩が終わる y（天井の高さ）。無ければ null。
      * yFrom が岩の中なら yFrom を返す。
      */

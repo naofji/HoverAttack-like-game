@@ -8,7 +8,7 @@ import { computeTileShape } from '../../src/js/utils/tileShape.js';
 // 通らないように。黙って isSolid に落とす作りにすると、テストが本番の判定を通らなくなる）
 const SHAPE_QUERIES = [
   'tileShapeAt', 'isSolidPoint', 'rectHitsTerrain', 'terrainTopY', 'terrainBottomY',
-  'floorSlopeAt', 'ceilingSlopeAt', 'hasShapedTileIn', 'slopeHitAlong', 'popOutOfRock',
+  'floorSlopeAt', 'ceilingSlopeAt', 'hasShapedTileIn', 'slopeHitAlong', 'popOutOfRock', 'snowSurfaceY',
 ];
 
 /**
@@ -17,8 +17,10 @@ const SHAPE_QUERIES = [
  * （渡さなければ既存の挙動どおり常に水なし）。
  * `options.tileShape` はタイルの形の規則（'square' が既定、5面と同じ坂は 'snowSlope'）。
  * 範囲外は本物の地図の外周と同じく磨き仕上げ（削らず、隣からは岩）として形を焼く。
+ * `options.envKind` は本物の Map の envKind（'snow' で5面）。`options.snowCaps` を立てると、積雪ビット
+ * exposedAtGen を本物の生成（Map._generate）と同じ規則＝「上が空の岩」で焼く（立てなければ持たない）。
  */
-export function makeMap(rows, waterRows, { tileShape = 'square' } = {}) {
+export function makeMap(rows, waterRows, { tileShape = 'square', envKind, snowCaps = false } = {}) {
   const grid = rows.map((s) => s.split(''));
   const waterGrid = waterRows ? waterRows.map((s) => s.split('')) : null;
   const cellAt = (r, c) => {
@@ -31,8 +33,19 @@ export function makeMap(rows, waterRows, { tileShape = 'square' } = {}) {
   }
   const queries = {};
   for (const name of SHAPE_QUERIES) queries[name] = GameMap.prototype[name];
+  let exposedAtGen;
+  if (snowCaps) {
+    exposedAtGen = new Uint8Array(grid.length * grid[0].length);
+    for (let r = 1; r < grid.length; r++) {
+      for (let c = 0; c < grid[0].length; c++) {
+        if (grid[r][c] === '#' && grid[r - 1][c] !== '#') exposedAtGen[r * grid[0].length + c] = 1;
+      }
+    }
+  }
   return {
     ...queries,
+    envKind,
+    exposedAtGen,
     tileShapeRule: tileShape,
     tileShapes,
     rows: grid.length,
