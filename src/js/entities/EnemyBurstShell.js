@@ -16,6 +16,7 @@
 import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
     COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
+    COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_RIM,
     SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
     SPIDER_SHELL_SCORE, SPIDER_SHELL_BURST_MIN_ABOVE, TOWN_SWEEP_STEP,
     ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS, ENEMY_BULLET_LIFETIME,
@@ -146,11 +147,28 @@ export class EnemyBurstShell extends Bullet {
         this.burst();
     }
 
-    /** 破裂が近いと白と交互に点滅する（霧の中で「もうすぐ割れる」と分かるように） */
+    /** 破裂が近いと地の色が明るい紫と交互に点滅する（霧の中で「もうすぐ割れる」と分かるように） */
     get bodyColor() {
         const left = this.target.frames - this.age;
         if (left <= SPIDER_SHELL_BLINK_FRAMES && Math.floor(this.age / 3) % 2 === 0) return COLOR_SPIDER_SHELL_BLINK;
-        return COLOR_SPIDER_SHELL;
+        return COLOR_SPIDER_SHELL_BODY;
+    }
+
+    /**
+     * 深紫の球（ユーザー指定）。光が左上から当たっている体で、ハイライトの中心を左上へずらした放射グラデーションを
+     * 球いっぱいに塗る（ハイライト → 地の色 → 暗い縁）。Bullet の「白い芯の光る弾」とは描き方が違うので上書きする
+     */
+    draw(ctx) {
+        if (!this.alive) return;
+        const r = this.radius;
+        const g = ctx.createRadialGradient(this.x - r * 0.35, this.y - r * 0.4, r * 0.1, this.x, this.y, r);
+        g.addColorStop(0, COLOR_SPIDER_SHELL_HIGHLIGHT);
+        g.addColorStop(0.45, this.bodyColor);
+        g.addColorStop(1, COLOR_SPIDER_SHELL_RIM);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 

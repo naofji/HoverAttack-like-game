@@ -841,23 +841,31 @@ export const SPIDER_FALL_MAX = 6;
 // 糸の色。霧の面（6面）で見えるよう白に寄せ、背景の工場の線と紛れないよう半透明にした
 export const COLOR_SPIDER_THREAD = 'rgba(235, 240, 255, 0.7)';
 // 撃つ。自機が見えていて（霧の倍率込み）、弧が途中で岩に当たらないとき。撃つ前に一瞬止まって予備動作を見せる
-export const SPIDER_SIGHT_RANGE = 500;        // 横半径（sightScaleFor を掛ける）。弧の平地の最大到達距離 640 より内側
+export const SPIDER_SIGHT_RANGE = 500;        // 横半径（sightScaleFor を掛ける）。弧の平地の最大到達距離 625 より内側
 export const SPIDER_FIRE_INTERVAL = 180;      // 3秒（ドローンは2秒。弾1発の圧が大きいので長めにした）
 export const SPIDER_FIRE_RETRY = 30;          // 撃てなかったときのやり直し
 export const SPIDER_FIRE_WINDUP = 20;         // 撃つ前に止まる
 export const SPIDER_MUZZLE_OFFSET = 6;        // 発射点＝体の中心から面と反対側へ何 px
-// 弾（ブラグ・ザカートのような弾）。グレネード（最大 5・重力 0.20）より速く、緩やかな放物線（ユーザー指定）
-export const SPIDER_SHELL_SPEED = 8;
-export const SPIDER_SHELL_GRAVITY = 0.10;
+// 弾（ブラグ・ザカートのような弾）。緩やかな放物線（ユーザー指定）。
+// 速さは初め 8（「グレネードより速く」）だったが、実機で「速すぎる。5px 程度に」（2026-11-22）。
+// 速さだけ 5 にすると平地の届く距離 v²/g が 640 → 250 に縮み、撃つ距離 500 の大半で「届かないので撃たない」に
+// なるので、重力も 0.10 → 0.04 に下げて届く距離（625）と弧の緩さを保った
+export const SPIDER_SHELL_SPEED = 5;
+export const SPIDER_SHELL_GRAVITY = 0.04;
 // 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）
 export const SPIDER_SHELL_AIM_ABOVE = 80;
 export const SPIDER_SHELL_LIFETIME = 240;
-// 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした
-export const SPIDER_SHELL_RADIUS = 4;
-export const COLOR_SPIDER_SHELL = '#66FFEE';
-// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色
+// 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした。球に見せるため 4 → 5
+export const SPIDER_SHELL_RADIUS = 5;
+// 見た目は深紫の球（ユーザー指定、2026-11-22）。左上のハイライト → 地の深紫 → 暗い縁の放射グラデーションで立体に見せる。
+// 割れた5発と破裂の閃光の縁は、小さくても見えるよう地より明るい紫（COLOR_SPIDER_SHELL）
+export const COLOR_SPIDER_SHELL_HIGHLIGHT = '#C9A2FF';
+export const COLOR_SPIDER_SHELL_BODY = '#4A1678';
+export const COLOR_SPIDER_SHELL_RIM = '#16052A';
+export const COLOR_SPIDER_SHELL = '#9C5CFF';
+// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色（地の深紫をこの明るい紫に入れ替えて光らせる）
 export const SPIDER_SHELL_BLINK_FRAMES = 20;
-export const COLOR_SPIDER_SHELL_BLINK = '#FFFFFF';
+export const COLOR_SPIDER_SHELL_BLINK = '#E6D4FF';
 // 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
 //   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
 // 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた

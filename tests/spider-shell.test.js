@@ -96,7 +96,7 @@ test('自機と同じ高さで横を通る弾は横では破裂しない', () =>
   const game = openWorld();
   // 遠くの点を狙った弾の、弧の頂点に自機の中心を置く。頂点の前後は高さがほとんど変わらないので、
   // 横の距離が近い間ずっと弾は自機の上端より下（＝体の高さ）を通る
-  const x0 = 100, y0 = 300, tx = 700, ty = 300;
+  const x0 = 100, y0 = 300, tx = 650, ty = 300;
   const sol = solveLaunch(tx - x0, ty - y0, V, G);
   const pts = simulateShell(x0, y0, sol.angle, V, G, sol.frames);
   let k = 0;
@@ -326,4 +326,32 @@ test('建物に当たって割れた5発は、その建物を素通りしない'
       assert.ok(!(f.alive && f.x > 232), `建物（右端 232）を抜けた破片 (${f.x.toFixed(1)}, ${f.y.toFixed(1)})`);
     }
   }
+});
+
+// ------------------------------------------
+// 見た目（2026-11-22 ユーザー指定「深紫色の球のような立体的な形」）
+// ------------------------------------------
+test('弾は深紫の球として、ハイライトを左上にずらした放射グラデーションで描く', async () => {
+  const { makeFakeCtx } = await import('./helpers/fake-ctx.js');
+  const C = await import('../src/js/utils/Constants.js');
+  const game = openWorld();
+  const shell = new EnemyBurstShell(game, 100, 200, 0, { x: 0, y: 0, frames: 9999 });
+  const ctx = makeFakeCtx();
+  shell.draw(ctx);
+  const grad = ctx.calls.find((c) => c.name === 'createRadialGradient');
+  assert.ok(grad, '放射グラデーションで塗っていない');
+  const [x0, y0, , x1, y1, r1] = grad.args;
+  assert.ok(x0 < x1 && y0 < y1, 'ハイライトが左上にない');
+  assert.equal(r1, C.SPIDER_SHELL_RADIUS);
+  const colors = grad.grad.stops.map(([, c]) => c);
+  assert.ok(colors.includes(C.COLOR_SPIDER_SHELL_BODY), `深紫の地の色が無い: ${colors}`);
+  assert.equal(colors[colors.length - 1], C.COLOR_SPIDER_SHELL_RIM, '縁が暗くない');
+  const arc = ctx.calls.find((c) => c.name === 'arc');
+  assert.equal(arc.args[2], C.SPIDER_SHELL_RADIUS);
+});
+
+test('弾の速さは 5、届く距離（平地で v²/g）は撃つ距離より長い', async () => {
+  const C = await import('../src/js/utils/Constants.js');
+  assert.equal(C.SPIDER_SHELL_SPEED, 5);
+  assert.ok(C.SPIDER_SHELL_SPEED ** 2 / C.SPIDER_SHELL_GRAVITY > C.SPIDER_SIGHT_RANGE);
 });
