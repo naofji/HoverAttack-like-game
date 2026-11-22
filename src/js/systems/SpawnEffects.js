@@ -23,6 +23,8 @@ import {
     ROLLER_SPARK_SPEED_MIN, ROLLER_SPARK_SPEED_MAX, ROLLER_SPARK_RISE_MAX,
     ROLLER_SPARK_LIFE_MIN, ROLLER_SPARK_LIFE_MAX, ROLLER_SPARK_COLORS,
     SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD,
+    SNOW_BLAST_MIN_SIZE, SNOW_BLAST_PER_SIZE, SNOW_BLAST_MAX, SNOW_BLAST_COLUMNS, SNOW_BLAST_COLUMN_STEP,
+    SNOW_BLAST_REACH, SNOW_BLAST_PUFF_SPREAD,
     SNOWTREE_FLURRY_MODES, SNOWTREE_FLURRY_LIFE, SNOWTREE_FLURRY_BIG_SHARE,
 } from '../utils/Constants.js';
 import { SNOWTREE_FLURRY_COLORS } from '../world/town/palette.js';
@@ -46,6 +48,9 @@ export const SpawnEffects = {
             if (r && r.addRipple) r.addRipple(x, EXPLOSION_RIPPLE_STRENGTH);
             this.spawnWaterColumn(x, y);
             this.spawnBubbles(x, y, 'blast', Math.min(BLAST_BUBBLES_MAX, Math.round(size * BLAST_BUBBLES_PER_PARTICLE)));
+        } else {
+            // 5面: 爆風が雪面を叩いて雪が舞う（水中の爆発は水柱の担当なので else）
+            this._spawnBlastSnow(x, y, size);
         }
 
         // 敵の弾の爆発は誘爆させない（playBlast の fromEnemy。敵機の巻き添え防止）
@@ -262,6 +267,30 @@ export const SpawnEffects = {
         if (!map || !map.snowSurfaceY) return;
         const y = map.snowSurfaceY(x, yFrom, yTo);
         if (y !== null) this.spawnSnowPuff(x, y, SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD);
+    },
+
+    /**
+     * 爆発の近くの雪面から雪を舞わせる（spawnExplosion から）。爆心の x から SNOW_BLAST_COLUMN_STEP おきに
+     * 左右 SNOW_BLAST_COLUMNS 本ずつの列で、爆心の 1 タイル上から SNOW_BLAST_REACH 下までの雪面を探し、
+     * 見つかった列で総数を分ける（余りは先の列へ。総数がぴったり出るように）。
+     * 探し始めを 1 タイル上にするのは、着弾の爆心は岩に少しめり込んでいることが多く、爆心からだと
+     * 始点が岩の中になって雪面を見落とすため（snowSurfaceY は始点が岩の中なら null を返す）
+     */
+    _spawnBlastSnow(x, y, size) {
+        const map = this.map;
+        if (!map || !map.snowSurfaceY || size < SNOW_BLAST_MIN_SIZE) return;
+        const hits = [];
+        for (let k = -SNOW_BLAST_COLUMNS; k <= SNOW_BLAST_COLUMNS; k++) {
+            const cx = x + k * SNOW_BLAST_COLUMN_STEP;
+            const sy = map.snowSurfaceY(cx, y - TILE_SIZE, y + SNOW_BLAST_REACH);
+            if (sy !== null) hits.push([cx, sy]);
+        }
+        if (hits.length === 0) return;
+        const total = Math.min(SNOW_BLAST_MAX, Math.round(size * SNOW_BLAST_PER_SIZE));
+        const base = Math.floor(total / hits.length);
+        hits.forEach(([cx, sy], i) => {
+            this.spawnSnowPuff(cx, sy, base + (i < total % hits.length ? 1 : 0), SNOW_BLAST_PUFF_SPREAD, 'puff');
+        });
     },
 
     /**

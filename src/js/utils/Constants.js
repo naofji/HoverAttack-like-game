@@ -2630,6 +2630,19 @@ export const SNOWTREE_TOPPLE_LEAN_DEADZONE = 1;
 // どちらも出発点で、実機で見て調整する
 export const SNOW_BULLET_PUFF_COUNT = 3;
 export const SNOW_BULLET_PUFF_SPREAD = 2;
+// 爆発（spawnExplosion を通るもの全部）が雪面を叩いたときに舞う雪。爆心の真下 REACH（px）までの雪面を、爆心の x から
+// COLUMN_STEP（px）おきに左右 COLUMNS 本ずつ（計 5 列）探し、見つかった列で総数を分ける（雪面が爆心の真下だけでなく横に広がって
+// 見えるように）。総数 = min(MAX, round(size × PER_SIZE))。size は爆発の粒の数（BLAST_PROFILES の blast.count など）で、
+// MIN_SIZE 未満は出さない: MG が敵に当たった mgHit（4）・巡航ミサイルの火花 cruiseSpark（5）は連射・多発するので除き、
+// 敵ミサイルの着弾 enemyMissileHit（8）からは出す。地形への着弾（36）で 22 粒、グレネード級は上限 40。
+// 動きは倒れた木から舞い上がる MODES.puff（弾の hit より強く上へ）。散らばりは SPREAD（px）。どれも出発点で、実機で見て調整する
+export const SNOW_BLAST_MIN_SIZE = 8;
+export const SNOW_BLAST_PER_SIZE = 0.6;
+export const SNOW_BLAST_MAX = 40;
+export const SNOW_BLAST_COLUMNS = 2;
+export const SNOW_BLAST_COLUMN_STEP = 8;
+export const SNOW_BLAST_REACH = TILE_SIZE * 2;
+export const SNOW_BLAST_PUFF_SPREAD = 4;
 export const SNOWTREE_FLURRY_HIT = 5;
 export const SNOWTREE_FLURRY_START = 14;
 export const SNOWTREE_FLURRY_TRICKLE_EVERY = 3;

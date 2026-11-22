@@ -9,7 +9,9 @@ import { SpawnEffects } from '../src/js/systems/SpawnEffects.js';
 import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
 import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
 import { SnowFlurryParticle } from '../src/js/entities/Particle.js';
-import { TILE_SIZE, SNOW_BULLET_PUFF_COUNT } from '../src/js/utils/Constants.js';
+import {
+    TILE_SIZE, SNOW_BULLET_PUFF_COUNT, SNOW_BLAST_MIN_SIZE, SNOW_BLAST_PER_SIZE, SNOW_BLAST_MAX, SNOW_BLAST_REACH,
+} from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
 const FLOOR_Y = 20 * T;
@@ -68,5 +70,47 @@ test('寿命が尽きて消えた弾は雪を出さない', () => {
     const b = new PlayerBullet(game, 5 * T, 3 * T, 0);
     b.lifetime = 2;
     fly(b);
+    assert.equal(flurries(game).length, 0);
+});
+
+// --- 爆発（spawnExplosion を通るもの全部） ---
+// spawnExplosion は爆発の粒（Particle）と地雷・Orb・町も触るので、偽 game に無い配列を足しておく
+
+function blastWorld(envKind = 'snow') {
+    const game = world(envKind);
+    game.landmines = [];
+    game.orbs = [];
+    return game;
+}
+
+test('雪面の近くの爆発は雪を舞わせる（数は大きさに比例）', () => {
+    const game = blastWorld();
+    game.spawnExplosion(5 * T + 8, FLOOR_Y - 10, 36);
+    assert.equal(flurries(game).length, Math.min(SNOW_BLAST_MAX, Math.round(36 * SNOW_BLAST_PER_SIZE)));
+    for (const p of flurries(game)) assert.ok(p.y <= FLOOR_Y, `雪が岩の中で生まれた: y=${p.y}`);
+});
+
+test('大きな爆発でも雪は上限まで', () => {
+    const game = blastWorld();
+    game.spawnExplosion(5 * T + 8, FLOOR_Y - 10, 200);
+    assert.equal(flurries(game).length, SNOW_BLAST_MAX);
+});
+
+test('小さな爆発（MG が敵に当たった mgHit の 4）は雪を出さない', () => {
+    assert.ok(4 < SNOW_BLAST_MIN_SIZE, 'mgHit が閾値を超えている（定数を見直す）');
+    const game = blastWorld();
+    game.spawnExplosion(5 * T + 8, FLOOR_Y - 10, 4);
+    assert.equal(flurries(game).length, 0);
+});
+
+test('雪面から REACH より高い空中の爆発は雪を出さない', () => {
+    const game = blastWorld();
+    game.spawnExplosion(5 * T + 8, FLOOR_Y - SNOW_BLAST_REACH - 4, 36);
+    assert.equal(flurries(game).length, 0);
+});
+
+test('雪の面でない地図の爆発は雪を出さない', () => {
+    const game = blastWorld('cave');
+    game.spawnExplosion(5 * T + 8, FLOOR_Y - 10, 36);
     assert.equal(flurries(game).length, 0);
 });
