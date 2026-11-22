@@ -1,0 +1,176 @@
+// スパイダーの弾（entities/EnemyBurstShell.js）の破裂と撃ち落とし。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { EnemyBurstShell, ShellFragment } from '../src/js/entities/EnemyBurstShell.js';
+import { solveLaunch, simulateShell } from '../src/js/utils/shellBallistics.js';
+import { CollisionManager } from '../src/js/systems/CollisionManager.js';
+import { audioManager } from '../src/js/audio/AudioManager.js';
+import { makeMap, makeGame } from './helpers/enemy-world.js';
+import {
+  SPIDER_SHELL_SPEED as V, SPIDER_SHELL_GRAVITY as G, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD,
+  ENEMY_BULLET_DAMAGE, TILE_SIZE,
+} from '../src/js/utils/Constants.js';
+
+const T = TILE_SIZE;
+const DEG = Math.PI / 180;
+
+/** 何も無い 60×40 タイルの空間（範囲外は岩） */
+function openWorld(extra = []) {
+  const rows = [];
+  for (let r = 0; r < 40; r++) rows.push('.'.repeat(60));
+  for (const [r, c] of extra) rows[r] = rows[r].slice(0, c) + '#' + rows[r].slice(c + 1);
+  const game = makeGame(makeMap(rows));
+  return game;
+}
+
+function addPlayer(game, x, y) {
+  game.player = {
+    x, y, width: 16, height: 24, alive: true, docked: false, invincibleTimer: 0, hp: 100,
+    takeDamage(n) { this.hp -= n; },
+  };
+  return game.player;
+}
+
+/** (x0, y0) から点 (tx, ty) を狙った弾を作って enemyBullets に入れる */
+function fireAt(game, x0, y0, tx, ty) {
+  const sol = solveLaunch(tx - x0, ty - y0, V, G);
+  assert.ok(sol);
+  const shell = new EnemyBurstShell(game, x0, y0, sol.angle, { x: tx, y: ty, frames: sol.frames });
+  game.enemyBullets.push(shell);
+  return shell;
+}
+
+const fragments = (game) => game.enemyBullets.filter((b) => b instanceof ShellFragment);
+
+function spyWeapon() {
+  const calls = [];
+  const orig = audioManager.playWeapon;
+  audioManager.playWeapon = (kind) => calls.push(kind);
+  return { calls, restore() { audioManager.playWeapon = orig; } };
+}
+
+/** 弾だけを回す（当たり判定は CollisionManager の仕事なので通さない） */
+function flyUntilBurst(shell, max = 400) {
+  for (let i = 0; i < max && shell.alive; i++) shell.update();
+}
+
+test('狙いの点に着くと破裂して5発が自機へ向かう', () => {
+  const game = openWorld();
+  const p = addPlayer(game, 400, 380);
+  const pcx = p.x + 8, pcy = p.y + 12;
+  const shell = fireAt(game, 100, 300, pcx, pcy - 80);
+  flyUntilBurst(shell);
+  assert.equal(shell.alive, false);
+  // 狙いの点の手前（自機の上・横が近い）か、着いたときに破裂する
+  assert.ok(shell.age <= shell.target.frames && shell.age >= shell.target.frames - 8, `age ${shell.age} / ${shell.target.frames}`);
+  const fr = fragments(game);
+  assert.equal(fr.length, SPIDER_SHELL_FRAGMENTS);
+  const angles = fr.map((f) => Math.atan2(f.vy, f.vx)).sort((a, b) => a - b);
+  const toPlayer = Math.atan2(pcy - shell.y, pcx - shell.x);
+  const mean = angles.reduce((a, b) => a + b, 0) / angles.length;
+  assert.ok(Math.abs(mean - toPlayer) < 3 * DEG, `平均 ${mean / DEG} / 自機 ${toPlayer / DEG}`);
+  assert.ok(Math.abs((angles[angles.length - 1] - angles[0]) - SPIDER_SHELL_SPREAD) < 0.5 * DEG);
+  for (const f of fr) assert.ok(f.vy > 0, '上から下へ');
+});
+
+test('自機が弾の下に動いてくると、狙いの点より手前で破裂する', () => {
+  const game = openWorld();
+  const p = addPlayer(game, 600, 380);
+  const shell = fireAt(game, 100, 300, p.x + 8, p.y + 12 - 80);
+  for (let i = 0; i < 20; i++) shell.update();
+  assert.equal(shell.alive, true);
+  // 弾の真下へ移る
+  p.x = shell.x - 8;
+  shell.update();
+  assert.equal(shell.alive, false);
+  assert.ok(shell.age < shell.target.frames - 8);
+  assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
+});
+
+test('自機と同じ高さで横を通る弾は横では破裂しない', () => {
+  const game = openWorld();
+  // 遠くの点を狙った弾の、弧の頂点に自機の中心を置く。頂点の前後は高さがほとんど変わらないので、
+  // 横の距離が近い間ずっと弾は自機の上端より下（＝体の高さ）を通る
+  const x0 = 100, y0 = 300, tx = 700, ty = 300;
+  const sol = solveLaunch(tx - x0, ty - y0, V, G);
+  const pts = simulateShell(x0, y0, sol.angle, V, G, sol.frames);
+  let k = 0;
+  for (let i = 1; i < pts.length; i++) if (pts[i].y < pts[k].y) k = i;
+  addPlayer(game, pts[k].x - 8, pts[k].y - 12);
+  const shell = fireAt(game, x0, y0, tx, ty);
+  for (let i = 0; i <= k; i++) shell.update();
+  assert.equal(shell.alive, true, `横を通る途中で破裂した (age ${shell.age})`);
+});
+
+test('地形に当たると破裂する', () => {
+  // 弾の進路（右へ）に岩の柱
+  const extra = [];
+  for (let r = 0; r < 40; r++) extra.push([r, 20]);
+  const game = openWorld(extra);
+  addPlayer(game, 600, 380);
+  const shell = fireAt(game, 100, 300, 608, 312);
+  flyUntilBurst(shell);
+  assert.equal(shell.alive, false);
+  assert.ok(shell.x >= 20 * T && shell.x < 21 * T + 8);
+  assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
+});
+
+test('寿命で破裂する', () => {
+  const game = openWorld();
+  addPlayer(game, 900, 380);
+  const shell = fireAt(game, 100, 300, 600, 250);
+  shell.lifetime = 5;
+  flyUntilBurst(shell);
+  assert.equal(shell.age, 5);
+  assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
+});
+
+test('建物に当たると破裂する', () => {
+  const game = openWorld();
+  addPlayer(game, 600, 380);
+  const shell = fireAt(game, 100, 300, 608, 312);
+  shell.update();
+  shell.onTownWall(150, 290);
+  assert.equal(shell.alive, false);
+  assert.deepEqual([shell.x, shell.y], [150, 290]);
+  assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
+});
+
+test('直撃では破片を出さない', () => {
+  const game = openWorld();
+  const p = addPlayer(game, 400, 380);
+  const shell = new EnemyBurstShell(game, p.x + 8, p.y + 12, 0, { x: 0, y: 0, frames: 999 });
+  shell.vx = 0; shell.vy = 0;
+  game.enemyBullets.push(shell);
+  new CollisionManager(game).update();
+  assert.equal(p.hp, 100 - ENEMY_BULLET_DAMAGE);
+  assert.equal(shell.alive, false);
+  assert.equal(fragments(game).length, 0);
+});
+
+test('走査中の破裂は同じフレームに破片を進めない', () => {
+  const game = openWorld();
+  addPlayer(game, 800, 380);
+  const shell = fireAt(game, 100, 300, 300, 250);
+  shell.age = shell.target.frames - 1;
+  new CollisionManager(game).update();
+  assert.equal(shell.alive, false);
+  const fr = fragments(game);
+  assert.equal(fr.length, SPIDER_SHELL_FRAGMENTS);
+  for (const f of fr) assert.deepEqual([f.x, f.y], [shell.x, shell.y]);
+});
+
+test('破裂音は1回、破片の発射音は鳴らない', () => {
+  const spy = spyWeapon();
+  try {
+    const game = openWorld();
+    addPlayer(game, 600, 380);
+    const shell = fireAt(game, 100, 300, 608, 312);
+    spy.calls.length = 0;
+    flyUntilBurst(shell);
+    assert.equal(spy.calls.filter((k) => k === 'spiderBurst').length, 1);
+    assert.equal(spy.calls.filter((k) => k === 'enemyMg').length, 0);
+  } finally {
+    spy.restore();
+  }
+});

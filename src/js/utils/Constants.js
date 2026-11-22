@@ -843,6 +843,16 @@ export const SPIDER_SHELL_LIFETIME = 240;
 // 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした
 export const SPIDER_SHELL_RADIUS = 4;
 export const COLOR_SPIDER_SHELL = '#66FFEE';
+// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色
+export const SPIDER_SHELL_BLINK_FRAMES = 20;
+export const COLOR_SPIDER_SHELL_BLINK = '#FFFFFF';
+// 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
+//   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
+// 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた
+export const SPIDER_SHELL_BURST_DX = 40;
+export const SPIDER_SHELL_FRAGMENTS = 5;
+export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
+export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;
 
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles

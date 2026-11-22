@@ -126,6 +126,10 @@ export class CollisionManager {
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = ENEMY_HOMING_MISSILE_DAMAGE;
             playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { fromEnemy: true });
+        } else if (bullet.isBurstShell) {
+            // スパイダーの弾の直撃。ダメージは普通の敵弾と同じで、割れる演出だけ出す。
+            // その場から5発を出すと機体の中から出て次のフレームで全部当たり、1発で 60 になるので出さない
+            bullet.burst({ fragments: false });
         }
 
         recordHit(target, hx, hy);
