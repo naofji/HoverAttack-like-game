@@ -33,6 +33,55 @@ import { SmokeScreen } from '../entities/SmokeScreen.js';
 import { buildDebris, trimDebris } from '../entities/debris/index.js';
 import { audioManager } from '../audio/AudioManager.js';
 
+// 雪の粒の生成は mixin のメソッドではなくモジュールの関数にしてある: spawnExplosion は既存のテストが
+// SpawnEffects を混ぜていない偽 game へ call で呼ぶ（tests/explosion-ripple.test.js など）ので、
+// this の他のメソッドを当てにすると、雪の無い面のテストまで落ちる
+
+/**
+ * 雪面から舞う雪（5面の着弾・爆発）。粒は雪の木が欠ける・倒れるときと同じ SnowFlurryParticle
+ * （空気抵抗で止まって揺れながら落ち、地面に触れたら消える）で、動きは SNOWTREE_FLURRY_MODES の行。
+ * 出る位置は横 ±spread・上へ 0〜spread だけ。(x, y) は雪面の線上なので、下へ散らすと岩の中で生まれて
+ * 最初の更新で消える（Town._spawnSnowFlurry と同じ理由）
+ * @param {string} [mode] SNOWTREE_FLURRY_MODES のキー
+ */
+function pushSnowPuff(game, x, y, count, spread, mode = 'hit') {
+    const m = SNOWTREE_FLURRY_MODES[mode] || SNOWTREE_FLURRY_MODES.hit;
+    for (let i = 0; i < (count | 0); i++) {
+        const a = m.angle[0] + Math.random() * (m.angle[1] - m.angle[0]);
+        const sp = m.speed[0] + Math.random() * (m.speed[1] - m.speed[0]);
+        const life = SNOWTREE_FLURRY_LIFE[0] + Math.floor(Math.random() * (SNOWTREE_FLURRY_LIFE[1] - SNOWTREE_FLURRY_LIFE[0] + 1));
+        game.particles.push(new SnowFlurryParticle(game,
+            x + (Math.random() - 0.5) * 2 * spread, y - Math.random() * spread,
+            Math.cos(a) * sp, Math.sin(a) * sp,
+            SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length],
+            Math.random() < SNOWTREE_FLURRY_BIG_SHARE ? m.size[1] : m.size[0], life));
+    }
+}
+
+/**
+ * 爆発の近くの雪面から雪を舞わせる（spawnExplosion から）。爆心の x から SNOW_BLAST_COLUMN_STEP おきに
+ * 左右 SNOW_BLAST_COLUMNS 本ずつの列で、爆心の 1 タイル上から SNOW_BLAST_REACH 下までの雪面を探し、
+ * 見つかった列で総数を分ける（余りは先の列へ。総数がぴったり出るように）。
+ * 探し始めを 1 タイル上にするのは、着弾の爆心は岩に少しめり込んでいることが多く、爆心からだと
+ * 始点が岩の中になって雪面を見落とすため（snowSurfaceY は始点が岩の中なら null を返す）
+ */
+function spawnBlastSnow(game, x, y, size) {
+    const map = game.map;
+    if (!map || !map.snowSurfaceY || size < SNOW_BLAST_MIN_SIZE) return;
+    const hits = [];
+    for (let k = -SNOW_BLAST_COLUMNS; k <= SNOW_BLAST_COLUMNS; k++) {
+        const cx = x + k * SNOW_BLAST_COLUMN_STEP;
+        const sy = map.snowSurfaceY(cx, y - TILE_SIZE, y + SNOW_BLAST_REACH);
+        if (sy !== null) hits.push([cx, sy]);
+    }
+    if (hits.length === 0) return;
+    const total = Math.min(SNOW_BLAST_MAX, Math.round(size * SNOW_BLAST_PER_SIZE));
+    const base = Math.floor(total / hits.length);
+    hits.forEach(([cx, sy], i) => {
+        pushSnowPuff(game, cx, sy, base + (i < total % hits.length ? 1 : 0), SNOW_BLAST_PUFF_SPREAD, 'puff');
+    });
+}
+
 export const SpawnEffects = {
     /** Spawn explosion particles and chain-detonate nearby landmines */
     spawnExplosion(x, y, size, opts, { fromEnemy = false } = {}) {
@@ -50,7 +99,7 @@ export const SpawnEffects = {
             this.spawnBubbles(x, y, 'blast', Math.min(BLAST_BUBBLES_MAX, Math.round(size * BLAST_BUBBLES_PER_PARTICLE)));
         } else {
             // 5面: 爆風が雪面を叩いて雪が舞う（水中の爆発は水柱の担当なので else）
-            this._spawnBlastSnow(x, y, size);
+            spawnBlastSnow(this, x, y, size);
         }
 
         // 敵の弾の爆発は誘爆させない（playBlast の fromEnemy。敵機の巻き添え防止）
@@ -237,27 +286,6 @@ export const SpawnEffects = {
     },
 
     /**
-     * 雪面から舞う雪（5面の着弾・爆発）。粒は雪の木が欠ける・倒れるときと同じ SnowFlurryParticle
-     * （空気抵抗で止まって揺れながら落ち、地面に触れたら消える）で、動きは SNOWTREE_FLURRY_MODES の行。
-     * 出る位置は横 ±spread・上へ 0〜spread だけ。(x, y) は雪面の線上なので、下へ散らすと岩の中で生まれて
-     * 最初の更新で消える（Town._spawnSnowFlurry と同じ理由）
-     * @param {string} [mode] SNOWTREE_FLURRY_MODES のキー
-     */
-    spawnSnowPuff(x, y, count, spread, mode = 'hit') {
-        const m = SNOWTREE_FLURRY_MODES[mode] || SNOWTREE_FLURRY_MODES.hit;
-        for (let i = 0; i < (count | 0); i++) {
-            const a = m.angle[0] + Math.random() * (m.angle[1] - m.angle[0]);
-            const sp = m.speed[0] + Math.random() * (m.speed[1] - m.speed[0]);
-            const life = SNOWTREE_FLURRY_LIFE[0] + Math.floor(Math.random() * (SNOWTREE_FLURRY_LIFE[1] - SNOWTREE_FLURRY_LIFE[0] + 1));
-            this.particles.push(new SnowFlurryParticle(this,
-                x + (Math.random() - 0.5) * 2 * spread, y - Math.random() * spread,
-                Math.cos(a) * sp, Math.sin(a) * sp,
-                SNOWTREE_FLURRY_COLORS[i % SNOWTREE_FLURRY_COLORS.length],
-                Math.random() < SNOWTREE_FLURRY_BIG_SHARE ? m.size[1] : m.size[0], life));
-        }
-    },
-
-    /**
      * 弾が地形に当たった（Bullet.update）。移動の始点 yFrom から当たった点 yTo までに雪の積もった上面を
      * 上から割ったときだけ雪を舞わせる（側面・天井・雪の無い面からは出さない。判定は Map.snowSurfaceY）。
      * 雪の無い面でも毎発呼ばれるので、問い合わせの無い地図（テストの偽地図）では黙って何もしない
@@ -266,31 +294,7 @@ export const SpawnEffects = {
         const map = this.map;
         if (!map || !map.snowSurfaceY) return;
         const y = map.snowSurfaceY(x, yFrom, yTo);
-        if (y !== null) this.spawnSnowPuff(x, y, SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD);
-    },
-
-    /**
-     * 爆発の近くの雪面から雪を舞わせる（spawnExplosion から）。爆心の x から SNOW_BLAST_COLUMN_STEP おきに
-     * 左右 SNOW_BLAST_COLUMNS 本ずつの列で、爆心の 1 タイル上から SNOW_BLAST_REACH 下までの雪面を探し、
-     * 見つかった列で総数を分ける（余りは先の列へ。総数がぴったり出るように）。
-     * 探し始めを 1 タイル上にするのは、着弾の爆心は岩に少しめり込んでいることが多く、爆心からだと
-     * 始点が岩の中になって雪面を見落とすため（snowSurfaceY は始点が岩の中なら null を返す）
-     */
-    _spawnBlastSnow(x, y, size) {
-        const map = this.map;
-        if (!map || !map.snowSurfaceY || size < SNOW_BLAST_MIN_SIZE) return;
-        const hits = [];
-        for (let k = -SNOW_BLAST_COLUMNS; k <= SNOW_BLAST_COLUMNS; k++) {
-            const cx = x + k * SNOW_BLAST_COLUMN_STEP;
-            const sy = map.snowSurfaceY(cx, y - TILE_SIZE, y + SNOW_BLAST_REACH);
-            if (sy !== null) hits.push([cx, sy]);
-        }
-        if (hits.length === 0) return;
-        const total = Math.min(SNOW_BLAST_MAX, Math.round(size * SNOW_BLAST_PER_SIZE));
-        const base = Math.floor(total / hits.length);
-        hits.forEach(([cx, sy], i) => {
-            this.spawnSnowPuff(cx, sy, base + (i < total % hits.length ? 1 : 0), SNOW_BLAST_PUFF_SPREAD, 'puff');
-        });
+        if (y !== null) pushSnowPuff(this, x, y, SNOW_BULLET_PUFF_COUNT, SNOW_BULLET_PUFF_SPREAD);
     },
 
     /**
