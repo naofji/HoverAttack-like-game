@@ -38,6 +38,12 @@ export const DESTRUCTION_PROFILES = {
         blast: { count: 20, opts: MACHINE_EXPLOSION_OPTS, delay: 0 },
         detonatesMines: true,
     },
+    // スパイダー（6面）。ドローンと同じ大きさ・同じ耐久の雑魚なので、壊れ方も同じにした
+    spider: {
+        flash: { count: 2, radius: IMPACT_FLASH_RADIUS * 0.7, stagger: 0 },
+        blast: { count: 20, opts: MACHINE_EXPLOSION_OPTS, delay: 0 },
+        detonatesMines: true,
+    },
     tank: {
         flash: { count: 3, radius: IMPACT_FLASH_RADIUS * 0.8, stagger: DEATH_FLASH_STAGGER },
         blast: { count: EXPLOSION_PARTICLE_COUNT, opts: MACHINE_EXPLOSION_OPTS, delay: 2 },

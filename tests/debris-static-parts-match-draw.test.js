@@ -137,3 +137,20 @@ test('EnemyAttacker: attackerBodyParts() は型ごとに draw() の fillRect と
     }
   }
 });
+
+test('EnemySpider: spiderDebris.parts（胴・目）は draw() の fillRect と一致する（中心原点なので +size/2 して比較）', async () => {
+  const { EnemySpider } = await import('../src/js/entities/EnemySpider.js');
+  const { spiderDebris, SPIDER_LEG_COLOR } = await import('../src/js/entities/debris/spiderParts.js');
+  const { SPIDER_SIZE } = await import('../src/js/utils/Constants.js');
+  const game = makeGame(makeMap(flatFloorRows()));
+  const s = new EnemySpider(game, 0, 0, 'floor');
+  s.fwd = { x: 1, y: 0 };
+  const ctx = makeFakeCtx();
+  s.draw(ctx);
+  const half = SPIDER_SIZE / 2;
+  const rects = extractFillRectsWithColor(ctx.calls).map((r) => ({ ...r, x: r.x + half, y: r.y + half }));
+  // 脚は線で描くので fillRect の対応は無い（ドローンの目と同じ扱い）
+  const bodyParts = spiderDebris.parts.filter((p) => p.color !== SPIDER_LEG_COLOR);
+  assert.ok(bodyParts.length >= 2);
+  assertEachPartMatches(bodyParts, rects, 'spider');
+});

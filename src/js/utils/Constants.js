@@ -797,6 +797,37 @@ export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies i
 // 当たり箱の一辺。タイル（16）より小さくして、1タイルの隙間にも入れるようにした。
 // 張り付く面で絵は回すが箱は回さない（正方形なら壁でも天井でも同じ箱で済む）
 export const SPIDER_SIZE = 14;
+// 耐久と得点はドローンと同じ（ユーザー指定「耐久力はドローンと同じくらい」）。参照せず別に置くのは、あとで別々に調整するため
+export const SPIDER_HP = 8;
+export const SPIDER_SCORE = 250;
+// 這う。クモの「ちょこまか走る → ぴたっと止まる → 向きを変える」を、走る長さと止まる長さの乱数で作る
+export const SPIDER_CRAWL_SPEED = 1.6;        // px/フレーム
+export const SPIDER_RUN_FRAMES = [40, 140];   // 走る長さの範囲
+export const SPIDER_PAUSE_FRAMES = [15, 50];  // 止まる長さの範囲
+export const SPIDER_TURN_CHANCE = 0.35;       // 止まったあと向きを変える確率
+// 小ジャンプ。面から離れて同じ面へ戻る。重力は張り付いている面の向き（天井なら上向き）に掛ける。
+// 高さ ≈ 2.4² / (2 × 0.18) ≈ 16px（タイル1つぶん）
+export const SPIDER_HOP_CHANCE = 0.3;
+export const SPIDER_HOP_SPEED = 2.4;
+export const SPIDER_HOP_GRAVITY = 0.18;
+// 糸（床 ⇄ 天井）。床から天井へは小ジャンプで届かないので、真上へ糸を撃ってたぐって登る。
+// 天井からは糸を垂らして降りる（ユーザー案、2026-11-22）。糸は切れない（見た目だけ）
+export const SPIDER_THREAD_CHANCE = 0.25;     // 床・天井で走り終わりに糸で移る確率（小ジャンプより先に引く）
+export const SPIDER_THREAD_MAX_TILES = 10;    // 糸が届く真上・真下の面までの距離
+export const SPIDER_THREAD_SHOOT_FRAMES = 8;  // 糸が伸びて届くまで（この間は止まっている）
+export const SPIDER_THREAD_CLIMB_SPEED = 1.2; // たぐって登る
+export const SPIDER_THREAD_DESCEND_SPEED = 1.6; // 垂らして降りる（重さで降りるので登りより速い）
+// 跳び移り（壁 ⇄ 向かいの壁）。糸は真上・真下にしか張らないので、壁どうしは直線で跳ぶ
+export const SPIDER_LEAP_CHANCE = 0.25;
+export const SPIDER_LEAP_MAX_TILES = 5;
+export const SPIDER_LEAP_SPEED = 4;
+// 跳んでいる時間の上限。壁の小ジャンプで横向きの重力のまま面の外へ出ると戻ってこないので、超えたら普通に落とす
+export const SPIDER_AIRBORNE_MAX_FRAMES = 90;
+// 足場を失ったときの落下（世界の下向き）
+export const SPIDER_FALL_GRAVITY = 0.25;
+export const SPIDER_FALL_MAX = 6;
+// 糸の色。霧の面（6面）で見えるよう白に寄せ、背景の工場の線と紛れないよう半透明にした
+export const COLOR_SPIDER_THREAD = 'rgba(235, 240, 255, 0.7)';
 
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles

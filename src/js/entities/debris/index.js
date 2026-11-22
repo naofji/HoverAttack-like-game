@@ -18,6 +18,7 @@ import {
     DEBRIS_SPLIT_JITTER, DEBRIS_SPLIT_SPIN_JITTER,
 } from '../../utils/Constants.js';
 import { droneDebris } from './droneParts.js';
+import { spiderDebris } from './spiderParts.js';
 import { playerDebris } from './playerParts.js';
 import { tankDebris } from './tankParts.js';
 import { turretDebris } from './turretParts.js';
@@ -32,6 +33,7 @@ export const DEBRIS_SPECS = {
     turret: turretDebris,
     attacker: attackerDebris,
     carrier: carrierDebris,
+    spider: spiderDebris,
 };
 
 /**
