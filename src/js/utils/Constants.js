@@ -792,6 +792,12 @@ export const ENEMY_DRONE_KAMIKAZE_SPEED = 6.0;     // Ramming charge speed
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER = 40;
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies in 4 hits
 
+// --- スパイダー（6面の後半。床・壁・天井を這い、自機の頭上で破裂する弾を撃つ） ---
+// 設計書 docs/superpowers/specs/2026-11-22-spider-enemy-design.md。数値はどれも初期値で、実機で調整する。
+// 当たり箱の一辺。タイル（16）より小さくして、1タイルの隙間にも入れるようにした。
+// 張り付く面で絵は回すが箱は回さない（正方形なら壁でも天井でも同じ箱で済む）
+export const SPIDER_SIZE = 14;
+
 // --- Enemy Turret (Stationary) ---
 export const ENEMY_TURRET_HP = 30;              // About 2 missiles
 export const ENEMY_TURRET_WIDTH = 24;
