@@ -18,7 +18,7 @@ import { TILE_SIZE, LANDMINE_BLAST_RADIUS, LANDMINE_HEIGHT } from '../src/js/uti
 function mineWorld() {
   const hits = [];
   const game = {
-    particles: [], projectiles: [], landmines: [], enemies: [],
+    particles: [], projectiles: [], landmines: [], enemies: [], enemyBullets: [],
     player: null, carrier: null, camera: null, storageTowers: [],
     score: 0,
     addScore(n) { this.score += n; },

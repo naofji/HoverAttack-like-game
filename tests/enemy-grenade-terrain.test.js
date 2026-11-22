@@ -31,7 +31,7 @@ async function makeMap(fill) {
 
 function makeGame(map) {
   return {
-    map, particles: [], enemies: [], player: null, carrier: null,
+    map, particles: [], enemies: [], enemyBullets: [], player: null, carrier: null,
     spawnExplosion() {},
     score: 0,
     addScore(n) { this.score += n; },

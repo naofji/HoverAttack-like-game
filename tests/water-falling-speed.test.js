@@ -41,7 +41,7 @@ function makeTestGame({ env = null } = {}) {
     map,
     env,
     particles: [],
-    enemies: [],
+    enemies: [], enemyBullets: [],
     spawnExplosion() {},
     input: {
       isKeyDown: () => false,

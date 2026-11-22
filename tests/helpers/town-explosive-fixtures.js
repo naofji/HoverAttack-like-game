@@ -46,7 +46,7 @@ export function world(specs, { seed = 1, isSolidTile = () => true, view = null }
     const rockHits = [];
     const booms = [];
     const game = Object.assign({
-        particles: [], projectiles: [], enemies: [], landmines: [], player: null, carrier: null,
+        particles: [], projectiles: [], enemies: [], enemyBullets: [], landmines: [], player: null, carrier: null,
         camera: view ? { x: view.x, y: view.y } : null, canvas: view ? { width: view.w, height: view.h } : null,
         map: {
             town,

@@ -30,7 +30,7 @@ function makeTestGame({ env = null, barriers = [] } = {}) {
     env,
     barriers,
     particles: [],
-    enemies: [],
+    enemies: [], enemyBullets: [],
     spawnExplosion() {},
   };
   return Object.assign(g, CombatActions);

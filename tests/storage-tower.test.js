@@ -61,7 +61,7 @@ import {
 /** 弾と塔だけの偽ゲーム。地図は何も無い空（グレネードの地形破壊は空振りさせる）。 */
 function towerGame() {
   const game = {
-    projectiles: [], particles: [], enemies: [], storageTowers: [],
+    projectiles: [], particles: [], enemies: [], enemyBullets: [], storageTowers: [],
     pickups: [],
     score: 0,
     addScore(n) { this.score += n; },
