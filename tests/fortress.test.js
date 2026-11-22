@@ -683,7 +683,7 @@ test('入り口の守衛はビームにならない（湧かせる側でも固�
   const game = {
     map: {
       enemyTurretSpawns: spawns, enemyTankSpawns: [], enemyAttackerSpawns: [],
-      enemyDroneSpawns: [], enemyBaseSpawn: null,
+      enemyDroneSpawns: [], spiderSpawns: [], enemyBaseSpawn: null,
     },
     missionsCompleted: 6, enemies: [], enemyBullets: [],
   };

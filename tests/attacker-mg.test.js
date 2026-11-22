@@ -48,7 +48,7 @@ function spawnAll(missionsCompleted, rngValues) {
   const game = {
     map: {
       isSolidAtPixel: () => false, isSolid: () => false, cols: 1000, rows: 1000,
-      enemyTankSpawns: [], enemyDroneSpawns: [], enemyTurretSpawns: [],
+      enemyTankSpawns: [], enemyDroneSpawns: [], spiderSpawns: [], enemyTurretSpawns: [],
       enemyBaseSpawn: null, landmineSpawns: [],
       // 重なり回避で横にずらされないよう十分離す
       enemyAttackerSpawns: Array.from({ length: rngValues.length }, (_, i) => ({ x: i * 100, y: 10 })),

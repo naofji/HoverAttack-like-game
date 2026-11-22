@@ -9,6 +9,7 @@ import { Landmine } from '../entities/Landmine.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
 import { EnemyAttacker } from '../entities/EnemyAttacker.js';
 import { EnemyDrone } from '../entities/EnemyDrone.js';
+import { EnemySpider } from '../entities/EnemySpider.js';
 import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
 import { StorageTower } from '../entities/StorageTower.js';
@@ -193,6 +194,12 @@ export class SpawnManager {
                 drone.setEmergencyDefense(true, game.emergencyTargetBase);
             }
             game.enemies.push(drone);
+        }
+
+        // 6面のスパイダー。置き場所は面に接するよう地図が決めてあるので、resolveOverlap は通さない
+        // （横にずらすと面から離れるうえ、game.rng を引いて週次の決定性が壊れる）
+        for (const p of game.map.spiderSpawns) {
+            game.enemies.push(new EnemySpider(game, p.x, p.y, p.surface));
         }
 
         // Spawn stationary turrets

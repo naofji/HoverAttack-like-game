@@ -18,7 +18,9 @@ import {
     ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG, TILE_SIZE, LANDMINE_WIDTH, LANDMINE_HEIGHT, STAGE_ENVIRONMENTS,
     ORB_SIZES, ORB_SPAWN_TOP_FRACTION, ORB_SPAWN_MIN_COL_GAP, ORB_SPAWN_SALT, ORB_SIZE_MIX,
     BASE_ROOM_MID_PLATFORM_MISSION, BASE_ROOM_SIDE_PLATFORMS_MISSION, ENEMY_DRONE_MISSION,
+    SPIDER_MISSION, SPIDER_LAST_MISSION, SPIDER_COUNT, SPIDER_SPAWN_MIN_COL_GAP, SPIDER_SPAWN_SALT, SPIDER_SIZE,
 } from '../../utils/Constants.js';
+import { boxHitsSolid, hasSupport } from '../../utils/surfaceCrawl.js';
 import { SeededRNG } from '../../utils/SeededRNG.js';
 import { BORDER_THICKNESS } from './common.js';
 import { SHAPE_FULL } from '../../utils/tileShape.js';
@@ -398,6 +400,52 @@ export const MapSpawns = {
      * 乱数は派生ストリーム（game.rng を消費しない＝敵の構成は変わらない）
      * @returns {Array<{cx:number, cy:number, size:'small'|'large'}>}
      */
+    _findSpiderPositions() {
+        // 6面だけ。範囲の外では乱数を作りもしない（他の面の生成に何も足さない）
+        if (this.missionLevel < SPIDER_MISSION || this.missionLevel > SPIDER_LAST_MISSION) return [];
+        // 派生ストリーム。game.rng を進めないので、敵の構成も地形も変わらない（週次の決定性）
+        const rng = new SeededRNG((this.game.rng.state ^ SPIDER_SPAWN_SALT) >>> 0);
+        const T = TILE_SIZE;
+        const S = SPIDER_SIZE;
+        const rects = this._reservedRects();
+        const inRects = (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
+        // 地雷・敵・基地の湧き位置の箱の周り 1 タイルには置かない（Orb と同じ。開始時に重なって弾き合わないように）
+        const keepOut = [
+            ...this.landmineSpawns.map((p) => [p.x, p.y, LANDMINE_WIDTH, LANDMINE_HEIGHT]),
+            ...this.enemyTankSpawns.map((p) => [p.x, p.y, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT]),
+            ...this.enemyAttackerSpawns.map((p) => [p.x, p.y, PLAYER_WIDTH, PLAYER_HEIGHT]),
+            ...this.enemyDroneSpawns.map((p) => [p.x, p.y, ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT]),
+            ...this.enemyTurretSpawns.map((p) => [p.x, p.y, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT]),
+            ...(this.enemyBaseSpawn ? [[this.enemyBaseSpawn.x, this.enemyBaseSpawn.y, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT]] : []),
+        ];
+        const nearSpawn = (x, y) => keepOut.some(([kx, ky, w, h]) =>
+            x + S + T > kx && x - T < kx + w && y + S + T > ky && y - T < ky + h);
+        const isSolid = (r, c) => this.isSolid(r, c);
+        const candidates = [];
+        for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
+            for (let c = Math.floor(this.cols / 2); c < this.cols - BORDER_THICKNESS; c++) {
+                if (this.grid[r][c] !== BLOCK_EMPTY || inRects(r, c)) continue;
+                // 張り付く面は天井 → 壁 → 床の順で選ぶ（頭上からの攻撃を増やすため。設計書）
+                let spot = null;
+                if (isSolid(r - 1, c)) spot = { x: c * T + (T - S) / 2, y: r * T, surface: 'ceiling' };
+                else if (isSolid(r, c - 1)) spot = { x: c * T, y: r * T + (T - S) / 2, surface: 'wallL' };
+                else if (isSolid(r, c + 1)) spot = { x: (c + 1) * T - S, y: r * T + (T - S) / 2, surface: 'wallR' };
+                else if (isSolid(r + 1, c)) spot = { x: c * T + (T - S) / 2, y: (r + 1) * T - S, surface: 'floor' };
+                if (!spot || nearSpawn(spot.x, spot.y)) continue;
+                if (boxHitsSolid(isSolid, spot.x, spot.y, S) || !hasSupport(isSolid, { ...spot, size: S })) continue;
+                candidates.push({ ...spot, c });
+            }
+        }
+        shuffleWith(rng, candidates);
+        const chosen = [];
+        for (const cand of candidates) {
+            if (chosen.length >= SPIDER_COUNT) break;
+            if (chosen.some((p) => Math.abs(p.c - cand.c) < SPIDER_SPAWN_MIN_COL_GAP)) continue;
+            chosen.push(cand);
+        }
+        return chosen.map(({ x, y, surface }) => ({ x, y, surface }));
+    },
+
     _findOrbPositions() {
         const count = STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].orbs || 0;
         if (count === 0) return [];

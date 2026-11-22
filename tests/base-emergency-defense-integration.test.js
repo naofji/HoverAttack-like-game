@@ -26,7 +26,7 @@ const AIR_MAP = {
   rows: 1000,
   enemyTankSpawns: [],
   enemyAttackerSpawns: [],
-  enemyDroneSpawns: [],
+  enemyDroneSpawns: [], spiderSpawns: [],
   enemyTurretSpawns: [],
   enemyBaseSpawn: null,
   landmineSpawns: []
@@ -59,7 +59,7 @@ test('spawnEnemies(): when baseEmergencyAlert is true, new EnemyAttacker/EnemyDr
     map: {
       ...AIR_MAP,
       enemyAttackerSpawns: [{ x: 10, y: 10 }],
-      enemyDroneSpawns: [{ x: 20, y: 20 }]
+      enemyDroneSpawns: [{ x: 20, y: 20 }], spiderSpawns: []
     }
   });
   const spawnManager = new SpawnManager(game);
@@ -91,7 +91,7 @@ test('spawnEnemies(): when baseEmergencyAlert is false, setEmergencyDefense is n
     map: {
       ...AIR_MAP,
       enemyAttackerSpawns: [{ x: 10, y: 10 }],
-      enemyDroneSpawns: [{ x: 20, y: 20 }]
+      enemyDroneSpawns: [{ x: 20, y: 20 }], spiderSpawns: []
     }
   });
   const spawnManager = new SpawnManager(game);

@@ -797,6 +797,14 @@ export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies i
 // 当たり箱の一辺。タイル（16）より小さくして、1タイルの隙間にも入れるようにした。
 // 張り付く面で絵は回すが箱は回さない（正方形なら壁でも天井でも同じ箱で済む）
 export const SPIDER_SIZE = 14;
+// 出る面。6面だけ（2026-11-22 ユーザー了承。7面は実機で手応えを見てから）。*_MISSION は「この値以上で有効」の
+// 約束なので、上限も置いて両方を見る。7面へ広げるときは上限を外し、這う規則に金属の斜面（tileShape）を足す
+export const SPIDER_MISSION = 5;
+export const SPIDER_LAST_MISSION = 5;
+// 置き方。6面の後半＝マップの右半分（敵基地は右端）に置く。数は設計書の目安 4〜6 の真ん中
+export const SPIDER_COUNT = 5;
+export const SPIDER_SPAWN_MIN_COL_GAP = 8;      // スパイダーどうしの列の間隔（タイル）。固まって出ないように
+export const SPIDER_SPAWN_SALT = 0x5D1DE5;      // 置き場所の派生ストリームの種（game.rng を消費しない）
 // 耐久と得点はドローンと同じ（ユーザー指定「耐久力はドローンと同じくらい」）。参照せず別に置くのは、あとで別々に調整するため
 export const SPIDER_HP = 8;
 export const SPIDER_SCORE = 250;

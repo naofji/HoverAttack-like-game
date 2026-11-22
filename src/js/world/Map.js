@@ -113,6 +113,7 @@ export class Map {
         this.enemyDroneSpawns = [];
         this.enemyTurretSpawns = [];
         this.enemyBaseSpawn = null;
+        this.spiderSpawns = [];     // 6面のスパイダー {x, y, surface}（mapgen/spawns.js の _findSpiderPositions）
 
         this.water = null;          // Uint8Array(rows*cols)。0..MAX_WATER_MASS。水の無い面は null のまま
         this.waterKind = null;      // Uint8Array。0=水なし 1=水中 2=水面 3=滝。water[] から導く要約
@@ -302,6 +303,8 @@ export class Map {
         this._seatSpawnsOnShapes();
         // 2面の Orb（押せて転がる鉱物）。形を焼いた後に置く（平らな床を形で選ぶため）。派生ストリーム
         this.orbSpawns = this._findOrbPositions();
+        // 6面のスパイダー（床・壁・天井に張り付く）。湧き位置を避けるので、ほかの湧きが全部決まってから。派生ストリーム
+        this.spiderSpawns = this._findSpiderPositions();
 
         // 6面: 工場の設計図を先に作り、建物の足元の地面をメタルにしてから地形を焼く（設計図は空きか岩かしか見ないので、
         // メタルにしても並びは変わらない。ここより後に game.rng を引く処理は無く、Step 13 で作っても同じ設計図になる）

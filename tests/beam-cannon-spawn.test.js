@@ -17,7 +17,7 @@ function makeGame(missionsCompleted, turretCount) {
     baseEmergencyAlert: false,
     map: {
       enemyTankSpawns: [], landmineSpawns: [], enemyAttackerSpawns: [],
-      enemyDroneSpawns: [], enemyTurretSpawns, enemyBaseSpawn: null,
+      enemyDroneSpawns: [], spiderSpawns: [], enemyTurretSpawns, enemyBaseSpawn: null,
       width: 2048, height: 512,
       isSolidAtPixel: () => false,
     },
