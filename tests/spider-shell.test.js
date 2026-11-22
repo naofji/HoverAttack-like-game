@@ -9,6 +9,7 @@ import { Missile } from '../src/js/entities/Missile.js';
 import { PlayerBullet } from '../src/js/entities/PlayerBullet.js';
 import { Grenade } from '../src/js/entities/Grenade.js';
 import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
+import { shed, world as townWorld } from './helpers/town-explosive-fixtures.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
 import {
   SPIDER_SHELL_SPEED as V, SPIDER_SHELL_GRAVITY as G, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD,
@@ -115,7 +116,8 @@ test('地形に当たると破裂する', () => {
   const shell = fireAt(game, 100, 300, 608, 312);
   flyUntilBurst(shell);
   assert.equal(shell.alive, false);
-  assert.ok(shell.x >= 20 * T && shell.x < 21 * T + 8);
+  // 1フレーム前（岩の外）で割れる
+  assert.ok(shell.x < 20 * T && shell.x > 20 * T - 12, `割れた x ${shell.x}`);
   assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
 });
 
@@ -136,7 +138,8 @@ test('建物に当たると破裂する', () => {
   shell.update();
   shell.onTownWall(150, 290);
   assert.equal(shell.alive, false);
-  assert.deepEqual([shell.x, shell.y], [150, 290]);
+  // 当たった点から、来た向きへ少し戻った所で割れる（建物の中から出すと、その建物を素通りする）
+  assert.ok(shell.x < 150);
   assert.equal(fragments(game).length, SPIDER_SHELL_FRAGMENTS);
 });
 
@@ -263,4 +266,64 @@ test('敵のグレネードではスパイダーの弾は消えない', () => {
   g.isPlayerOwned = false;
   g._explode();
   assert.equal(shell.alive, true);
+});
+
+// ------------------------------------------
+// 最終レビューの指摘（Important 1・3）
+// ------------------------------------------
+
+test('自機より上で横が近くても、頭のすぐ上では割れない（割れるのは頭上 SPIDER_SHELL_BURST_MIN_ABOVE 以上）', async () => {
+  const { SPIDER_SHELL_BURST_MIN_ABOVE } = await import('../src/js/utils/Constants.js');
+  // スパイダーが自機より下・同じ高さ・上の、左右いろいろな位置から撃つ（自機は止まったまま）
+  for (const [x0, y0] of [[150, 470], [250, 440], [650, 470], [200, 392], [600, 392], [250, 250], [560, 200], [380, 470]]) {
+    const game = openWorld();
+    const p = addPlayer(game, 400, 380);
+    const shell = fireAt(game, x0, y0, p.x + 8, p.y + 12 - 80);
+    flyUntilBurst(shell);
+    assert.equal(shell.alive, false);
+    assert.ok(shell.y <= p.y - SPIDER_SHELL_BURST_MIN_ABOVE + 1e-9,
+      `(${x0}, ${y0}) から: 頭上 ${(p.y - shell.y).toFixed(1)}px で割れた`);
+  }
+});
+
+test('地形に当たって割れたら、5発は岩の外から出る', () => {
+  const extra = [];
+  for (let r = 0; r < 40; r++) extra.push([r, 20]);
+  const game = openWorld(extra);
+  addPlayer(game, 100, 380);   // 割れた点から見て左下（岩と反対側）
+  const shell = fireAt(game, 200, 300, 700, 250);
+  flyUntilBurst(shell);
+  assert.equal(shell.alive, false);
+  assert.equal(game.map.isSolidPoint(shell.x, shell.y), false, `割れた点が岩の中 (${shell.x}, ${shell.y})`);
+  const fr = fragments(game);
+  for (const f of fr) f.update();
+  assert.equal(fr.filter((f) => f.alive).length, SPIDER_SHELL_FRAGMENTS, '1フレーム目で岩に消えた');
+});
+
+test('建物に当たって割れた5発は、その建物を素通りしない', () => {
+  const w = townWorld([shed(200, 100)]);
+  const game = w.game;
+  game.map.isSolidPoint = () => false;
+  game.map.isSolidAtPixel = () => false;
+  // 自機は建物の向こう側。割れた5発は建物へ向かって飛ぶ
+  addPlayer(game, 300, 104);
+  const shell = new EnemyBurstShell(game, 150, 116, 0, { x: 9999, y: 0, frames: 9999 });
+  game.enemyBullets.push(shell);
+  const none = new Set();
+  for (let i = 0; i < 40 && shell.alive; i++) {
+    shell.update();
+    shell.vy = 0;   // 重力で建物の下へ外れないよう、まっすぐ当てる
+    w.town.sweepProjectile(shell, none);
+  }
+  assert.equal(shell.alive, false, '建物に当たっていない');
+  const fr = fragments(game);
+  assert.equal(fr.length, SPIDER_SHELL_FRAGMENTS);
+  for (let i = 0; i < 60; i++) {
+    for (const f of fr) {
+      if (!f.alive) continue;
+      f.update();
+      w.town.sweepProjectile(f, none);
+      assert.ok(!(f.alive && f.x > 232), `建物（右端 232）を抜けた破片 (${f.x.toFixed(1)}, ${f.y.toFixed(1)})`);
+    }
+  }
 });

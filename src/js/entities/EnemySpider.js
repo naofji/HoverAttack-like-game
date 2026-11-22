@@ -19,7 +19,7 @@ import {
     SPIDER_THREAD_CHANCE, SPIDER_THREAD_MAX_TILES, SPIDER_THREAD_SHOOT_FRAMES,
     SPIDER_THREAD_CLIMB_SPEED, SPIDER_THREAD_DESCEND_SPEED,
     SPIDER_LEAP_CHANCE, SPIDER_LEAP_MAX_TILES, SPIDER_LEAP_SPEED,
-    SPIDER_AIRBORNE_MAX_FRAMES, SPIDER_FALL_GRAVITY, SPIDER_FALL_MAX,
+    SPIDER_AIRBORNE_MAX_FRAMES, SPIDER_HOP_MAX_FRAMES, SPIDER_FALL_GRAVITY, SPIDER_FALL_MAX,
     COLOR_SPIDER_THREAD,
     SPIDER_SIGHT_RANGE, SPIDER_FIRE_INTERVAL, SPIDER_FIRE_RETRY, SPIDER_FIRE_WINDUP, SPIDER_MUZZLE_OFFSET,
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_AIM_ABOVE,
@@ -247,8 +247,10 @@ export class EnemySpider {
             this._attach(contact);
             return;
         }
-        // 壁の小ジャンプで面の外へ出ると、横向きの重力のまま戻ってこない。一定時間で普通に落とす
-        if (this.mode !== 'fall' && ++this.airFrames > SPIDER_AIRBORNE_MAX_FRAMES) this._startFall();
+        // 壁・天井の小ジャンプで面の端を越えると、面の向きの重力のまま戻ってこない。往復の時間を過ぎたら普通に落とす。
+        // 跳び移りは向かいの壁があるのを確かめてから跳ぶので、長めの上限で足りる
+        const limit = this.mode === 'hop' ? SPIDER_HOP_MAX_FRAMES : SPIDER_AIRBORNE_MAX_FRAMES;
+        if (this.mode !== 'fall' && ++this.airFrames > limit) this._startFall();
     }
 
     /**

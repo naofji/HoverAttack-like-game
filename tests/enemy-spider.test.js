@@ -275,3 +275,25 @@ test('糸にぶら下がっている間は撃たず、張り付いたら撃つ',
   for (let i = 0; i < SPIDER_FIRE_WINDUP + 3; i++) s.update();
   assert.equal(shells(game).length, 1);
 });
+
+test('壁の端を越えた小ジャンプは、横へ落ち続けずに普通に落ちる（最終レビュー Important 2）', async () => {
+  const { SPIDER_HOP_MAX_FRAMES } = await import('../src/js/utils/Constants.js');
+  // 宙に浮いた 1×2 タイルの柱。右面の上の方に張り付き、上へ進みながら小ジャンプ → 柱の上端を越える
+  const rows = [];
+  for (let r = 0; r < 30; r++) rows.push('.'.repeat(30));
+  rows[10] = '.'.repeat(15) + '#' + '.'.repeat(14);
+  rows[11] = '.'.repeat(15) + '#' + '.'.repeat(14);
+  const { game } = world(rows);
+  const s = new EnemySpider(game, 16 * T, 10 * T + 2, 'wallL');
+  s.fwd = { x: 0, y: -1 };
+  const x0 = s.x;
+  s._startHop();
+  let maxDx = 0;
+  let f = 0;
+  for (; f < 200 && s.mode === 'hop'; f++) {
+    s.update();
+    maxDx = Math.max(maxDx, Math.abs(s.x - x0));
+  }
+  assert.ok(f <= SPIDER_HOP_MAX_FRAMES + 1, `小ジャンプが ${f} フレーム続いた`);
+  assert.ok(maxDx <= 1.5 * T, `横に ${maxDx.toFixed(1)}px 流れた`);
+});

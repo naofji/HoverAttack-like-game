@@ -831,6 +831,10 @@ export const SPIDER_LEAP_MAX_TILES = 5;
 export const SPIDER_LEAP_SPEED = 4;
 // 跳んでいる時間の上限。壁の小ジャンプで横向きの重力のまま面の外へ出ると戻ってこないので、超えたら普通に落とす
 export const SPIDER_AIRBORNE_MAX_FRAMES = 90;
+// 小ジャンプの上限。往復は 2 × 2.4 / 0.18 ≈ 27 フレーム。最終レビューの実測で、壁・天井の小ジャンプが面の端を
+// 越えると戻る面が無いまま 90 フレーム加速し続け、最大 554px 横へ流れていた。40 では戻った先へさらに 56px 流れたので、
+// 往復に 5 フレームだけ足した 32（面から離れる最大は頂点の 2.4² / (2 × 0.18) = 16px のまま）
+export const SPIDER_HOP_MAX_FRAMES = 32;
 // 足場を失ったときの落下（世界の下向き）
 export const SPIDER_FALL_GRAVITY = 0.25;
 export const SPIDER_FALL_MAX = 6;
@@ -858,6 +862,10 @@ export const COLOR_SPIDER_SHELL_BLINK = '#FFFFFF';
 //   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
 // 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた
 export const SPIDER_SHELL_BURST_DX = 40;
+// 条件2で割れてよいのは、自機の上端よりこれ以上上にいるときだけ。最終レビューの実測で、下から上がってくる弾が
+// 頭の横 40px の帯に入った瞬間に頭のすぐ上（20px 以内が 25%）で割れ、止まった自機に5発がまとめて当たっていた
+// （3発以上が 35%、5発全部が 7%）。狙いの点は上端の 68px 上（80 − 自機の高さの半分 12）なので、その手前の 40px
+export const SPIDER_SHELL_BURST_MIN_ABOVE = 40;
 export const SPIDER_SHELL_FRAGMENTS = 5;
 export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
 export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;

@@ -17,7 +17,7 @@ import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
     COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
     SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
-    SPIDER_SHELL_SCORE,
+    SPIDER_SHELL_SCORE, SPIDER_SHELL_BURST_MIN_ABOVE, TOWN_SWEEP_STEP,
     ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS, ENEMY_BULLET_LIFETIME,
 } from '../utils/Constants.js';
 import { Bullet } from './Bullet.js';
@@ -68,17 +68,25 @@ export class EnemyBurstShell extends Bullet {
         this.x += this.vx;
         this.y += this.vy;
         this.lifetime--;
-        if (this.lifetime <= 0 || this.age >= this.target.frames
-            || this._aboveNearPlayer() || this.game.map.isSolidPoint(this.x, this.y)) {
+        if (this.game.map.isSolidPoint(this.x, this.y)) {
+            // 岩の中で割ると5発が最初の1歩で岩に消える（最終レビュー）。1フレーム前の位置は岩の外だったので、そこで割る
+            this.x -= this.vx;
+            this.y -= this.vy;
             this.burst();
+            return;
         }
+        if (this.lifetime <= 0 || this.age >= this.target.frames || this._aboveNearPlayer()) this.burst();
     }
 
-    /** 自機より上（自機の上端より上）にいて、横が近いか */
+    /**
+     * 自機の上端より SPIDER_SHELL_BURST_MIN_ABOVE 以上上にいて、横が近いか。
+     * 上端より上なら割る、だけだと、下から上がってくる弾が頭のすぐ横で割れて5発がまとめて当たった（最終レビュー）
+     */
     _aboveNearPlayer() {
         const p = this.game.player;
         if (!p || !p.alive) return false;
-        return this.y < p.y && Math.abs(this.x - (p.x + p.width / 2)) <= SPIDER_SHELL_BURST_DX;
+        return this.y <= p.y - SPIDER_SHELL_BURST_MIN_ABOVE
+            && Math.abs(this.x - (p.x + p.width / 2)) <= SPIDER_SHELL_BURST_DX;
     }
 
     /**
@@ -115,10 +123,26 @@ export class EnemyBurstShell extends Bullet {
         this.game.addScore(SPIDER_SHELL_SCORE);
     }
 
-    /** 町の建物に当たった。消えるのではなく、そこで割れる（建物の多い6面で弾が効かなくならないように） */
+    /**
+     * 町の建物に当たった。消えるのではなく、そこで割れる（建物の多い6面で弾が効かなくならないように）。
+     * 当たった点で割ると5発がその建物を素通りする（Town.sweepProjectile は出発点に重なる建物を外接矩形で
+     * 見て無視するため。最終レビュー）。来た向きへ TOWN_SWEEP_STEP ずつ戻し、外接矩形の外へ出てから割る
+     */
     onTownWall(x, y) {
-        this.x = x;
-        this.y = y;
+        const speed = Math.hypot(this.vx, this.vy) || 1;
+        const ux = this.vx / speed;
+        const uy = this.vy / speed;
+        const town = this.game.map && this.game.map.town;
+        // 1 tick に進む距離より長く戻ることは無い（前の tick の終わりは建物の外だった）
+        const maxSteps = Math.ceil(speed / TOWN_SWEEP_STEP) + 1;
+        let bx = x - ux * TOWN_SWEEP_STEP;
+        let by = y - uy * TOWN_SWEEP_STEP;
+        for (let i = 0; town && i < maxSteps && town.buildingsAt(bx, by).length > 0; i++) {
+            bx -= ux * TOWN_SWEEP_STEP;
+            by -= uy * TOWN_SWEEP_STEP;
+        }
+        this.x = bx;
+        this.y = by;
         this.burst();
     }
 
