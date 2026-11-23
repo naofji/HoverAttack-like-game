@@ -28,14 +28,17 @@ test('雪の地形に接地していれば onTerrain が立つ', () => {
   assert.equal(e.onTerrain, true);
 });
 
-test('雪の上では目標速度に一発で届かない（滑る）', () => {
+// 規則は自機と同じ（Player._updateHorizontal）: 動きたい向きがあれば目標の速さがそのまま出て、
+// 滑るのは止まりたいときの惰性だけ。歩き出しまで追従させると坂の下り加速が積み上がって
+// 雪の坂を上れなくなる（tests/attacker-slope.test.js の巡回のテストが落ちた）
+test('雪の上でも、動きたい向きがあれば目標速度がそのまま出る（自機と同じ）', () => {
   const game = snowGame();
   const e = grounded(game);
   e.vx = 0;
-  const desired = e.maxSpeed;
-  e._applyGroundSlide(desired);     // 1フレームぶん
-  assert.ok(Math.abs(e.vx) < desired * 0.9, `氷の上で一発で届いている: ${e.vx}`);
-  assert.ok(Math.abs(e.vx) > 0, '一切動いていない');
+  e._applyGroundSlide(e.maxSpeed);
+  assert.equal(e.vx, e.maxSpeed);
+  e._applyGroundSlide(-e.maxSpeed);   // 切り返しもすぐ効く
+  assert.equal(e.vx, -e.maxSpeed);
 });
 
 test('陸上では目標速度がそのまま出る（現行の挙動を変えない）', () => {
@@ -60,6 +63,46 @@ test('雪の上では急に止まれない（目標 0 を出しても数フレ�
   e.vx = e.maxSpeed;
   e._applyGroundSlide(0);
   assert.ok(Math.abs(e.vx) > e.maxSpeed * 0.5, `即止まっている: ${e.vx}`);
+});
+
+// --- update() を通した経路 ---------------------------------------------------
+// 上の4本は _applyGroundSlide を直接呼ぶので、update() の中で AI が先に this.vx を
+// 目標で上書きしてしまう不具合（前の速さ＝目標になって滑りが消える）を見逃していた。
+// ここでは update() を丸ごと回し、AI の出す目標だけを差し替えて確かめる。
+
+/** AI の目標速度を固定する（AI の分岐に依らず、update() の順序だけを試す）。 */
+function forceDesired(e, desired) {
+  e._updateMovement = function () { this.vx = desired; };
+}
+
+test('update() を通しても、雪の上では急に止まれない', () => {
+  const game = snowGame();
+  const e = grounded(game);
+  e.vx = e.maxSpeed;
+  forceDesired(e, 0);
+  e.update();
+  assert.equal(e.onTerrain, true, '雪の床に乗っていない');
+  assert.ok(Math.abs(e.vx) > e.maxSpeed * 0.5, `update() で即止まっている: ${e.vx}`);
+});
+
+test('update() を通すと、雪の上では止まりたくなってから数フレーム流れて止まる', () => {
+  const game = snowGame();
+  const e = grounded(game);
+  e.vx = e.maxSpeed;
+  forceDesired(e, 0);
+  let frames = 0;
+  while (e.vx !== 0 && frames < 300) { e.update(); frames++; }
+  assert.equal(e.vx, 0, '止まらない');
+  assert.ok(frames > 10, `すぐ止まっている: ${frames} フレーム`);
+});
+
+test('update() を通しても、陸上では目標速度がそのまま出る', () => {
+  const game = makeGame(makeMap(flatFloorRows()));
+  const e = grounded(game);
+  e.vx = e.maxSpeed;
+  forceDesired(e, 0);
+  e.update();
+  assert.equal(e.vx, 0);
 });
 
 test('空中では滑りを掛けない（従来どおり AI の値がそのまま出る）', () => {

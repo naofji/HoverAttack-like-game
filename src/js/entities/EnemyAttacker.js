@@ -232,10 +232,14 @@ export class EnemyAttacker {
         // --- Movement ---
         // 反動中は自前の移動制御を飛ばす。重力・地形衝突・射撃はそのまま動く。
         if (!tickRecoil(this)) {
+            // 前フレームの速さは AI が書く前に取っておく。_updateMovement は this.vx を
+            // 目標で上書きするので、後から this.vx を読むと「前の速さ＝目標」になって
+            // 滑りが消えていた（2026-11-22 に発見。_applyGroundSlide を直接呼ぶテストでは見えなかった）
+            const prevVx = this.vx;
             this._updateMovement(target);
             // AI が出した vx は「こう動きたい」。実際に出る速度は床が決める
             // （雪の地形の上では滑るので、止まるのにも曲がるのにも時間がかかる）
-            this._applyGroundSlide(this.vx);
+            this._applyGroundSlide(this.vx, prevVx);
             // 坂の上の加速（押せば上り、止まれば滑り落ちる。自機と同じ規則。attacker/collision.js）
             this._applyAttackerSlope();
         } else if (this.isRollerDashing()) {
@@ -394,15 +398,27 @@ export class EnemyAttacker {
     /**
      * AI が決めた「こう動きたい」を、床の性質を通して実際の vx にする。
      * 陸上（slide 0）では目標がそのまま出るので、雪以外の面の挙動は変わらない。
+     *
+     * **規則は自機と同じ**（Player._updateHorizontal）: 動きたい向きがあるフレームは目標の速さを
+     * そのまま出し、止まりたい（目標 0）フレームだけ前の速さに滑りを掛けて惰性で流す。
+     * 以前は歩き出しや切り返しも approachVx で追従させる作りだったが、update() の順序の誤りで
+     * 一度も効いていなかった。順序を直して追従を効かせると、坂の下り加速（_applyAttackerSlope）が
+     * 毎フレーム持ち越されて 下り加速×k/(1−k) まで積み上がり、雪の坂を上れずに坂の下で
+     * 止まってしまった（戦車が同じ理由で滑りを外した＝ENEMY_TANK_SLIDE_SCALE 0）。
+     * 動いている間は代入にすれば積み上がらない（自機が坂を上れているのと同じ理由）。
+     * @param {number} desiredVx AI が出した目標の速さ
+     * @param {number} [prevVx] 前フレームの速さ。update() は AI が this.vx を書く前の値を渡す
+     *   （_updateMovement が this.vx を目標で上書きするので、後から読むと前の速さ＝目標になる。
+     *   2026-11-22 に見つかった「敵の雪の滑りが効いていない」の原因）
      */
-    _applyGroundSlide(desiredVx) {
+    _applyGroundSlide(desiredVx, prevVx = this.vx) {
         // ローラーダッシュは車輪が噛んでいる扱い（rival が出る5面は氷 0.94 なので、
-        // 通すと加速が16フレームほど鈍って「一気に乗る」が消える）
-        if (this.isRollerDashing()) {
+        // 滑らせると急停止の「キィッ」のあとも流れてしまう）
+        if (this.isRollerDashing() || desiredVx !== 0) {
             this.vx = desiredVx;
             return;
         }
-        this.vx = approachVx(this.vx, desiredVx, groundSlide(this, this.game));
+        this.vx = approachVx(prevVx, 0, groundSlide(this, this.game));
     }
 
     // ------------------------------------------

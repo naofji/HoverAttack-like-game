@@ -214,21 +214,24 @@ test('追跡をやめたら終わる', () => seeded(() => {
     assert.equal(e.isRollerDashing(), false);
 }));
 
-test('雪・氷の床でも一気に速さが乗る（床の滑りを通さない）', () => {
+test('雪・氷の床でも一気に速さが乗り、止まるときも流れない（床の滑りを通さない）', () => {
     // _applyGroundSlide を直接呼ぶ（tests/enemy-snow-slide.test.js と同じ形）。
-    // update() 経由だと、AI が this.vx を書いた後に this.vx を目標として渡すので、
-    // 前の速さと目標が同じ値になって滑りの差が出ない（既存の作り。2026-11-22 に気づいた）
+    // 床の滑りは自機と同じ規則で、動きたい向きがあれば目標がそのまま出て、目標 0 のときだけ
+    // 惰性で流れる（2026-11-23 に update() の順序を直したときに揃えた）。滑走が床を通さない差は
+    // 目標 0 のフレーム＝急停止の終わりに出る
     const { e } = world(undefined, { env: SNOW });
     e._tryStartRollerDash(40);
     e.vx = 0;
     e._applyGroundSlide(ROLLER_SPEED);
     assert.equal(e.vx, ROLLER_SPEED);
+    e._applyGroundSlide(0);
+    assert.equal(e.vx, 0, '滑走中なのに止まるときに流れた');
 
-    // 差が出る fixture であることの確認: 滑走していなければ同じ床で一発では届かない
+    // 差が出る fixture であることの確認: 滑走していなければ同じ床で目標 0 でも流れる
     const { e: walker } = world(undefined, { env: SNOW });
-    walker.vx = 0;
-    walker._applyGroundSlide(ROLLER_SPEED);
-    assert.ok(Math.abs(walker.vx) < ROLLER_SPEED * 0.9, `滑走していない vx ${walker.vx} が滑っていない`);
+    walker.vx = ROLLER_SPEED;
+    walker._applyGroundSlide(0);
+    assert.ok(Math.abs(walker.vx) > ROLLER_SPEED * 0.5, `滑走していない vx ${walker.vx} が滑っていない`);
 });
 
 test('上り坂でも滑走の速さ × SLOPE_UPHILL_SCALE まで出る（歩きの上限で失速しない）', () => seeded(() => {
