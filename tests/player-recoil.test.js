@@ -10,6 +10,7 @@ import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { EnemyHomingMissile } from '../src/js/entities/EnemyHomingMissile.js';
 import { EnemyBullet } from '../src/js/entities/EnemyBullet.js';
 import { applyKnockback } from '../src/js/utils/Knockback.js';
+import { Landmine } from '../src/js/entities/Landmine.js';
 import { makeMap, makeGame, flatFloorRows } from './helpers/enemy-world.js';
 import {
   TILE_SIZE, PLAYER_RECOIL_FRAMES, PLAYER_MAX_SPEED,
@@ -36,7 +37,8 @@ function setup(rows = flatFloorRows(), x = 8 * T, y = 2 * T) {
   p.docked = false;
   p.invincibleTimer = 0;
   game.player = p;
-  for (let i = 0; i < 60; i++) p.update();   // 床に降ろす
+  // 床に降ろし、着地のスタン（しゃがむ）が明けるまで待つ
+  for (let i = 0; i < 300 && !(p.onGround && p.stunTimer === 0 && i >= 60); i++) p.update();
   return { game, p, held };
 }
 
@@ -61,13 +63,29 @@ test('ミサイルに当たると、反対へ入力していても反動の間�
   assert.equal(p.vx, -PLAYER_MAX_SPEED, '反動が明けても入力が戻らない');
 });
 
-test('止まっていても、地面の摩擦ですぐには止まらず飛ばされる（地雷・爆風・Orb など applyKnockback 全部）', () => {
+test('止まっていても、地面の摩擦ですぐには止まらず飛ばされる（グレネード・爆風・Orb など applyKnockback 全部。地雷は除く）', () => {
   const { p } = setup();
   const x0 = p.x;
   applyKnockback(p, -1, LANDMINE_KNOCKBACK_VY, LANDMINE_KNOCKBACK_VX);   // 右から → 左へ
   assert.equal(p.recoilTimer, PLAYER_RECOIL_FRAMES);
   for (let i = 0; i < 10; i++) p.update();
   assert.ok(x0 - p.x >= LANDMINE_KNOCKBACK_VX * 10 * 0.8, `飛ばされた距離 ${(x0 - p.x).toFixed(1)}`);
+});
+
+// 2026-11-23 ユーザー指定:「地雷は以前のように上方向に押し出すだけでよい。そうでないと歩いているときにうざい」。
+// 地雷は反動の時間を付けない（速さは前と同じく書き換えるが、左右の入力ですぐ消える）
+test('地雷は上へ跳ね上げるだけで、反動の時間は付かず、歩く入力はそのまま効く', () => {
+  const { game, p, held } = setup();
+  game.landmines = [];
+  held.add('KeyD');   // 右へ歩いている
+  p.update();
+  // 右（進む先）で爆発 → 前なら左へ飛ばされるところ
+  const mine = new Landmine(game, cx(p) + 4, p.y + p.height - 4);
+  mine.detonate();
+  assert.equal(p.vy, LANDMINE_KNOCKBACK_VY, '跳ね上がっていない');
+  assert.equal(p.recoilTimer, 0, '反動の時間が付いた');
+  p.update();
+  assert.equal(p.vx, PLAYER_MAX_SPEED, '歩く入力が効かない');
 });
 
 test('ホーミングミサイルの直撃でも飛ばされる', () => {

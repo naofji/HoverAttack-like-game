@@ -13,10 +13,11 @@ import { recordHit } from './hitPoint.js';
  * @param {object} game player / carrier / enemies / landmines を持つ（無いものは飛ばす）
  * @param {number} cx 爆心
  * @param {number} cy
- * @param {{radius:number, damage:number, knockVy:number, knockVx:number, source?:object}} opts
- *   source は爆発したもの自身（地雷が自分を誘爆させないように）
+ * @param {{radius:number, damage:number, knockVy:number, knockVx:number, source?:object, recoil?:boolean}} opts
+ *   source は爆発したもの自身（地雷が自分を誘爆させないように）。
+ *   recoil: false なら自機に反動の時間を付けない（applyKnockback。地雷）
  */
-export function applyBlastDamage(game, cx, cy, { radius, damage, knockVy, knockVx, source = null }) {
+export function applyBlastDamage(game, cx, cy, { radius, damage, knockVy, knockVx, source = null, recoil = true }) {
     const hit = (entity) => {
         if (!entity || !entity.alive || entity === source) return;
         const dx = entity.x + entity.width / 2 - cx;
@@ -25,7 +26,7 @@ export function applyBlastDamage(game, cx, cy, { radius, damage, knockVy, knockV
         if (typeof entity.takeDamage === 'function') {
             recordHit(entity, cx, cy);
             entity.takeDamage(damage);
-            applyKnockback(entity, dx, knockVy, knockVx);
+            applyKnockback(entity, dx, knockVy, knockVx, { recoil });
         } else if (typeof entity.detonate === 'function') {
             entity.detonate();   // 地雷の誘爆
         }

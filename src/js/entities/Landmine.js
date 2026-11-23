@@ -114,6 +114,9 @@ export class Landmine {
         applyBlastDamage(this.game, cx, cy, {
             radius: LANDMINE_BLAST_RADIUS, damage: LANDMINE_DAMAGE,
             knockVy: LANDMINE_KNOCKBACK_VY, knockVx: LANDMINE_KNOCKBACK_VX, source: this,
+            // 自機の被弾ノックバック（反動の時間）は付けない。上へ跳ね上げるだけ（横の速さは歩く入力ですぐ消える）。
+            // 2026-11-23 ユーザー指定「地雷は以前のように上方向に押し出すだけでよい。歩いているときにうざい」
+            recoil: false,
         });
     }
 
