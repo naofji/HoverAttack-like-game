@@ -4,6 +4,8 @@
 
 import { Orb } from '../entities/Orb.js';
 import { TILE_SIZE, ENEMY_ATTACKER_TYPES, BEAM_TURRET_MISSION, START_SAFE_RADIUS,
+    ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT,
+    ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT, SPIDER_SIZE,
 } from '../utils/Constants.js';
 import { standardWeaponAt, STANDARD_MG_CONFIG } from '../utils/attackerWeapon.js';
 import { Landmine } from '../entities/Landmine.js';
@@ -14,6 +16,7 @@ import { EnemySpider } from '../entities/EnemySpider.js';
 import { EnemyTurret } from '../entities/EnemyTurret.js';
 import { EnemyBase } from '../entities/EnemyBase.js';
 import { StorageTower } from '../entities/StorageTower.js';
+import { findSpotOutside } from './startSafeZone.js';
 import { FortressBarrier } from '../entities/FortressBarrier.js';
 import { ElectricFloor } from '../entities/ElectricFloor.js';
 
@@ -120,6 +123,10 @@ export class SpawnManager {
         const game = this.game;
         game.enemies = [];
         game.enemyBullets = [];
+        // 開始地点の安全圏の内側に置かれたら、外へ作り直すための材料（_moveOutOfStartArea）。
+        // 敵ごとに「どこに置けるか」と「同じ敵を別の場所に作る関数」。型の抽選などは済んだ値を閉じ込める（乱数を引き直さない）
+        const rebuild = new Map();
+        const remember = (enemy, spec, make) => rebuild.set(enemy, { spec, make });
 
         // Helper: find a non-overlapping spawn offset
         const resolveOverlap = (baseX, baseY) => {
@@ -142,9 +149,12 @@ export class SpawnManager {
         };
 
         // Spawn hover tanks
+        const makeTank = (p) => new EnemyTank(game, p.x, p.y);
         for (const pos of game.map.enemyTankSpawns) {
             const adjustedPos = resolveOverlap(pos.x, pos.y);
-            game.enemies.push(new EnemyTank(game, adjustedPos.x, adjustedPos.y));
+            const tank = makeTank(adjustedPos);
+            remember(tank, { kind: 'ground', w: ENEMY_TANK_WIDTH, h: ENEMY_TANK_HEIGHT }, makeTank);
+            game.enemies.push(tank);
         }
 
         // Filter available attacker types based on missionsCompleted
@@ -181,26 +191,35 @@ export class SpawnManager {
                 && standardWeaponAt(game.missionsCompleted, standardIndex++) === 'mg') {
                 config = STANDARD_MG_CONFIG;
             }
-            const attacker = new EnemyAttacker(game, adjustedPos.x, adjustedPos.y, config);
-            if (game.baseEmergencyAlert) {
-                attacker.setEmergencyDefense(true, game.emergencyTargetBase);
-            }
+            const makeAttacker = (p) => {
+                const a = new EnemyAttacker(game, p.x, p.y, config);
+                if (game.baseEmergencyAlert) a.setEmergencyDefense(true, game.emergencyTargetBase);
+                return a;
+            };
+            const attacker = makeAttacker(adjustedPos);
+            remember(attacker, { kind: 'ground', w: PLAYER_WIDTH, h: PLAYER_HEIGHT }, makeAttacker);
             game.enemies.push(attacker);
         }
 
         // Spawn aerial drones
+        const makeDrone = (p) => {
+            const d = new EnemyDrone(game, p.x, p.y);
+            if (game.baseEmergencyAlert) d.setEmergencyDefense(true, game.emergencyTargetBase);
+            return d;
+        };
         for (const pos of game.map.enemyDroneSpawns) {
-            const drone = new EnemyDrone(game, pos.x, pos.y);
-            if (game.baseEmergencyAlert) {
-                drone.setEmergencyDefense(true, game.emergencyTargetBase);
-            }
+            const drone = makeDrone(pos);
+            remember(drone, { kind: 'air', w: ENEMY_DRONE_WIDTH, h: ENEMY_DRONE_HEIGHT }, makeDrone);
             game.enemies.push(drone);
         }
 
         // 6面のスパイダー。置き場所は面に接するよう地図が決めてあるので、resolveOverlap は通さない
         // （横にずらすと面から離れるうえ、game.rng を引いて週次の決定性が壊れる）
         for (const p of game.map.spiderSpawns) {
-            game.enemies.push(new EnemySpider(game, p.x, p.y, p.surface));
+            const makeSpider = (q) => new EnemySpider(game, q.x, q.y, p.surface);
+            const spider = makeSpider(p);
+            remember(spider, { kind: 'spider', w: SPIDER_SIZE, h: SPIDER_SIZE, surface: p.surface }, makeSpider);
+            game.enemies.push(spider);
         }
 
         // Spawn stationary turrets
@@ -215,7 +234,10 @@ export class SpawnManager {
             // 7面はビームが混ざる面なので、放っておくと門番がビームになって
             // 入る前に削られる）。無ければ今までどおり偶数番目をビームに
             const type = pos.type ?? ((beamMission && i % 2 === 0) ? 'beam' : 'gun');
-            game.enemies.push(new EnemyTurret(game, pos.x, pos.y, pos.isCeiling, type));
+            const makeTurret = (p) => new EnemyTurret(game, p.x, p.y, pos.isCeiling, type);
+            const turret = makeTurret(pos);
+            remember(turret, { kind: 'turret', w: ENEMY_TURRET_WIDTH, h: ENEMY_TURRET_HEIGHT, isCeiling: !!pos.isCeiling }, makeTurret);
+            game.enemies.push(turret);
         });
 
         // Spawn Main Base at the very end
@@ -224,22 +246,59 @@ export class SpawnManager {
             game.enemies.push(game.base);
         }
 
-        this._clearStartArea();
+        this._moveOutOfStartArea(rebuild);
     }
 
     /**
-     * 開始地点（自機の中心）から START_SAFE_RADIUS の内側の敵を外す（2026-11-23 ユーザー指定。地雷は別）。
-     * 開始地点は地図を作った後に母艦の置き場所で決まるので、地図の生成ではなくここで外す。
-     * **置く処理を全部走らせてから外す** — 置く前に飛ばすと、型の抽選・重なりの回避が game.rng を引く回数が
-     * 変わり、同じ週なのに敵の構成が変わる（週次の決定性）。敵基地は外さない（面の目的なので）
+     * 開始地点（自機の中心）から START_SAFE_RADIUS の内側の敵を、外の「その敵が置ける一番近い場所」へ作り直す
+     * （2026-11-23 ユーザー指定。地雷は別。初めは外していたが、週によって敵の数が減るので「移すほうがいい」）。
+     * 開始地点は地図を作った後に母艦の置き場所で決まるので、地図の生成ではなくここで移す。
+     * **置く処理を全部走らせてから移す** — 置く前に飛ばすと、型の抽選・重なりの回避が game.rng を引く回数が
+     * 変わり、同じ週なのに敵の構成が変わる（週次の決定性）。移し先は地図だけで決める（systems/startSafeZone.js）。
+     * 敵基地は動かさない（面の目的なので）。置ける場所が見つからない敵だけは外す
+     * @param {Map<object, {spec:object, make:(p:{x:number,y:number}) => object}>} rebuild
      */
-    _clearStartArea() {
+    _moveOutOfStartArea(rebuild) {
         const game = this.game;
         const p = game.player;
         if (!p) return;
-        const px = p.x + p.width / 2;
-        const py = p.y + p.height / 2;
-        game.enemies = game.enemies.filter((e) => e === game.base
-            || Math.hypot(e.x + e.width / 2 - px, e.y + e.height / 2 - py) >= START_SAFE_RADIUS);
+        const start = { x: p.x + p.width / 2, y: p.y + p.height / 2 };
+        const inside = (e) => Math.hypot(e.x + e.width / 2 - start.x, e.y + e.height / 2 - start.y) < START_SAFE_RADIUS;
+        const T = TILE_SIZE;
+        const town = game.map.town;
+        const inBuilding = (x, y) => !!town && town.buildingsAt(x, y).some((b) => {
+            const k = town.cellAt(b, x, y);
+            return k >= 0 && !!b.cells[k];
+        });
+        for (let i = 0; i < game.enemies.length; i++) {
+            const e = game.enemies[i];
+            if (e === game.base || !inside(e)) continue;
+            const entry = rebuild.get(e);
+            // 置ける場所かどうか: ほかの敵と重ならない（resolveOverlap と同じ 24px）、地雷・Orb・町の建物に掛からない
+            const isFree = (box) => {
+                const cx = box.x + box.w / 2;
+                const cy = box.y + box.h / 2;
+                for (const o of game.enemies) {
+                    if (o === e) continue;
+                    if (Math.abs(o.x + o.width / 2 - cx) < 24 && Math.abs(o.y + o.height / 2 - cy) < 24) return false;
+                }
+                for (const m of game.landmines || []) {
+                    if (box.x < m.x + m.width + T && box.x + box.w > m.x - T
+                        && box.y < m.y + m.height + T && box.y + box.h > m.y - T) return false;
+                }
+                for (const o of game.orbs || []) {
+                    if (Math.hypot(o.cx - cx, o.cy - cy) < (o.r || 0) + Math.max(box.w, box.h)) return false;
+                }
+                const corners = [[box.x, box.y], [box.x + box.w, box.y], [box.x, box.y + box.h], [box.x + box.w, box.y + box.h], [cx, cy]];
+                return !corners.some(([x, y]) => inBuilding(x, y));
+            };
+            const spot = entry && findSpotOutside(game.map, entry.spec, e, start, START_SAFE_RADIUS, isFree);
+            if (spot) {
+                game.enemies[i] = entry.make(spot);
+            } else {
+                game.enemies.splice(i, 1);
+                i--;
+            }
+        }
     }
 }
