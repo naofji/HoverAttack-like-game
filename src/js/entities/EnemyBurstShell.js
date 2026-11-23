@@ -16,29 +16,15 @@
 import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
     COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
-    COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_RIM,
+    COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_SHADE, COLOR_SPIDER_SHELL_RIM,
     SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
     SPIDER_SHELL_SCORE, SPIDER_SHELL_BURST_MIN_ABOVE, TOWN_SWEEP_STEP,
-    ENEMY_BULLET_SPEED, ENEMY_BULLET_RADIUS, ENEMY_BULLET_LIFETIME,
 } from '../utils/Constants.js';
 import { Bullet } from './Bullet.js';
+import { EnemyBullet } from './EnemyBullet.js';
 import { ImpactFlash } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playBlast } from './destruction.js';
-
-/** 破裂して飛ぶ5発。普通の敵弾と同じ速さ・ダメージで、発射音は鳴らさない */
-export class ShellFragment extends Bullet {
-    constructor(game, x, y, angle) {
-        super(game, x, y, angle, {
-            speed: ENEMY_BULLET_SPEED,
-            radius: ENEMY_BULLET_RADIUS,
-            lifetime: ENEMY_BULLET_LIFETIME,
-        });
-        this.isPlayerOwned = false;
-    }
-
-    get bodyColor() { return COLOR_SPIDER_SHELL; }
-}
 
 export class EnemyBurstShell extends Bullet {
     /**
@@ -92,6 +78,7 @@ export class EnemyBurstShell extends Bullet {
 
     /**
      * その場で割れる。fragments が true なら自機へ向けて扇形に5発。
+     * 5発は普通の敵弾（EnemyBullet）そのもの（2026-11-23 ユーザー指定。初めは紫の専用の弾だった）。発射音だけ鳴らさない
      * 走査中（CollisionManager の enemyBullets の後ろからの走査）に push しても、
      * 末尾に足された破片はそのフレームには処理されず、次のフレームから飛ぶ
      */
@@ -112,7 +99,7 @@ export class EnemyBurstShell extends Bullet {
         const n = SPIDER_SHELL_FRAGMENTS;
         for (let i = 0; i < n; i++) {
             const a = base - SPIDER_SHELL_SPREAD / 2 + (SPIDER_SHELL_SPREAD * i) / (n - 1);
-            game.enemyBullets.push(new ShellFragment(game, this.x, this.y, a));
+            game.enemyBullets.push(new EnemyBullet(game, this.x, this.y, a, { sound: null }));
         }
     }
 
@@ -147,7 +134,7 @@ export class EnemyBurstShell extends Bullet {
         this.burst();
     }
 
-    /** 破裂が近いと地の色が明るい紫と交互に点滅する（霧の中で「もうすぐ割れる」と分かるように） */
+    /** 破裂が近いと地の色が明るめの紫と交互に点滅する（霧の中で「もうすぐ割れる」と分かるように） */
     get bodyColor() {
         const left = this.target.frames - this.age;
         if (left <= SPIDER_SHELL_BLINK_FRAMES && Math.floor(this.age / 3) % 2 === 0) return COLOR_SPIDER_SHELL_BLINK;
@@ -156,14 +143,16 @@ export class EnemyBurstShell extends Bullet {
 
     /**
      * 深紫の球（ユーザー指定）。光が左上から当たっている体で、ハイライトの中心を左上へずらした放射グラデーションを
-     * 球いっぱいに塗る（ハイライト → 地の色 → 暗い縁）。Bullet の「白い芯の光る弾」とは描き方が違うので上書きする
+     * 球いっぱいに塗る（ハイライト → 地の色 → 影 → 暗い縁）。Bullet の「白い芯の光る弾」とは描き方が違うので上書きする。
+     * ハイライトは小さく・左上へ大きめにずらし、球の右下の 4 割を影と縁にあてて、光の側と影の側の差で丸みを出す
      */
     draw(ctx) {
         if (!this.alive) return;
         const r = this.radius;
-        const g = ctx.createRadialGradient(this.x - r * 0.35, this.y - r * 0.4, r * 0.1, this.x, this.y, r);
+        const g = ctx.createRadialGradient(this.x - r * 0.4, this.y - r * 0.45, r * 0.05, this.x, this.y, r);
         g.addColorStop(0, COLOR_SPIDER_SHELL_HIGHLIGHT);
-        g.addColorStop(0.45, this.bodyColor);
+        g.addColorStop(0.3, this.bodyColor);
+        g.addColorStop(0.75, COLOR_SPIDER_SHELL_SHADE);
         g.addColorStop(1, COLOR_SPIDER_SHELL_RIM);
         ctx.fillStyle = g;
         ctx.beginPath();

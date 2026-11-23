@@ -23,6 +23,7 @@ import {
     COLOR_SPIDER_THREAD,
     SPIDER_SIGHT_RANGE, SPIDER_FIRE_INTERVAL, SPIDER_FIRE_RETRY, SPIDER_FIRE_WINDUP, SPIDER_MUZZLE_OFFSET,
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_AIM_ABOVE,
+    SPIDER_SHELL_AIM_ABOVE_MIN, SPIDER_SHELL_AIM_STEP,
 } from '../utils/Constants.js';
 import { stepCrawl, hasSupport, boxHitsSolid, downOf } from '../utils/surfaceCrawl.js';
 import { spawnStateRng } from '../utils/spawnState.js';
@@ -385,7 +386,7 @@ export class EnemySpider {
     }
 
     /**
-     * 自機の頭上の点を通る低い弧。撃てない（見えない・遠い・届かない・途中に岩）なら null
+     * 自機の頭上の点を通る低い弧。撃てない（見えない・遠い・どの高さにも届かない・途中に岩）なら null
      * @returns {{x:number, y:number, angle:number, target:{x:number, y:number, frames:number}}|null}
      */
     _aim() {
@@ -403,13 +404,18 @@ export class EnemySpider {
         const mx = cx + away.x * SPIDER_MUZZLE_OFFSET;
         const my = cy + away.y * SPIDER_MUZZLE_OFFSET;
         const tx = pcx;
-        const ty = pcy - SPIDER_SHELL_AIM_ABOVE;
-        const sol = solveLaunch(tx - mx, ty - my, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY);
-        if (!sol) return null;
-        // 弧が途中で岩に当たるなら撃たない（無駄撃ちを避ける。建物は見ない＝当たれば破裂する）
-        const pts = simulateShell(mx, my, sol.angle, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, sol.frames);
-        if (pts.some((q) => map.isSolidAtPixel(q.x, q.y))) return null;
-        return { x: mx, y: my, angle: sol.angle, target: { x: tx, y: ty, frames: sol.frames } };
+        // 高い点から順に試し、届いて途中に岩の無い一番高い点を狙う（天井の低い通路でも撃てるように）
+        for (let above = SPIDER_SHELL_AIM_ABOVE; above >= SPIDER_SHELL_AIM_ABOVE_MIN; above -= SPIDER_SHELL_AIM_STEP) {
+            const ty = pcy - above;
+            if (map.isSolidAtPixel(tx, ty)) continue;
+            const sol = solveLaunch(tx - mx, ty - my, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY);
+            if (!sol) continue;
+            // 弧が途中で岩に当たるなら撃たない（無駄撃ちを避ける。建物は見ない＝当たれば破裂する）
+            const pts = simulateShell(mx, my, sol.angle, SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, sol.frames);
+            if (pts.some((q) => map.isSolidAtPixel(q.x, q.y))) continue;
+            return { x: mx, y: my, angle: sol.angle, target: { x: tx, y: ty, frames: sol.frames } };
+        }
+        return null;
     }
 
     // ------------------------------------------

@@ -847,33 +847,45 @@ export const SPIDER_FIRE_RETRY = 30;          // 撃てなかったときのや�
 export const SPIDER_FIRE_WINDUP = 20;         // 撃つ前に止まる
 export const SPIDER_MUZZLE_OFFSET = 6;        // 発射点＝体の中心から面と反対側へ何 px
 // 弾（ブラグ・ザカートのような弾）。緩やかな放物線（ユーザー指定）。
-// 速さは初め 8（「グレネードより速く」）だったが、実機で「速すぎる。5px 程度に」（2026-11-22）。
-// 速さだけ 5 にすると平地の届く距離 v²/g が 640 → 250 に縮み、撃つ距離 500 の大半で「届かないので撃たない」に
-// なるので、重力も 0.10 → 0.04 に下げて届く距離（625）と弧の緩さを保った
-export const SPIDER_SHELL_SPEED = 5;
-export const SPIDER_SHELL_GRAVITY = 0.04;
-// 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）
-export const SPIDER_SHELL_AIM_ABOVE = 80;
+// 速さは初め 8（「グレネードより速く」）→ 実機で「速すぎる。5px 程度に」→ 5 → また「速すぎる。4px 位で」→ 4（2026-11-23）。
+// 速さだけ下げると平地の届く距離 v²/g が縮み、撃つ距離 500 の大半で「届かないので撃たない」になるので、
+// 重力もいっしょに下げて届く距離を 600 余りに保つ（8/0.10 = 640、5/0.04 = 625、4/0.026 = 615）
+export const SPIDER_SHELL_SPEED = 4;
+export const SPIDER_SHELL_GRAVITY = 0.026;
+// 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）。
+// 80 だと割れる場所が近すぎた（実機、2026-11-23「もう少しプレイヤーから離れている所で」）ので 140。
+// 5発（速さ 3）が自機の上端に届くまで約 40 フレームになり、割れたのを見てから避けられる
+export const SPIDER_SHELL_AIM_ABOVE = 140;
+// 天井が低くて 140px 上が岩の中・弧が天井に当たるときは、SPIDER_SHELL_AIM_STEP ずつ下げて届く一番高い点を狙う。
+// 下限は元の 80（これより下は「頭のすぐ上で割れる」に戻るので、それでも駄目なら撃たない）。
+// 下げないと高さ 8 タイル（128px）の通路で一切撃たなくなった（テスト「糸にぶら下がっている間は撃たず…」で発覚）
+export const SPIDER_SHELL_AIM_ABOVE_MIN = 80;
+export const SPIDER_SHELL_AIM_STEP = 20;
 export const SPIDER_SHELL_LIFETIME = 240;
 // 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした。球に見せるため 4 → 5
 export const SPIDER_SHELL_RADIUS = 5;
-// 見た目は深紫の球（ユーザー指定、2026-11-22）。左上のハイライト → 地の深紫 → 暗い縁の放射グラデーションで立体に見せる。
-// 割れた5発と破裂の閃光の縁は、小さくても見えるよう地より明るい紫（COLOR_SPIDER_SHELL）
-export const COLOR_SPIDER_SHELL_HIGHLIGHT = '#C9A2FF';
-export const COLOR_SPIDER_SHELL_BODY = '#4A1678';
-export const COLOR_SPIDER_SHELL_RIM = '#16052A';
+// 見た目は深紫の球（ユーザー指定、2026-11-22）。左上のハイライト → 地の深紫 → 影 → 暗い縁の放射グラデーションで立体に見せる。
+// 初めのハイライト #C9A2FF・地 #4A1678 は「明るすぎる。もう少し暗く、立体感をしっかり」（2026-11-23）だったので、
+// 全体を暗くし、地と縁の間に影の段（SHADE）を足して、光の当たる側と影の側の差をはっきりさせた
+export const COLOR_SPIDER_SHELL_HIGHLIGHT = '#9E74D8';
+export const COLOR_SPIDER_SHELL_BODY = '#3B0E66';
+export const COLOR_SPIDER_SHELL_SHADE = '#1F0640';
+export const COLOR_SPIDER_SHELL_RIM = '#07010F';
+// 破裂の閃光の縁の色（割れた5発は普通の敵弾なので、この色は使わない）
 export const COLOR_SPIDER_SHELL = '#9C5CFF';
-// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色（地の深紫をこの明るい紫に入れ替えて光らせる）
+// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色（地の深紫をこの紫に入れ替えて光らせる。暗くした球に合わせて
+// #E6D4FF から落とした）
 export const SPIDER_SHELL_BLINK_FRAMES = 20;
-export const COLOR_SPIDER_SHELL_BLINK = '#E6D4FF';
+export const COLOR_SPIDER_SHELL_BLINK = '#8C52D6';
 // 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
 //   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
 // 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた
 export const SPIDER_SHELL_BURST_DX = 40;
 // 条件2で割れてよいのは、自機の上端よりこれ以上上にいるときだけ。最終レビューの実測で、下から上がってくる弾が
 // 頭の横 40px の帯に入った瞬間に頭のすぐ上（20px 以内が 25%）で割れ、止まった自機に5発がまとめて当たっていた
-// （3発以上が 35%、5発全部が 7%）。狙いの点は上端の 68px 上（80 − 自機の高さの半分 12）なので、その手前の 40px
-export const SPIDER_SHELL_BURST_MIN_ABOVE = 40;
+// （3発以上が 35%、5発全部が 7%）。狙いの点（上端の 128px 上 ＝ 140 − 自機の高さの半分 12）の 28px 手前。
+// 狙いを 80 → 140 に上げたとき、いっしょに 40 → 100 に上げた（差の 28px は変えていない）
+export const SPIDER_SHELL_BURST_MIN_ABOVE = 100;
 export const SPIDER_SHELL_FRAGMENTS = 5;
 export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
 export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;
