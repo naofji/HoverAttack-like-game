@@ -13,6 +13,8 @@ import {
   TILE_SIZE, SPIDER_WEB_STRANDS, SPIDER_WEB_SPREAD, SPIDER_WEB_SPEED, SPIDER_WEB_MAX_LENGTH,
   SPIDER_WEB_RING_STEP, SPIDER_WEB_FADE_FRAMES, SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW,
   SPIDER_WEB_SHAKE_FRAMES, PLAYER_MAX_SPEED, PLAYER_MAX_HOVER_SPEED,
+  SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_CROSS_SAG, SPIDER_WEB_WRAP_FRAMES,
+  SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB,
 } from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
@@ -71,8 +73,7 @@ test('岩に当たった糸はそこで止まる（先が岩に入らない）',
   const web = new SpiderWeb(game, 25 * T - 30, 200, 0);   // 右の岩の柱へ向ける
   grow(web, 40);
   for (const s of web.strands) {
-    const tx = web.x + Math.cos(s.angle) * s.len;
-    const ty = web.y + Math.sin(s.angle) * s.len;
+    const { x: tx, y: ty } = web.pointAt(s, s.len);
     assert.equal(game.map.isSolidAtPixel(tx, ty), false, `先が岩の中 (${tx.toFixed(1)}, ${ty.toFixed(1)})`);
     assert.ok(s.len < 40, `止まっていない ${s.len}`);
   }
@@ -87,53 +88,139 @@ test('建物に当たった糸はそこで止まる', () => {
   grow(web, 60);
   // 外の2本（±20°）は小屋（y 100〜132）の上下をかすめて外れるので、小屋に向かう真ん中の3本を見る
   for (const s of web.strands.filter((st) => Math.abs(st.angle) < 15 * DEG)) {
-    const tx = web.x + Math.cos(s.angle) * s.len;
+    const tx = web.pointAt(s, s.len).x;
     assert.ok(tx <= 232, `建物（右端 232）を抜けた糸 x ${tx.toFixed(1)}`);
   }
 });
 
-test('横糸: 隣り合う糸の同じ距離の点を、SPIDER_WEB_RING_STEP ごとに結ぶ', () => {
+test('横糸: 隣り合う糸の同じ距離の点を、SPIDER_WEB_RING_STEP ごとに、真ん中がたるんだ2本の線で結ぶ', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 90 * DEG);
   grow(web, Math.ceil((SPIDER_WEB_RING_STEP * 3 + 1) / SPIDER_WEB_SPEED));
   const segs = web.segments();
-  const radial = segs.filter((s) => s.x1 === web.x && s.y1 === web.y);
-  const cross = segs.filter((s) => !(s.x1 === web.x && s.y1 === web.y));
-  assert.equal(radial.length, SPIDER_WEB_STRANDS);
-  assert.equal(cross.length, 3 * (SPIDER_WEB_STRANDS - 1));
-  for (const c of cross) {
-    const r1 = Math.hypot(c.x1 - web.x, c.y1 - web.y);
-    const r2 = Math.hypot(c.x2 - web.x, c.y2 - web.y);
-    assert.ok(Math.abs(r1 - r2) < 1e-9);
-    assert.ok(Math.abs(r1 / SPIDER_WEB_RING_STEP - Math.round(r1 / SPIDER_WEB_RING_STEP)) < 1e-9);
+  const cross = segs.filter((s) => s.kind === 'cross');
+  assert.equal(cross.length, 2 * 3 * (SPIDER_WEB_STRANDS - 1));
+  const close = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-9;
+  let k = 0;
+  for (let i = 0; i + 1 < SPIDER_WEB_STRANDS; i++) {
+    for (let ring = 1; ring <= 3; ring++, k += 2) {
+      const r = ring * SPIDER_WEB_RING_STEP;
+      const a = web.pointAt(web.strands[i], r);
+      const b = web.pointAt(web.strands[i + 1], r);
+      const [h1, h2] = [cross[k], cross[k + 1]];
+      assert.ok(close({ x: h1.x1, y: h1.y1 }, a), '横糸の端が縦糸の上にない');
+      assert.ok(close({ x: h2.x2, y: h2.y2 }, b), '横糸の端が縦糸の上にない');
+      assert.ok(close({ x: h1.x2, y: h1.y2 }, { x: h2.x1, y: h2.y1 }), '2本がつながっていない');
+      assert.ok(Math.abs(h1.y2 - ((a.y + b.y) / 2 + SPIDER_WEB_CROSS_SAG)) < 1e-9, 'たるんでいない');
+    }
+  }
+  // 縦糸は中心から先まで折れ線でつながる
+  for (const st of web.strands) {
+    const tip = web.pointAt(st, st.len);
+    assert.ok(segs.some((s) => s.kind === 'radial' && close({ x: s.x2, y: s.y2 }, tip)), '縦糸の先が無い');
+  }
+  assert.ok(segs.some((s) => s.kind === 'radial' && s.x1 === web.x && s.y1 === web.y), '縦糸が中心から出ていない');
+});
+
+test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布）', () => {
+  const game = openWorld();
+  const web = new SpiderWeb(game, 300, 200, 0);   // 真横へ
+  grow(web, Math.ceil(SPIDER_WEB_MAX_LENGTH / SPIDER_WEB_SPEED));
+  const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+  const sagAt = (r) => web.pointAt(mid, r).y - web.y;
+  assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH) - SPIDER_WEB_DROOP) <= SPIDER_WEB_FLUTTER + 1e-9,
+    `先の垂れ ${sagAt(SPIDER_WEB_MAX_LENGTH)}`);
+  assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH / 2) - SPIDER_WEB_DROOP / 4) <= SPIDER_WEB_FLUTTER + 1e-9,
+    `半ばの垂れ ${sagAt(SPIDER_WEB_MAX_LENGTH / 2)}`);
+  // 揺れている（同じ点がフレームごとに動く）
+  const before = web.pointAt(mid, 150);
+  web.update();
+  const after = web.pointAt(mid, 150);
+  assert.ok(Math.hypot(after.x - before.x, after.y - before.y) > 0.05, '揺れていない');
+});
+
+test('垂れるぶん扇を上へ向けるので、真ん中の糸は狙った点を通る', () => {
+  const game = openWorld();
+  const tx = 600;
+  const ty = 500;
+  for (const [dx, dy] of [[-140, 0], [-99, -99], [0, -140], [99, -99]]) {
+    const x = tx + dx;
+    const y = ty + dy;
+    const web = new SpiderWeb(game, x, y, SpiderWeb.aimAngle(x, y, tx, ty));
+    const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+    // 狙った点の周り（自機の大きさ 16×24 の半分ほど）を通る
+    let best = Infinity;
+    for (let r = 100; r <= 180; r += 0.5) {
+      const p = web.pointAt(mid, r);
+      best = Math.min(best, Math.hypot(p.x - tx, p.y - ty));
+    }
+    assert.ok(best < 5, `(${dx}, ${dy}) から 狙いと ${best.toFixed(1)}px ずれた`);
   }
 });
 
-test('自機に触れると絡まって消え、ダメージは無い', () => {
+test('薄れている間は沈むが、岩の中へは沈まない', () => {
+  // 下に床（row 18 = y 288〜）
+  const extra = [];
+  for (let c = 0; c < 60; c++) extra.push([18, c]);
+  const game = openWorld(extra);
+  const web = new SpiderWeb(game, 300, 100, 30 * DEG);
+  grow(web, Math.ceil(SPIDER_WEB_MAX_LENGTH / SPIDER_WEB_SPEED) + 1);
+  const free = web.strands.find((s) => s.len >= SPIDER_WEB_MAX_LENGTH - 1e-9 && s.angle < 20 * DEG);
+  const tipY0 = web.pointAt(free, 60).y;
+  grow(web, 20);
+  assert.ok(web.alive);
+  assert.ok(web.pointAt(free, 60).y > tipY0 + 5, '沈んでいない');
+  for (const s of web.segments()) {
+    for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]]) {
+      assert.equal(game.map.isSolidAtPixel(x, y), false, `岩の中 (${x.toFixed(1)}, ${y.toFixed(1)})`);
+    }
+  }
+});
+
+test('自機に触れると絡まり、糸は急に消えずに機体へ覆い被さるように縮んで消える。ダメージは無い', () => {
   const game = openWorld();
   const p = fakePlayer(game, 300, 280);
   const web = new SpiderWeb(game, 308, 200, 90 * DEG);
   game.enemyBullets.push(web);
   const cm = new CollisionManager(game);
-  for (let i = 0; i < 40 && web.alive; i++) cm.update();
-  assert.equal(web.alive, false);
+  for (let i = 0; i < 40 && p.webbed === 0; i++) cm.update();
   assert.equal(p.webbed, 1);
   assert.equal(p.hp, 100);
+  assert.equal(web.alive, true, '当たった瞬間に消えた');
+  assert.ok(web.wrapping, '覆い被さっていない');
+  // 自機が動いてもついて行く
+  p.x += 40;
+  for (let i = 0; i < SPIDER_WEB_WRAP_FRAMES - 1; i++) cm.update();
+  assert.equal(web.alive, true);
+  const cx = p.x + p.width / 2;
+  const cy = p.y + p.height / 2;
+  for (const s of web.segments()) {
+    for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]]) {
+      assert.ok(Math.hypot(x - cx, y - cy) <= SPIDER_WEB_CLING_RADIUS + 1e-6,
+        `機体から ${Math.hypot(x - cx, y - cy).toFixed(1)}px`);
+    }
+  }
+  // 覆い被さっている間に重ねて絡めない
+  assert.equal(p.webbed, 1);
+  cm.update();
+  assert.equal(web.alive, false);
+  assert.equal(game.enemyBullets.includes(web), false);
 });
 
 test('横糸だけが触れても絡まる（糸と糸の間をすり抜けられない）', () => {
   const game = openWorld();
   // 真ん中の糸（真下）と隣の糸の間に、小さな箱を置く
   const web = new SpiderWeb(game, 300, 200, 90 * DEG);
-  const gap = SPIDER_WEB_SPREAD / (SPIDER_WEB_STRANDS - 1);
-  const r = SPIDER_WEB_RING_STEP * 4;   // 横糸の上（縦糸と縦糸の真ん中）
-  const mx = 300 + Math.cos(90 * DEG + gap / 2) * r;
-  const my = 200 + Math.sin(90 * DEG + gap / 2) * r;
+  const r = SPIDER_WEB_RING_STEP * 4;   // 横糸の上（縦糸と縦糸の真ん中の、たるんだ点）
+  const a = web.pointAt(web.strands[2], r);
+  const b = web.pointAt(web.strands[3], r);
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2 + SPIDER_WEB_CROSS_SAG;
   const p = fakePlayer(game, mx - 2, my - 2);
   p.width = 4; p.height = 4;
   game.enemyBullets.push(web);
   const cm = new CollisionManager(game);
-  for (let i = 0; i < 60 && web.alive; i++) cm.update();
+  for (let i = 0; i < 60 && p.webbed === 0; i++) cm.update();
   assert.equal(p.webbed, 1);
 });
 
@@ -241,4 +328,56 @@ test('絡まった自機には糸がかかって見える（点線）', () => {
   p.webTimer = 0;
   p.draw(plain);
   assert.ok(!plain.calls.some((c) => c.name === 'setLineDash' && c.args[0].length > 0));
+});
+
+/** 自機の描画のうち、糸（COLOR_SPIDER_WEB）で引いた点の外接矩形 */
+function webBox(p) {
+  const ctx = makeFakeCtx();
+  p.draw(ctx);
+  const start = ctx.calls.findIndex((c) => c.name === 'set:strokeStyle' && c.args[0] === COLOR_SPIDER_WEB);
+  assert.ok(start >= 0, '糸を描いていない');
+  const pts = [];
+  for (let i = start; i < ctx.calls.length && ctx.calls[i].name !== 'restore'; i++) {
+    const c = ctx.calls[i];
+    if (c.name === 'moveTo' || c.name === 'lineTo') pts.push(c.args);
+  }
+  const xs = pts.map((q) => q[0]);
+  const ys = pts.map((q) => q[1]);
+  return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
+test('機体にまとわりつく糸は、覆い被さる間に育ち、振りほどくほど小さくなる', () => {
+  const { p, held } = realPlayer();
+  p.entangle();
+  const first = webBox(p);
+  for (let i = 0; i < SPIDER_WEB_WRAP_FRAMES; i++) p.update();
+  const full = webBox(p);
+  assert.ok(full.w > first.w * 1.5, `育っていない ${first.w.toFixed(1)} → ${full.w.toFixed(1)}`);
+  assert.ok(full.w > SPIDER_WEB_CLING_RADIUS * 1.5, `機体を覆っていない 幅 ${full.w.toFixed(1)}`);
+  // 左右に揺さぶる
+  for (const key of ['KeyA', 'KeyD', 'KeyA', 'KeyD']) {
+    held.clear(); held.add(key);
+    p.update();
+  }
+  held.clear();
+  for (let i = 0; i < SPIDER_WEB_JOLT_FRAMES + 30; i++) p.update();
+  assert.ok(p.webTimer > 0);
+  const shaken = webBox(p);
+  assert.ok(shaken.w < full.w * 0.75, `小さくなっていない ${full.w.toFixed(1)} → ${shaken.w.toFixed(1)}`);
+});
+
+test('揺さぶった瞬間、機体の糸がはねる', () => {
+  const { p, held } = realPlayer();
+  p.entangle();
+  for (let i = 0; i < SPIDER_WEB_WRAP_FRAMES; i++) p.update();
+  held.add('KeyA');
+  p.update();
+  held.clear();
+  for (let i = 0; i < SPIDER_WEB_JOLT_FRAMES + 1; i++) p.update();
+  assert.equal(p._webJolt, 0);
+  held.add('KeyD');
+  p.update();
+  held.clear(); held.add('KeyA');
+  p.update();
+  assert.equal(p._webJolt > 0, true, 'はねていない');
 });

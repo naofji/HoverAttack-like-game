@@ -110,8 +110,9 @@ export class EnemyBurstShell extends Bullet {
         audioManager.playWeapon('spiderBurst', this.x, this.y);
         if (!fragments) return;
         const p = game.player;
+        // 糸は垂れるので、真ん中の糸が自機の中心を通るよう少し上へ向ける（SpiderWeb.aimAngle）
         const angle = p && p.alive
-            ? Math.atan2(p.y + p.height / 2 - this.y, p.x + p.width / 2 - this.x)
+            ? SpiderWeb.aimAngle(this.x, this.y, p.x + p.width / 2, p.y + p.height / 2)
             : Math.PI / 2;
         game.enemyBullets.push(new SpiderWeb(game, this.x, this.y, angle));
     }

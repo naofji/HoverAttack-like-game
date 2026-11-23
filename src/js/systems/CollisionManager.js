@@ -86,10 +86,12 @@ export class CollisionManager {
      */
     _updateSpiderWeb(web) {
         const p = this.game.player;
-        if (!web.alive || !p || !p.alive || p.docked || p.invincibleTimer > 0) return;
+        // 覆い被さっている途中（wrapping）の糸はもう当たらない（1つの糸で何度も絡めない）
+        if (!web.alive || web.wrapping || !p || !p.alive || p.docked || p.invincibleTimer > 0) return;
         if (web.segments().some((s) => segmentIntersectsRect(s.x1, s.y1, s.x2, s.y2, p))) {
             p.entangle();
-            web.alive = false;
+            // 消さずに機体へ覆い被さって消える（2026-11-23 ユーザー指定「急に消えるのでは無くて」）
+            web.wrapOnto(p);
         }
     }
 

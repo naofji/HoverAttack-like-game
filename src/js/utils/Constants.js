@@ -932,7 +932,26 @@ export const SPIDER_WEB_SPREAD = 40 * Math.PI / 180;
 export const SPIDER_WEB_SPEED = 3;            // 糸が伸びる速さ（px/フレーム）。5発の弾（ENEMY_BULLET_SPEED）と同じ
 export const SPIDER_WEB_MAX_LENGTH = 200;     // 伸び切る長さ。割れる距離 140 の自機に届き、その先 60px まで
 export const SPIDER_WEB_RING_STEP = 24;       // 横糸の間隔（中心からの距離）
-export const SPIDER_WEB_FADE_FRAMES = 30;     // 伸び切ってから薄れて消えるまで（薄れている間も当たる）
+// 伸び切ってから薄れて消えるまで（薄れている間も当たる）。30 では「急に消える」（2026-11-23 ユーザー）ので、
+// 沈みながらゆっくり消える 45 に
+export const SPIDER_WEB_FADE_FRAMES = 45;
+// 柔らかい布のように降り注ぐ見た目（2026-11-23 ユーザー指定「柔らかな布のような糸が降り注いでくる感じ」）。
+// 糸はまっすぐでなく、中心からの距離の2乗で下へ垂れる（伸び切った 200px の先で DROOP、140px で約 12px）。
+// 垂れるぶんは扇を少し上へ向けて打ち消す（SpiderWeb.aimAngle。打ち消さないと真ん中の糸が足元へ外れる）
+export const SPIDER_WEB_DROOP = 24;
+export const SPIDER_WEB_FLUTTER = 2;          // 糸に沿って揺れる波の振れ幅（先ほど大きい。px）
+export const SPIDER_WEB_NODE_STEP = 12;       // 曲がった糸を折れ線にする刻み（px）。当たりと描画が同じ折れ線を使う
+export const SPIDER_WEB_CROSS_SAG = 3;        // 横糸の真ん中のたるみ（px）
+export const SPIDER_WEB_SINK_SPEED = 0.6;     // 薄れている間に沈む速さ（px/フレーム）。岩の中へは沈まない
+// 自機に当たったら消さずに、機体へ覆い被さるように縮んで消える（ユーザー指定）。その間に自機の側の糸が育つ
+export const SPIDER_WEB_WRAP_FRAMES = 16;
+// 機体にまとわりつく糸（player/draw.js の _drawWeb）。中心から放射状の SPOKES 本と輪。
+// 半径は残り時間に比例して CLING_RADIUS から CLING_MIN_RADIUS まで縮む（振りほどくほど小さく。ユーザー指定）
+export const SPIDER_WEB_CLING_RADIUS = 18;    // 機体 16×24 の対角の半分 14.4 を少し越えて覆う
+export const SPIDER_WEB_CLING_MIN_RADIUS = 6;
+export const SPIDER_WEB_CLING_SPOKES = 6;
+export const SPIDER_WEB_CLING_DRAG = 2;       // 動いた向きの反対へ糸の先が引きずられる量（速さ1あたり px）
+export const SPIDER_WEB_JOLT_FRAMES = 8;      // 揺さぶった瞬間に糸がはねる長さ
 export const SPIDER_WEB_DASH = [3, 3];        // 点線（ユーザー指定）の線と隙間
 export const COLOR_SPIDER_WEB = 'rgba(235, 240, 255, 0.85)';   // 糸（COLOR_SPIDER_THREAD）と同じ白、少し濃く
 // 絡まった自機。横の速さと上へ昇る速さを SLOW 倍に抑える（ダメージは無い）。左右の入力の向きを変えるたびに

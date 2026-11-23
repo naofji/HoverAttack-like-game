@@ -79,9 +79,14 @@ test('自機から SPIDER_SHELL_BURST_RANGE まで近づくと破裂して、5�
   assert.deepEqual([web.x, web.y], [shell.x, shell.y]);
   assert.equal(web.strands.length, SPIDER_WEB_STRANDS);
   const angles = web.strands.map((s) => s.angle).sort((a, b) => a - b);
-  const toPlayer = Math.atan2(pcy - shell.y, pcx - shell.x);
-  const mean = angles.reduce((a, b) => a + b, 0) / angles.length;
-  assert.ok(Math.abs(mean - toPlayer) < 3 * DEG, `平均 ${mean / DEG} / 自機 ${toPlayer / DEG}`);
+  // 真ん中の糸が（垂れるぶんを打ち消して）自機の中心のそばを通る
+  const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+  let best = Infinity;
+  for (let r = 0; r <= 200; r += 0.5) {
+    const q = web.pointAt(mid, r);
+    best = Math.min(best, Math.hypot(q.x - pcx, q.y - pcy));
+  }
+  assert.ok(best < 6, `真ん中の糸が自機の中心から ${best.toFixed(1)}px`);
   assert.ok(Math.abs((angles[angles.length - 1] - angles[0]) - SPIDER_WEB_SPREAD) < 0.5 * DEG);
   // 5発の弾はもう出さない（割れた弾そのものは CollisionManager が取り除くまで残っている）
   assert.equal(game.enemyBullets.filter((b) => b.alive).length, 1);
@@ -287,7 +292,7 @@ test('建物に当たって割れた糸は、その建物を素通りしない',
   for (let i = 0; i < 60 && web.alive; i++) web.update();
   // 外の2本は小屋の上下をかすめるので、小屋に向かう真ん中の3本を見る
   for (const st of web.strands.filter((t) => Math.abs(t.angle) < 15 * DEG)) {
-    const tx = web.x + Math.cos(st.angle) * st.len;
+    const tx = web.pointAt(st, st.len).x;
     assert.ok(tx <= 232, `建物（右端 232）を抜けた糸 x ${tx.toFixed(1)}`);
   }
 });

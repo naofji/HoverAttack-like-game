@@ -6,7 +6,7 @@ import {
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
     PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
-    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES,
+    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES, SPIDER_WEB_JOLT_FRAMES,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -93,6 +93,10 @@ export class Player {
         // スパイダーの糸に絡まっている残りフレーム（entangle）と、もがいた向きを数えるための最後の左右の入力
         this.webTimer = 0;
         this._webLastDir = 0;
+        // 絡まってからのフレーム数（機体の糸が育つ）と、揺さぶった瞬間に糸がはねる残りフレーム・向き
+        this._webAge = 0;
+        this._webJolt = 0;
+        this._webJoltDir = 0;
 
         // Animation
         this.walkFrame = 2;
@@ -174,7 +178,11 @@ export class Player {
     _updateTimers() {
         if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.lifeUpTimer > 0) this.lifeUpTimer--;
-        if (this.webTimer > 0) this.webTimer--;
+        if (this.webTimer > 0) {
+            this.webTimer--;
+            this._webAge++;
+        }
+        if (this._webJolt > 0) this._webJolt--;
         if (this.missileCooldown > 0) this.missileCooldown--;
         if (this.mgFireTimer > 0) this.mgFireTimer--;
         this.mgSinceShot++;
@@ -253,6 +261,7 @@ export class Player {
      */
     entangle() {
         this.webTimer = SPIDER_WEB_ENTANGLE_FRAMES;
+        this._webAge = 0;
     }
 
     /**
@@ -264,6 +273,8 @@ export class Player {
         if (this.webTimer > 0) {
             if (dir !== 0 && this._webLastDir !== 0 && dir !== this._webLastDir) {
                 this.webTimer = Math.max(0, this.webTimer - SPIDER_WEB_SHAKE_FRAMES);
+                this._webJolt = SPIDER_WEB_JOLT_FRAMES;
+                this._webJoltDir = dir;
             }
             const cap = PLAYER_MAX_SPEED * SPIDER_WEB_SLOW;
             if (this.webTimer > 0 && Math.abs(this.vx) > cap) this.vx = Math.sign(this.vx) * cap;
@@ -861,6 +872,10 @@ export class Player {
         this.stunTimer = 0;
         this.webTimer = 0;
         this._webLastDir = 0;
+        // 絡まってからのフレーム数（機体の糸が育つ）と、揺さぶった瞬間に糸がはねる残りフレーム・向き
+        this._webAge = 0;
+        this._webJolt = 0;
+        this._webJoltDir = 0;
         this.hoverCooldown = 0;
         this._burstMistFrames = 0;
         this._burstSnowPuff = false;
@@ -1004,6 +1019,9 @@ export class Player {
 Player.prototype.motion = LAND_MOTION;
 Player.prototype.webTimer = 0;
 Player.prototype._webLastDir = 0;
+Player.prototype._webAge = 0;
+Player.prototype._webJolt = 0;
+Player.prototype._webJoltDir = 0;
 
 // 坂を歩く・坂に当たる手順と地形の上を歩く手順（どちらも敵アタッカーと共通）と、描画（entities/player/draw.js）
 Object.assign(Player.prototype, SlopeBody, WalkerBody, PlayerDraw);

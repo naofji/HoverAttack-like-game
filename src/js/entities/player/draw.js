@@ -18,6 +18,8 @@ import {
     COLOR_HOVER_EXHAUST,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
     COLOR_SPIDER_WEB, SPIDER_WEB_DASH, SPIDER_WEB_ENTANGLE_FRAMES,
+    SPIDER_WEB_WRAP_FRAMES, SPIDER_WEB_JOLT_FRAMES, SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_CLING_MIN_RADIUS,
+    SPIDER_WEB_CLING_SPOKES, SPIDER_WEB_CLING_DRAG,
 } from '../../utils/Constants.js';
 import { drawThrusterFlame } from '../thrusterFlame.js';
 
@@ -93,26 +95,56 @@ export const PlayerDraw = {
     },
 
     /**
-     * スパイダーの糸に絡まっている間、機体に点線の糸がかかって見える（SpiderWeb と同じ色・点線）。
-     * 体の外へ少しはみ出す斜めの2本と横の1本。取れかけ（残りが少ない）ほど薄くする
+     * スパイダーの糸に絡まっている間、機体にまとわりつく糸（SpiderWeb と同じ色・点線）。
+     * 機体の中心から放射状の CLING_SPOKES 本と、内・外の2重の輪（輪は少したるむ）。
+     * - 当たった直後は小さく、SpiderWeb が覆い被さる WRAP_FRAMES の間に育つ（向こうの糸と入れ替わる）
+     * - 半径は残り時間に比例して縮む。揺さぶると残り時間が減るので「振りほどくほど小さく」なる（ユーザー指定）
+     * - 糸の先は動いた向きの反対へ引きずられ（DRAG）、揺さぶった瞬間ははねる（JOLT）
      */
     _drawWeb(ctx, x, y, crouchOffset) {
         if (!(this.webTimer > 0)) return;
-        const top = y + crouchOffset;
-        const h = this.height - crouchOffset;
-        const w = this.width;
+        const f = this.webTimer / SPIDER_WEB_ENTANGLE_FRAMES;
+        const grow = Math.min(1, this._webAge / SPIDER_WEB_WRAP_FRAMES);
+        const jolt = this._webJolt / SPIDER_WEB_JOLT_FRAMES;
+        const radius = (SPIDER_WEB_CLING_MIN_RADIUS + (SPIDER_WEB_CLING_RADIUS - SPIDER_WEB_CLING_MIN_RADIUS) * f)
+            * grow * (1 + 0.25 * jolt);
+        const cx = x + this.width / 2;
+        const cy = y + crouchOffset + (this.height - crouchOffset) / 2;
+        // 引きずり。落ちる速さで糸が機体から外れて見えないよう、半径の半分までに抑える
+        let dx = -this.vx * SPIDER_WEB_CLING_DRAG - this._webJoltDir * 4 * jolt;
+        let dy = -this.vy * SPIDER_WEB_CLING_DRAG;
+        const dl = Math.hypot(dx, dy);
+        if (dl > radius * 0.5) {
+            dx *= radius * 0.5 / dl;
+            dy *= radius * 0.5 / dl;
+        }
+        const n = SPIDER_WEB_CLING_SPOKES;
+        // k = 0.5（内の輪）と 1（先）の点。引きずりは先ほど大きい
+        const at = (i, k) => {
+            const a = (i * 2 * Math.PI) / n + 0.12 * Math.sin(this.webTimer * 0.15 + i * 1.7);
+            const len = radius * (0.9 + 0.1 * Math.sin(i * 2.3)) * k;
+            return { x: cx + Math.cos(a) * len + dx * k, y: cy + Math.sin(a) * len + dy * k };
+        };
         ctx.save();
-        ctx.globalAlpha = Math.min(1, 0.4 + this.webTimer / SPIDER_WEB_ENTANGLE_FRAMES);
+        ctx.globalAlpha = 0.5 + 0.5 * f;
         ctx.strokeStyle = COLOR_SPIDER_WEB;
         ctx.lineWidth = 1;
         ctx.setLineDash(SPIDER_WEB_DASH);
         ctx.beginPath();
-        ctx.moveTo(x - 3, top - 2);
-        ctx.lineTo(x + w + 3, top + h + 1);
-        ctx.moveTo(x + w + 3, top - 2);
-        ctx.lineTo(x - 3, top + h + 1);
-        ctx.moveTo(x - 4, top + h * 0.45);
-        ctx.lineTo(x + w + 4, top + h * 0.55);
+        for (let i = 0; i < n; i++) {
+            const m = at(i, 0.5);
+            const e = at(i, 1);
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(m.x, m.y);
+            ctx.lineTo(e.x, e.y);
+            for (const k of [0.5, 1]) {
+                const p = at(i, k);
+                const q = at((i + 1) % n, k);
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo((p.x + q.x) / 2, (p.y + q.y) / 2 + 1.5 * k);
+                ctx.lineTo(q.x, q.y);
+            }
+        }
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
