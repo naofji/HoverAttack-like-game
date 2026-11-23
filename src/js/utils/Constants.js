@@ -957,6 +957,14 @@ export const SPIDER_WEB_CLING_MIN_RADIUS = 6;
 export const SPIDER_WEB_CLING_SPOKES = 6;
 export const SPIDER_WEB_CLING_DRAG = 2;       // 動いた向きの反対へ糸の先が引きずられる量（速さ1あたり px）
 export const SPIDER_WEB_JOLT_FRAMES = 8;      // 揺さぶった瞬間に糸がはねる長さ
+// 揺さぶって振りほどくたびに、糸の切れ端（SpiderWeb.js の WebScrap）が機体のまわりから飛び散る（2026-11-23 ユーザー指定）。
+// 外へ SCRAP_SPEED で飛び、空気に押されてすぐ遅くなり（DRAG）、軽くふわっと落ちながら（GRAVITY）薄れて消える
+export const SPIDER_WEB_SCRAPS = 4;           // 1回の揺さぶりで飛ぶ切れ端の数
+export const SPIDER_WEB_SCRAP_SPEED = 2.2;
+export const SPIDER_WEB_SCRAP_DRAG = 0.93;
+export const SPIDER_WEB_SCRAP_GRAVITY = 0.05;
+export const SPIDER_WEB_SCRAP_LENGTH = 7;     // 切れ端の長さ（px）
+export const SPIDER_WEB_SCRAP_LIFETIME = 36;
 export const SPIDER_WEB_DASH = [3, 3];        // 点線（ユーザー指定）の線と隙間
 export const COLOR_SPIDER_WEB = 'rgba(235, 240, 255, 0.85)';   // 糸（COLOR_SPIDER_THREAD）と同じ白、少し濃く
 // 絡まった自機。横の速さと上へ昇る速さを SLOW 倍に抑える（ダメージは無い）。左右の入力の向きを変えるたびに

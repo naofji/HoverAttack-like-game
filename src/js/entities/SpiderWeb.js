@@ -24,6 +24,8 @@ import {
     SPIDER_WEB_RING_STEP, SPIDER_WEB_FADE_FRAMES, SPIDER_WEB_DASH, COLOR_SPIDER_WEB,
     SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_NODE_STEP, SPIDER_WEB_CROSS_SAG,
     SPIDER_WEB_SINK_SPEED, SPIDER_WEB_WRAP_FRAMES, SPIDER_WEB_CLING_RADIUS,
+    SPIDER_WEB_SCRAPS, SPIDER_WEB_SCRAP_SPEED, SPIDER_WEB_SCRAP_DRAG, SPIDER_WEB_SCRAP_GRAVITY,
+    SPIDER_WEB_SCRAP_LENGTH, SPIDER_WEB_SCRAP_LIFETIME,
 } from '../utils/Constants.js';
 
 // 伸びる途中で岩・建物を見る刻み（px）。1 フレームの伸び（最大 5）より細かく見て、先が壁へ入らないようにする
@@ -251,6 +253,72 @@ export class SpiderWeb {
         }
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.restore();
+    }
+}
+
+/**
+ * 振りほどいたときに飛び散る糸の切れ端（2026-11-23 ユーザー指定）。game.particles に入る。
+ * 短い曲がった糸で、くるくる回り、丸まり具合が揺れる。外へ飛んでから空気に押されてすぐ遅くなり、
+ * 軽く落ちながら薄れる（布の切れ端なので、重力は弱く、DRAG で落ちる速さも頭打ちになる）
+ */
+export class WebScrap {
+    /**
+     * 絡まった機体のまわり（中心 cx, cy・半径 radius）から SPIDER_WEB_SCRAPS 本を散らす。
+     * 向きは等分に散らし、phase で回して毎回違って見せる（Math.random を使わない＝テストで決まる）。
+     * 揺さぶった向き dir の反対へ少し寄せる（機体が切り返した反動で、糸が置いていかれる）
+     */
+    static scatter(game, cx, cy, radius, dir, phase) {
+        if (!game || !Array.isArray(game.particles)) return;
+        const n = SPIDER_WEB_SCRAPS;
+        for (let i = 0; i < n; i++) {
+            const a = phase + (i * 2 * Math.PI) / n;
+            const ux = Math.cos(a);
+            const uy = Math.sin(a);
+            game.particles.push(new WebScrap(
+                cx + ux * radius, cy + uy * radius,
+                ux * SPIDER_WEB_SCRAP_SPEED - dir * 0.6, uy * SPIDER_WEB_SCRAP_SPEED - 0.4,
+                a + Math.PI / 2, i * 2.1,
+            ));
+        }
+    }
+
+    constructor(x, y, vx, vy, angle, phase = 0) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.angle = angle;
+        this.spin = (phase % 2 < 1 ? 1 : -1) * 0.12;
+        this.phase = phase;
+        this.age = 0;
+        this.alive = true;
+    }
+
+    update() {
+        if (!this.alive) return;
+        this.vx *= SPIDER_WEB_SCRAP_DRAG;
+        this.vy = this.vy * SPIDER_WEB_SCRAP_DRAG + SPIDER_WEB_SCRAP_GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.angle += this.spin;
+        if (++this.age >= SPIDER_WEB_SCRAP_LIFETIME) this.alive = false;
+    }
+
+    draw(ctx) {
+        if (!this.alive) return;
+        const h = SPIDER_WEB_SCRAP_LENGTH / 2;
+        const ux = Math.cos(this.angle);
+        const uy = Math.sin(this.angle);
+        const curl = 2.5 * Math.sin(this.age * 0.3 + this.phase);   // 丸まり具合が揺れる
+        ctx.save();
+        ctx.globalAlpha = 1 - this.age / SPIDER_WEB_SCRAP_LIFETIME;
+        ctx.strokeStyle = COLOR_SPIDER_WEB;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(this.x - ux * h, this.y - uy * h);
+        ctx.quadraticCurveTo(this.x - uy * curl, this.y + ux * curl, this.x + ux * h, this.y + uy * h);
+        ctx.stroke();
         ctx.restore();
     }
 }

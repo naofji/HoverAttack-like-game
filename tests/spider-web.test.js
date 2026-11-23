@@ -3,7 +3,7 @@
 // 当たると自機の動きが遅くなる（ダメージなし）。左右に揺さぶると早く取れる
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SpiderWeb } from '../src/js/entities/SpiderWeb.js';
+import { SpiderWeb, WebScrap } from '../src/js/entities/SpiderWeb.js';
 import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { Player } from '../src/js/entities/Player.js';
 import { shed, world as townWorld } from './helpers/town-explosive-fixtures.js';
@@ -15,6 +15,7 @@ import {
   SPIDER_WEB_SHAKE_FRAMES, PLAYER_MAX_SPEED, PLAYER_MAX_HOVER_SPEED,
   SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_CROSS_SAG, SPIDER_WEB_WRAP_FRAMES,
   SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB, SPIDER_WEB_SINK_SPEED,
+  SPIDER_WEB_SCRAPS, SPIDER_WEB_SCRAP_LIFETIME,
 } from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
@@ -402,4 +403,57 @@ test('揺さぶった瞬間、機体の糸がはねる', () => {
   held.clear(); held.add('KeyA');
   p.update();
   assert.equal(p._webJolt > 0, true, 'はねていない');
+});
+
+const scrapsOf = (game) => game.particles.filter((q) => q instanceof WebScrap);
+
+test('揺さぶって振りほどくたびに、糸の切れ端が SPIDER_WEB_SCRAPS 本飛び散る（同じ向きを押し続けても出ない）', () => {
+  const { game, p, held } = realPlayer();
+  p.entangle();
+  held.add('KeyA');
+  for (let i = 0; i < 5; i++) p.update();
+  assert.equal(scrapsOf(game).length, 0, '揺さぶっていないのに飛んだ');
+  held.clear(); held.add('KeyD');
+  p.update();
+  assert.equal(scrapsOf(game).length, SPIDER_WEB_SCRAPS);
+  held.clear(); held.add('KeyA');
+  p.update();
+  assert.equal(scrapsOf(game).length, 2 * SPIDER_WEB_SCRAPS);
+  // 絡まっていなければ、左右に切り返しても出ない
+  const fresh = realPlayer();
+  for (const key of ['KeyA', 'KeyD', 'KeyA']) {
+    fresh.held.clear(); fresh.held.add(key);
+    fresh.p.update();
+  }
+  assert.equal(scrapsOf(fresh.game).length, 0);
+});
+
+test('切れ端は機体から外へ飛び、ふわっと落ちながら薄れて消える', () => {
+  const { game, p, held } = realPlayer();
+  p.entangle();
+  held.add('KeyA'); p.update();
+  held.clear(); held.add('KeyD'); p.update();
+  const cx = p.x + p.width / 2;
+  const cy = p.y + p.height / 2;
+  const scraps = scrapsOf(game);
+  const d0 = scraps.map((q) => Math.hypot(q.x - cx, q.y - cy));
+  // 向きがばらけている（全部が同じ向きへ飛ばない）
+  const dirs = new Set(scraps.map((q) => Math.sign(q.vx)));
+  assert.ok(dirs.size >= 2, '片側にしか飛ばない');
+  const alpha = (q) => {
+    const ctx = makeFakeCtx();
+    q.draw(ctx);
+    const a = ctx.calls.filter((c) => c.name === 'set:globalAlpha').pop();
+    assert.ok(ctx.calls.some((c) => c.name === 'set:strokeStyle' && c.args[0] === COLOR_SPIDER_WEB), '糸の色でない');
+    return a ? a.args[0] : 1;
+  };
+  const a0 = alpha(scraps[0]);
+  for (let i = 0; i < 12; i++) scraps.forEach((q) => q.update());
+  scraps.forEach((q, i) => assert.ok(Math.hypot(q.x - cx, q.y - cy) > d0[i] + 4, '外へ飛んでいない'));
+  assert.ok(alpha(scraps[0]) < a0, '薄れていない');
+  // 上へ飛んだものも下へ飛んだものも、やがてみな同じゆっくりした速さで落ちる（布の切れ端なので石のようには落ちない）
+  for (let i = 0; i < 18; i++) scraps.forEach((q) => q.update());
+  scraps.forEach((q) => assert.ok(q.vy > 0.3 && q.vy < 1, `落ちる速さ ${q.vy.toFixed(2)}`));
+  for (let i = 0; i < SPIDER_WEB_SCRAP_LIFETIME; i++) scraps.forEach((q) => q.update());
+  scraps.forEach((q) => assert.equal(q.alive, false));
 });

@@ -6,7 +6,7 @@ import {
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
     PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
-    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES, SPIDER_WEB_JOLT_FRAMES,
+    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES, SPIDER_WEB_JOLT_FRAMES, SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_CLING_MIN_RADIUS,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -32,6 +32,7 @@ import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/pla
 import { playDestruction } from './destruction.js';
 import { JET_BUBBLE_DROP } from './thrusterFlame.js';
 import { PlayerDraw } from './player/draw.js';
+import { WebScrap } from './SpiderWeb.js';
 
 export class Player {
     constructor(game, x, y) {
@@ -275,6 +276,12 @@ export class Player {
                 this.webTimer = Math.max(0, this.webTimer - SPIDER_WEB_SHAKE_FRAMES);
                 this._webJolt = SPIDER_WEB_JOLT_FRAMES;
                 this._webJoltDir = dir;
+                // 振りほどいた切れ端を、機体にまとわりつく糸（_drawWeb）の今の大きさのまわりから散らす
+                const f = this.webTimer / SPIDER_WEB_ENTANGLE_FRAMES;
+                WebScrap.scatter(this.game,
+                    this.x + this.width / 2, this.y + this.height / 2,
+                    SPIDER_WEB_CLING_MIN_RADIUS + (SPIDER_WEB_CLING_RADIUS - SPIDER_WEB_CLING_MIN_RADIUS) * f,
+                    dir, this.webTimer * 0.7);
             }
             const cap = PLAYER_MAX_SPEED * SPIDER_WEB_SLOW;
             if (this.webTimer > 0 && Math.abs(this.vx) > cap) this.vx = Math.sign(this.vx) * cap;
