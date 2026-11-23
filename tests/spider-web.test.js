@@ -14,7 +14,7 @@ import {
   SPIDER_WEB_RING_STEP, SPIDER_WEB_FADE_FRAMES, SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW,
   SPIDER_WEB_SHAKE_FRAMES, PLAYER_MAX_SPEED, PLAYER_MAX_HOVER_SPEED,
   SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_CROSS_SAG, SPIDER_WEB_WRAP_FRAMES,
-  SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB, SPIDER_WEB_SINK_SPEED,
+  SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB, SPIDER_WEB_SINK_SPEED, SPIDER_WEB_DRIFT_SPEED, SPIDER_WEB_DRIFT_DECAY,
   SPIDER_WEB_SCRAPS, SPIDER_WEB_SCRAP_LIFETIME,
 } from '../src/js/utils/Constants.js';
 
@@ -66,13 +66,28 @@ test('5本の糸が、向けた向きを中心に扇に広がり、初めは速�
   assert.equal(web.alive, false);
 });
 
-test('自機の距離（割れる距離 140px）まで届くのは 30〜45 フレーム（扇の外へ逃げる間が残る）', () => {
+// 自機の 140px 先で割れた糸が、狙った自機の中心に届くまでのフレーム数。2026-11-23 に「扇の向きに流れる」を足す前に
+// 測った値（ユーザー指定「今の届くまでの時間を保ちたい。あまり速いとストレスフル」）。斜め下・真下ほど沈みが
+// 加わって早い。扇の真ん中から外へ出るのに約 29 フレーム（SPIDER_WEB_SPREAD のコメント）
+const REACH_FRAMES = [[[-140, 0], 41], [[-99, -99], 32], [[0, -140], 29], [[99, -99], 32], [[-130, -52], 36]];
+
+test('140px 先の自機に届くまでの時間は、流れを足す前と ±2 フレームで同じ', () => {
   const game = openWorld();
-  const web = new SpiderWeb(game, 300, 200, 90 * DEG);
-  let n = 0;
-  while (web.strands[0].len < 140) { web.update(); n++; }
-  // 扇の真ん中から外へ出るのに約 29 フレーム（SPIDER_WEB_SPREAD のコメント）。速すぎると逃げられない
-  assert.ok(n >= 30 && n <= 45, `${n} フレーム`);
+  for (const [[dx, dy], want] of REACH_FRAMES) {
+    const tx = 600;
+    const ty = 500;
+    const web = new SpiderWeb(game, tx + dx, ty + dy, SpiderWeb.aimAngle(tx + dx, ty + dy, tx, ty));
+    const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+    let n = 0;
+    let hit = null;
+    while (!mid.stopped && n < 200) {
+      web.update();
+      n++;
+      const p = web.pointAt(mid, mid.len);
+      if (hit === null && Math.hypot(p.x - tx, p.y - ty) < 5) hit = n;
+    }
+    assert.ok(hit !== null && Math.abs(hit - want) <= 2, `(${dx}, ${dy}) から ${hit} フレーム（前は ${want}）`);
+  }
 });
 
 test('伸び切った糸は SPIDER_WEB_MAX_LENGTH で止まり、SPIDER_WEB_FADE_FRAMES で薄れて消える', () => {
@@ -151,7 +166,7 @@ test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布�
   growFull(web);
   const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
   // 伸び切ったフレームから薄れ始めて沈むので、その分を引く
-  const sagAt = (r) => web.pointAt(mid, r).y - web.y - web.sink;
+  const sagAt = (r) => web.pointAt(mid, r).y - web.y - web.offset.y;
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH) - SPIDER_WEB_DROOP) <= SPIDER_WEB_FLUTTER + 1e-9,
     `先の垂れ ${sagAt(SPIDER_WEB_MAX_LENGTH)}`);
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH / 2) - SPIDER_WEB_DROOP / 4) <= SPIDER_WEB_FLUTTER + 1e-9,
@@ -163,7 +178,7 @@ test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布�
   assert.ok(Math.hypot(after.x - before.x, after.y - before.y) > 0.05, '揺れていない');
 });
 
-test('垂れ・沈むぶん扇を上へ向けるので、伸びていく真ん中の糸の先は狙った点を通る', () => {
+test('垂れ・沈み・流れのぶん扇の向きを直すので、伸びていく真ん中の糸の先は狙った点を通る', () => {
   const game = openWorld();
   const tx = 600;
   const ty = 500;
@@ -183,21 +198,35 @@ test('垂れ・沈むぶん扇を上へ向けるので、伸びていく真ん�
   }
 });
 
-test('拡がる最中から、起点も糸も一緒に沈む（起点だけ残って網がゆがまない）', () => {
+test('網は扇の向きへ流れながら（だんだん遅く）沈む。起点も糸も一緒に動く', () => {
   const game = openWorld();
-  const web = new SpiderWeb(game, 300, 200, 60 * DEG);
+  const a = 60 * DEG;
+  const web = new SpiderWeb(game, 300, 200, a);
   const origin = () => web.segments().find((sg) => sg.kind === 'radial');
-  grow(web, 10);
+  const n = 10;
+  grow(web, n);
   assert.ok(web.strands.every((s) => !s.stopped), 'まだ伸びている最中のはず');
+  // 流れ: 1フレーム目 DRIFT_SPEED、以後 DRIFT_DECAY 倍ずつ。沈み: 毎フレーム SINK_SPEED
+  let drift = 0;
+  for (let i = 0; i < n; i++) drift += SPIDER_WEB_DRIFT_SPEED * SPIDER_WEB_DRIFT_DECAY ** i;
+  const ex = Math.cos(a) * drift;
+  const ey = Math.sin(a) * drift + n * SPIDER_WEB_SINK_SPEED;
   const o1 = origin();
-  assert.ok(Math.abs((o1.y1 - 200) - 10 * SPIDER_WEB_SINK_SPEED) < 1e-9, `起点の沈み ${o1.y1 - 200}`);
-  assert.equal(o1.x1, 300);
-  // 糸の点も同じだけ沈んでいる（垂れ・揺れを除いて）
+  assert.ok(Math.abs(o1.x1 - 300 - ex) < 1e-9 && Math.abs(o1.y1 - 200 - ey) < 1e-9,
+    `起点の動き (${(o1.x1 - 300).toFixed(2)}, ${(o1.y1 - 200).toFixed(2)}) / (${ex.toFixed(2)}, ${ey.toFixed(2)})`);
+  // 糸の点も同じだけ動いている（垂れ・揺れを除いて）
   const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
   const r = 30;
-  const straight = 200 + Math.sin(mid.angle) * r + SPIDER_WEB_DROOP * (r / SPIDER_WEB_MAX_LENGTH) ** 2;
-  assert.ok(Math.abs(web.pointAt(mid, r).y - straight - 10 * SPIDER_WEB_SINK_SPEED) <= SPIDER_WEB_FLUTTER,
-    `糸の点の沈み ${(web.pointAt(mid, r).y - straight).toFixed(1)}`);
+  const sx = 300 + Math.cos(mid.angle) * r;
+  const sy = 200 + Math.sin(mid.angle) * r + SPIDER_WEB_DROOP * (r / SPIDER_WEB_MAX_LENGTH) ** 2;
+  const q = web.pointAt(mid, r);
+  assert.ok(Math.hypot(q.x - sx - ex, q.y - sy - ey) <= SPIDER_WEB_FLUTTER, '糸の点が一緒に動いていない');
+  // 流れはやがて止まり、沈むだけになる
+  grow(web, 80);
+  const o2 = origin();
+  grow(web, 1);
+  const o3 = origin();
+  assert.ok(Math.abs(o3.x1 - o2.x1) < 0.01, `まだ横へ流れている ${o3.x1 - o2.x1}`);
 });
 
 test('沈むが、岩の中へは沈まない', () => {

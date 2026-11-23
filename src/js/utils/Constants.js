@@ -935,8 +935,11 @@ export const SPIDER_WEB_SPREAD = 40 * Math.PI / 180;
 // 糸が伸びる速さ（px/フレーム）。初めは速く、伸びた長さに比例して遅くなり、伸び切る手前で END
 // （2026-11-23 ユーザー指定「初速は速く、徐々に遅くなる方がそれっぽい」。それまでは 3 の一定）。
 // 5 → 1 で、割れる距離 140px に届くのは 41 フレーム（一定 3 のころは 47）、伸び切る 200px までは約 80 フレーム。
+// 網全体が扇の向きへ流れる（DRIFT）のを足したとき、START 5 のままだと真横で 41 → 32 フレームに早まった。
+// 「今の届くまでの時間を保ちたい。あまり速いとストレスフル」（ユーザー）なので 4 に下げ、5方向とも前と ±1 フレームに戻した
+// （真横 40・斜め上 32・真上 29。tests/spider-web.test.js の REACH_FRAMES）。
 // 扇の真ん中から外へ逃げる約 29 フレームより長く残す（SPIDER_WEB_SPREAD のコメント）
-export const SPIDER_WEB_SPEED_START = 5;
+export const SPIDER_WEB_SPEED_START = 4;
 export const SPIDER_WEB_SPEED_END = 1;
 export const SPIDER_WEB_MAX_LENGTH = 200;     // 伸び切る長さ。割れる距離 140 の自機に届き、その先 60px まで
 export const SPIDER_WEB_RING_STEP = 24;       // 横糸の間隔（中心からの距離）
@@ -953,6 +956,11 @@ export const SPIDER_WEB_CROSS_SAG = 3;        // 横糸の真ん中のたるみ�
 // 沈む速さ（px/フレーム）。割れた瞬間から起点ごと沈む（2026-11-23 ユーザー指定。初めは薄れている間だけ）。岩の中へは沈まない。
 // 140px 先の自機に届くまでに約 25px 沈むので、そのぶん扇を上へ向ける（SpiderWeb.aimAngle）＝上から降り注ぐ
 export const SPIDER_WEB_SINK_SPEED = 0.6;
+// 網全体が扇の向き（自機へ）へ流れる勢い（2026-11-23 ユーザー指定「扇の方向に慣性が働きつつ、下方向に sink する方が自然」）。
+// 割れた瞬間 DRIFT_SPEED px/フレームで、毎フレーム DRIFT_DECAY 倍に弱まる（合計で約 21px 前へ流れて止まる）。
+// 投げた網は全体が前へ進みながら広がる。流れを足す前は起点が割れた点から真下へ落ちるだけで、網の後ろが宙に留められて見えた
+export const SPIDER_WEB_DRIFT_SPEED = 1.5;
+export const SPIDER_WEB_DRIFT_DECAY = 0.93;
 // 自機に当たったら消さずに、機体へ覆い被さるように縮んで消える（ユーザー指定）。その間に自機の側の糸が育つ
 export const SPIDER_WEB_WRAP_FRAMES = 16;
 // 機体にまとわりつく糸（player/draw.js の _drawWeb）。中心から放射状の SPOKES 本と輪。
