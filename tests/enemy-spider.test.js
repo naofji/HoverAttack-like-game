@@ -447,3 +447,36 @@ test('出っ張った角は、角を軸に回り込んで側面へ移る（1フ�
   // 角の外側を回る（体の中心は角から離れたまま）
   assert.ok(Math.hypot(s.x + S / 2 - P.x, s.y + S / 2 - P.y) < 12);
 });
+
+// ------------------------------------------
+// 2026-11-23 ユーザー指定: へこんだ角（床から壁へ登るなど）も、一瞬で向きを変えず滑らかに回る
+// ------------------------------------------
+test('へこんだ角は、その場で体を少しずつ起こして壁へ移る（向きが一瞬で 90° 変わらない）', () => {
+  // 部屋の床を右へ走って、右の壁を登る
+  const { game, map } = world(roomRows(30, 14));
+  const s = onFloor(game, 13, 24);
+  s.fwd = { x: 1, y: 0 };
+  s.fireTimer = 1e9;
+  s.mode = 'crawl';
+  s.modeTimer = 1000;
+  const isSolid = isSolidOf(map);
+  const rots = [];
+  let px = s.x, py = s.y, maxStep = 0;
+  for (let i = 0; i < 40 && !(s.surface === 'wallR' && s.mode === 'crawl'); i++) {
+    s.update();
+    s.modeTimer = 1000;
+    maxStep = Math.max(maxStep, Math.hypot(s.x - px, s.y - py));
+    px = s.x; py = s.y;
+    assert.equal(boxHitsSolid(isSolid, s.x, s.y, S), false, `frame ${i}: 岩にめり込んだ`);
+    rots.push(s._drawRotation());
+  }
+  assert.equal(s.surface, 'wallR', '壁へ移っていない');
+  assert.ok(maxStep <= 6, `1フレームで ${maxStep.toFixed(1)}px 跳んだ`);
+  // 床 0 → 右の壁 −π/2 の途中の向きが2つ以上（1フレームで跳ばない）
+  const mid = rots.filter((r) => r < -0.2 && r > -Math.PI / 2 + 0.2);
+  assert.ok(mid.length >= 2, `回る途中の向き: ${rots.map((r) => r.toFixed(2))}`);
+  // 回り終えたら壁を登り続ける
+  const y0 = s.y;
+  for (let i = 0; i < 5; i++) { s.update(); s.modeTimer = 1000; }
+  assert.ok(s.y < y0 - 8, `登っていない ${y0} → ${s.y}`);
+});

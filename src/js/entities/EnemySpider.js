@@ -18,7 +18,7 @@
 
 import {
     TILE_SIZE, SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE,
-    SPIDER_CRAWL_SPEED, SPIDER_CORNER_FRAMES, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE, SPIDER_JINK_CHANCE,
+    SPIDER_CRAWL_SPEED, SPIDER_CORNER_FRAMES, SPIDER_CONCAVE_FRAMES, SPIDER_CONCAVE_LIFT, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE, SPIDER_JINK_CHANCE,
     SPIDER_ENGAGE_DIST_X, SPIDER_ENGAGE_DIST_Y, SPIDER_ENGAGE_JITTER, SPIDER_SEEK_DEADBAND,
     SPIDER_HOP_CHANCE, SPIDER_HOP_SPEED, SPIDER_HOP_SIDE_SPEED, SPIDER_HOP_GRAVITY, SPIDER_HOP_AFTER_FIRE_CHANCE,
     SPIDER_THREAD_CHANCE, SPIDER_THREAD_MAX_TILES, SPIDER_THREAD_SHOOT_FRAMES,
@@ -147,6 +147,11 @@ export class EnemySpider {
             this._startCorner(next);
             return;
         }
+        // へこんだ角（新しい下 = 元の前）は、岩に接した位置でその場で体を起こす
+        if (next.surface !== this.surface && next.fwd.x === -down.x && next.fwd.y === -down.y) {
+            this._startConcave(next);
+            return;
+        }
         this.x = next.x;
         this.y = next.y;
         this.surface = next.surface;
@@ -208,9 +213,46 @@ export class EnemySpider {
         this._updateCorner();
     }
 
+    /**
+     * へこんだ角で体を起こす。stepCrawl の next は岩に接した位置で、前後で箱は動かない（中心は両方の面から 7px）ので、
+     * 絵だけを SPIDER_CONCAVE_FRAMES かけて 90° 回す。ただその場で回すと、45° のあたりで前の足先が
+     * 斜めに伸びて岩へ 2px ほど入って見える。そこで回っている間は体を角から斜め外へ少し浮かせる
+     * （SPIDER_CONCAVE_LIFT、真ん中で最大の山なり）。浮かせた位置が岩に入る狭い所では浮かせない
+     * @param {{x:number, y:number, surface:string, fwd:{x:number,y:number}}} next stepCrawl の乗り換えた後の体
+     */
+    _startConcave(next) {
+        const a0 = this._away();
+        const f0 = this.fwd;
+        // 角から離れる斜めの向き（元の面の上 a0 と、前の岩の反対 −f0 の和）
+        const out = { x: (a0.x - f0.x) / Math.SQRT2, y: (a0.y - f0.y) / Math.SQRT2 };
+        const rot0 = ROTATION[this.surface];
+        this.corner = {
+            kind: 'concave',
+            base: { x: next.x, y: next.y }, out, lift: SPIDER_CONCAVE_LIFT,
+            frames: SPIDER_CONCAVE_FRAMES,
+            rot0, rotSweep: wrapAngle(ROTATION[next.surface] - rot0),
+            next: { x: next.x, y: next.y, surface: next.surface, fwd: { ...next.fwd } },
+            t: 0,
+        };
+        const isSolid = this._isSolid();
+        for (let t = 1; t < this.corner.frames; t++) {
+            const q = this._cornerPos(t);
+            if (boxHitsSolid(isSolid, q.x, q.y, SPIDER_SIZE)) {
+                this.corner.lift = 0;
+                break;
+            }
+        }
+        this.mode = 'corner';
+        this._updateCorner();
+    }
+
     /** 回り込みの t フレーム目の箱の左上 */
     _cornerPos(t) {
         const c = this.corner;
+        if (c.kind === 'concave') {
+            const k = c.lift * Math.sin(Math.PI * Math.min(1, t / c.frames));
+            return { x: c.base.x + c.out.x * k, y: c.base.y + c.out.y * k };
+        }
         const th = c.thIdeal0 + c.dir * this._cornerProgress(t);
         const h = SPIDER_SIZE / 2;
         return { x: c.P.x + c.r * Math.cos(th) - h, y: c.P.y + c.r * Math.sin(th) - h };
@@ -623,7 +665,8 @@ export class EnemySpider {
     _drawRotation() {
         if (this.mode === 'corner' && this.corner) {
             const c = this.corner;
-            return c.rot0 + c.rotSweep * (this._cornerProgress() / Math.PI);
+            const frac = c.kind === 'concave' ? Math.min(1, c.t / c.frames) : this._cornerProgress() / Math.PI;
+            return c.rot0 + c.rotSweep * frac;
         }
         return ROTATION[this.surface || this.drawSurface] || 0;
     }
