@@ -73,7 +73,6 @@ export class SpiderWeb {
         this.alive = true;
         this.age = 0;
         this.fade = 0;          // 伸び切ってから数える
-        this.sink = 0;          // 薄れている間に、起点ごと全体が沈んだ量（px）
         this.wrapping = null;   // 自機に覆い被さっている間の状態（wrapOnto）
         const n = SPIDER_WEB_STRANDS;
         this.strands = [];
@@ -107,7 +106,6 @@ export class SpiderWeb {
             if (!s.stopped) growing = true;
         }
         if (growing) return;
-        this._sinkStep();
         if (++this.fade > SPIDER_WEB_FADE_FRAMES) this.alive = false;
     }
 
@@ -163,24 +161,18 @@ export class SpiderWeb {
         });
     }
 
+    /** 薄れている間に沈んだ量（px）。点ごとに沈め、岩・建物に入る点はそこに残す（pointAt） */
+    get sink() {
+        return this.fade * SPIDER_WEB_SINK_SPEED;
+    }
+
     /**
-     * 薄れている間、起点ごと全体を SINK_SPEED だけ沈める。どこか1点でも岩・建物に入るなら、全体をそこで止める。
-     * 以前は点ごとに沈めて、岩に入る点だけその場に残していた。起点は沈まず、床に近い糸だけ止まるので、
-     * 網の形がゆがんで見えた（2026-11-23 ユーザー指摘）。全体を1つの量で動かして形を保つ
+     * 起点（割れた点）。糸の点と同じだけ沈める。以前は起点だけ沈まず、起点のそばの糸が引き伸ばされて
+     * 網がゆがんで見えた（2026-11-23 ユーザー指摘。「起点以外の変形は前のままでいい」）
      */
-    _sinkStep() {
-        const next = this.sink + SPIDER_WEB_SINK_SPEED;
-        for (const s of this.strands) {
-            for (let r = SPIDER_WEB_NODE_STEP; ; r += SPIDER_WEB_NODE_STEP) {
-                const rr = Math.min(r, s.len);
-                if (rr <= 0) break;
-                const b = this._base(s, rr);
-                if (this._blocked(b.x, b.y + next)) return;
-                if (rr >= s.len) break;
-            }
-        }
-        if (this._blocked(this.x, this.y + next)) return;
-        this.sink = next;
+    origin() {
+        const y = this.y + this.sink;
+        return this._blocked(this.x, y) ? { x: this.x, y: this.y } : { x: this.x, y };
     }
 
     /** 縦糸の、中心から r の点（垂れだけ。伸びるときに岩を見た線なので、ここは必ず空いている） */
@@ -192,8 +184,8 @@ export class SpiderWeb {
     }
 
     /**
-     * 縦糸の、中心から r の点。垂れ＋揺れ＋（薄れている間の）全体の沈み。
-     * 揺れで岩・建物に入るなら揺れを外す（垂れ＋沈みの点は _grow と _sinkStep が確かめてある）
+     * 縦糸の、中心から r の点。垂れ＋揺れ＋（薄れている間の）沈み。
+     * 揺れ・沈みで岩・建物に入るなら、入らないほうへ戻す（沈み → 揺れの順に外す。垂れだけの点は伸びるときに確かめてある）
      */
     pointAt(s, r) {
         const b = this._base(s, r);
@@ -202,8 +194,10 @@ export class SpiderWeb {
         // 糸に直交する向きへ揺らす
         const fx = b.x - Math.sin(s.angle) * wave;
         const fy = b.y + Math.cos(s.angle) * wave;
-        if (!this._blocked(fx, fy + this.sink)) return { x: fx, y: fy + this.sink };
-        return { x: b.x, y: b.y + this.sink };
+        const sink = this.sink;
+        if (sink > 0 && !this._blocked(fx, fy + sink)) return { x: fx, y: fy + sink };
+        if (!this._blocked(fx, fy)) return { x: fx, y: fy };
+        return b;
     }
 
     /**
@@ -217,7 +211,7 @@ export class SpiderWeb {
         if (this.wrapping) return this._wrapSegments();
         const out = [];
         for (const s of this.strands) {
-            let prev = { x: this.x, y: this.y + this.sink };
+            let prev = this.origin();
             for (let r = SPIDER_WEB_NODE_STEP; ; r += SPIDER_WEB_NODE_STEP) {
                 const rr = Math.min(r, s.len);
                 if (rr <= 0) break;
