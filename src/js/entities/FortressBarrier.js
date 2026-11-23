@@ -13,6 +13,7 @@
 //
 // 設計: docs/superpowers/specs/2026-09-06-stage7-fortress-design.md 節4b
 
+import { applyKnockback } from '../utils/Knockback.js';
 import {
     TILE_SIZE,
     BARRIER_EMITTER_HP, BARRIER_UNIT_W, BARRIER_UNIT_H, BARRIER_FIELD_W,
@@ -280,8 +281,8 @@ export class FortressBarrier {
         const center = this.fieldX + this.fieldW / 2;
         const entityCenter = entity.x + entity.width / 2;
         const dir = entity.vx ? -Math.sign(entity.vx) : (entityCenter < center ? -1 : 1);
-        entity.vx = dir * BARRIER_KNOCKBACK_VX;
-        entity.vy = BARRIER_KNOCKBACK_VY;
+        // 速度は爆発・ミサイルと同じ applyKnockback で（自機はこれで反動の時間も付き、入力ですぐ消されない）
+        applyKnockback(entity, dir, BARRIER_KNOCKBACK_VY, BARRIER_KNOCKBACK_VX);
         // 場の外側の縁へ置き直す。1px 余分に離すのは、次のフレームでまた
         // 重なったと判定されて押し戻しが毎フレーム走り続けるのを防ぐため
         entity.x = dir < 0

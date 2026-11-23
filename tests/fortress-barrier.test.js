@@ -68,6 +68,18 @@ test('自機が触れるとダメージを受け、来た方向へ押し戻さ�
   assert.equal(Math.abs(player.vx), BARRIER_KNOCKBACK_VX);
 });
 
+// 2026-11-23: 押し戻しも爆発・ミサイルと同じ applyKnockback を通す（自機の被弾ノックバックを一本化。反動の時間も付く）
+test('押し戻しは爆発・ミサイルと同じノックバック（自機の反動の時間も付く）', () => {
+  const game = makeGame();
+  const b = makeBarrier(game);
+  const player = makePlayer(b.fieldX - 8, (4 + 1) * TILE_SIZE);
+  let knocked = 0;
+  player.onKnockback = () => { knocked++; };
+  game.player = player;
+  b.update();
+  assert.equal(knocked, 1);
+});
+
 test('右から突っ込めば右へ押し戻される', () => {
   const game = makeGame();
   const b = makeBarrier(game);

@@ -2318,6 +2318,10 @@ export const DEATH_FLASH_STAGGER = 4;     // 1つあたりの遅延の刻み（t
 // 速度を書き換えるだけでは次のフレームで消えるので、この時間だけ敵側の
 // 移動制御を止めて反動を成立させる。射撃は止めない（自機の着地スタンと同じ考え方）。
 export const ENEMY_RECOIL_FRAMES = 18;
+// 自機の被弾ノックバック（反動）。2026-11-23 ユーザー指定「敵のアタッカーと同じように自機も被弾したときにノックバック」。
+// 速度は前から applyKnockback で書き換えていたが、次のフレームで左右の入力（±MAX の代入）と地面の摩擦に消されて
+// ほとんど飛ばなかった。アタッカーと同じ長さだけ、左右の入力と摩擦を止める（ホバーは止めない＝穴・水の上で立て直せる）
+export const PLAYER_RECOIL_FRAMES = ENEMY_RECOIL_FRAMES;
 
 // 機体ごとの吹き飛び方。重い機体ほど動かない。破片の weight と同じ考え方。
 export const ENEMY_RECOIL_PROFILES = {

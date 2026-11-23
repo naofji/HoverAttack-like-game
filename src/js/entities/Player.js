@@ -6,7 +6,7 @@ import {
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
     PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
-    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES, SPIDER_WEB_JOLT_FRAMES, SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_CLING_MIN_RADIUS,
+    SPIDER_WEB_ENTANGLE_FRAMES, PLAYER_RECOIL_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES, SPIDER_WEB_JOLT_FRAMES, SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_CLING_MIN_RADIUS,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -94,6 +94,8 @@ export class Player {
         // スパイダーの糸に絡まっている残りフレーム（entangle）と、もがいた向きを数えるための最後の左右の入力
         this.webTimer = 0;
         this._webLastDir = 0;
+        // 被弾ノックバックの反動の残りフレーム（onKnockback）。この間は左右の入力と摩擦を止める
+        this.recoilTimer = 0;
         // 絡まってからのフレーム数（機体の糸が育つ）と、揺さぶった瞬間に糸がはねる残りフレーム・向き
         this._webAge = 0;
         this._webJolt = 0;
@@ -230,11 +232,28 @@ export class Player {
         }
     }
 
+    /**
+     * 被弾ノックバック（utils/Knockback.js の applyKnockback が呼ぶ）。2026-11-23 ユーザー指定
+     * 「敵のアタッカーと同じように自機も被弾したときにノックバック」。速度は applyKnockback が書き換え済み。
+     * それだけでは次のフレームで左右の入力（±MAX の代入）と地面の摩擦に消されていたので、
+     * PLAYER_RECOIL_FRAMES の間その2つを止める（_updateHorizontal）。ホバーは止めない（穴・水の上で立て直せる）。
+     * 岩へ向かって飛ばされても、横・縦の当たり（_moveAndCollide）は普段と同じに効く
+     */
+    onKnockback() {
+        this.recoilTimer = PLAYER_RECOIL_FRAMES;
+    }
+
     /** Apply horizontal movement or friction. */
     _updateHorizontal(input) {
         // 左右の入力の向き。母艦を横から押すのは入力で進んでいるときだけ（_pushOutOfCarrierHorizontally）。
         // vx の向きで見ると、被弾で飛ばされてぶつかっただけでも母艦が動いてしまう
         this.heldDir = 0;
+        // 被弾の反動中は、飛ばされた速さのまま（入力も摩擦も効かせない）。数え下げもここで行い、
+        // 敵アタッカーの tickRecoil と同じく、PLAYER_RECOIL_FRAMES のフレーム数ぶんちょうど止める
+        if (this.recoilTimer > 0) {
+            this.recoilTimer--;
+            return;
+        }
         if (this.crouching) {
             if (this.onGround) this.vx = 0;
             return;
@@ -879,6 +898,8 @@ export class Player {
         this.stunTimer = 0;
         this.webTimer = 0;
         this._webLastDir = 0;
+        // 被弾ノックバックの反動の残りフレーム（onKnockback）。この間は左右の入力と摩擦を止める
+        this.recoilTimer = 0;
         // 絡まってからのフレーム数（機体の糸が育つ）と、揺さぶった瞬間に糸がはねる残りフレーム・向き
         this._webAge = 0;
         this._webJolt = 0;
@@ -1026,6 +1047,7 @@ export class Player {
 Player.prototype.motion = LAND_MOTION;
 Player.prototype.webTimer = 0;
 Player.prototype._webLastDir = 0;
+Player.prototype.recoilTimer = 0;
 Player.prototype._webAge = 0;
 Player.prototype._webJolt = 0;
 Player.prototype._webJoltDir = 0;

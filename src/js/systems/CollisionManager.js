@@ -134,6 +134,9 @@ export class CollisionManager {
         const hx = hitPoint ? hitPoint.x : bullet.x;
         const hy = hitPoint ? hitPoint.y : bullet.y;
         let damage = ENEMY_BULLET_DAMAGE;
+        // 爆発する弾（ミサイル）は当たった機体を飛ばす。自機の被弾ノックバック（2026-11-23 ユーザー指定）。
+        // 普通の敵弾・レーザー・スパイダーの弾は飛ばさない（アタッカーも MG では飛ばない）。母艦は vx を持たないので効かない
+        let knock = false;
 
         if (bullet.isBaseLaser) {
             damage = BASE_LASER_DAMAGE;
@@ -144,9 +147,11 @@ export class CollisionManager {
         } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
             damage = CRUISE_MISSILE_DAMAGE;
             bullet._explode(true);   // 自機に当たって爆発。撃ち落とした爆発（下の迎撃）とは違い、町と地雷は巻き込まない
+            knock = true;
         } else if (bullet.constructor.name === 'EnemyHomingMissile') {
             damage = ENEMY_HOMING_MISSILE_DAMAGE;
             playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { fromEnemy: true });
+            knock = true;
         } else if (bullet.isBurstShell) {
             // スパイダーの弾の直撃。ダメージは普通の敵弾と同じで、割れる演出だけ出す。
             // その場から5発を出すと機体の中から出て次のフレームで全部当たり、1発で 60 になるので出さない
@@ -155,6 +160,9 @@ export class CollisionManager {
 
         recordHit(target, hx, hy);
         target.takeDamage(damage);
+        if (knock && target === game.player) {
+            applyKnockback(target, (target.x + target.width / 2) - hx, MISSILE_HIT_KNOCKBACK_VY, MISSILE_HIT_KNOCKBACK_VX);
+        }
         if (!bullet.isBaseLaser) bullet.alive = false;
     }
 
