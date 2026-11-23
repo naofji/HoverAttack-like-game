@@ -896,8 +896,9 @@ export const SPIDER_SHELL_AIM_ABOVE = 120;
 export const SPIDER_SHELL_AIM_ABOVE_MIN = 80;
 export const SPIDER_SHELL_AIM_STEP = 20;
 export const SPIDER_SHELL_LIFETIME = 240;
-// 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした。球に見せるため 4 → 5
-export const SPIDER_SHELL_RADIUS = 5;
+// 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした。球に見せるため 4 → 5 としたが、
+// 実機で「弾自体が大きすぎ」（2026-11-23）で 3.5。見た目と自機への当たりの半径（迎撃は SPIDER_SHELL_INTERCEPT_RADIUS で別）
+export const SPIDER_SHELL_RADIUS = 3.5;
 // 見た目は深紫の球（ユーザー指定、2026-11-22）。左上のハイライト → 地の深紫 → 影 → 暗い縁の放射グラデーションで立体に見せる。
 // 初めのハイライト #C9A2FF・地 #4A1678 は「明るすぎる。もう少し暗く、立体感をしっかり」（2026-11-23）だったので、
 // 全体を暗くし、地と縁の間に影の段（SHADE）を足して、光の当たる側と影の側の差をはっきりさせた
@@ -912,11 +913,13 @@ export const COLOR_SPIDER_SHELL = '#9C5CFF';
 export const SPIDER_SHELL_BLINK_FRAMES = 20;
 export const COLOR_SPIDER_SHELL_BLINK = '#8C52D6';
 // 球の周りの光の輪（「もう少し目立つように。明滅させるもヨシ」2026-11-23 ユーザー指定）。球は暗いまま、周りを紫に光らせ、
-// 明るさを GLOW_ALPHA の範囲で GLOW_PERIOD フレームごとに脈打たせる。割れる直前（BLINK_FRAMES）は 3 倍の速さで脈打つ
+// 明るさを GLOW_ALPHA の範囲で GLOW_PERIOD フレームごとに脈打たせる。割れる直前（BLINK_FRAMES）は 3 倍の速さで脈打つ。
+// 初めの半径 11・明るさ 0.25〜0.8 は「フレアが明るすぎて、弾というよりお手玉みたい」（2026-11-23）。大きくぼんやり光る円が
+// 球そのものに見えていたので、輪は球のすぐ外（半径 6 ＝ 球 3.5 の外 2.5px）にまとわせ、一番明るいときも 0.45 に抑えた
 export const COLOR_SPIDER_SHELL_GLOW = '#B57CFF';
-export const SPIDER_SHELL_GLOW_RADIUS = 11;
+export const SPIDER_SHELL_GLOW_RADIUS = 6;
 export const SPIDER_SHELL_GLOW_PERIOD = 24;
-export const SPIDER_SHELL_GLOW_ALPHA = [0.25, 0.8];
+export const SPIDER_SHELL_GLOW_ALPHA = [0.1, 0.45];
 // 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
 //   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
 // 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた

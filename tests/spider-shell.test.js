@@ -425,3 +425,11 @@ test('止まった自機に向けた弾は、頭のほぼ真上（横 20px 以�
     assert.ok(Math.abs(shell.x - (p.x + 8)) <= 20, `(${x0}, ${y0}) から: 横に ${(shell.x - p.x - 8).toFixed(1)}px で割れた`);
   }
 });
+
+// 2026-11-23 ユーザー指定: 「弾自体が大きすぎ」「フレアが明るすぎてお手玉みたい」。弾に見える大きさと光り方に収める
+test('弾は普通の敵弾の2倍より小さく、光の輪は球にまとわる程度で淡い', async () => {
+  const C = await import('../src/js/utils/Constants.js');
+  assert.ok(C.SPIDER_SHELL_RADIUS < C.ENEMY_BULLET_RADIUS * 2, `球の半径 ${C.SPIDER_SHELL_RADIUS}`);
+  assert.ok(C.SPIDER_SHELL_GLOW_RADIUS <= C.SPIDER_SHELL_RADIUS * 2, `輪の半径 ${C.SPIDER_SHELL_GLOW_RADIUS}`);
+  assert.ok(C.SPIDER_SHELL_GLOW_ALPHA[1] <= 0.5, `輪の一番明るいとき ${C.SPIDER_SHELL_GLOW_ALPHA[1]}`);
+});
