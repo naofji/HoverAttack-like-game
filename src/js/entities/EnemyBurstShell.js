@@ -19,6 +19,7 @@ import {
     COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_SHADE, COLOR_SPIDER_SHELL_RIM,
     SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
     SPIDER_SHELL_SCORE, SPIDER_SHELL_BURST_MIN_ABOVE, TOWN_SWEEP_STEP,
+    COLOR_SPIDER_SHELL_GLOW, SPIDER_SHELL_GLOW_RADIUS, SPIDER_SHELL_GLOW_PERIOD, SPIDER_SHELL_GLOW_ALPHA,
 } from '../utils/Constants.js';
 import { Bullet } from './Bullet.js';
 import { EnemyBullet } from './EnemyBullet.js';
@@ -148,6 +149,7 @@ export class EnemyBurstShell extends Bullet {
      */
     draw(ctx) {
         if (!this.alive) return;
+        this._drawGlow(ctx);
         const r = this.radius;
         const g = ctx.createRadialGradient(this.x - r * 0.4, this.y - r * 0.45, r * 0.05, this.x, this.y, r);
         g.addColorStop(0, COLOR_SPIDER_SHELL_HIGHLIGHT);
@@ -158,6 +160,27 @@ export class EnemyBurstShell extends Bullet {
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.fill();
+    }
+
+    /**
+     * 球の周りの脈打つ紫の光（霧の中で目立たせる。球そのものは暗いまま立体に見せたいので、光は外に出す）。
+     * 割れる直前は速く脈打って「もうすぐ割れる」を知らせる
+     */
+    _drawGlow(ctx) {
+        const left = this.target.frames - this.age;
+        const period = left <= SPIDER_SHELL_BLINK_FRAMES ? SPIDER_SHELL_GLOW_PERIOD / 3 : SPIDER_SHELL_GLOW_PERIOD;
+        const [lo, hi] = SPIDER_SHELL_GLOW_ALPHA;
+        const k = 0.5 - 0.5 * Math.cos((this.age / period) * Math.PI * 2);
+        const g = ctx.createRadialGradient(this.x, this.y, this.radius * 0.5, this.x, this.y, SPIDER_SHELL_GLOW_RADIUS);
+        g.addColorStop(0, COLOR_SPIDER_SHELL_GLOW);
+        g.addColorStop(1, 'rgba(181, 124, 255, 0)');   // COLOR_SPIDER_SHELL_GLOW の透明
+        const prev = ctx.globalAlpha;
+        ctx.globalAlpha = lo + (hi - lo) * k;
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, SPIDER_SHELL_GLOW_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = prev;
     }
 }
 

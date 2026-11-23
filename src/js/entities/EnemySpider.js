@@ -18,7 +18,7 @@
 
 import {
     TILE_SIZE, SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE,
-    SPIDER_CRAWL_SPEED, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE, SPIDER_JINK_CHANCE,
+    SPIDER_CRAWL_SPEED, SPIDER_CORNER_FRAMES, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE, SPIDER_JINK_CHANCE,
     SPIDER_ENGAGE_DIST_X, SPIDER_ENGAGE_DIST_Y, SPIDER_ENGAGE_JITTER, SPIDER_SEEK_DEADBAND,
     SPIDER_HOP_CHANCE, SPIDER_HOP_SPEED, SPIDER_HOP_SIDE_SPEED, SPIDER_HOP_GRAVITY, SPIDER_HOP_AFTER_FIRE_CHANCE,
     SPIDER_THREAD_CHANCE, SPIDER_THREAD_MAX_TILES, SPIDER_THREAD_SHOOT_FRAMES,
@@ -51,6 +51,13 @@ const LEG_FOOT_X = [-6, -2.5, 2.5, 6];
 
 // 箱の端ちょうどは隣のタイルに入らない（surfaceCrawl.js と同じ半開区間の見方）
 const EPS = 1e-6;
+
+/** 角度を (−π, π] へ */
+function wrapAngle(a) {
+    while (a > Math.PI) a -= 2 * Math.PI;
+    while (a <= -Math.PI) a += 2 * Math.PI;
+    return a;
+}
 
 /** [min, max] の範囲の整数を引く */
 function pick(rng, [min, max]) {
@@ -120,6 +127,7 @@ export class EnemySpider {
             case 'leap':
             case 'fall': this._updateAirborne(); break;
             case 'thread': this._updateThread(); break;
+            case 'corner': this._updateCorner(); break;
             default: break;
         }
     }
@@ -133,6 +141,12 @@ export class EnemySpider {
             this._startFall();
             return;
         }
+        // 出っ張った角（新しい前 = 元の下）は、1フレームで側面へ移さず回り込む
+        const down = downOf(this.surface);
+        if (next.surface !== this.surface && next.fwd.x === down.x && next.fwd.y === down.y) {
+            this._startCorner(next);
+            return;
+        }
         this.x = next.x;
         this.y = next.y;
         this.surface = next.surface;
@@ -141,6 +155,92 @@ export class EnemySpider {
         // 脚の振り。速さに比例させると 4px で脚が回りすぎて見えないので、走っている間の一定の速さにした
         this.walkPhase += 1.2;
         if (--this.modeTimer <= 0) this._endRun();
+    }
+
+    /**
+     * 出っ張った角を回り込む。stepCrawl が出した側面の位置 next へ、角の点 P を軸に体の中心を半円で動かす
+     * （中心は P から 7√2 のまま、元の面の上 → 角の斜め外 → 側面）。絵は元の面の向きから新しい面の向きへ 90° 回す。
+     * 半円の上ではどこでも箱は岩に入らない（箱が岩の側の象限に掛かるのは cos > 1/√2 かつ sin < −1/√2 のときで、両立しない）
+     * @param {{x:number, y:number, surface:string, fwd:{x:number,y:number}}} next stepCrawl の回り込んだ後の体
+     */
+    _startCorner(next) {
+        const h = SPIDER_SIZE / 2;
+        const a0 = this._away();
+        const f0 = this.fwd;
+        const d1 = downOf(next.surface);
+        const a1 = { x: -d1.x, y: -d1.y };
+        const f1 = next.fwd;
+        // 新しい位置の中心は P + h(a1 + f1)。そこから角の点を逆算する（next は stepCrawl がタイル境界に揃えた正確な値）
+        const P = { x: next.x + h - h * (a1.x + f1.x), y: next.y + h - h * (a1.y + f1.y) };
+        // 角を回る半円は、元の面の上で角に接する位置（中心 P + h(a0 − f0)）から、角の斜め外（a0 + f0 の向き）を通って
+        // 側面の位置（P + h(a1 + f1)）まで。ただし箱は半分ほど角からはみ出すまで元の面に乗っていられるので、出発の角度は
+        // 今の中心から取る（理想の出発点から回すと 7px 後ろへ跳んだ）。半径は 7√2 のまま（今の中心は角に近く、
+        // その距離で回すと箱の角が岩に掛かる）。絵の回り方は、理想の半円のどこまで来たかに合わせる
+        const thIdeal0 = Math.atan2(a0.y - f0.y, a0.x - f0.x);
+        const thMid = Math.atan2(a0.y + f0.y, a0.x + f0.x);
+        const dir = Math.sign(wrapAngle(thMid - thIdeal0));
+        // 理想の出発点から回る向きに測った角度。わずかに手前（負）なら 0 とみなす（2π 近くと読んで回り終えたことにしない）
+        const along = (a) => Math.max(0, wrapAngle(a - thIdeal0) * dir);
+        const th0 = Math.atan2(this.y + h - P.y, this.x + h - P.x);
+        const done = Math.min(along(th0), Math.PI);   // 理想の半円（π）のうち、もう回った分
+        const rot0 = ROTATION[this.surface];
+        const rotSweep = wrapAngle(ROTATION[next.surface] - rot0);
+        this.corner = {
+            P, r: h * Math.SQRT2, dir,
+            thIdeal0, done, frames: Math.max(2, Math.round(SPIDER_CORNER_FRAMES * (Math.PI - done) / Math.PI)),
+            rot0, rotSweep,
+            next: { x: next.x, y: next.y, surface: next.surface, fwd: { ...next.fwd } },
+            t: 0,
+        };
+        // 半円が岩に入らないのは、角のタイルのほかに岩が無いときだけ。1タイル幅の溝や、斜め外に別の岩がある所では
+        // 半円の外側が向かいの岩に入った（本物の6面で 5 シード回して、めり込み 0 → 3766 フレーム）。
+        // 回る前に全部の位置を確かめ、どこかで入るなら前のとおり1フレームで側面へ移す（狭い所で回れないだけ）
+        const isSolid = this._isSolid();
+        for (let t = 1; t < this.corner.frames; t++) {
+            const q = this._cornerPos(t);
+            if (boxHitsSolid(isSolid, q.x, q.y, SPIDER_SIZE)) {
+                this.corner.t = this.corner.frames - 1;
+                break;
+            }
+        }
+        this.mode = 'corner';
+        this._leaveSurface();
+        this._updateCorner();
+    }
+
+    /** 回り込みの t フレーム目の箱の左上 */
+    _cornerPos(t) {
+        const c = this.corner;
+        const th = c.thIdeal0 + c.dir * this._cornerProgress(t);
+        const h = SPIDER_SIZE / 2;
+        return { x: c.P.x + c.r * Math.cos(th) - h, y: c.P.y + c.r * Math.sin(th) - h };
+    }
+
+    _updateCorner() {
+        const c = this.corner;
+        c.t++;
+        this.walkPhase += 1.2;
+        if (c.t >= c.frames) {
+            const n = c.next;
+            this.x = n.x;
+            this.y = n.y;
+            this.surface = n.surface;
+            this.drawSurface = n.surface;
+            this.fwd = n.fwd;
+            this.corner = null;
+            this.mode = 'crawl';   // 走りの残り（modeTimer）はそのまま続ける
+            return;
+        }
+        // 回っている途中で岩ができることは無い（壊れて減るだけ）ので、始めに確かめた位置をそのままたどる
+        const q = this._cornerPos(c.t);
+        this.x = q.x;
+        this.y = q.y;
+    }
+
+    /** 理想の半円（0..π）のどこまで回ったか。t を省くと今のフレーム */
+    _cornerProgress(t = this.corner.t) {
+        const c = this.corner;
+        return c.done + (Math.PI - c.done) * Math.min(1, t / c.frames);
     }
 
     _updatePause() {
@@ -521,6 +621,10 @@ export class EnemySpider {
     // ------------------------------------------
     /** 絵の回転（破片も読む）。空中では最後に張り付いていた面の向きで描く */
     _drawRotation() {
+        if (this.mode === 'corner' && this.corner) {
+            const c = this.corner;
+            return c.rot0 + c.rotSweep * (this._cornerProgress() / Math.PI);
+        }
         return ROTATION[this.surface || this.drawSurface] || 0;
     }
 

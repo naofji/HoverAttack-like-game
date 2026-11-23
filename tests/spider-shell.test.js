@@ -341,7 +341,8 @@ test('弾は深紫の球として、ハイライトを左上にずらした放�
   const shell = new EnemyBurstShell(game, 100, 200, 0, { x: 0, y: 0, frames: 9999 });
   const ctx = makeFakeCtx();
   shell.draw(ctx);
-  const grad = ctx.calls.find((c) => c.name === 'createRadialGradient');
+  // 外の光の輪も放射グラデーションなので、球（外の半径 = 弾の半径）のものを選ぶ
+  const grad = ctx.calls.find((c) => c.name === 'createRadialGradient' && c.args[5] === C.SPIDER_SHELL_RADIUS);
   assert.ok(grad, '放射グラデーションで塗っていない');
   const [x0, y0, , x1, y1, r1] = grad.args;
   assert.ok(x0 < x1 && y0 < y1, 'ハイライトが左上にない');
@@ -349,8 +350,7 @@ test('弾は深紫の球として、ハイライトを左上にずらした放�
   const colors = grad.grad.stops.map(([, c]) => c);
   assert.ok(colors.includes(C.COLOR_SPIDER_SHELL_BODY), `深紫の地の色が無い: ${colors}`);
   assert.equal(colors[colors.length - 1], C.COLOR_SPIDER_SHELL_RIM, '縁が暗くない');
-  const arc = ctx.calls.find((c) => c.name === 'arc');
-  assert.equal(arc.args[2], C.SPIDER_SHELL_RADIUS);
+  assert.ok(ctx.calls.some((c) => c.name === 'arc' && c.args[2] === C.SPIDER_SHELL_RADIUS), '球の大きさで描いていない');
 });
 
 test('弾の速さは 4、届く距離（平地で v²/g）は撃つ距離より長い', async () => {
@@ -391,5 +391,37 @@ test('止まった自機に向けた弾は、自機の上端から 80px 以上�
     flyUntilBurst(shell);
     assert.equal(shell.alive, false);
     assert.ok(p.y - shell.y >= 80, `(${x0}, ${y0}) から: 頭上 ${(p.y - shell.y).toFixed(1)}px で割れた`);
+  }
+});
+
+// ------------------------------------------
+// 2026-11-23 ユーザー指定: 弾を目立たせる（明滅も可）、頭の真上で割れる
+// ------------------------------------------
+test('弾の周りに光の輪があり、明るさが明滅する', async () => {
+  const { makeFakeCtx } = await import('./helpers/fake-ctx.js');
+  const C = await import('../src/js/utils/Constants.js');
+  const game = openWorld();
+  const shell = new EnemyBurstShell(game, 100, 200, 0, { x: 0, y: 0, frames: 9999 });
+  const glowAlpha = () => {
+    const ctx = makeFakeCtx();
+    shell.draw(ctx);
+    const i = ctx.calls.findIndex((c) => c.name === 'arc' && c.args[2] > C.SPIDER_SHELL_RADIUS);
+    assert.ok(i >= 0, '球より大きい光の輪が無い');
+    // 輪を描いた時点の globalAlpha（その前の最後の代入）
+    for (let j = i; j >= 0; j--) if (ctx.calls[j].name === 'set:globalAlpha') return ctx.calls[j].args[0];
+    return 1;
+  };
+  const seen = new Set();
+  for (let a = 0; a < 40; a++) { shell.age = a; seen.add(glowAlpha().toFixed(2)); }
+  assert.ok(seen.size >= 3, `明滅していない: ${[...seen]}`);
+});
+
+test('止まった自機に向けた弾は、頭のほぼ真上（横 20px 以内）で割れる', () => {
+  for (const [x0, y0] of [[150, 470], [250, 440], [650, 470], [200, 392], [600, 392], [250, 250], [560, 200], [380, 470]]) {
+    const game = openWorld();
+    const p = addPlayer(game, 400, 380);
+    const shell = fireAt(game, x0, y0, p.x + 8, p.y + 12 - AIM);
+    flyUntilBurst(shell);
+    assert.ok(Math.abs(shell.x - (p.x + 8)) <= 20, `(${x0}, ${y0}) から: 横に ${(shell.x - p.x - 8).toFixed(1)}px で割れた`);
   }
 });

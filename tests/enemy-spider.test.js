@@ -413,3 +413,37 @@ test('どちらへ跳んでも面が無ければ跳ばない', () => {
   assert.notEqual(s.mode, 'hop');
   assert.equal(s.surface, 'ceiling');
 });
+
+// ------------------------------------------
+// 2026-11-23 ユーザー指定: 岩の出っ張った角は、いきなり側面へ移らず回り込む
+// ------------------------------------------
+test('出っ張った角は、角を軸に回り込んで側面へ移る（1フレームで跳ばない）', async () => {
+  // 宙に浮いた 4×4 タイルの岩。上面を右へ走って右の側面へ回る
+  const rows = [];
+  for (let r = 0; r < 30; r++) rows.push('.'.repeat(30));
+  for (let r = 10; r < 14; r++) rows[r] = '.'.repeat(10) + '####' + '.'.repeat(16);
+  const { game, map } = world(rows);
+  const s = new EnemySpider(game, 12 * T, 10 * T - S, 'floor');
+  s.fwd = { x: 1, y: 0 };
+  s.fireTimer = 1e9;
+  s.mode = 'crawl';
+  s.modeTimer = 1000;
+  const P = { x: 14 * T, y: 10 * T };   // 回る角
+  const isSolid = isSolidOf(map);
+  let maxStep = 0;
+  const rots = [];
+  let px = s.x, py = s.y;
+  for (let i = 0; i < 40 && s.surface !== 'wallL'; i++) {
+    s.update();
+    s.modeTimer = 1000;   // 途中で止まらせない
+    maxStep = Math.max(maxStep, Math.hypot(s.x - px, s.y - py));
+    px = s.x; py = s.y;
+    assert.equal(boxHitsSolid(isSolid, s.x, s.y, S), false, `frame ${i}: 岩にめり込んだ`);
+    rots.push(s._drawRotation());
+  }
+  assert.equal(s.surface, 'wallL', '側面へ回っていない');
+  assert.ok(maxStep <= 6, `1フレームで ${maxStep.toFixed(1)}px 跳んだ`);
+  assert.ok(rots.some((r) => r > 0.2 && r < Math.PI / 2 - 0.2), `回る途中の向きが無い: ${rots.map((r) => r.toFixed(2))}`);
+  // 角の外側を回る（体の中心は角から離れたまま）
+  assert.ok(Math.hypot(s.x + S / 2 - P.x, s.y + S / 2 - P.y) < 12);
+});

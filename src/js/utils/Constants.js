@@ -819,6 +819,10 @@ export const SPIDER_SCORE = 250;
 export const SPIDER_CRAWL_SPEED = 4;          // px/フレーム
 export const SPIDER_RUN_FRAMES = [6, 20];     // 1回の走りの長さ（24〜80px）
 export const SPIDER_PAUSE_FRAMES = [8, 45];   // 止まる長さ
+// 出っ張った角を回り込むフレーム数。角を軸に体の中心が半円（半径 7√2 ≈ 9.9px、弧の長さ ≈ 31px）を描き、絵は 90° 回る。
+// 初めは1フレームで側面へ移していたが「いきなり側面から上面に移るのではなく、その間を回り込むように」（2026-11-23 ユーザー指定）。
+// 31px を走る速さ（4）で割った 8
+export const SPIDER_CORNER_FRAMES = 8;
 export const SPIDER_TURN_CHANCE = 0.35;       // 自機が見えないとき、止まったあと向きを変える確率
 // 走り終わりに止まらず、すぐ逆へ走り出す（クモの急な切り返し）確率
 export const SPIDER_JINK_CHANCE = 0.3;
@@ -900,10 +904,18 @@ export const COLOR_SPIDER_SHELL = '#9C5CFF';
 // #E6D4FF から落とした）
 export const SPIDER_SHELL_BLINK_FRAMES = 20;
 export const COLOR_SPIDER_SHELL_BLINK = '#8C52D6';
+// 球の周りの光の輪（「もう少し目立つように。明滅させるもヨシ」2026-11-23 ユーザー指定）。球は暗いまま、周りを紫に光らせ、
+// 明るさを GLOW_ALPHA の範囲で GLOW_PERIOD フレームごとに脈打たせる。割れる直前（BLINK_FRAMES）は 3 倍の速さで脈打つ
+export const COLOR_SPIDER_SHELL_GLOW = '#B57CFF';
+export const SPIDER_SHELL_GLOW_RADIUS = 11;
+export const SPIDER_SHELL_GLOW_PERIOD = 24;
+export const SPIDER_SHELL_GLOW_ALPHA = [0.25, 0.8];
 // 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
 //   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
 // 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた
-export const SPIDER_SHELL_BURST_DX = 40;
+// 40 だと、横から来た弾が頭の手前 40px で斜め上に割れた。「狙いをもう少し頭上側に」（2026-11-23 ユーザー指定）で 14。
+// 弾は 1 フレームに横へ最大 4px 進むので、割れる点は頭の中心から横 18px 以内に収まる
+export const SPIDER_SHELL_BURST_DX = 14;
 // 条件2で割れてよいのは、自機の上端よりこれ以上上にいるときだけ。最終レビューの実測で、下から上がってくる弾が
 // 頭の横 40px の帯に入った瞬間に頭のすぐ上（20px 以内が 25%）で割れ、止まった自機に5発がまとめて当たっていた
 // （3発以上が 35%、5発全部が 7%）。狙いの点（上端の 108px 上 ＝ 120 − 自機の高さの半分 12）の 28px 手前。
