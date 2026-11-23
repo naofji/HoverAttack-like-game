@@ -401,7 +401,7 @@ export const MapSpawns = {
      * @returns {Array<{cx:number, cy:number, size:'small'|'large'}>}
      */
     _findSpiderPositions() {
-        // 6面だけ。範囲の外では乱数を作りもしない（他の面の生成に何も足さない）
+        // 6・7面だけ。範囲の外では乱数を作りもしない（他の面の生成に何も足さない）
         if (this.missionLevel < SPIDER_MISSION || this.missionLevel > SPIDER_LAST_MISSION) return [];
         // 派生ストリーム。game.rng を進めないので、敵の構成も地形も変わらない（週次の決定性）
         const rng = new SeededRNG((this.game.rng.state ^ SPIDER_SPAWN_SALT) >>> 0);
@@ -436,6 +436,10 @@ export const MapSpawns = {
                 else if (isSolid(r + 1, c)) spot = { x: c * T + (T - S) / 2, y: (r + 1) * T - S, surface: 'floor' };
                 if (!spot || nearSpawn(spot.x, spot.y)) continue;
                 if (boxHitsSolid(isSolid, spot.x, spot.y, S) || !hasSupport(isSolid, { ...spot, size: S })) continue;
+                // 張り付く岩が形のある（斜面の）タイルなら置かない。スパイダーはタイル単位で這うので斜面から浮いて見える
+                // （7面の金属の斜面。60 週で 300 体中 9 体が乗っていた。6面には形のあるタイルが無いので置き場所は変わらない）
+                const [sr, sc] = { ceiling: [r - 1, c], wallL: [r, c - 1], wallR: [r, c + 1], floor: [r + 1, c] }[spot.surface];
+                if (this.tileShapeAt(sr, sc) !== SHAPE_FULL) continue;
                 candidates.push({ ...spot, c });
             }
         }

@@ -31,6 +31,7 @@ import {
 
 } from '../utils/Constants.js';
 import { stepCrawl, hasSupport, boxHitsSolid, downOf } from '../utils/surfaceCrawl.js';
+import { SHAPE_FULL } from '../utils/tileShape.js';
 import { spawnStateRng } from '../utils/spawnState.js';
 import { applyDamage } from '../utils/damage.js';
 import { playDestruction } from './destruction.js';
@@ -139,6 +140,14 @@ export class EnemySpider {
         const next = stepCrawl(this._isSolid(), this._body(), SPIDER_CRAWL_SPEED);
         if (next.surface === null) {
             this._startFall();
+            return;
+        }
+        // 形のある（斜面の）タイルへは這って入らず折り返す。スパイダーはタイル単位の岩の上を這うので、7面の金属の
+        // 斜面に乗ると見える斜面から浮いて、四角い段の上を歩いて見える（2026-11-23、7面にも置くときに。本物の7面で
+        // 這っている間の 2.3% が斜面の上だった）。すでに斜面の上（跳んで・糸で降りて乗った）なら、出られるようにそのまま
+        if (this._onShapedTile(next) && !this._onShapedTile(this._body())) {
+            this._reverse();
+            if (--this.modeTimer <= 0) this._endRun();
             return;
         }
         // 出っ張った角（新しい前 = 元の下）は、1フレームで側面へ移さず回り込む
@@ -307,6 +316,24 @@ export class EnemySpider {
 
     _reverse() {
         this.fwd = { x: -this.fwd.x || 0, y: -this.fwd.y || 0 };
+    }
+
+    /** 体 body を支える面（下の 1px の帯）が、形のある（全部は埋まっていない）岩のタイルに掛かっているか */
+    _onShapedTile(body) {
+        const map = this.game.map;
+        const d = downOf(body.surface);
+        const n = SPIDER_SIZE;
+        // 帯は下の向きの 1px 外側。帯が掛かるタイルの行・列の範囲
+        const x0 = d.x < 0 ? body.x - 1 : d.x > 0 ? body.x + n : body.x;
+        const x1 = d.x !== 0 ? x0 : body.x + n - 1;
+        const y0 = d.y < 0 ? body.y - 1 : d.y > 0 ? body.y + n : body.y;
+        const y1 = d.y !== 0 ? y0 : body.y + n - 1;
+        for (let r = Math.floor(y0 / TILE_SIZE); r <= Math.floor(y1 / TILE_SIZE); r++) {
+            for (let c = Math.floor(x0 / TILE_SIZE); c <= Math.floor(x1 / TILE_SIZE); c++) {
+                if (map.isSolid(r, c) && map.tileShapeAt(r, c) !== SHAPE_FULL) return true;
+            }
+        }
+        return false;
     }
 
     /** @param {number} [maxFrames] 行き先までのフレーム数。走りの長さをこれで打ち切る */

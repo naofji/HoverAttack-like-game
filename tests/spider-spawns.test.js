@@ -39,8 +39,9 @@ test('6面（missionLevel 5）では数体が前半〜中盤（偵察部隊）�
   }
 });
 
-test('6面以外では置かれない', async () => {
-  for (const ml of [0, 1, 2, 3, 4, 6]) {
+// 2026-11-23 ユーザー指定「スパイダーは7面にも配置して」で 6・7面に
+test('6・7面以外では置かれない', async () => {
+  for (const ml of [0, 1, 2, 3, 4]) {
     const { map } = await buildMap(42, ml);
     assert.deepEqual(map.spiderSpawns, [], `missionLevel ${ml}`);
   }
@@ -87,4 +88,22 @@ test('SpawnManager が EnemySpider を作る', async () => {
   const spiders = game.enemies.filter((e) => e instanceof EnemySpider);
   assert.equal(spiders.length, 2);
   assert.deepEqual(spiders.map((s) => [s.x, s.y, s.surface]), [[100, 50, 'ceiling'], [300, 82, 'floor']]);
+});
+
+test('7面にも置かれ、金属の斜面（形のあるタイル）には張り付かない', async () => {
+  const { SHAPE_FULL } = await import('../src/js/utils/tileShape.js');
+  const T = 16;
+  let total = 0;
+  // 6・8・31 は斜面を除かないと斜面に張り付いた週（60 週を数えて 300 体中 9 体）
+  for (const seed of [42, 6, 8, 31]) {
+    const { map } = await buildMap(seed, 6);
+    total += map.spiderSpawns.length;
+    for (const p of map.spiderSpawns) {
+      const c = Math.floor((p.x + 7) / T);
+      const r = Math.floor((p.y + 7) / T);
+      const [sr, sc] = { ceiling: [r - 1, c], floor: [r + 1, c], wallL: [r, c - 1], wallR: [r, c + 1] }[p.surface];
+      assert.equal(map.tileShapeAt(sr, sc), SHAPE_FULL, `seed ${seed} の (${p.x}, ${p.y}) ${p.surface} は斜面に張り付いている`);
+    }
+  }
+  assert.ok(total > 0, '7面に置かれていない');
 });

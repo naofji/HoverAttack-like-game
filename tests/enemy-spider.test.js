@@ -491,3 +491,31 @@ test('へこんだ角は、その場で体を少しずつ起こして壁へ移�
   for (let i = 0; i < 5; i++) { s.update(); s.modeTimer = 1000; }
   assert.ok(s.y < y0 - 8, `登っていない ${y0} → ${s.y}`);
 });
+
+// 2026-11-23 ユーザー指定で 7面にも置く。スパイダーはタイル単位の岩（isSolid）の上を這うので、7面の金属の斜面
+// （形のあるタイル）に乗ると、見える斜面から浮いて四角い段の上を歩いて見える。形のあるタイルへは這って入らず、
+// 手前で折り返す（跳んで・糸で降りて乗った後は、その上から出られるようにそのまま這う）
+test('形のある（斜面の）タイルへは這って入らず、手前で折り返す', async () => {
+  const { SHAPE_FULL } = await import('../src/js/utils/tileShape.js');
+  const { game, map } = world(roomRows(30, 10));
+  // 床（row 9）の列 15〜17 を斜面にする
+  for (let c = 15; c <= 17; c++) map.tileShapes[9 * map.cols + c] = SHAPE_FULL - 1;
+  const shapedUnder = (s) => {
+    if (s.surface !== 'floor') return false;
+    for (let c = Math.floor(s.x / T); c <= Math.floor((s.x + S - 1) / T); c++) if (c >= 15 && c <= 17) return true;
+    return false;
+  };
+  const s = onFloor(game, 9, 8);
+  s.fwd = { x: 1, y: 0 };
+  let approached = false;
+  let prevShaped = false;
+  for (let i = 0; i < 4000; i++) {
+    const wasCrawl = s.mode === 'crawl';
+    s.update();
+    const now = shapedUnder(s);
+    if (wasCrawl && s.mode === 'crawl') assert.ok(!(now && !prevShaped), `${i} フレーム目: 這って斜面に乗った x ${s.x.toFixed(1)}`);
+    if (s.surface === 'floor' && s.x + S >= 15 * T - 3 && s.x < 15 * T) approached = true;
+    prevShaped = now;
+  }
+  assert.ok(approached, '斜面の手前まで来ていない（テストが試せていない）');
+});
