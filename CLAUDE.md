@@ -4,7 +4,7 @@
 `index.html` が `src/js/main.js` を `<script type="module">` で読むだけで動く。
 
 ```bash
-npm test                              # node --test。全テスト。1秒弱で終わる
+npm test                              # node --test。全テスト（約3500件、30秒ほど）
 npm test -- tests/xxx.test.js         # 1ファイルだけ
 ```
 
@@ -32,9 +32,9 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
 | 画面の色・文字サイズ | `src/js/ui/theme.js` の `UI` | `ui/screens/` の各ファイル |
 | 画面のパネル寸法・表の列 | `src/js/ui/screens/layout.js` | 同ファイルのコメント |
 | 何面から出るか（敵・基地の武器・砲台の連射など） | `Constants.js` の `*_MISSION`（missionsCompleted の値。0 = 1面）、アタッカーの型は `ENEMY_ATTACKER_TYPES` の `firstMission` 列。面の数は `STAGE_COUNT` | 各機能の側（数字を直に書かない） |
-| 調整用の数値 | `src/js/utils/Constants.js` | — |
+| 調整用の数値 | 系統が合う `src/js/constants/*.js`（新しい系統のファイルを作ったら `utils/Constants.js` に `export *` を1行） | 使う側は `utils/Constants.js` から import |
 
-`Constants.js` はゲームバランスと演出の数値の唯一の置き場。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `entities/attacker/legs.js` の `LEG_STYLES`）。
+`Constants.js` はゲームバランスと演出の数値の唯一の置き場（入口）。中身は `src/js/constants/` に系統ごと（core / player / attackers / enemies / base / stages / fortress / water / environment / effects / audio / ui / town / stageProps）に分けてあり、入口が全部を再 export する。**使う側は必ず `utils/Constants.js` から import する**（`constants/` を直接読まない）。マジックナンバーを実装側に直書きしない（描画専用のパラメータだけは例外的に各ファイルのモジュールスコープに置いている。例: `entities/attacker/legs.js` の `LEG_STYLES`）。
 
 ### 音を足すとき
 
