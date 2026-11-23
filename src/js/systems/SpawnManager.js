@@ -3,7 +3,8 @@
 // ============================================
 
 import { Orb } from '../entities/Orb.js';
-import { TILE_SIZE, ENEMY_ATTACKER_TYPES, BEAM_TURRET_MISSION } from '../utils/Constants.js';
+import { TILE_SIZE, ENEMY_ATTACKER_TYPES, BEAM_TURRET_MISSION, START_SAFE_RADIUS,
+} from '../utils/Constants.js';
 import { standardWeaponAt, STANDARD_MG_CONFIG } from '../utils/attackerWeapon.js';
 import { Landmine } from '../entities/Landmine.js';
 import { EnemyTank } from '../entities/EnemyTank.js';
@@ -222,5 +223,23 @@ export class SpawnManager {
             game.base = new EnemyBase(game, game.map.enemyBaseSpawn.x, game.map.enemyBaseSpawn.y);
             game.enemies.push(game.base);
         }
+
+        this._clearStartArea();
+    }
+
+    /**
+     * 開始地点（自機の中心）から START_SAFE_RADIUS の内側の敵を外す（2026-11-23 ユーザー指定。地雷は別）。
+     * 開始地点は地図を作った後に母艦の置き場所で決まるので、地図の生成ではなくここで外す。
+     * **置く処理を全部走らせてから外す** — 置く前に飛ばすと、型の抽選・重なりの回避が game.rng を引く回数が
+     * 変わり、同じ週なのに敵の構成が変わる（週次の決定性）。敵基地は外さない（面の目的なので）
+     */
+    _clearStartArea() {
+        const game = this.game;
+        const p = game.player;
+        if (!p) return;
+        const px = p.x + p.width / 2;
+        const py = p.y + p.height / 2;
+        game.enemies = game.enemies.filter((e) => e === game.base
+            || Math.hypot(e.x + e.width / 2 - px, e.y + e.height / 2 - py) >= START_SAFE_RADIUS);
     }
 }
