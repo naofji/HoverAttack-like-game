@@ -6,6 +6,7 @@ import {
     GRAVITY, AIR_FRICTION,
     PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_MAX_SPEED,
     PLAYER_MAX_FALLING_SPEED, PLAYER_STUN_FALL_SPEED, LANDING_MIN_AIRBORNE_FRAMES, PLAYER_STUN_DURATION, PLAYER_MAX_HOVER_SPEED,
+    SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW, SPIDER_WEB_SHAKE_FRAMES,
     PLAYER_BURST_FORCE,
     HOVER_THRUST, HOVER_THRUST_MIN, HOVER_MAX_FUEL, HOVER_FUEL_CONSUMPTION,
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
@@ -89,6 +90,9 @@ export class Player {
         // Crouching & Stun
         this.crouching = false;
         this.stunTimer = 0;
+        // スパイダーの糸に絡まっている残りフレーム（entangle）と、もがいた向きを数えるための最後の左右の入力
+        this.webTimer = 0;
+        this._webLastDir = 0;
 
         // Animation
         this.walkFrame = 2;
@@ -132,6 +136,7 @@ export class Player {
         this.motion = motionFor(this.game, this.x + this.width / 2, this.y + this.height / 2);
         this._updateCrouching(input);
         this._updateHorizontal(input);
+        this._updateWebHorizontal();
         this._applySnowSlope(input);
 
         this.vy += GRAVITY * this.motion.gravity + (this.motion.downforce || 0);
@@ -139,6 +144,7 @@ export class Player {
         this._updateBurstHover(input);
         this._updateFuelRecovery(input);
         this._updateSpeedCaps();
+        this._updateWebVertical();
         this._updateFacing(input);
 
         // 着地音は「空中→接地」の遷移で1回だけ鳴らす。onGround を立てる箇所は
@@ -168,6 +174,7 @@ export class Player {
     _updateTimers() {
         if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.lifeUpTimer > 0) this.lifeUpTimer--;
+        if (this.webTimer > 0) this.webTimer--;
         if (this.missileCooldown > 0) this.missileCooldown--;
         if (this.mgFireTimer > 0) this.mgFireTimer--;
         this.mgSinceShot++;
@@ -238,6 +245,37 @@ export class Player {
             this.vx *= AIR_FRICTION;
             if (Math.abs(this.vx) < 0.1) this.vx = 0;
         }
+    }
+
+    /**
+     * スパイダーの糸に絡まった（CollisionManager._updateSpiderWeb）。ダメージは無く、しばらく動きが遅くなる。
+     * 絡まっている間にまた当たっても足し算はせず、最初からやり直す（重ねがけで長く動けなくなるのを避ける）
+     */
+    entangle() {
+        this.webTimer = SPIDER_WEB_ENTANGLE_FRAMES;
+    }
+
+    /**
+     * 絡まっている間の横の動き。_updateHorizontal が ±MAX にした直後に上限を掛ける（掛け算で弱めると、
+     * 入力の無いフレームの減衰と重なって積み上がるので上限にした）。左右の入力の向きを変えるたびに早く取れる
+     */
+    _updateWebHorizontal() {
+        const dir = this.heldDir || 0;
+        if (this.webTimer > 0) {
+            if (dir !== 0 && this._webLastDir !== 0 && dir !== this._webLastDir) {
+                this.webTimer = Math.max(0, this.webTimer - SPIDER_WEB_SHAKE_FRAMES);
+            }
+            const cap = PLAYER_MAX_SPEED * SPIDER_WEB_SLOW;
+            if (this.webTimer > 0 && Math.abs(this.vx) > cap) this.vx = Math.sign(this.vx) * cap;
+        }
+        if (dir !== 0) this._webLastDir = dir;
+    }
+
+    /** 絡まっている間は、ホバー・バーストで昇る速さにも上限を掛ける（落ちる速さはそのまま） */
+    _updateWebVertical() {
+        if (this.webTimer <= 0) return;
+        const cap = PLAYER_MAX_HOVER_SPEED * SPIDER_WEB_SLOW;
+        if (this.vy < cap) this.vy = cap;
     }
 
     /**
@@ -821,6 +859,8 @@ export class Player {
         this.hovering = false;
         this.crouching = false;
         this.stunTimer = 0;
+        this.webTimer = 0;
+        this._webLastDir = 0;
         this.hoverCooldown = 0;
         this._burstMistFrames = 0;
         this._burstSnowPuff = false;
@@ -962,6 +1002,8 @@ export class Player {
 // プロトタイプ側にも既定を置き、update() を一度も呼んでいない・constructor も
 // 通っていない経路でも motion が undefined にならないようにする。
 Player.prototype.motion = LAND_MOTION;
+Player.prototype.webTimer = 0;
+Player.prototype._webLastDir = 0;
 
 // 坂を歩く・坂に当たる手順と地形の上を歩く手順（どちらも敵アタッカーと共通）と、描画（entities/player/draw.js）
 Object.assign(Player.prototype, SlopeBody, WalkerBody, PlayerDraw);

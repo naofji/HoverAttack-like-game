@@ -886,15 +886,12 @@ export const SPIDER_MUZZLE_OFFSET = 6;        // 発射点＝体の中心から�
 // 重力もいっしょに下げて届く距離を 600 余りに保つ（8/0.10 = 640、5/0.04 = 625、4/0.026 = 615）
 export const SPIDER_SHELL_SPEED = 4;
 export const SPIDER_SHELL_GRAVITY = 0.026;
-// 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）。
-// 80 だと割れる場所が近すぎた（実機、2026-11-23「もう少しプレイヤーから離れている所で」）ので 140 にしたが、
-// 今度は遠すぎて「120px でどうか」（同日）→ 120。5発（速さ 3）が自機の上端に届くまで約 36 フレーム
-export const SPIDER_SHELL_AIM_ABOVE = 120;
-// 天井が低くて 120px 上が岩の中・弧が天井に当たるときは、SPIDER_SHELL_AIM_STEP ずつ下げて届く一番高い点を狙う。
-// 下限は元の 80（これより下は「頭のすぐ上で割れる」に戻るので、それでも駄目なら撃たない）。
-// 下げないと高さ 8 タイル（128px）の通路で一切撃たなくなった（テスト「糸にぶら下がっている間は撃たず…」で発覚）
-export const SPIDER_SHELL_AIM_ABOVE_MIN = 80;
-export const SPIDER_SHELL_AIM_STEP = 20;
+// 狙う点＝自機の中心から何 px 上。弧の形を決める点で、ふつうはそこへ着く前に SPIDER_SHELL_BURST_RANGE で割れる。
+// 経緯: 80（近すぎ）→ 140（遠すぎ）→ 120 と「狙いの点で割れる」高さを調整していたが、実機で
+// 「狙い目は頭上 50px 位、140px まで近づいたら破裂して5発に。頭上というより少し高めの位置から射出される感じ」
+// （2026-11-23 ユーザー指定）。頭の上端の 50px 上 ＝ 中心から 50 + 自機の高さの半分 12 = 62。
+// 低い点なので、天井の低い通路で狙いを下げていく仕組み（以前の AIM_ABOVE_MIN / AIM_STEP）は要らなくなった
+export const SPIDER_SHELL_AIM_ABOVE = 62;
 export const SPIDER_SHELL_LIFETIME = 240;
 // 半径。普通の敵弾（2）より大きくして、霧の中で見えるようにした。球に見せるため 4 → 5 としたが、
 // 実機で「弾自体が大きすぎ」（2026-11-23）で 3.5。見た目と自機への当たりの半径（迎撃は SPIDER_SHELL_INTERCEPT_RADIUS で別）
@@ -920,19 +917,29 @@ export const COLOR_SPIDER_SHELL_GLOW = '#B57CFF';
 export const SPIDER_SHELL_GLOW_RADIUS = 6;
 export const SPIDER_SHELL_GLOW_PERIOD = 24;
 export const SPIDER_SHELL_GLOW_ALPHA = [0.1, 0.45];
-// 破裂。次のどちらか早いほうで割れる（2026-11-22 ユーザー了承）:
-//   1. 狙いの点に着いた  2. 自機より上にいて、自機との横の距離が SPIDER_SHELL_BURST_DX 以下
-// 旧案「自機から 90px 以内」は、同じ高さのスパイダーから来た弾が斜め横で割れて5発も横から来たので捨てた
-// 40 だと、横から来た弾が頭の手前 40px で斜め上に割れた。「狙いをもう少し頭上側に」（2026-11-23 ユーザー指定）で 14。
-// 弾は 1 フレームに横へ最大 4px 進むので、割れる点は頭の中心から横 18px 以内に収まる
-export const SPIDER_SHELL_BURST_DX = 14;
-// 条件2で割れてよいのは、自機の上端よりこれ以上上にいるときだけ。最終レビューの実測で、下から上がってくる弾が
-// 頭の横 40px の帯に入った瞬間に頭のすぐ上（20px 以内が 25%）で割れ、止まった自機に5発がまとめて当たっていた
-// （3発以上が 35%、5発全部が 7%）。狙いの点（上端の 108px 上 ＝ 120 − 自機の高さの半分 12）の 28px 手前。
-// 狙いを動かすときは、いっしょに動かす（80 → 40、140 → 100、120 → 80。差の 28px は変えていない）
-export const SPIDER_SHELL_BURST_MIN_ABOVE = 80;
-export const SPIDER_SHELL_FRAGMENTS = 5;
-export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
+// 破裂。次のどれかで割れる（2026-11-23 ユーザー指定で作り直し）:
+//   1. 自機の中心から BURST_RANGE まで近づいた  2. 狙いの点に着いた  3. 地形・建物に当たった・寿命
+// 1 は外から内へ入ったときだけ。撃った時点ですでに内側（壁の上など自機に近いスパイダー）なら、足元で割れないよう
+// 狙いの点まで飛ばす。以前の「頭の真上（横 14px 以内）・頭上 80px 以上で割る」判定は、この距離の判定に置き換えた
+export const SPIDER_SHELL_BURST_RANGE = 140;
+// 割れたら5本の糸（entities/SpiderWeb.js）を自機へ向けて扇に広げる。初めは5発の普通の敵弾だったが、
+// 「5発の弾よりも Web を射出してプレイヤーの動きを邪魔する方が面白い」「5発の弾を5本の糸に。点線で、
+// 絡む感じが出るよう横糸も」（2026-11-23 ユーザー指定）。当たるとダメージは無く、しばらく動きが遅くなる
+export const SPIDER_WEB_STRANDS = 5;
+// 扇の全幅。5発の弾のころの 60° のままだと、横糸で埋まった扇は 140px 先で幅 147px になり、自機の横の速さ（1.75）では
+// 糸が届く約 47 フレームの間に外へ出られない。40° なら 140px 先で幅 102px、真ん中からでも外へ出るのに約 29 フレーム
+export const SPIDER_WEB_SPREAD = 40 * Math.PI / 180;
+export const SPIDER_WEB_SPEED = 3;            // 糸が伸びる速さ（px/フレーム）。5発の弾（ENEMY_BULLET_SPEED）と同じ
+export const SPIDER_WEB_MAX_LENGTH = 200;     // 伸び切る長さ。割れる距離 140 の自機に届き、その先 60px まで
+export const SPIDER_WEB_RING_STEP = 24;       // 横糸の間隔（中心からの距離）
+export const SPIDER_WEB_FADE_FRAMES = 30;     // 伸び切ってから薄れて消えるまで（薄れている間も当たる）
+export const SPIDER_WEB_DASH = [3, 3];        // 点線（ユーザー指定）の線と隙間
+export const COLOR_SPIDER_WEB = 'rgba(235, 240, 255, 0.85)';   // 糸（COLOR_SPIDER_THREAD）と同じ白、少し濃く
+// 絡まった自機。横の速さと上へ昇る速さを SLOW 倍に抑える（ダメージは無い）。左右の入力の向きを変えるたびに
+// SHAKE_FRAMES ずつ早く取れる（もがいてほどく）。もう一度当たると最初からやり直し（足し算はしない）
+export const SPIDER_WEB_ENTANGLE_FRAMES = 150;
+export const SPIDER_WEB_SLOW = 0.4;
+export const SPIDER_WEB_SHAKE_FRAMES = 20;
 export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;
 // 撃ち落とし。MG は跳ね返す（壊れない）、自機のミサイル・グレネードで壊れる（ユーザー指定）。
 // 当たりの距離² は誘導ミサイルの迎撃と同じ流儀。点は誘導ミサイルの撃ち落とし（HOMING_INTERCEPT_SCORE）と同じ

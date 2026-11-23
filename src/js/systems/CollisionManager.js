@@ -49,6 +49,12 @@ export class CollisionManager {
         for (let i = game.enemyBullets.length - 1; i >= 0; i--) {
             const bullet = game.enemyBullets[i];
             bullet.update();
+            // スパイダーの糸は点の弾ではない（建物・岩では糸が自分で止まる）。自機に触れたら絡まるだけで、母艦には効かない
+            if (bullet.isSpiderWeb) {
+                this._updateSpiderWeb(bullet);
+                if (!bullet.alive) game.enemyBullets.splice(i, 1);
+                continue;
+            }
             // 自機・母艦との当たりより先に見る（壁で止まった弾は当たらない）
             if (town && bullet.alive) town.sweepProjectile(bullet, vulnerable);
             // 2面の Orb。町と同じく、自機・母艦との当たりより先に見る（Orb は盾になる）
@@ -71,6 +77,19 @@ export class CollisionManager {
             }
 
             if (!bullet.alive) game.enemyBullets.splice(i, 1);
+        }
+    }
+
+    /**
+     * スパイダーの糸（entities/SpiderWeb.js）。縦糸・横糸のどれかが自機の箱に触れたら絡めて消す。
+     * ダメージは無い（2026-11-23 ユーザー指定「動きを邪魔する」）。無敵の間・ドック中は絡まない（普通の弾と同じ）
+     */
+    _updateSpiderWeb(web) {
+        const p = this.game.player;
+        if (!web.alive || !p || !p.alive || p.docked || p.invincibleTimer > 0) return;
+        if (web.segments().some((s) => segmentIntersectsRect(s.x1, s.y1, s.x2, s.y2, p))) {
+            p.entangle();
+            web.alive = false;
         }
     }
 

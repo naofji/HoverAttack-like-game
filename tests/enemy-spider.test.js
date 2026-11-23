@@ -298,21 +298,16 @@ test('壁の端を越えた小ジャンプは、横へ落ち続けずに普通�
   assert.ok(maxDx <= 1.5 * T, `横に ${maxDx.toFixed(1)}px 流れた`);
 });
 
-test('天井が低くて頭上 SPIDER_SHELL_AIM_ABOVE が岩の中なら、届く一番高い点を狙う（下限 SPIDER_SHELL_AIM_ABOVE_MIN）', async () => {
-  const { SPIDER_SHELL_AIM_ABOVE_MIN } = await import('../src/js/utils/Constants.js');
-  // 高さ 10 タイル（中は 8 タイル＝128px）の部屋。自機の中心から 140px 上は天井の岩の中
+test('高さ 8 タイルの低い部屋でも、頭上 SPIDER_SHELL_AIM_ABOVE を狙って撃つ', () => {
   const { game } = world(roomRows(40, 10));
   const s = onFloor(game, 9, 5);
   const p = playerOnFloor(game, 9, s.x + 200);
   const pcy = p.y + p.height / 2;
-  assert.ok(pcy - SPIDER_SHELL_AIM_ABOVE < T, '前提: 頭上 140px が天井の中にない');
   s.fireTimer = 0;
   for (let i = 0; i < SPIDER_FIRE_WINDUP + 2; i++) s.update();
   const list = shells(game);
   assert.equal(list.length, 1, '低い部屋で撃たなかった');
-  const above = pcy - list[0].target.y;
-  assert.ok(above >= SPIDER_SHELL_AIM_ABOVE_MIN && above < SPIDER_SHELL_AIM_ABOVE, `頭上 ${above}px を狙った`);
-  assert.ok(list[0].target.y >= T, '狙いの点が天井の中');
+  assert.equal(pcy - list[0].target.y, SPIDER_SHELL_AIM_ABOVE);
 });
 
 // ------------------------------------------

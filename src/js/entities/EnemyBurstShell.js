@@ -1,5 +1,5 @@
 // ============================================
-// EnemyBurstShell - スパイダーの弾（自機の頭上で破裂して5発を降らせる）
+// EnemyBurstShell - スパイダーの弾（自機の手前で破裂して糸を広げる）
 // ============================================
 //
 // game.enemyBullets に入れる。町の建物（Town.sweepProjectile）・Orb で止まる扱いは、
@@ -7,22 +7,22 @@
 // 判別子は isBurstShell フラグ（isBaseLaser と同じ作法。constructor.name は使わない）。
 //
 // 破裂の条件（設計書「弾」の節）:
-//   1. 狙いの点に着いた（age が逆算したフレーム数に達した）
-//   2. 自機より上にいて、自機との横の距離が近い（自機が動いて弾の下へ来た）
+//   1. 自機の中心から SPIDER_SHELL_BURST_RANGE まで近づいた（外から入ったときだけ）
+//   2. 狙いの点に着いた（age が逆算したフレーム数に達した）
 //   3. 地形・建物に当たった、寿命が切れた
 // 自機・母艦に直撃したときは CollisionManager が burst({ fragments: false }) を呼ぶ
-// （その場から5発を出すと機体の中から出て次のフレームで全部当たるため）。
+// （直撃でダメージを受けたうえに、機体の中から糸を広げて絡めると二重の罰になるため）。
 
 import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
     COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
     COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_SHADE, COLOR_SPIDER_SHELL_RIM,
-    SPIDER_SHELL_BURST_DX, SPIDER_SHELL_FRAGMENTS, SPIDER_SHELL_SPREAD, SPIDER_SHELL_BURST_FLASH_RADIUS,
-    SPIDER_SHELL_SCORE, SPIDER_SHELL_BURST_MIN_ABOVE, TOWN_SWEEP_STEP,
+    SPIDER_SHELL_BURST_RANGE, SPIDER_SHELL_BURST_FLASH_RADIUS,
+    SPIDER_SHELL_SCORE, TOWN_SWEEP_STEP,
     COLOR_SPIDER_SHELL_GLOW, SPIDER_SHELL_GLOW_RADIUS, SPIDER_SHELL_GLOW_PERIOD, SPIDER_SHELL_GLOW_ALPHA,
 } from '../utils/Constants.js';
 import { Bullet } from './Bullet.js';
-import { EnemyBullet } from './EnemyBullet.js';
+import { SpiderWeb } from './SpiderWeb.js';
 import { ImpactFlash } from './Particle.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playBlast } from './destruction.js';
@@ -46,6 +46,8 @@ export class EnemyBurstShell extends Bullet {
         this.isBurstShell = true;
         this.target = target;
         this.age = 0;
+        // 自機から BURST_RANGE の外にいたことがあるか。撃った時点で内側なら、外へ出るまで距離では割らない
+        this.armed = this._playerDist() > SPIDER_SHELL_BURST_RANGE;
     }
 
     update() {
@@ -63,25 +65,39 @@ export class EnemyBurstShell extends Bullet {
             this.burst();
             return;
         }
-        if (this.lifetime <= 0 || this.age >= this.target.frames || this._aboveNearPlayer()) this.burst();
+        if (this.lifetime <= 0 || this.age >= this.target.frames || this._reachedPlayer()) this.burst();
     }
 
-    /**
-     * 自機の上端より SPIDER_SHELL_BURST_MIN_ABOVE 以上上にいて、横が近いか。
-     * 上端より上なら割る、だけだと、下から上がってくる弾が頭のすぐ横で割れて5発がまとめて当たった（最終レビュー）
-     */
-    _aboveNearPlayer() {
+    /** 自機の中心までの距離。自機がいなければ Infinity */
+    _playerDist() {
         const p = this.game.player;
-        if (!p || !p.alive) return false;
-        return this.y <= p.y - SPIDER_SHELL_BURST_MIN_ABOVE
-            && Math.abs(this.x - (p.x + p.width / 2)) <= SPIDER_SHELL_BURST_DX;
+        if (!p || !p.alive) return Infinity;
+        return Math.hypot(this.x - (p.x + p.width / 2), this.y - (p.y + p.height / 2));
+    }
+
+    /** 自機から BURST_RANGE の外から内へ入ったか */
+    _reachedPlayer() {
+        const d = this._playerDist();
+        if (d > SPIDER_SHELL_BURST_RANGE) {
+            this.armed = true;
+            return false;
+        }
+        return this.armed;
+    }
+
+    /** 割れるまでの見込みのフレーム数（点滅を始める合図）。狙いの点に着くか、自機の 140px に入るかの早いほう */
+    _framesToBurst() {
+        const left = this.target.frames - this.age;
+        if (!this.armed) return left;
+        const d = this._playerDist() - SPIDER_SHELL_BURST_RANGE;
+        return Math.min(left, d / SPIDER_SHELL_SPEED);
     }
 
     /**
-     * その場で割れる。fragments が true なら自機へ向けて扇形に5発。
-     * 5発は普通の敵弾（EnemyBullet）そのもの（2026-11-23 ユーザー指定。初めは紫の専用の弾だった）。発射音だけ鳴らさない
+     * その場で割れる。fragments が true なら自機へ向けて5本の糸（SpiderWeb）を扇に広げる。
+     * 2026-11-23 ユーザー指定で、5発の普通の敵弾から糸に変えた（当たると動きが遅くなる。ダメージは無い）。
      * 走査中（CollisionManager の enemyBullets の後ろからの走査）に push しても、
-     * 末尾に足された破片はそのフレームには処理されず、次のフレームから飛ぶ
+     * 末尾に足された糸はそのフレームには処理されず、次のフレームから伸びる
      */
     burst({ fragments = true } = {}) {
         if (!this.alive) return;
@@ -94,14 +110,10 @@ export class EnemyBurstShell extends Bullet {
         audioManager.playWeapon('spiderBurst', this.x, this.y);
         if (!fragments) return;
         const p = game.player;
-        const base = p && p.alive
+        const angle = p && p.alive
             ? Math.atan2(p.y + p.height / 2 - this.y, p.x + p.width / 2 - this.x)
             : Math.PI / 2;
-        const n = SPIDER_SHELL_FRAGMENTS;
-        for (let i = 0; i < n; i++) {
-            const a = base - SPIDER_SHELL_SPREAD / 2 + (SPIDER_SHELL_SPREAD * i) / (n - 1);
-            game.enemyBullets.push(new EnemyBullet(game, this.x, this.y, a, { sound: null }));
-        }
+        game.enemyBullets.push(new SpiderWeb(game, this.x, this.y, angle));
     }
 
     /** 自機が撃ち落とした（ミサイル・グレネード）。割れずに消え、5発は出ない */
@@ -137,7 +149,7 @@ export class EnemyBurstShell extends Bullet {
 
     /** 破裂が近いと地の色が明るめの紫と交互に点滅する（霧の中で「もうすぐ割れる」と分かるように） */
     get bodyColor() {
-        const left = this.target.frames - this.age;
+        const left = this._framesToBurst();
         if (left <= SPIDER_SHELL_BLINK_FRAMES && Math.floor(this.age / 3) % 2 === 0) return COLOR_SPIDER_SHELL_BLINK;
         return COLOR_SPIDER_SHELL_BODY;
     }
@@ -167,7 +179,7 @@ export class EnemyBurstShell extends Bullet {
      * 割れる直前は速く脈打って「もうすぐ割れる」を知らせる
      */
     _drawGlow(ctx) {
-        const left = this.target.frames - this.age;
+        const left = this._framesToBurst();
         const period = left <= SPIDER_SHELL_BLINK_FRAMES ? SPIDER_SHELL_GLOW_PERIOD / 3 : SPIDER_SHELL_GLOW_PERIOD;
         const [lo, hi] = SPIDER_SHELL_GLOW_ALPHA;
         const k = 0.5 - 0.5 * Math.cos((this.age / period) * Math.PI * 2);

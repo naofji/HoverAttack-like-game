@@ -17,6 +17,7 @@ import {
     EXTRA_LIFE_FLASH_FRAMES,
     COLOR_HOVER_EXHAUST,
     OVERDRIVE_WARN_TICKS, OVERDRIVE_GLOW_RADIUS, OVERDRIVE_BLINK_MS,
+    COLOR_SPIDER_WEB, SPIDER_WEB_DASH, SPIDER_WEB_ENTANGLE_FRAMES,
 } from '../../utils/Constants.js';
 import { drawThrusterFlame } from '../thrusterFlame.js';
 
@@ -86,8 +87,35 @@ export const PlayerDraw = {
             }
         }
         this._drawHoverExhaust(ctx);
+        this._drawWeb(ctx, x, y, crouchOffset);
         ctx.restore();
         this._drawLifeUp(ctx);
+    },
+
+    /**
+     * スパイダーの糸に絡まっている間、機体に点線の糸がかかって見える（SpiderWeb と同じ色・点線）。
+     * 体の外へ少しはみ出す斜めの2本と横の1本。取れかけ（残りが少ない）ほど薄くする
+     */
+    _drawWeb(ctx, x, y, crouchOffset) {
+        if (!(this.webTimer > 0)) return;
+        const top = y + crouchOffset;
+        const h = this.height - crouchOffset;
+        const w = this.width;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, 0.4 + this.webTimer / SPIDER_WEB_ENTANGLE_FRAMES);
+        ctx.strokeStyle = COLOR_SPIDER_WEB;
+        ctx.lineWidth = 1;
+        ctx.setLineDash(SPIDER_WEB_DASH);
+        ctx.beginPath();
+        ctx.moveTo(x - 3, top - 2);
+        ctx.lineTo(x + w + 3, top + h + 1);
+        ctx.moveTo(x + w + 3, top - 2);
+        ctx.lineTo(x - 3, top + h + 1);
+        ctx.moveTo(x - 4, top + h * 0.45);
+        ctx.lineTo(x + w + 4, top + h * 0.55);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
     },
 
     /**
