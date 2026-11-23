@@ -1,4 +1,4 @@
-// entities/Player.js は描画を entities/player/draw.js の mixin に置き、坂の手順（slopeBody.js）・地形の上を
+// entities/Player.js は描画を entities/player/draw.js、押し戻しの手順を entities/player/collision.js の mixin に置き、坂の手順（slopeBody.js）・地形の上を
 // 歩く手順（walkerBody.js）といっしょに Object.assign で Player.prototype へ混ぜている。Object.assign は同名のキーを黙って
 // 後勝ちで上書きするので、名前が重なると片方のメソッドが消えても何も言わない。それをここで縛る
 // （tests/map-mixins.test.js と同じ見方）。
@@ -9,11 +9,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/js/entities/Player.js';
 import { PlayerDraw } from '../src/js/entities/player/draw.js';
+import { PlayerCollision } from '../src/js/entities/player/collision.js';
 import { SlopeBody } from '../src/js/entities/slopeBody.js';
 import { WalkerBody } from '../src/js/entities/walkerBody.js';
 import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
 
-const MIXINS = { SlopeBody, WalkerBody, PlayerDraw };
+const MIXINS = { SlopeBody, WalkerBody, PlayerDraw, PlayerCollision };
 
 test('Player の mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
