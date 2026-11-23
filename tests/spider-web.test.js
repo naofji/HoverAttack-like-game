@@ -10,11 +10,11 @@ import { shed, world as townWorld } from './helpers/town-explosive-fixtures.js';
 import { makeMap, makeGame, flatFloorRows } from './helpers/enemy-world.js';
 import { makeFakeCtx } from './helpers/fake-ctx.js';
 import {
-  TILE_SIZE, SPIDER_WEB_STRANDS, SPIDER_WEB_SPREAD, SPIDER_WEB_SPEED, SPIDER_WEB_MAX_LENGTH,
+  TILE_SIZE, SPIDER_WEB_STRANDS, SPIDER_WEB_SPREAD, SPIDER_WEB_SPEED_START, SPIDER_WEB_SPEED_END, SPIDER_WEB_MAX_LENGTH,
   SPIDER_WEB_RING_STEP, SPIDER_WEB_FADE_FRAMES, SPIDER_WEB_ENTANGLE_FRAMES, SPIDER_WEB_SLOW,
   SPIDER_WEB_SHAKE_FRAMES, PLAYER_MAX_SPEED, PLAYER_MAX_HOVER_SPEED,
   SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_CROSS_SAG, SPIDER_WEB_WRAP_FRAMES,
-  SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB,
+  SPIDER_WEB_CLING_RADIUS, SPIDER_WEB_JOLT_FRAMES, COLOR_SPIDER_WEB, SPIDER_WEB_SINK_SPEED,
 } from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
@@ -37,8 +37,10 @@ function fakePlayer(game, x, y) {
 }
 
 const grow = (web, n) => { for (let i = 0; i < n && web.alive; i++) web.update(); };
+// 全部の糸が止まるまで（伸び切った最後のフレームで薄れ始める）
+const growFull = (web) => { for (let i = 0; i < 1000 && web.strands.some((s) => !s.stopped); i++) web.update(); };
 
-test('5本の糸が、向けた向きを中心に扇に広がり、毎フレーム SPIDER_WEB_SPEED ずつ伸びる', () => {
+test('5本の糸が、向けた向きを中心に扇に広がり、初めは速く（SPEED_START）だんだん遅く伸びる', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 60 * DEG);
   assert.equal(web.strands.length, SPIDER_WEB_STRANDS);
@@ -46,18 +48,36 @@ test('5本の糸が、向けた向きを中心に扇に広がり、毎フレー�
   const mean = angles.reduce((a, b) => a + b, 0) / angles.length;
   assert.ok(Math.abs(mean - 60 * DEG) < 1e-9);
   assert.ok(Math.abs(Math.max(...angles) - Math.min(...angles) - SPIDER_WEB_SPREAD) < 1e-9);
-  grow(web, 3);
-  for (const s of web.strands) assert.ok(Math.abs(s.len - 3 * SPIDER_WEB_SPEED) < 1e-9);
+  grow(web, 1);
+  for (const s of web.strands) assert.ok(Math.abs(s.len - SPIDER_WEB_SPEED_START) < 1e-9);
+  // 1フレームの伸びは減り続け、伸び切る手前で SPEED_END 近くまで落ちる
+  const steps = [];
+  let prev = web.strands[0].len;
+  while (!web.strands[0].stopped) {
+    web.update();
+    steps.push(web.strands[0].len - prev);
+    prev = web.strands[0].len;
+  }
+  for (let i = 1; i < steps.length - 1; i++) assert.ok(steps[i] < steps[i - 1], `${i} フレーム目で速くなった`);
+  assert.ok(steps[steps.length - 2] < SPIDER_WEB_SPEED_END * 1.2, `終わりの速さ ${steps[steps.length - 2]}`);
   grow(web, 500);
   // 伸び切ったら消える（伸びる → 薄れる）
   assert.equal(web.alive, false);
 });
 
+test('自機の距離（割れる距離 140px）まで届くのは 30〜45 フレーム（扇の外へ逃げる間が残る）', () => {
+  const game = openWorld();
+  const web = new SpiderWeb(game, 300, 200, 90 * DEG);
+  let n = 0;
+  while (web.strands[0].len < 140) { web.update(); n++; }
+  // 扇の真ん中から外へ出るのに約 29 フレーム（SPIDER_WEB_SPREAD のコメント）。速すぎると逃げられない
+  assert.ok(n >= 30 && n <= 45, `${n} フレーム`);
+});
+
 test('伸び切った糸は SPIDER_WEB_MAX_LENGTH で止まり、SPIDER_WEB_FADE_FRAMES で薄れて消える', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 90 * DEG);
-  const full = Math.ceil(SPIDER_WEB_MAX_LENGTH / SPIDER_WEB_SPEED);
-  grow(web, full);
+  growFull(web);
   for (const s of web.strands) assert.ok(Math.abs(s.len - SPIDER_WEB_MAX_LENGTH) < 1e-9);
   assert.equal(web.alive, true);
   grow(web, SPIDER_WEB_FADE_FRAMES - 1);
@@ -96,7 +116,7 @@ test('建物に当たった糸はそこで止まる', () => {
 test('横糸: 隣り合う糸の同じ距離の点を、SPIDER_WEB_RING_STEP ごとに、真ん中がたるんだ2本の線で結ぶ', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 90 * DEG);
-  grow(web, Math.ceil((SPIDER_WEB_RING_STEP * 3 + 1) / SPIDER_WEB_SPEED));
+  for (let i = 0; i < 200 && web.strands.some((s) => s.len < SPIDER_WEB_RING_STEP * 3 + 1); i++) web.update();
   const segs = web.segments();
   const cross = segs.filter((s) => s.kind === 'cross');
   assert.equal(cross.length, 2 * 3 * (SPIDER_WEB_STRANDS - 1));
@@ -125,9 +145,10 @@ test('横糸: 隣り合う糸の同じ距離の点を、SPIDER_WEB_RING_STEP ご
 test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布）', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 0);   // 真横へ
-  grow(web, Math.ceil(SPIDER_WEB_MAX_LENGTH / SPIDER_WEB_SPEED));
+  growFull(web);
   const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
-  const sagAt = (r) => web.pointAt(mid, r).y - web.y;
+  // 伸び切ったフレームから薄れ始めて沈むので、その分を引く
+  const sagAt = (r) => web.pointAt(mid, r).y - web.y - web.fade * SPIDER_WEB_SINK_SPEED;
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH) - SPIDER_WEB_DROOP) <= SPIDER_WEB_FLUTTER + 1e-9,
     `先の垂れ ${sagAt(SPIDER_WEB_MAX_LENGTH)}`);
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH / 2) - SPIDER_WEB_DROOP / 4) <= SPIDER_WEB_FLUTTER + 1e-9,
@@ -164,7 +185,8 @@ test('薄れている間は沈むが、岩の中へは沈まない', () => {
   for (let c = 0; c < 60; c++) extra.push([18, c]);
   const game = openWorld(extra);
   const web = new SpiderWeb(game, 300, 100, 30 * DEG);
-  grow(web, Math.ceil(SPIDER_WEB_MAX_LENGTH / SPIDER_WEB_SPEED) + 1);
+  growFull(web);
+  web.update();
   const free = web.strands.find((s) => s.len >= SPIDER_WEB_MAX_LENGTH - 1e-9 && s.angle < 20 * DEG);
   const tipY0 = web.pointAt(free, 60).y;
   grow(web, 20);

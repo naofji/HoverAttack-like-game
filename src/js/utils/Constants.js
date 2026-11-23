@@ -927,9 +927,14 @@ export const SPIDER_SHELL_BURST_RANGE = 140;
 // 絡む感じが出るよう横糸も」（2026-11-23 ユーザー指定）。当たるとダメージは無く、しばらく動きが遅くなる
 export const SPIDER_WEB_STRANDS = 5;
 // 扇の全幅。5発の弾のころの 60° のままだと、横糸で埋まった扇は 140px 先で幅 147px になり、自機の横の速さ（1.75）では
-// 糸が届く約 47 フレームの間に外へ出られない。40° なら 140px 先で幅 102px、真ん中からでも外へ出るのに約 29 フレーム
+// 糸が届く約 41 フレームの間に外へ出られない。40° なら 140px 先で幅 102px、真ん中からでも外へ出るのに約 29 フレーム
 export const SPIDER_WEB_SPREAD = 40 * Math.PI / 180;
-export const SPIDER_WEB_SPEED = 3;            // 糸が伸びる速さ（px/フレーム）。5発の弾（ENEMY_BULLET_SPEED）と同じ
+// 糸が伸びる速さ（px/フレーム）。初めは速く、伸びた長さに比例して遅くなり、伸び切る手前で END
+// （2026-11-23 ユーザー指定「初速は速く、徐々に遅くなる方がそれっぽい」。それまでは 3 の一定）。
+// 5 → 1 で、割れる距離 140px に届くのは 41 フレーム（一定 3 のころは 47）、伸び切る 200px までは約 80 フレーム。
+// 扇の真ん中から外へ逃げる約 29 フレームより長く残す（SPIDER_WEB_SPREAD のコメント）
+export const SPIDER_WEB_SPEED_START = 5;
+export const SPIDER_WEB_SPEED_END = 1;
 export const SPIDER_WEB_MAX_LENGTH = 200;     // 伸び切る長さ。割れる距離 140 の自機に届き、その先 60px まで
 export const SPIDER_WEB_RING_STEP = 24;       // 横糸の間隔（中心からの距離）
 // 伸び切ってから薄れて消えるまで（薄れている間も当たる）。30 では「急に消える」（2026-11-23 ユーザー）ので、

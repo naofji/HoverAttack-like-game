@@ -6,7 +6,7 @@
 // 糸は点線、絡む感じが出るよう隣り合う糸を横糸で結ぶ。当たってもダメージは無い（Player.entangle）。
 // 同日の2回目の指定: 「柔らかな布のような糸が降り注いでくる感じ」「急に消えるのではなく覆い被さって消えていく」。
 //
-// 割れた点から自機へ向けた扇に、縦糸が SPIDER_WEB_SPEED ずつ伸びる。岩・建物に当たった糸はそこで止まる。
+// 割れた点から自機へ向けた扇に、縦糸が初めは速く（SPEED_START）、伸びるにつれ遅く（SPEED_END まで）伸びる。岩・建物に当たった糸はそこで止まる。
 // 糸はまっすぐ伸びず、中心からの距離の2乗で下へ垂れ（DROOP）、先ほど大きく揺れる（FLUTTER）。
 // 垂れるぶんは扇を上へ向けて打ち消す（aimAngle）。
 // 横糸は中心から SPIDER_WEB_RING_STEP ごとの距離で、両隣の縦糸がそこまで伸びていれば結び、真ん中をたるませる
@@ -20,13 +20,13 @@
 // 自機への当たりは segments() の線分で見る（反射ビームと同じ作法）。
 
 import {
-    SPIDER_WEB_STRANDS, SPIDER_WEB_SPREAD, SPIDER_WEB_SPEED, SPIDER_WEB_MAX_LENGTH,
+    SPIDER_WEB_STRANDS, SPIDER_WEB_SPREAD, SPIDER_WEB_SPEED_START, SPIDER_WEB_SPEED_END, SPIDER_WEB_MAX_LENGTH,
     SPIDER_WEB_RING_STEP, SPIDER_WEB_FADE_FRAMES, SPIDER_WEB_DASH, COLOR_SPIDER_WEB,
     SPIDER_WEB_DROOP, SPIDER_WEB_FLUTTER, SPIDER_WEB_NODE_STEP, SPIDER_WEB_CROSS_SAG,
     SPIDER_WEB_SINK_SPEED, SPIDER_WEB_WRAP_FRAMES, SPIDER_WEB_CLING_RADIUS,
 } from '../utils/Constants.js';
 
-// 伸びる途中で岩・建物を見る刻み（px）。1 フレームの伸び（3）より細かく見て、先が壁へ入らないようにする
+// 伸びる途中で岩・建物を見る刻み（px）。1 フレームの伸び（最大 5）より細かく見て、先が壁へ入らないようにする
 const PROBE_STEP = 1;
 // 揺れの波（描画専用の見た目）。フレームあたりの位相の進みと、糸に沿った波の細かさ（rad/px）
 const FLUTTER_RATE = 0.2;
@@ -126,9 +126,14 @@ export class SpiderWeb {
         this.wrapping = { t: 0, player, cx, cy, segs };
     }
 
-    /** 1本を SPEED だけ伸ばす。岩・建物の手前か、MAX_LENGTH で止める（揺れを除いた垂れた線で見る） */
+    /**
+     * 1本を伸ばす。速さは伸びた長さに比例して START から END へ落ちる（投げた布が広がりながら勢いを失う）。
+     * 岩・建物の手前か、MAX_LENGTH で止める（揺れを除いた垂れた線で見る）
+     */
     _grow(s) {
-        const target = Math.min(SPIDER_WEB_MAX_LENGTH, s.len + SPIDER_WEB_SPEED);
+        const k = s.len / SPIDER_WEB_MAX_LENGTH;
+        const speed = SPIDER_WEB_SPEED_START + (SPIDER_WEB_SPEED_END - SPIDER_WEB_SPEED_START) * k;
+        const target = Math.min(SPIDER_WEB_MAX_LENGTH, s.len + speed);
         let len = s.len;
         while (len < target) {
             const next = Math.min(target, len + PROBE_STEP);
