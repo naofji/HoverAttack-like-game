@@ -411,3 +411,42 @@ test('自機の 140px に入る少し前から点滅する（狙いの点がま�
   for (let a = 0; a < 10; a++) { shell.age = a; colors.add(shell.bodyColor); }
   assert.ok(colors.has(C.COLOR_SPIDER_SHELL_BLINK), `点滅していない: ${[...colors]}`);
 });
+
+// 2026-11-23 ユーザー指定: 「明滅をもう少し目立つように」。点滅の色を地との差がはっきりした明るい色にし、
+// 点いたフレームは光の輪も一緒にぱっと明るくする（ふだんの脈打ちは淡いまま＝お手玉に戻さない）
+test('割れる前の点滅は目立つ: 地との明るさの差が大きく、点いたフレームは光の輪も明るくなる', async () => {
+  const { makeFakeCtx } = await import('./helpers/fake-ctx.js');
+  const C = await import('../src/js/utils/Constants.js');
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (lum(C.COLOR_SPIDER_SHELL_BLINK) + 0.05) / (lum(C.COLOR_SPIDER_SHELL_BODY) + 0.05);
+  assert.ok(contrast >= 5, `点滅の色と地の明るさの比 ${contrast.toFixed(1)}`);
+  assert.ok(C.SPIDER_SHELL_BLINK_FRAMES >= 30, `点滅の長さ ${C.SPIDER_SHELL_BLINK_FRAMES}`);
+
+  const game = openWorld();
+  const shell = new EnemyBurstShell(game, 100, 200, 0, { x: 0, y: 0, frames: 25 });
+  const glowAlpha = () => {
+    const ctx = makeFakeCtx();
+    shell.draw(ctx);
+    const i = ctx.calls.findIndex((c) => c.name === 'arc' && c.args[2] > C.SPIDER_SHELL_RADIUS);
+    for (let j = i; j >= 0; j--) if (ctx.calls[j].name === 'set:globalAlpha') return ctx.calls[j].args[0];
+    return 1;
+  };
+  let on = 0;
+  let off = 0;
+  for (let a = 0; a < 12; a++) {
+    shell.age = a;
+    if (shell.bodyColor === C.COLOR_SPIDER_SHELL_BLINK) {
+      on++;
+      assert.equal(glowAlpha(), C.SPIDER_SHELL_BLINK_GLOW_ALPHA, `${a} フレーム目: 点いたのに輪が明るくない`);
+    } else {
+      off++;
+      assert.ok(glowAlpha() <= C.SPIDER_SHELL_GLOW_ALPHA[1] + 1e-9, `${a} フレーム目: 消えているのに輪が明るい`);
+    }
+  }
+  assert.ok(on > 0 && off > 0);
+  assert.ok(C.SPIDER_SHELL_BLINK_GLOW_ALPHA > C.SPIDER_SHELL_GLOW_ALPHA[1] + 0.2);
+});

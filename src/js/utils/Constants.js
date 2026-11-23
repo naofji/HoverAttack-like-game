@@ -905,10 +905,13 @@ export const COLOR_SPIDER_SHELL_SHADE = '#1F0640';
 export const COLOR_SPIDER_SHELL_RIM = '#07010F';
 // 破裂の閃光の縁の色（割れた5発は普通の敵弾なので、この色は使わない）
 export const COLOR_SPIDER_SHELL = '#9C5CFF';
-// 破裂の点滅（狙いの点に着く何フレーム前から）と、その色（地の深紫をこの紫に入れ替えて光らせる。暗くした球に合わせて
-// #E6D4FF から落とした）
-export const SPIDER_SHELL_BLINK_FRAMES = 20;
-export const COLOR_SPIDER_SHELL_BLINK = '#8C52D6';
+// 破裂の点滅（割れる何フレーム前から）と、その色（地の深紫をこの色に入れ替えて光らせる）。
+// 暗くした球に合わせて #E6D4FF → #8C52D6 に落としたが、地との明るさの比が 2.9 しかなく「明滅をもう少し目立つように」
+// （2026-11-23 ユーザー）。点くときだけの色なので明るいラベンダー #C9A2FF（比 7.2）に上げ、20 → 30 フレーム前から点滅させる。
+// 点いたフレームは光の輪も BLINK_GLOW_ALPHA まで明るくする（ふだんの脈打ちは GLOW_ALPHA の淡いまま＝お手玉に戻さない）
+export const SPIDER_SHELL_BLINK_FRAMES = 30;
+export const COLOR_SPIDER_SHELL_BLINK = '#C9A2FF';
+export const SPIDER_SHELL_BLINK_GLOW_ALPHA = 0.75;
 // 球の周りの光の輪（「もう少し目立つように。明滅させるもヨシ」2026-11-23 ユーザー指定）。球は暗いまま、周りを紫に光らせ、
 // 明るさを GLOW_ALPHA の範囲で GLOW_PERIOD フレームごとに脈打たせる。割れる直前（BLINK_FRAMES）は 3 倍の速さで脈打つ。
 // 初めの半径 11・明るさ 0.25〜0.8 は「フレアが明るすぎて、弾というよりお手玉みたい」（2026-11-23）。大きくぼんやり光る円が

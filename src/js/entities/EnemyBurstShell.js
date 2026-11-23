@@ -15,7 +15,7 @@
 
 import {
     SPIDER_SHELL_SPEED, SPIDER_SHELL_GRAVITY, SPIDER_SHELL_RADIUS, SPIDER_SHELL_LIFETIME,
-    COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_FRAMES,
+    COLOR_SPIDER_SHELL, COLOR_SPIDER_SHELL_BLINK, SPIDER_SHELL_BLINK_GLOW_ALPHA, SPIDER_SHELL_BLINK_FRAMES,
     COLOR_SPIDER_SHELL_HIGHLIGHT, COLOR_SPIDER_SHELL_BODY, COLOR_SPIDER_SHELL_SHADE, COLOR_SPIDER_SHELL_RIM,
     SPIDER_SHELL_BURST_RANGE, SPIDER_SHELL_BURST_FLASH_RADIUS,
     SPIDER_SHELL_SCORE, TOWN_SWEEP_STEP,
@@ -188,7 +188,8 @@ export class EnemyBurstShell extends Bullet {
         g.addColorStop(0, COLOR_SPIDER_SHELL_GLOW);
         g.addColorStop(1, 'rgba(181, 124, 255, 0)');   // COLOR_SPIDER_SHELL_GLOW の透明
         const prev = ctx.globalAlpha;
-        ctx.globalAlpha = lo + (hi - lo) * k;
+        // 点滅で点いたフレームは、球と一緒に輪もぱっと明るくする（地の色だけだと小さい球では目立たない）
+        ctx.globalAlpha = this.bodyColor === COLOR_SPIDER_SHELL_BLINK ? SPIDER_SHELL_BLINK_GLOW_ALPHA : lo + (hi - lo) * k;
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(this.x, this.y, SPIDER_SHELL_GLOW_RADIUS, 0, Math.PI * 2);
