@@ -858,7 +858,9 @@ export const SPIDER_THREAD_CHANCE = 0.08;
 export const SPIDER_THREAD_MAX_TILES = 10;    // 糸が届く真上・真下の面までの距離
 export const SPIDER_THREAD_SHOOT_FRAMES = 8;  // 糸が伸びて届くまで（この間は止まっている）
 export const SPIDER_THREAD_CLIMB_SPEED = 1.2; // たぐって登る
-export const SPIDER_THREAD_DESCEND_SPEED = 1.6; // 垂らして降りる（重さで降りるので登りより速い）
+// 垂らして降りる（重さで降りるので登りより速い）。初めの 1.6（登りの 1.3 倍）では差が見えず、「降りるスピードは
+// 登るより速くしていい」（2026-11-23 ユーザー）ので 3.0（2.5 倍）に。高さ 8 タイルの部屋で登り 95・降り 39 フレーム（前は 72）
+export const SPIDER_THREAD_DESCEND_SPEED = 3.0;
 // 跳び移り（壁 ⇄ 向かいの壁）。糸は真上・真下にしか張らないので、壁どうしは直線で跳ぶ
 export const SPIDER_LEAP_CHANCE = 0.1;   // 糸と同じ理由で 0.25 → 0.1
 export const SPIDER_LEAP_MAX_TILES = 5;

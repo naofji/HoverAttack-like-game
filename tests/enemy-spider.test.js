@@ -6,7 +6,7 @@ import { boxHitsSolid } from '../src/js/utils/surfaceCrawl.js';
 import { makeMap, makeGame } from './helpers/enemy-world.js';
 import {
   SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE, TILE_SIZE,
-  SPIDER_FIRE_WINDUP, SPIDER_FIRE_RETRY, SPIDER_SHELL_AIM_ABOVE,
+  SPIDER_FIRE_WINDUP, SPIDER_FIRE_RETRY, SPIDER_SHELL_AIM_ABOVE, SPIDER_THREAD_SHOOT_FRAMES,
 } from '../src/js/utils/Constants.js';
 
 const T = TILE_SIZE;
@@ -119,6 +119,22 @@ test('天井から糸で床へ降りる', () => {
   }
   assert.equal(s.surface, 'floor');
   assert.equal(s.y, 9 * T - S);
+});
+
+// 2026-11-23 ユーザー指定: 「糸を伝って降りるスピードは登るスピードより速くしていい」（1.2 と 1.6 では差が見えなかった）
+test('糸で降りるのは、同じ高さを登るより2倍以上速い', () => {
+  const frames = (s) => {
+    s._startThread();
+    let n = 0;
+    while (s.mode === 'thread' && n < 400) { s.update(); n++; }
+    assert.notEqual(s.mode, 'thread');
+    return n;
+  };
+  const up = frames(onFloor(world(roomRows(30, 10)).game, 9, 10));
+  const down = frames(new EnemySpider(world(roomRows(30, 10)).game, 10 * T + 1, T, 'ceiling'));
+  // 糸が届くまでの SHOOT_FRAMES はどちらも同じなので、動いている間で比べる
+  const C = SPIDER_THREAD_SHOOT_FRAMES;
+  assert.ok((down - C) * 2 <= up - C, `登り ${up - C} フレーム / 降り ${down - C} フレーム`);
 });
 
 test('糸の支点が壊れると落ちる', () => {
