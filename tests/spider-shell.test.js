@@ -383,13 +383,13 @@ test('割れた5発は普通の敵弾と同じ見た目・速さで、発射音�
   } finally { spy.restore(); }
 });
 
-test('止まった自機に向けた弾は、自機の上端から 100px 以上上で割れる', () => {
+test('止まった自機に向けた弾は、自機の上端から 80px 以上上で割れる（狙いは中心の 120px 上）', () => {
   for (const [x0, y0] of [[150, 470], [250, 440], [650, 470], [200, 392], [600, 392], [250, 250], [560, 200], [380, 470]]) {
     const game = openWorld();
     const p = addPlayer(game, 400, 380);
     const shell = fireAt(game, x0, y0, p.x + 8, p.y + 12 - AIM);
     flyUntilBurst(shell);
     assert.equal(shell.alive, false);
-    assert.ok(p.y - shell.y >= 100, `(${x0}, ${y0}) から: 頭上 ${(p.y - shell.y).toFixed(1)}px で割れた`);
+    assert.ok(p.y - shell.y >= 80, `(${x0}, ${y0}) から: 頭上 ${(p.y - shell.y).toFixed(1)}px で割れた`);
   }
 });

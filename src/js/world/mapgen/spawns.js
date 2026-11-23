@@ -18,7 +18,7 @@ import {
     ENEMY_BASE_HEIGHT, ENEMY_BASE_DRAW_OVERHANG, TILE_SIZE, LANDMINE_WIDTH, LANDMINE_HEIGHT, STAGE_ENVIRONMENTS,
     ORB_SIZES, ORB_SPAWN_TOP_FRACTION, ORB_SPAWN_MIN_COL_GAP, ORB_SPAWN_SALT, ORB_SIZE_MIX,
     BASE_ROOM_MID_PLATFORM_MISSION, BASE_ROOM_SIDE_PLATFORMS_MISSION, ENEMY_DRONE_MISSION,
-    SPIDER_MISSION, SPIDER_LAST_MISSION, SPIDER_COUNT, SPIDER_SPAWN_MIN_COL_GAP, SPIDER_SPAWN_SALT, SPIDER_SIZE,
+    SPIDER_MISSION, SPIDER_LAST_MISSION, SPIDER_COUNT, SPIDER_SPAWN_MIN_COL_GAP, SPIDER_SPAWN_SALT, SPIDER_SPAWN_COL_FROM, SPIDER_SPAWN_COL_TO, SPIDER_SIZE,
 } from '../../utils/Constants.js';
 import { boxHitsSolid, hasSupport } from '../../utils/surfaceCrawl.js';
 import { SeededRNG } from '../../utils/SeededRNG.js';
@@ -422,8 +422,11 @@ export const MapSpawns = {
             x + S + T > kx && x - T < kx + w && y + S + T > ky && y - T < ky + h);
         const isSolid = (r, c) => this.isSolid(r, c);
         const candidates = [];
+        // 前半〜中盤（偵察部隊。2026-11-23 ユーザー指定。初めは右半分＝後半だった）
+        const c0 = Math.max(BORDER_THICKNESS, Math.floor(this.cols * SPIDER_SPAWN_COL_FROM));
+        const c1 = Math.min(this.cols - BORDER_THICKNESS, Math.ceil(this.cols * SPIDER_SPAWN_COL_TO));
         for (let r = BORDER_THICKNESS; r < this.rows - BORDER_THICKNESS; r++) {
-            for (let c = Math.floor(this.cols / 2); c < this.cols - BORDER_THICKNESS; c++) {
+            for (let c = c0; c < c1; c++) {
                 if (this.grid[r][c] !== BLOCK_EMPTY || inRects(r, c)) continue;
                 // 張り付く面は天井 → 壁 → 床の順で選ぶ（頭上からの攻撃を増やすため。設計書）
                 let spot = null;

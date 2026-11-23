@@ -792,7 +792,7 @@ export const ENEMY_DRONE_KAMIKAZE_SPEED = 6.0;     // Ramming charge speed
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_PLAYER = 40;
 export const ENEMY_DRONE_KAMIKAZE_DAMAGE_CARRIER = 20; // Carrier (80 HP) dies in 4 hits
 
-// --- スパイダー（6面の後半。床・壁・天井を這い、自機の頭上で破裂する弾を撃つ） ---
+// --- スパイダー（6面の前半〜中盤の偵察部隊。床・壁・天井を這い、自機の頭上で破裂する弾を撃つ） ---
 // 設計書 docs/superpowers/specs/2026-11-22-spider-enemy-design.md。数値はどれも初期値で、実機で調整する。
 // 当たり箱の一辺。タイル（16）より小さくして、1タイルの隙間にも入れるようにした。
 // 張り付く面で絵は回すが箱は回さない（正方形なら壁でも天井でも同じ箱で済む）
@@ -801,40 +801,63 @@ export const SPIDER_SIZE = 14;
 // 約束なので、上限も置いて両方を見る。7面へ広げるときは上限を外し、這う規則に金属の斜面（tileShape）を足す
 export const SPIDER_MISSION = 5;
 export const SPIDER_LAST_MISSION = 5;
-// 置き方。6面の後半＝マップの右半分（敵基地は右端）に置く。数は設計書の目安 4〜6 の真ん中
+// 置き方。初めは6面の後半＝マップの右半分（敵基地は右端）に置いたが、「後半ではなく偵察部隊として前半〜中盤で」
+// （2026-11-23 ユーザー指定）。列の範囲をマップの幅の割合で決める。始まりは左上（母艦の湧きは列 5 から探す）なので、
+// 下限 25% は一番狭いマップ（150 列）でも 37 列＝ 600px 先で、霧込みの索敵 450px の外になり、始まってすぐには撃たれない。
+// 上限 60% から先は従来どおりアタッカーと砲台の面。数は設計書の目安 4〜6 の真ん中
+export const SPIDER_SPAWN_COL_FROM = 0.25;
+export const SPIDER_SPAWN_COL_TO = 0.6;
 export const SPIDER_COUNT = 5;
 export const SPIDER_SPAWN_MIN_COL_GAP = 8;      // スパイダーどうしの列の間隔（タイル）。固まって出ないように
 export const SPIDER_SPAWN_SALT = 0x5D1DE5;      // 置き場所の派生ストリームの種（game.rng を消費しない）
 // 耐久と得点はドローンと同じ（ユーザー指定「耐久力はドローンと同じくらい」）。参照せず別に置くのは、あとで別々に調整するため
 export const SPIDER_HP = 8;
 export const SPIDER_SCORE = 250;
-// 這う。クモの「ちょこまか走る → ぴたっと止まる → 向きを変える」を、走る長さと止まる長さの乱数で作る
-export const SPIDER_CRAWL_SPEED = 1.6;        // px/フレーム
-export const SPIDER_RUN_FRAMES = [40, 140];   // 走る長さの範囲
-export const SPIDER_PAUSE_FRAMES = [15, 50];  // 止まる長さの範囲
-export const SPIDER_TURN_CHANCE = 0.35;       // 止まったあと向きを変える確率
-// 小ジャンプ。面から離れて同じ面へ戻る。重力は張り付いている面の向き（天井なら上向き）に掛ける。
-// 高さ ≈ 2.4² / (2 × 0.18) ≈ 16px（タイル1つぶん）
-export const SPIDER_HOP_CHANCE = 0.3;
-export const SPIDER_HOP_SPEED = 2.4;
+// 這う。初めは 1.6px で 40〜140 フレーム走り続けたが、実機で「フナムシみたい。ドローンと同じようなトリッキーな動きに。
+// クモの動きを思い出して」（2026-11-23）。クモの「ダッと走る → ぴたっと止まる → 急に向きを変える」に作り直した:
+// 走りはドローンのダッシュ（ENEMY_DRONE_SPEED = 4）と同じ速さで短く、止まる時間はばらつかせる
+export const SPIDER_CRAWL_SPEED = 4;          // px/フレーム
+export const SPIDER_RUN_FRAMES = [6, 20];     // 1回の走りの長さ（24〜80px）
+export const SPIDER_PAUSE_FRAMES = [8, 45];   // 止まる長さ
+export const SPIDER_TURN_CHANCE = 0.35;       // 自機が見えないとき、止まったあと向きを変える確率
+// 走り終わりに止まらず、すぐ逆へ走り出す（クモの急な切り返し）確率
+export const SPIDER_JINK_CHANCE = 0.3;
+// 自機が見えたら、ドローン（ENEMY_DRONE_HOVER_DIST_X/Y）と同じく自機から間合いを取った所へ走り寄る。
+// 床・天井では横に ENGAGE_DIST_X 離れた所、壁では自機より ENGAGE_DIST_Y 上（頭上へ撃ちやすい）。
+// 行き先は毎回 ±JITTER/2 ずらす（同じ所に居座らない）。DEADBAND より近ければ着いたとみなし、その場で切り返す
+export const SPIDER_ENGAGE_DIST_X = 160;
+export const SPIDER_ENGAGE_DIST_Y = 120;
+export const SPIDER_ENGAGE_JITTER = 100;
+export const SPIDER_SEEK_DEADBAND = 12;
+// 小ジャンプ。初めは面から真上に離れる跳び方だったが「横飛びの感じで」（2026-11-23 ユーザー指定）。
+// 進む向きへ HOP_SIDE_SPEED、面から離れる向きへ HOP_SPEED で跳び、重力は張り付いている面の向き（天井なら上向き）に掛ける。
+// 宙にいるのは 2 × 1.6 / 0.18 ≈ 18 フレーム、横へ ≈ 57px（3.5 タイル）、高さ ≈ 1.6² / (2 × 0.18) ≈ 7px。
+// 走り終わりが前より短い間隔で来るので、確率は 0.3 → 0.2 に下げた
+export const SPIDER_HOP_CHANCE = 0.2;
+export const SPIDER_HOP_SPEED = 1.6;
+export const SPIDER_HOP_SIDE_SPEED = 3.2;
 export const SPIDER_HOP_GRAVITY = 0.18;
+// 撃ったあとに横跳びで逃げる確率（ドローンの「撃ったらすぐ離れる」）。向きは左右半々
+export const SPIDER_HOP_AFTER_FIRE_CHANCE = 0.5;
 // 糸（床 ⇄ 天井）。床から天井へは小ジャンプで届かないので、真上へ糸を撃ってたぐって登る。
 // 天井からは糸を垂らして降りる（ユーザー案、2026-11-22）。糸は切れない（見た目だけ）
-export const SPIDER_THREAD_CHANCE = 0.25;     // 床・天井で走り終わりに糸で移る確率（小ジャンプより先に引く）
+// 床・天井で走り終わりに糸で移る確率（小ジャンプより先に引く）。走りを短くして走り終わりが約 3 倍の頻度で来るので、
+// 0.25 → 0.08 に下げて、糸を使う頻度を前と同じくらい（10 秒に 1 回ほど）に保った
+export const SPIDER_THREAD_CHANCE = 0.08;
 export const SPIDER_THREAD_MAX_TILES = 10;    // 糸が届く真上・真下の面までの距離
 export const SPIDER_THREAD_SHOOT_FRAMES = 8;  // 糸が伸びて届くまで（この間は止まっている）
 export const SPIDER_THREAD_CLIMB_SPEED = 1.2; // たぐって登る
 export const SPIDER_THREAD_DESCEND_SPEED = 1.6; // 垂らして降りる（重さで降りるので登りより速い）
 // 跳び移り（壁 ⇄ 向かいの壁）。糸は真上・真下にしか張らないので、壁どうしは直線で跳ぶ
-export const SPIDER_LEAP_CHANCE = 0.25;
+export const SPIDER_LEAP_CHANCE = 0.1;   // 糸と同じ理由で 0.25 → 0.1
 export const SPIDER_LEAP_MAX_TILES = 5;
 export const SPIDER_LEAP_SPEED = 4;
 // 跳んでいる時間の上限。壁の小ジャンプで横向きの重力のまま面の外へ出ると戻ってこないので、超えたら普通に落とす
 export const SPIDER_AIRBORNE_MAX_FRAMES = 90;
-// 小ジャンプの上限。往復は 2 × 2.4 / 0.18 ≈ 27 フレーム。最終レビューの実測で、壁・天井の小ジャンプが面の端を
-// 越えると戻る面が無いまま 90 フレーム加速し続け、最大 554px 横へ流れていた。40 では戻った先へさらに 56px 流れたので、
-// 往復に 5 フレームだけ足した 32（面から離れる最大は頂点の 2.4² / (2 × 0.18) = 16px のまま）
-export const SPIDER_HOP_MAX_FRAMES = 32;
+// 小ジャンプの上限。最終レビューの実測で、壁・天井の小ジャンプが面の端を越えると戻る面が無いまま 90 フレーム
+// 加速し続け、最大 554px 横へ流れていた。往復に 5 フレームだけ足した値にする（縦跳びのころは 27 + 5 = 32、
+// 横跳びにして往復 18 なので 23）
+export const SPIDER_HOP_MAX_FRAMES = 23;
 // 足場を失ったときの落下（世界の下向き）
 export const SPIDER_FALL_GRAVITY = 0.25;
 export const SPIDER_FALL_MAX = 6;
@@ -853,10 +876,10 @@ export const SPIDER_MUZZLE_OFFSET = 6;        // 発射点＝体の中心から�
 export const SPIDER_SHELL_SPEED = 4;
 export const SPIDER_SHELL_GRAVITY = 0.026;
 // 狙う点＝自機の中心から何 px 上。ここで破裂して5発が上から降る（「上からの弾を避けさせる」）。
-// 80 だと割れる場所が近すぎた（実機、2026-11-23「もう少しプレイヤーから離れている所で」）ので 140。
-// 5発（速さ 3）が自機の上端に届くまで約 40 フレームになり、割れたのを見てから避けられる
-export const SPIDER_SHELL_AIM_ABOVE = 140;
-// 天井が低くて 140px 上が岩の中・弧が天井に当たるときは、SPIDER_SHELL_AIM_STEP ずつ下げて届く一番高い点を狙う。
+// 80 だと割れる場所が近すぎた（実機、2026-11-23「もう少しプレイヤーから離れている所で」）ので 140 にしたが、
+// 今度は遠すぎて「120px でどうか」（同日）→ 120。5発（速さ 3）が自機の上端に届くまで約 36 フレーム
+export const SPIDER_SHELL_AIM_ABOVE = 120;
+// 天井が低くて 120px 上が岩の中・弧が天井に当たるときは、SPIDER_SHELL_AIM_STEP ずつ下げて届く一番高い点を狙う。
 // 下限は元の 80（これより下は「頭のすぐ上で割れる」に戻るので、それでも駄目なら撃たない）。
 // 下げないと高さ 8 タイル（128px）の通路で一切撃たなくなった（テスト「糸にぶら下がっている間は撃たず…」で発覚）
 export const SPIDER_SHELL_AIM_ABOVE_MIN = 80;
@@ -883,9 +906,9 @@ export const COLOR_SPIDER_SHELL_BLINK = '#8C52D6';
 export const SPIDER_SHELL_BURST_DX = 40;
 // 条件2で割れてよいのは、自機の上端よりこれ以上上にいるときだけ。最終レビューの実測で、下から上がってくる弾が
 // 頭の横 40px の帯に入った瞬間に頭のすぐ上（20px 以内が 25%）で割れ、止まった自機に5発がまとめて当たっていた
-// （3発以上が 35%、5発全部が 7%）。狙いの点（上端の 128px 上 ＝ 140 − 自機の高さの半分 12）の 28px 手前。
-// 狙いを 80 → 140 に上げたとき、いっしょに 40 → 100 に上げた（差の 28px は変えていない）
-export const SPIDER_SHELL_BURST_MIN_ABOVE = 100;
+// （3発以上が 35%、5発全部が 7%）。狙いの点（上端の 108px 上 ＝ 120 − 自機の高さの半分 12）の 28px 手前。
+// 狙いを動かすときは、いっしょに動かす（80 → 40、140 → 100、120 → 80。差の 28px は変えていない）
+export const SPIDER_SHELL_BURST_MIN_ABOVE = 80;
 export const SPIDER_SHELL_FRAGMENTS = 5;
 export const SPIDER_SHELL_SPREAD = Math.PI / 3;   // 扇の全幅 60°
 export const SPIDER_SHELL_BURST_FLASH_RADIUS = 14;

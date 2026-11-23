@@ -1,5 +1,5 @@
 // ============================================
-// EnemySpider - 6面の後半の小型ロボ（床・壁・天井を這い、自機の頭上で破裂する弾を撃つ）
+// EnemySpider - 6面の前半〜中盤の偵察の小型ロボ（床・壁・天井を這い、自機の頭上で破裂する弾を撃つ）
 // ============================================
 //
 // 設計書 docs/superpowers/specs/2026-11-22-spider-enemy-design.md。
@@ -9,13 +9,18 @@
 // 壁・天井を這わせると共有部品を曲げることになる。面に沿って進む規則は utils/surfaceCrawl.js に
 // 純粋関数として置き、ここは「いつ走る・止まる・跳ぶ・糸を使う」の判断と、空中の動きだけを持つ。
 //
+// 動きはクモの「ダッと走る → ぴたっと止まる → 急に切り返す」と横跳び（2026-11-23 ユーザー指定。初めの一定速で
+// 長く這う動きは「フナムシみたい」だった）。自機が見えると、ドローンと同じく自機から間合いを取った所へ走り寄り、
+// 撃ったあとは横跳びで離れることがある。
+//
 // 判断の乱数は**湧いた場所から作った個体の乱数**（spawnStateRng）だけを使い、Math.random は使わない。
 // 同じ週・同じ面・同じ場所のスパイダーは同じ動きをする（面別ランキングの公平さ。utils/spawnState.js）。
 
 import {
     TILE_SIZE, SPIDER_SIZE, SPIDER_HP, SPIDER_SCORE,
-    SPIDER_CRAWL_SPEED, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE,
-    SPIDER_HOP_CHANCE, SPIDER_HOP_SPEED, SPIDER_HOP_GRAVITY,
+    SPIDER_CRAWL_SPEED, SPIDER_RUN_FRAMES, SPIDER_PAUSE_FRAMES, SPIDER_TURN_CHANCE, SPIDER_JINK_CHANCE,
+    SPIDER_ENGAGE_DIST_X, SPIDER_ENGAGE_DIST_Y, SPIDER_ENGAGE_JITTER, SPIDER_SEEK_DEADBAND,
+    SPIDER_HOP_CHANCE, SPIDER_HOP_SPEED, SPIDER_HOP_SIDE_SPEED, SPIDER_HOP_GRAVITY, SPIDER_HOP_AFTER_FIRE_CHANCE,
     SPIDER_THREAD_CHANCE, SPIDER_THREAD_MAX_TILES, SPIDER_THREAD_SHOOT_FRAMES,
     SPIDER_THREAD_CLIMB_SPEED, SPIDER_THREAD_DESCEND_SPEED,
     SPIDER_LEAP_CHANCE, SPIDER_LEAP_MAX_TILES, SPIDER_LEAP_SPEED,
@@ -133,7 +138,8 @@ export class EnemySpider {
         this.surface = next.surface;
         this.drawSurface = next.surface;
         this.fwd = next.fwd;
-        this.walkPhase += SPIDER_CRAWL_SPEED * 0.5;
+        // 脚の振り。速さに比例させると 4px で脚が回りすぎて見えないので、走っている間の一定の速さにした
+        this.walkPhase += 1.2;
         if (--this.modeTimer <= 0) this._endRun();
     }
 
@@ -143,13 +149,65 @@ export class EnemySpider {
             return;
         }
         if (--this.modeTimer > 0) return;
-        if (this.rng.next() < SPIDER_TURN_CHANCE) this.fwd = { x: -this.fwd.x || 0, y: -this.fwd.y || 0 };
+        // 乱数は自機が見えるかどうかに関係なく毎回同じ数だけ引く（_endRun と同じ理由）
+        const turnRoll = this.rng.next();
+        const jitterRoll = this.rng.next();
+        const seek = this._seek(jitterRoll);
+        if (seek && seek.dist > SPIDER_SEEK_DEADBAND) {
+            this.fwd = seek.fwd;
+            this._startRun(Math.ceil(seek.dist / SPIDER_CRAWL_SPEED));
+            return;
+        }
+        // 見えない（行き先が無い）か、もう間合いの所にいる: その場で向きを変えることがある
+        if (turnRoll < SPIDER_TURN_CHANCE) this._reverse();
         this._startRun();
     }
 
-    _startRun() {
+    _reverse() {
+        this.fwd = { x: -this.fwd.x || 0, y: -this.fwd.y || 0 };
+    }
+
+    /** @param {number} [maxFrames] 行き先までのフレーム数。走りの長さをこれで打ち切る */
+    _startRun(maxFrames = Infinity) {
         this.mode = 'crawl';
-        this.modeTimer = pick(this.rng, SPIDER_RUN_FRAMES);
+        this.modeTimer = Math.max(1, Math.min(pick(this.rng, SPIDER_RUN_FRAMES), maxFrames));
+    }
+
+    /**
+     * 自機が見えるなら、ドローンの _startDash と同じく自機から間合いを取った行き先を決め、面に沿ったその向きと距離を返す。
+     * 床・天井は横（自機の今いる側に ENGAGE_DIST_X）、壁は縦（自機より ENGAGE_DIST_Y 上）で測る。見えなければ null
+     * @param {number} jitterRoll 0..1。行き先を ±JITTER/2 ずらす
+     * @returns {{fwd:{x:number,y:number}, dist:number}|null}
+     */
+    _seek(jitterRoll) {
+        const seen = this._seenPlayer();
+        if (!seen) return null;
+        const { cx, cy, pcx, pcy } = seen;
+        const jitter = (jitterRoll - 0.5) * SPIDER_ENGAGE_JITTER;
+        if (this.surface === 'floor' || this.surface === 'ceiling') {
+            const side = Math.sign(cx - pcx) || 1;
+            const d = pcx + side * SPIDER_ENGAGE_DIST_X + jitter - cx;
+            return { fwd: { x: Math.sign(d) || 1, y: 0 }, dist: Math.abs(d) };
+        }
+        const d = pcy - SPIDER_ENGAGE_DIST_Y + jitter - cy;
+        return { fwd: { x: 0, y: Math.sign(d) || 1 }, dist: Math.abs(d) };
+    }
+
+    /**
+     * 自機が見えるか（索敵の楕円 × 霧の倍率、間に岩が無い）。見えれば体と自機の中心を返す
+     * @returns {{cx:number, cy:number, pcx:number, pcy:number}|null}
+     */
+    _seenPlayer() {
+        const p = this.game.player;
+        if (!p || !p.alive || p.docked) return null;
+        const half = SPIDER_SIZE / 2;
+        const cx = this.x + half;
+        const cy = this.y + half;
+        const pcx = p.x + p.width / 2;
+        const pcy = p.y + p.height / 2;
+        if (!withinSight(pcx - cx, pcy - cy, SPIDER_SIGHT_RANGE * sightScaleFor(this.game))) return null;
+        if (!hasLineOfSight(cx, cy, pcx, pcy, this.game.map)) return null;
+        return { cx, cy, pcx, pcy };
     }
 
     _startPause() {
@@ -159,19 +217,23 @@ export class EnemySpider {
 
     /**
      * 走り終わりに次の動きを決める。床・天井では糸、壁では跳び移りを先に引き、
-     * 外れたら小ジャンプ、それも外れたら止まる。乱数は「使えるかどうか」に関係なく毎回同じ数だけ引く
+     * 外れたら横跳び、それも外れたら切り返して走るか、止まる。乱数は「使えるかどうか」に関係なく毎回同じ数だけ引く
      * （地形の違いで引く回数が変わると、同じ場所のスパイダーでも以降の判断がずれていく）
      */
     _endRun() {
         const vertical = this.surface === 'floor' || this.surface === 'ceiling';
         const moveRoll = this.rng.next();
         const hopRoll = this.rng.next();
+        const jinkRoll = this.rng.next();
         if (vertical && moveRoll < SPIDER_THREAD_CHANCE && this._threadGap() !== null) {
             this._startThread();
         } else if (!vertical && moveRoll < SPIDER_LEAP_CHANCE && this._gapAlong(this._away(), SPIDER_LEAP_MAX_TILES) !== null) {
             this._startLeap();
         } else if (hopRoll < SPIDER_HOP_CHANCE) {
             this._startHop();
+        } else if (jinkRoll < SPIDER_JINK_CHANCE) {
+            this._reverse();
+            this._startRun();
         } else {
             this._startPause();
         }
@@ -205,14 +267,35 @@ export class EnemySpider {
     // 空中（小ジャンプ・跳び移り・落下）
     // ------------------------------------------
     _startHop() {
+        // 着地点に面が無ければ逆へ、どちらも無ければ跳ばずに止まる。横跳びにしたら、天井・壁の端を跳び越えて
+        // 落ちるのが前の 3 倍近くに増え（本物の6面で 5 シード: 落下 284 → 797 回）、天井のスパイダーが頭上に残らなかった
+        if (!this._hopLands(this.fwd)) {
+            this._reverse();
+            if (!this._hopLands(this.fwd)) {
+                this._startPause();
+                return;
+            }
+        }
         const away = this._away();
         this.mode = 'hop';
-        // 面から離れつつ、進む向きへ少し流れる（その場で真上に跳ぶより生き物らしい）
-        this.vx = away.x * SPIDER_HOP_SPEED + this.fwd.x * SPIDER_CRAWL_SPEED;
-        this.vy = away.y * SPIDER_HOP_SPEED + this.fwd.y * SPIDER_CRAWL_SPEED;
+        // 横跳び（ユーザー指定）: 進む向きへ大きく、面から離れる向きへは少しだけ
+        this.vx = away.x * SPIDER_HOP_SPEED + this.fwd.x * SPIDER_HOP_SIDE_SPEED;
+        this.vy = away.y * SPIDER_HOP_SPEED + this.fwd.y * SPIDER_HOP_SIDE_SPEED;
         const d = downOf(this.surface);
         this.airGravity = { x: d.x * SPIDER_HOP_GRAVITY, y: d.y * SPIDER_HOP_GRAVITY };
         this._leaveSurface();
+    }
+
+    /**
+     * dir へ横跳びしたとき、張り付ける所に降りるか。途中に岩（壁）があればそこへ張り付くので可、
+     * 無ければ着地点（宙にいる時間 × 横の速さ ≈ 57px 先）の真下（面の向き）に足場があるか
+     */
+    _hopLands(dir) {
+        const reach = SPIDER_HOP_SIDE_SPEED * (2 * SPIDER_HOP_SPEED / SPIDER_HOP_GRAVITY);
+        if (this._gapAlong(dir, reach / TILE_SIZE) !== null) return true;
+        const isSolid = this._isSolid();
+        const body = { ...this._body(), x: this.x + dir.x * reach, y: this.y + dir.y * reach };
+        return !boxHitsSolid(isSolid, body.x, body.y, SPIDER_SIZE) && hasSupport(isSolid, body);
     }
 
     _startLeap() {
@@ -368,7 +451,15 @@ export class EnemySpider {
             } else {
                 this.fireTimer = SPIDER_FIRE_RETRY;
             }
-            this._startPause();
+            // 撃ったら横跳びで離れることがある（ドローンの「撃ったらすぐ離れる」）。乱数は毎回 2 つ引く
+            const hopRoll = this.rng.next();
+            const dirRoll = this.rng.next();
+            if (aim && hopRoll < SPIDER_HOP_AFTER_FIRE_CHANCE) {
+                if (dirRoll < 0.5) this._reverse();
+                this._startHop();
+            } else {
+                this._startPause();
+            }
             return true;
         }
         if (this.fireTimer > 0) {
@@ -390,16 +481,10 @@ export class EnemySpider {
      * @returns {{x:number, y:number, angle:number, target:{x:number, y:number, frames:number}}|null}
      */
     _aim() {
-        const p = this.game.player;
-        if (!p || !p.alive || p.docked) return null;
-        const half = SPIDER_SIZE / 2;
-        const cx = this.x + half;
-        const cy = this.y + half;
-        const pcx = p.x + p.width / 2;
-        const pcy = p.y + p.height / 2;
-        if (!withinSight(pcx - cx, pcy - cy, SPIDER_SIGHT_RANGE * sightScaleFor(this.game))) return null;
+        const seen = this._seenPlayer();
+        if (!seen) return null;
+        const { cx, cy, pcx, pcy } = seen;
         const map = this.game.map;
-        if (!hasLineOfSight(cx, cy, pcx, pcy, map)) return null;
         const away = this._away();
         const mx = cx + away.x * SPIDER_MUZZLE_OFFSET;
         const my = cy + away.y * SPIDER_MUZZLE_OFFSET;

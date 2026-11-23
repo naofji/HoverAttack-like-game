@@ -3,7 +3,9 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
 import { boxHitsSolid, hasSupport } from '../src/js/utils/surfaceCrawl.js';
-import { SPIDER_SIZE, SPIDER_COUNT, SPIDER_SPAWN_MIN_COL_GAP, TILE_SIZE } from '../src/js/utils/Constants.js';
+import {
+  SPIDER_SIZE, SPIDER_COUNT, SPIDER_SPAWN_MIN_COL_GAP, TILE_SIZE, SPIDER_SPAWN_COL_FROM, SPIDER_SPAWN_COL_TO,
+} from '../src/js/utils/Constants.js';
 
 // Map._generateMiniMap() を Node で回すための最小の DOM（MapDeterminism.test.js と同じ）
 before(() => {
@@ -19,14 +21,16 @@ async function buildMap(seed, missionLevel) {
 
 const SEEDS = [7, 42, 2026];
 
-test('6面（missionLevel 5）では数体が右半分に置かれ、面に接している', async () => {
+test('6面（missionLevel 5）では数体が前半〜中盤（偵察部隊）に置かれ、面に接している', async () => {
   for (const seed of SEEDS) {
     const { map } = await buildMap(seed, 5);
     const sp = map.spiderSpawns;
     assert.ok(sp.length >= 1 && sp.length <= SPIDER_COUNT, `seed ${seed}: ${sp.length} 体`);
     const isSolid = (r, c) => map.isSolid(r, c);
     for (const p of sp) {
-      assert.ok(p.x >= map.width / 2, `seed ${seed}: 左半分 ${p.x}`);
+      const c = Math.floor(p.x / TILE_SIZE);
+      assert.ok(c >= Math.floor(map.cols * SPIDER_SPAWN_COL_FROM) && c < Math.ceil(map.cols * SPIDER_SPAWN_COL_TO),
+        `seed ${seed}: 列 ${c} / ${map.cols}`);
       assert.equal(boxHitsSolid(isSolid, p.x, p.y, SPIDER_SIZE), false, `seed ${seed}: めり込み ${JSON.stringify(p)}`);
       assert.equal(hasSupport(isSolid, { ...p, size: SPIDER_SIZE }), true, `seed ${seed}: 足場なし ${JSON.stringify(p)}`);
     }

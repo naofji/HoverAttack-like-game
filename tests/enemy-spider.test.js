@@ -314,3 +314,102 @@ test('天井が低くて頭上 SPIDER_SHELL_AIM_ABOVE が岩の中なら、届�
   assert.ok(above >= SPIDER_SHELL_AIM_ABOVE_MIN && above < SPIDER_SHELL_AIM_ABOVE, `頭上 ${above}px を狙った`);
   assert.ok(list[0].target.y >= T, '狙いの点が天井の中');
 });
+
+// ------------------------------------------
+// 2026-11-23 ユーザー指定: フナムシのような一定の這い方ではなく、ドローンのようなトリッキーな動き。
+// 小ジャンプは横跳び
+// ------------------------------------------
+test('走りは短く速い（ダッシュ）', async () => {
+  const { SPIDER_CRAWL_SPEED, SPIDER_RUN_FRAMES, ENEMY_DRONE_SPEED } = await import('../src/js/utils/Constants.js');
+  assert.ok(SPIDER_CRAWL_SPEED >= ENEMY_DRONE_SPEED * 0.9, 'ドローンのダッシュ並みの速さでない');
+  const { game } = world(roomRows(80, 6));
+  const s = onFloor(game, 5, 40);
+  s.fireTimer = 1e9;
+  // 1回の走り＝同じ向きで crawl が続く間（切り返しは止まらずに逆へ走るので、向きが変わったら別の走り）
+  let run = 0, longest = 0, fx = s.fwd.x;
+  for (let i = 0; i < 3000; i++) {
+    s.update();
+    if (s.mode === 'crawl' && s.fwd.x === fx) run++;
+    else { longest = Math.max(longest, run); run = s.mode === 'crawl' ? 1 : 0; }
+    fx = s.fwd.x;
+  }
+  assert.ok(longest > 0 && longest <= SPIDER_RUN_FRAMES[1], `一番長い走り ${longest} フレーム`);
+});
+
+/** 自機から横にどれだけ離れているか、最後の n フレームの平均 */
+function standoff(game, s, p, frames, n) {
+  let sum = 0;
+  for (let i = 0; i < frames; i++) {
+    s.update();
+    if (i >= frames - n) sum += Math.abs((s.x + S / 2) - (p.x + p.width / 2));
+  }
+  return sum / n;
+}
+
+test('自機が見えると、ドローンのように自機から一定の間合いの所へ走り寄る', async () => {
+  const { SPIDER_ENGAGE_DIST_X, SPIDER_ENGAGE_JITTER } = await import('../src/js/utils/Constants.js');
+  // 天井の高い長い部屋（床は row 29）。自機は床の上、スパイダーの 420px 右。
+  // スパイダーは壁から離して置く（壁に張り付くと、壁の上の行き先＝自機より上の高さを目指すので横には寄らない）
+  const { game } = world(roomRows(80, 30));
+  const s = onFloor(game, 29, 20);
+  const p = playerOnFloor(game, 29, s.x + 420);
+  s.fireTimer = 1e9;   // 撃たせない（動きだけ見る）
+  const d = standoff(game, s, p, 600, 300);
+  assert.ok(Math.abs(d - SPIDER_ENGAGE_DIST_X) <= SPIDER_ENGAGE_JITTER, `平均の間合い ${d.toFixed(0)}px`);
+});
+
+test('自機に近すぎると、間合いの所まで離れる', async () => {
+  const { SPIDER_ENGAGE_DIST_X, SPIDER_ENGAGE_JITTER } = await import('../src/js/utils/Constants.js');
+  // 1体だと、でたらめに動いてもたまたま間合いに収まることがあった（_seek を外しても通った）ので、何か所かで見る
+  for (const col of [30, 36, 42, 48, 54]) {
+    const { game } = world(roomRows(80, 30));
+    const s = onFloor(game, 29, col);
+    const p = playerOnFloor(game, 29, s.x + 20);
+    s.fireTimer = 1e9;
+    const d = standoff(game, s, p, 600, 300);
+    assert.ok(Math.abs(d - SPIDER_ENGAGE_DIST_X) <= SPIDER_ENGAGE_JITTER, `列 ${col}: 平均の間合い ${d.toFixed(0)}px`);
+  }
+});
+
+test('床の小ジャンプは横跳び（低く、横へ 2 タイル以上）', () => {
+  const { game } = world(roomRows(40, 14));
+  const s = onFloor(game, 13, 10);
+  s.fwd = { x: 1, y: 0 };
+  const x0 = s.x, y0 = s.y;
+  s._startHop();
+  let minY = y0;
+  for (let i = 0; i < 120 && s.mode === 'hop'; i++) {
+    s.update();
+    minY = Math.min(minY, s.y);
+  }
+  assert.equal(s.surface, 'floor');
+  assert.ok(s.x - x0 >= 2 * T, `横に ${(s.x - x0).toFixed(1)}px`);
+  assert.ok(y0 - minY <= 12, `高さ ${(y0 - minY).toFixed(1)}px`);
+  assert.ok(s.x - x0 > 3 * (y0 - minY), '横より縦に跳んだ');
+});
+
+test('横跳びの着地点に面が無ければ逆へ跳び、天井から落ちない', () => {
+  // 天井は列 3〜12 だけ（その外は上へ抜けている）。スパイダーは右端近くで右向き → 右へ跳ぶと天井の外
+  const rows = [];
+  for (let r = 0; r < 20; r++) rows.push('.'.repeat(30));
+  rows[2] = '...' + '#'.repeat(10) + '.'.repeat(17);
+  const { game } = world(rows);
+  const s = new EnemySpider(game, 11 * T + 1, 3 * T, 'ceiling');
+  s.fwd = { x: 1, y: 0 };
+  s._startHop();
+  assert.equal(s.mode, 'hop');
+  assert.equal(s.fwd.x, -1, '天井の外へ向かって跳んだ');
+  for (let i = 0; i < 60 && s.mode === 'hop'; i++) s.update();
+  assert.equal(s.surface, 'ceiling');
+});
+
+test('どちらへ跳んでも面が無ければ跳ばない', () => {
+  const rows = [];
+  for (let r = 0; r < 20; r++) rows.push('.'.repeat(30));
+  rows[2] = '.'.repeat(10) + '##' + '.'.repeat(18);
+  const { game } = world(rows);
+  const s = new EnemySpider(game, 10 * T + 1, 3 * T, 'ceiling');
+  s._startHop();
+  assert.notEqual(s.mode, 'hop');
+  assert.equal(s.surface, 'ceiling');
+});
