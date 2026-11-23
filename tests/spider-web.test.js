@@ -149,7 +149,7 @@ test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布�
   growFull(web);
   const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
   // 伸び切ったフレームから薄れ始めて沈むので、その分を引く
-  const sagAt = (r) => web.pointAt(mid, r).y - web.y - web.fade * SPIDER_WEB_SINK_SPEED;
+  const sagAt = (r) => web.pointAt(mid, r).y - web.y - web.sink;
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH) - SPIDER_WEB_DROOP) <= SPIDER_WEB_FLUTTER + 1e-9,
     `先の垂れ ${sagAt(SPIDER_WEB_MAX_LENGTH)}`);
   assert.ok(Math.abs(sagAt(SPIDER_WEB_MAX_LENGTH / 2) - SPIDER_WEB_DROOP / 4) <= SPIDER_WEB_FLUTTER + 1e-9,
@@ -180,7 +180,24 @@ test('垂れるぶん扇を上へ向けるので、真ん中の糸は狙った�
   }
 });
 
-test('薄れている間は沈むが、岩の中へは沈まない', () => {
+test('薄れて沈む間も、起点ごと全体が同じだけ沈み、形は崩れない', () => {
+  const game = openWorld();
+  const web = new SpiderWeb(game, 300, 200, 60 * DEG);
+  growFull(web);
+  const origin = () => web.segments().find((sg) => sg.kind === 'radial');
+  const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+  const o0 = origin();
+  const rel0 = web.pointAt(mid, 120).y - o0.y1;
+  grow(web, 20);
+  assert.ok(web.alive);
+  const o1 = origin();
+  assert.ok(Math.abs((o1.y1 - o0.y1) - 20 * SPIDER_WEB_SINK_SPEED) < 1e-9, `起点の沈み ${o1.y1 - o0.y1}`);
+  assert.equal(o1.x1, o0.x1);
+  const rel1 = web.pointAt(mid, 120).y - o1.y1;
+  assert.ok(Math.abs(rel1 - rel0) <= 2 * SPIDER_WEB_FLUTTER, `起点からの位置が ${rel0.toFixed(1)} → ${rel1.toFixed(1)}`);
+});
+
+test('薄れている間は沈むが、どこかが岩に着いたら全体がそこで止まる（岩の中へは沈まず、形も崩さない）', () => {
   // 下に床（row 18 = y 288〜）
   const extra = [];
   for (let c = 0; c < 60; c++) extra.push([18, c]);
@@ -188,13 +205,17 @@ test('薄れている間は沈むが、岩の中へは沈まない', () => {
   const web = new SpiderWeb(game, 300, 100, 30 * DEG);
   growFull(web);
   web.update();
-  const free = web.strands.find((s) => s.len >= SPIDER_WEB_MAX_LENGTH - 1e-9 && s.angle < 20 * DEG);
-  const tipY0 = web.pointAt(free, 60).y;
-  grow(web, 20);
+  const tipGap = () => web.pointAt(web.strands[4], 200).y - web.pointAt(web.strands[0], 200).y;
+  const free = web.strands[0];
+  const y0 = web.pointAt(free, 60).y;
+  const gap0 = tipGap();
+  grow(web, 30);
   assert.ok(web.alive);
-  assert.ok(web.pointAt(free, 60).y > tipY0 + 5, '沈んでいない');
-  for (const s of web.segments()) {
-    for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]]) {
+  assert.ok(web.pointAt(free, 60).y > y0 + 5, '沈んでいない');
+  // 床に近い糸だけ止まって、ほかの糸が沈み続けると形がゆがむ
+  assert.ok(Math.abs(tipGap() - gap0) <= 2 * SPIDER_WEB_FLUTTER, `糸の先どうしの高さの差 ${gap0.toFixed(1)} → ${tipGap().toFixed(1)}`);
+  for (const sg of web.segments()) {
+    for (const [x, y] of [[sg.x1, sg.y1], [sg.x2, sg.y2]]) {
       assert.equal(game.map.isSolidAtPixel(x, y), false, `岩の中 (${x.toFixed(1)}, ${y.toFixed(1)})`);
     }
   }
