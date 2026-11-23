@@ -19,7 +19,6 @@ import {
     CANVAS_WIDTH, CANVAS_HEIGHT,
     COLOR_CAVE_BG,
     LANDMINE_SCORE,
-    CARRIER_PROXIMITY_ALERT_RANGE, CARRIER_SPEED,
     DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
     AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
@@ -29,7 +28,7 @@ import {
     VIEW_CULL_MARGIN,
     CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
     ENEMY_BASE_DRAW_OVERHANG, FLAG_HEIGHT,
-    STAGE_COUNT, BASE_EMERGENCY_MISSION,
+    STAGE_COUNT,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
 import { loadSettings, stepSetting } from './utils/settings.js';
@@ -43,8 +42,6 @@ import { StageEnvironment } from './world/StageEnvironment.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
 import { Flag } from './entities/Flag.js';
-import { EnemyAttacker } from './entities/EnemyAttacker.js';
-import { EnemyDrone } from './entities/EnemyDrone.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 import { ScreenRenderer } from './ui/ScreenRenderer.js';
@@ -58,8 +55,7 @@ import { SaveManager } from './systems/SaveManager.js';
 import { OnlineLeaderboard } from './systems/OnlineLeaderboard.js';
 import { audioManager } from './audio/AudioManager.js';
 import { AimLeadTracker } from './utils/aimLead.js';
-import { centerOf } from './utils/Physics.js';
-import { nearestHoveringEnemy, nearestActiveBarrier, positionalVolume } from './utils/audioFalloff.js';
+import { positionalVolume } from './utils/audioFalloff.js';
 import { MODES } from './utils/modes.js';
 import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
@@ -72,6 +68,8 @@ import { OnlineFlow } from './systems/OnlineFlow.js';
 import { CombatActions } from './systems/CombatActions.js';
 import { SpawnEffects } from './systems/SpawnEffects.js';
 import { AutoAim } from './systems/AutoAim.js';
+import { LoopSounds } from './systems/LoopSounds.js';
+import { Alerts } from './systems/Alerts.js';
 import { DEMO_CYCLE_STATES, DEMO_SCREEN_DRAWERS } from './ui/flows/demoScreens.js';
 
 // テストと main.js 自身が使う。表の実体は ui/flows/demoScreens.js
@@ -666,30 +664,6 @@ export const Game = {
     },
 
     /**
-     * 敵のホバー音。画面に映っている敵は満音量、画面外は半分で、
-     * 1画面ぶん離れると聞こえなくなる。左右はその敵の横位置で振る。
-     */
-    _updateEnemyHoverSound() {
-        const nearest = nearestHoveringEnemy(this.enemies, this._viewRect());
-        // 聞こえる敵が居なくなっても止めるのではなく 0 を渡す。音源を残した
-        // まま滑らかに引くため。本当に止めるのはミッションを抜けるとき。
-        if (!nearest) {
-            audioManager.setEnemyHover(0);
-            return;
-        }
-        audioManager.setEnemyHover(nearest.volume, nearest.x);
-    },
-
-    /**
-     * バリアの唸り。敵のホバー音と同じく、いちばん近い1本だけを鳴らす
-     * （7面には10本前後あるので、足すと本数ぶん青天井になる）。
-     */
-    _updateBarrierSound() {
-        const nearest = nearestActiveBarrier(this.barriers, this._viewRect());
-        audioManager.setBarrierHum(nearest ? nearest.volume : 0, nearest ? nearest.x : null);
-    },
-
-    /**
      * 電流の床。放電が始まる瞬間にだけ音を出す（連続音にすると床の本数ぶん騒がしくなる）。
      * 7面には十数本あるので、画面から1画面以上離れたもの（音量 0）は鳴らさない。
      */
@@ -702,23 +676,6 @@ export const Game = {
             const volume = positionalVolume(floor.x + floor.width / 2, floor.y, view);
             if (volume > 0) floor.playZap(volume);
         }
-    },
-
-    /**
-     * 母艦のエンジン音。ドッキング中（＝母艦を操作できる間）だけ鳴らす。
-     * 移動しているほど音が上がる。
-     */
-    _updateCarrierEngineSound() {
-        const player = this.player;
-        const carrier = this.carrier;
-        const running = player && player.docked && player.alive && carrier.alive;
-        if (!running) {
-            audioManager.stopCarrierEngine();
-            audioManager.stopRepairHum(); // 母艦の撃墜で強制離脱したときもハムを残さない
-            return;
-        }
-        const throttle = Math.min(1, Math.abs(carrier.vx) / CARRIER_SPEED);
-        audioManager.startCarrierEngine(throttle);
     },
 
     _updatePlayer() {
@@ -1140,61 +1097,6 @@ export const Game = {
     // GAME LOOP
     // ==========================================
 
-    _updateProximityAlert() {
-        if (!this.carrier || !this.carrier.alive || this.gameState !== 'playing') {
-            this.proximityAlertActive = false;
-            return;
-        }
-
-        const cx = this.carrier.x + this.carrier.width / 2;
-        const cy = this.carrier.y + this.carrier.height / 2;
-        const rangeSq = CARRIER_PROXIMITY_ALERT_RANGE * CARRIER_PROXIMITY_ALERT_RANGE;
-
-        // 敵も敵弾も、機体の中心が範囲に入ったら警報。x,y が左上か中心かは
-        // クラスによって違うので、中心の求め方は centerOf に任せる。
-        const nearCarrier = (obj) => {
-            if (!obj.alive) return false;
-            const c = centerOf(obj);
-            return (cx - c.x) ** 2 + (cy - c.y) ** 2 < rangeSq;
-        };
-
-        this.proximityAlertActive = this.enemies.some(nearCarrier)
-            || this.enemyBullets.some(nearCarrier);
-
-        // Play alarm sound periodically while threat is near
-        if (this.proximityAlertActive) {
-            if (Math.floor(this.totalTime / 16) % 30 === 0) {
-                audioManager.playAlarm();
-            }
-        }
-    },
-
-    /**
-     * Enter "Enemy Base Emergency Defense Mode" — called by EnemyBase.takeDamage()
-     * on mission 2+ once the base is under attack. One-shot latch: once active,
-     * subsequent calls are no-ops until a fresh mission (or base destruction)
-     * resets the flags.
-     * @param {EnemyBase} enemyBase - the base under attack; stored so redirected
-     *   defenders (and newly-spawned ones, via SpawnManager) know their rally point.
-     */
-    triggerBaseEmergencyAlert(enemyBase) {
-        if (this.baseEmergencyAlert) return; // one-shot latch: already active
-
-        if (this.missionsCompleted < BASE_EMERGENCY_MISSION) return; // 基地側でも見ているが念のため（defense in depth）
-
-        this.baseEmergencyAlert = true;
-        this.emergencyTargetBase = enemyBase;
-        this.baseEmergencyAlertStartTime = Date.now();
-
-        for (const enemy of this.enemies) {
-            if (enemy instanceof EnemyAttacker || enemy instanceof EnemyDrone) {
-                enemy.setEmergencyDefense(true, enemyBase);
-            }
-        }
-
-        audioManager.playAlarm();
-    },
-
     loop(timestamp) {
         let deltaTime = timestamp - this.lastTime;
         this.lastTime = timestamp;
@@ -1222,7 +1124,7 @@ export const Game = {
 // 画面フローなど、ループ本体と関係のないメソッド群は別ファイルに分けて
 // ここで `Game` に混ぜている。`this` の意味は変わらないので、
 // `Game._updateSettings.call(fakeGame)` というテストの呼び方もそのまま通る。
-Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions, SpawnEffects, AutoAim);
+Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions, SpawnEffects, AutoAim, LoopSounds, Alerts);
 
 // ============================================
 // Start (ES modules are deferred, DOM is ready)
