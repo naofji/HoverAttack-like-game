@@ -950,7 +950,9 @@ export const SPIDER_WEB_DROOP = 24;
 export const SPIDER_WEB_FLUTTER = 2;          // 糸に沿って揺れる波の振れ幅（先ほど大きい。px）
 export const SPIDER_WEB_NODE_STEP = 12;       // 曲がった糸を折れ線にする刻み（px）。当たりと描画が同じ折れ線を使う
 export const SPIDER_WEB_CROSS_SAG = 3;        // 横糸の真ん中のたるみ（px）
-export const SPIDER_WEB_SINK_SPEED = 0.6;     // 薄れている間に沈む速さ（px/フレーム）。岩の中へは沈まない
+// 沈む速さ（px/フレーム）。割れた瞬間から起点ごと沈む（2026-11-23 ユーザー指定。初めは薄れている間だけ）。岩の中へは沈まない。
+// 140px 先の自機に届くまでに約 25px 沈むので、そのぶん扇を上へ向ける（SpiderWeb.aimAngle）＝上から降り注ぐ
+export const SPIDER_WEB_SINK_SPEED = 0.6;
 // 自機に当たったら消さずに、機体へ覆い被さるように縮んで消える（ユーザー指定）。その間に自機の側の糸が育つ
 export const SPIDER_WEB_WRAP_FRAMES = 16;
 // 機体にまとわりつく糸（player/draw.js の _drawWeb）。中心から放射状の SPOKES 本と輪。

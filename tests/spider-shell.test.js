@@ -82,8 +82,9 @@ test('自機から SPIDER_SHELL_BURST_RANGE まで近づくと破裂して、5�
   // 真ん中の糸が（垂れるぶんを打ち消して）自機の中心のそばを通る
   const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
   let best = Infinity;
-  for (let r = 0; r <= 200; r += 0.5) {
-    const q = web.pointAt(mid, r);
+  for (let i = 0; i < 200 && !mid.stopped; i++) {
+    web.update();
+    const q = web.pointAt(mid, mid.len);
     best = Math.min(best, Math.hypot(q.x - pcx, q.y - pcy));
   }
   assert.ok(best < 6, `真ん中の糸が自機の中心から ${best.toFixed(1)}px`);

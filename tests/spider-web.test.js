@@ -105,7 +105,8 @@ test('建物に当たった糸はそこで止まる', () => {
   const game = w.game;
   game.map.isSolidPoint = () => false;
   game.map.isSolidAtPixel = () => false;
-  const web = new SpiderWeb(game, 150, 116, 0);
+  // 糸は割れた瞬間から沈むので、沈んで小屋（高さ 32）の下へ抜ける前に届く近さで割る
+  const web = new SpiderWeb(game, 185, 116, 0);
   grow(web, 60);
   // 外の2本（±20°）は小屋（y 100〜132）の上下をかすめて外れるので、小屋に向かう真ん中の3本を見る
   for (const s of web.strands.filter((st) => Math.abs(st.angle) < 15 * DEG)) {
@@ -140,7 +141,8 @@ test('横糸: 隣り合う糸の同じ距離の点を、SPIDER_WEB_RING_STEP ご
     const tip = web.pointAt(st, st.len);
     assert.ok(segs.some((s) => s.kind === 'radial' && close({ x: s.x2, y: s.y2 }, tip)), '縦糸の先が無い');
   }
-  assert.ok(segs.some((s) => s.kind === 'radial' && s.x1 === web.x && s.y1 === web.y), '縦糸が中心から出ていない');
+  const o = web.origin();
+  assert.ok(segs.some((s) => s.kind === 'radial' && s.x1 === o.x && s.y1 === o.y), '縦糸が起点から出ていない');
 });
 
 test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布）', () => {
@@ -161,7 +163,7 @@ test('糸はまっすぐでなく、先ほど下へ垂れる（柔らかい布�
   assert.ok(Math.hypot(after.x - before.x, after.y - before.y) > 0.05, '揺れていない');
 });
 
-test('垂れるぶん扇を上へ向けるので、真ん中の糸は狙った点を通る', () => {
+test('垂れ・沈むぶん扇を上へ向けるので、伸びていく真ん中の糸の先は狙った点を通る', () => {
   const game = openWorld();
   const tx = 600;
   const ty = 500;
@@ -170,34 +172,35 @@ test('垂れるぶん扇を上へ向けるので、真ん中の糸は狙った�
     const y = ty + dy;
     const web = new SpiderWeb(game, x, y, SpiderWeb.aimAngle(x, y, tx, ty));
     const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
-    // 狙った点の周り（自機の大きさ 16×24 の半分ほど）を通る
+    // 狙った点の周り（自機の大きさ 16×24 の半分ほど）を、伸びていく先が通る
     let best = Infinity;
-    for (let r = 100; r <= 180; r += 0.5) {
-      const p = web.pointAt(mid, r);
+    while (!mid.stopped) {
+      web.update();
+      const p = web.pointAt(mid, mid.len);
       best = Math.min(best, Math.hypot(p.x - tx, p.y - ty));
     }
     assert.ok(best < 5, `(${dx}, ${dy}) から 狙いと ${best.toFixed(1)}px ずれた`);
   }
 });
 
-test('薄れて沈む間は、起点も糸と同じだけ沈む（起点だけ残って網がゆがまない）', () => {
+test('拡がる最中から、起点も糸も一緒に沈む（起点だけ残って網がゆがまない）', () => {
   const game = openWorld();
   const web = new SpiderWeb(game, 300, 200, 60 * DEG);
-  growFull(web);
   const origin = () => web.segments().find((sg) => sg.kind === 'radial');
-  const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
-  const o0 = origin();
-  const rel0 = web.pointAt(mid, 120).y - o0.y1;
-  grow(web, 20);
-  assert.ok(web.alive);
+  grow(web, 10);
+  assert.ok(web.strands.every((s) => !s.stopped), 'まだ伸びている最中のはず');
   const o1 = origin();
-  assert.ok(Math.abs((o1.y1 - o0.y1) - 20 * SPIDER_WEB_SINK_SPEED) < 1e-9, `起点の沈み ${o1.y1 - o0.y1}`);
-  assert.equal(o1.x1, o0.x1);
-  const rel1 = web.pointAt(mid, 120).y - o1.y1;
-  assert.ok(Math.abs(rel1 - rel0) <= 2 * SPIDER_WEB_FLUTTER, `起点からの位置が ${rel0.toFixed(1)} → ${rel1.toFixed(1)}`);
+  assert.ok(Math.abs((o1.y1 - 200) - 10 * SPIDER_WEB_SINK_SPEED) < 1e-9, `起点の沈み ${o1.y1 - 200}`);
+  assert.equal(o1.x1, 300);
+  // 糸の点も同じだけ沈んでいる（垂れ・揺れを除いて）
+  const mid = web.strands[(SPIDER_WEB_STRANDS - 1) / 2];
+  const r = 30;
+  const straight = 200 + Math.sin(mid.angle) * r + SPIDER_WEB_DROOP * (r / SPIDER_WEB_MAX_LENGTH) ** 2;
+  assert.ok(Math.abs(web.pointAt(mid, r).y - straight - 10 * SPIDER_WEB_SINK_SPEED) <= SPIDER_WEB_FLUTTER,
+    `糸の点の沈み ${(web.pointAt(mid, r).y - straight).toFixed(1)}`);
 });
 
-test('薄れている間は沈むが、岩の中へは沈まない', () => {
+test('沈むが、岩の中へは沈まない', () => {
   // 下に床（row 18 = y 288〜）
   const extra = [];
   for (let c = 0; c < 60; c++) extra.push([18, c]);
@@ -473,4 +476,17 @@ test('切れ端は機体から外へ飛び、ふわっと落ちながら薄れ�
   scraps.forEach((q) => assert.ok(q.vy > 0.3 && q.vy < 1, `落ちる速さ ${q.vy.toFixed(2)}`));
   for (let i = 0; i < SPIDER_WEB_SCRAP_LIFETIME; i++) scraps.forEach((q) => q.update());
   scraps.forEach((q) => assert.equal(q.alive, false));
+});
+
+test('沈む糸は薄い床（1タイル）をすり抜けて下へ出ない（消えるまでずっと床の上）', () => {
+  const extra = [];
+  for (let c = 0; c < 60; c++) extra.push([18, c]);   // y 288〜304 の薄い床、その下は空洞
+  const game = openWorld(extra);
+  const web = new SpiderWeb(game, 300, 100, 30 * DEG);
+  for (let i = 0; i < 300 && web.alive; i++) {
+    web.update();
+    for (const sg of web.segments()) {
+      for (const y of [sg.y1, sg.y2]) assert.ok(y < 288, `${i} フレーム目: 床を抜けた y ${y.toFixed(1)}`);
+    }
+  }
 });
