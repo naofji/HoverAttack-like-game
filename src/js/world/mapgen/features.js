@@ -33,6 +33,7 @@ import { pickFacilityAreas, metalizeFacilityBand } from '../facility.js';
 import { generateTown } from '../town/generate.js';
 import { FACTORY_THEME, BASE_THEME } from '../town/themes.js';
 import { SHAPE_FULL } from '../../utils/tileShape.js';
+import { blockHoldsSnow } from '../mapShapes.js';
 import { metalizeFactoryGround } from '../town/factoryGround.js';
 import { generatePlants } from '../town/generatePlants.js';
 import { generateSnowTrees } from '../town/generateSnowTrees.js';
@@ -390,7 +391,7 @@ export const MapFeatures = {
         if (this.envKind !== 'snow') return;
         const nr = r + 1;
         if (nr >= this.rows) return;
-        if (this.grid[nr][c] === BLOCK_EMPTY) return;
+        if (!blockHoldsSnow(this.grid[nr][c])) return;   // 空・無敵ブロック・金属には積もらない
         this.exposedAtGen[nr * this.cols + c] = 1;
     },
 };

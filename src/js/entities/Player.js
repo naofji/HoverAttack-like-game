@@ -25,7 +25,7 @@ import {
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { SlopeBody } from './slopeBody.js';
 import { WalkerBody } from './walkerBody.js';
-import { groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { floorSlide, groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, hoverGroundIsSnow, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -335,8 +335,9 @@ export class Player {
     _kickSnow(landed) {
         if (!this.game.spawnSnowKick) return;
         // 着地したフレームは motion がまだ「雪の面」のまま（係数はフレーム先頭、
-        // 着地は _moveAndCollide の中）なので、ここでも接地面を見る必要がある
-        if (!this.onTerrain) return;
+        // 着地は _moveAndCollide の中）なので、ここでも接地面を見る必要がある。
+        // 床の性質（floorSlide）で見るので、敵基地の無敵ブロックの上では雪を蹴らない
+        if (!floorSlide(this, this.game)) return;
         const fx = this.x + this.width / 2;
         const fy = this.y + this.height;
         if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
@@ -358,6 +359,7 @@ export class Player {
         if (this.motion.slide <= 0) return;
         const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
+        if (!hoverGroundIsSnow(this, this.game, clearance)) return;   // 無敵ブロックの上には雪が無い
         const fx = this.x + this.width / 2;
         const fy = snowMistOriginY(this, this.game, clearance);   // 岩の中から出さない（snowMistOriginY）
         const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;

@@ -12,9 +12,9 @@ import { makeMap } from './helpers/enemy-world.js';
 const SNOW_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: ICE_SLIDE }), sightScale: 1, kind: 'snow' };
 const LAND_ENV = { motionAt: () => ({ speed: 1, gravity: 1, slide: 0 }), sightScale: 1, kind: 'none' };
 
-/** 足元に地形がある雪の世界。groundSlide は環境しか見ないので map は最小でよい。 */
+/** 足元が一面の岩（雪の載る床）の世界。床が雪を載せるか（floorHoldsSnowAt）は本物の Map の問い合わせで見る */
 function world(env) {
-  return { env, map: { isSolidAtPixel: () => true, cols: 100, rows: 100 } };
+  return { env, map: makeMap(Array.from({ length: 30 }, () => '#'.repeat(30))) };
 }
 
 function entity(over = {}) {

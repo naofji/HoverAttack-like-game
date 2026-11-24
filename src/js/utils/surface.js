@@ -34,7 +34,29 @@ import {
 export function floorSlide(entity, game) {
     if (!entity || !entity.onTerrain) return 0;
     const motion = motionFor(game, entity.x + entity.width / 2, entity.y + entity.height / 2);
-    return motion.slide || 0;
+    if (!motion.slide) return 0;
+    return standingOnSnow(entity, game) ? motion.slide : 0;
+}
+
+/**
+ * 足元の床のブロックに雪が載るか（Map.floorHoldsSnowAt。面が雪かどうかは呼ぶ側が motion.slide で見る）。5面でも敵基地の無敵ブロックや金属の上は雪が無いので滑らず、
+ * 雪煙も上げない（2026-11-25 実機の指摘）。床は中心の列で探し、中心が床の切れ目の上なら両足の列を見る
+ * （端に片足で立っているときも、その足の床で決める）。探す深さは足の下端から半タイル（slopeBody の
+ * _applySlope と同じ。戦車は床の 0.3〜0.9px 上を上下する）
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ
+ * @returns {boolean}
+ */
+export function standingOnSnow(entity, game) {
+    const map = game && game.map;
+    if (!map) return false;
+    const bottom = entity.y + entity.height;
+    for (const x of [entity.x + entity.width / 2, entity.x + 2, entity.x + entity.width - 2]) {
+        const floorY = map.terrainTopY(x, bottom - 1, bottom + TILE_SIZE / 2);
+        if (floorY !== null) return map.floorHoldsSnowAt(x, floorY);
+    }
+    return false;
 }
 
 /**
@@ -161,6 +183,20 @@ export function groundSurfaceY(entity, game, clearance) {
 export function snowMistOriginY(entity, game, clearance) {
     const surface = groundSurfaceY(entity, game, clearance);
     return surface !== null ? surface : entity.y + entity.height + clearance;
+}
+
+/**
+ * ホバー中に `groundClearance` が見つけた地面のブロックに雪が載るか（Map.floorHoldsSnowAt。面が雪かどうかは呼ぶ側が motion.slide で見る）。5面でも無敵ブロック・金属の
+ * 上では粉雪を出さない。上面が読めなければ偽（雪の有無が分からない所からは出さない）
+ *
+ * @param {object} entity x, y, width, height を持つ
+ * @param {object} game map を持つ
+ * @param {number} clearance groundClearance の戻り値（null でないこと）
+ * @returns {boolean}
+ */
+export function hoverGroundIsSnow(entity, game, clearance) {
+    const surface = groundSurfaceY(entity, game, clearance);
+    return surface !== null && game.map.floorHoldsSnowAt(entity.x + entity.width / 2, surface);
 }
 
 /**

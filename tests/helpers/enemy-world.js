@@ -1,5 +1,5 @@
 // Minimal world mocks for EnemyAttacker simulation tests
-import { TILE_SIZE, ENEMY_ATTACKER_TYPES } from '../../src/js/utils/Constants.js';
+import { TILE_SIZE, ENEMY_ATTACKER_TYPES, BLOCK_EMPTY, BLOCK_NORMAL, BLOCK_INDESTRUCTIBLE } from '../../src/js/utils/Constants.js';
 import { EnemyAttacker } from '../../src/js/entities/EnemyAttacker.js';
 import { Map as GameMap } from '../../src/js/world/Map.js';
 import { computeTileShape } from '../../src/js/utils/tileShape.js';
@@ -9,10 +9,12 @@ import { computeTileShape } from '../../src/js/utils/tileShape.js';
 const SHAPE_QUERIES = [
   'tileShapeAt', 'isSolidPoint', 'rectHitsTerrain', 'terrainTopY', 'terrainBottomY',
   'floorSlopeAt', 'ceilingSlopeAt', 'hasShapedTileIn', 'slopeHitAlong', 'popOutOfRock', 'snowSurfaceY',
+  'floorHoldsSnowAt',
 ];
 
 /**
  * Build a map mock from ASCII rows ('#' = solid). Out of bounds is solid.
+ * 'B' は敵基地の無敵ブロック（固くて磨き仕上げ、雪が積もらない）。本物の grid も BLOCK_* の数値で持つ。
  * `waterRows`（'w' = 水）を渡すと isWater/isWaterAtPixel/getSurfaceY も使えるようになる
  * （渡さなければ既存の挙動どおり常に水なし）。
  * `options.tileShape` はタイルの形の規則（'square' が既定、5面と同じ坂は 'snowSlope'）。
@@ -25,6 +27,7 @@ export function makeMap(rows, waterRows, { tileShape = 'square', envKind, snowCa
   const waterGrid = waterRows ? waterRows.map((s) => s.split('')) : null;
   const cellAt = (r, c) => {
     if (r < 0 || c < 0 || r >= grid.length || c >= grid[0].length) return 'polished';
+    if (grid[r][c] === 'B') return 'polished';
     return grid[r][c] === '#' ? 'rock' : 'empty';
   };
   const tileShapes = new Uint16Array(grid.length * grid[0].length);
@@ -38,7 +41,7 @@ export function makeMap(rows, waterRows, { tileShape = 'square', envKind, snowCa
     exposedAtGen = new Uint8Array(grid.length * grid[0].length);
     for (let r = 1; r < grid.length; r++) {
       for (let c = 0; c < grid[0].length; c++) {
-        if (grid[r][c] === '#' && grid[r - 1][c] !== '#') exposedAtGen[r * grid[0].length + c] = 1;
+        if (grid[r][c] === '#' && grid[r - 1][c] !== '#' && grid[r - 1][c] !== 'B') exposedAtGen[r * grid[0].length + c] = 1;
       }
     }
   }
@@ -46,13 +49,14 @@ export function makeMap(rows, waterRows, { tileShape = 'square', envKind, snowCa
     ...queries,
     envKind,
     exposedAtGen,
+    grid: grid.map((row) => row.map((ch) => (ch === 'B' ? BLOCK_INDESTRUCTIBLE : ch === '#' ? BLOCK_NORMAL : BLOCK_EMPTY))),
     tileShapeRule: tileShape,
     tileShapes,
     rows: grid.length,
     cols: grid[0].length,
     isSolid(r, c) {
       if (r < 0 || c < 0 || r >= grid.length || c >= grid[0].length) return true;
-      return grid[r][c] === '#';
+      return grid[r][c] === '#' || grid[r][c] === 'B';
     },
     isSolidAtPixel(x, y) {
       return this.isSolid(Math.floor(y / TILE_SIZE), Math.floor(x / TILE_SIZE));

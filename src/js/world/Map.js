@@ -28,7 +28,7 @@ import { BORDER_THICKNESS } from './mapgen/common.js';
 import { MapRender } from './mapRender.js';
 import { MapMiniMap } from './mapMiniMap.js';
 import { MapWater } from './mapWater.js';
-import { MapShapes } from './mapShapes.js';
+import { MapShapes, blockHoldsSnow } from './mapShapes.js';
 import { MapSpawns } from './mapgen/spawns.js';
 import { MapFeatures } from './mapgen/features.js';
 import { MapCarve } from './mapgen/carve.js';
@@ -289,7 +289,8 @@ export class Map {
         this.exposedAtGen = new Uint8Array(this.rows * this.cols);
         for (let r = 1; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
-                if (this.grid[r][c] !== BLOCK_EMPTY && this.grid[r - 1][c] === BLOCK_EMPTY) {
+                // 無敵ブロック・金属には積もらない（blockHoldsSnow。描画も積雪の帯を描かない）
+                if (blockHoldsSnow(this.grid[r][c]) && this.grid[r - 1][c] === BLOCK_EMPTY) {
                     this.exposedAtGen[r * this.cols + c] = 1;
                 }
             }

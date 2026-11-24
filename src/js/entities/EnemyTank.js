@@ -18,7 +18,7 @@ import { collidesWithTerrain, checkHorizontalEntityCollision, checkVerticalEntit
 import { liftOutOfFloor, floorBelow } from '../utils/slopeMotion.js';
 import { SlopeBody } from './slopeBody.js';
 import { isInView } from '../utils/viewCull.js';
-import { groundSlide, approachVx } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { tickRecoil, isRecoiling } from '../utils/Recoil.js';
@@ -127,7 +127,8 @@ export class EnemyTank {
         // 粒は接地しているときだけ。_applySnowSlope は _moveAndCollide より前に走るので
         // this.grounded は前フレームの結果（自機が this.onGround を同じ順で見ているのと対）。
         // 接地を条件にしないと、崖から落ちる戦車が空中で雪を撒く
-        if (this.grounded && this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
+        // 床の性質（floorSlide）も見る: 敵基地の無敵ブロックの上では雪を蹴らない
+        if (this.grounded && floorSlide(this, this.game) && this.game.spawnSnowKick && Math.abs(this.vx) > 0.1
             && this.game.camera && isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) {
             this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, dir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
         }

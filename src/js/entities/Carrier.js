@@ -16,7 +16,7 @@ import { collidesWithTerrain } from '../utils/Physics.js';
 import { liftOutOfFloor, floorBelow } from '../utils/slopeMotion.js';
 import { SlopeBody } from './slopeBody.js';
 import { motionFor, LAND_MOTION } from '../world/StageEnvironment.js';
-import { groundClearance, groundSlopeDirection, snowMistOriginY, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { groundClearance, groundSlopeDirection, snowMistOriginY, hoverGroundIsSnow, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
 import { createDestructionFinale } from './DestructionFinale.js';
 import { playDestruction } from './destruction.js';
 
@@ -137,6 +137,7 @@ export class Carrier {
         const footprint = { x: footX, y: this.y, width: this.width / 3, height: this.height - CARRIER_FLOAT_DRAW_OFFSET };
         const clearance = groundClearance(footprint, this.game, HOVER_SNOW_MIST_MAX_ALT);
         if (clearance === null) return;
+        if (!hoverGroundIsSnow(footprint, this.game, clearance)) return;   // 無敵ブロックの上には雪が無い
         const timerKey = `_hoverMistTimer${side}`;
         this[timerKey] = (this[timerKey] || 0) + 1;
         if (this[timerKey] % HOVER_SNOW_MIST_INTERVAL !== 0) return;

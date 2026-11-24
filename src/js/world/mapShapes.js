@@ -15,6 +15,16 @@ import {
     shapeFloorSlope, shapeCeilingSlope, hypotenuseNormal, hypotenuseAhead, shapeAfterBreak,
 } from '../utils/tileShape.js';
 
+/**
+ * そのブロックの上面に雪が積もるか（5面）。無敵ブロック（敵基地の床・台座）と金属は磨いた板・パネルの絵で、
+ * 描画（mapRender の _drawTile）は積雪の帯を岩（_drawRockyBlock）にしか描かない。積雪ビット（exposedAtGen）・
+ * 滑り・雪煙・着弾の雪がみなこの1つを見るので、見た目に雪が無い板の上で雪が舞ったり滑ったりしない
+ * （2026-11-25 実機の指摘「無敵ブロックの上でも雪が舞ったり滑ったりする」）
+ */
+export function blockHoldsSnow(block) {
+    return block !== BLOCK_EMPTY && block !== BLOCK_INDESTRUCTIBLE && block !== BLOCK_METAL;
+}
+
 export const MapShapes = {
     // ------------------------------------------
     // Collision Helpers
@@ -168,6 +178,20 @@ export const MapShapes = {
         const r = Math.floor(y / TILE_SIZE), c = Math.floor(x / TILE_SIZE);
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return null;
         return this.exposedAtGen[r * this.cols + c] ? y : null;
+    },
+
+    /**
+     * 床の上面の点 (x, y)（terrainTopY の戻り値）のブロックに雪が載るか（blockHoldsSnow）。マップの外は偽。
+     * 上面は岩に含まれるので行は floor（floorSlopeAt と同じ）。滑り（utils/surface.js の floorSlide）と
+     * ホバーの粉雪が読む。面が雪かどうかは環境（motion.slide）が決めるので、ここはブロックの種類だけを見る。
+     * 積雪ビットでなくブロックの種類で見るのは、坂の形のタイルでは上面の見つかる行と積雪ビットの立つ行が
+     * ずれることがあり、雪の坂で滑らなくなるため
+     */
+    floorHoldsSnowAt(x, y) {
+        if (isNaN(x) || isNaN(y)) return false;
+        const r = Math.floor(y / TILE_SIZE), c = Math.floor(x / TILE_SIZE);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
+        return blockHoldsSnow(this.grid[r][c]);
     },
 
     /**
