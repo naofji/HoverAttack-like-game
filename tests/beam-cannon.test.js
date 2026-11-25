@@ -16,13 +16,12 @@ import {
 } from '../src/js/utils/Constants.js';
 import { lerpColor } from '../src/js/utils/color.js';
 
-// 砲身の見た目パラメータ。draw() 側と同じ値をここでも持つ（描画専用の値は
-// Constants ではなく EnemyTurret.js のモジュールスコープにあるため、テスト側で
-// 別途決め打つ）。BARREL_LENGTH=14, BARREL_BASE=4
+// 砲身の見た目パラメータ。描画専用の値は entities/turret/draw.js にある（BARREL_* は砲口の位置にも
+// 使うので export されている）。ここでは値を決め打ちで持つ。import すると、実装の値が誤って変わっても
+// 期待値が一緒に動いてしまい、テストが見張れなくなるため。BARREL_LENGTH=14, BARREL_BASE=4
 const BARREL_BASE = 4;
 const BARREL_LENGTH = 14;
-// ランプ本体の半径。draw() 側と同じ値（描画専用なので EnemyTurret.js の
-// モジュールスコープにあり、import できない）
+// ランプ本体の半径。draw() 側と同じ値（entities/turret/draw.js のモジュールスコープ。上と同じ理由で決め打ち）
 const BEAM_LAMP_CORE_RADIUS_FOR_TEST = 3;
 
 const ROOM = [

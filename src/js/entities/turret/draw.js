@@ -16,7 +16,7 @@ import {
 import { lerpColor } from '../../utils/color.js';
 
 // 砲身の見た目。描画専用のパラメータなので Constants ではなくここに置く
-// （EnemyAttacker.js の LEG_STYLES と同じ扱い）。砲口の位置（EnemyTurret._muzzleOffset）も同じ砲身の
+// （entities/attacker/legs.js の LEG_STYLES と同じ扱い）。砲口の位置（EnemyTurret._muzzleOffset）も同じ砲身の
 // 寸法から出すので、本体はここから import する
 export const BARREL_BASE = 4;    // 砲身が始まる位置（中心から）
 export const BARREL_LENGTH = 14; // 砲身の長さ

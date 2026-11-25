@@ -52,6 +52,9 @@ test('敵アタッカーにも共通の手順（SlopeBody・WalkerBody・HoverMi
   for (const [mixinName, mixin] of Object.entries({ SlopeBody, WalkerBody, HoverMist })) {
     for (const key of Object.keys(mixin)) {
       assert.equal(EnemyAttacker.prototype[key], mixin[key], `${mixinName}.${key} が EnemyAttacker で別のものになっている`);
+      // class 本体に同名のメソッドがあると、値は mixin のものになっても列挙不可のまま残る（Player 側と同じ見方）
+      assert.equal(Object.getOwnPropertyDescriptor(EnemyAttacker.prototype, key).enumerable, true,
+        `${mixinName}.${key} が EnemyAttacker.js の class 本体の同名メソッドと重なっている`);
     }
   }
 });

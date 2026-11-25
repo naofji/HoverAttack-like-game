@@ -55,6 +55,7 @@ const { EnemyAttacker } = await import('../src/js/entities/EnemyAttacker.js');
 const { ENEMY_ATTACKER_TYPES, TILE_SIZE } = await import('../src/js/utils/Constants.js');
 const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
 
+// 1面（m0）には敵アタッカーの湧き位置が無いので、型ごとの指紋は4型とも同じになる（自機だけが走る）
 const SEEDS = [1, 7, 42];
 const MISSIONS = [0, 1, 2, 3, 4, 5, 6];
 const FRAMES = 1500;
@@ -124,7 +125,9 @@ for (const seed of SEEDS) {
             try {
                 const game = makeGame(seed, mission);
                 // ホバーの粉雪・水煙の注文も指紋に入れる（2026-11-25、自機とアタッカーの _kickHover* を共通部品へ
-                // 寄せたとき。game に無いと入口ですぐ戻り、その経路を一度も通らなかった）
+                // 寄せたとき。game に無いと入口ですぐ戻り、その経路を一度も通らなかった）。
+                // **水滴はほとんど通らない**（3シード×7面で8回、m3 だけ。雪は約2600回）。水滴の経路の変更は
+                // tests/hover-water-mist.test.js で見ること。注文した機体（自機か敵か）も区別していない
                 const mist = (kind) => (...args) => h.update(`${kind}${args.map((v) => (typeof v === 'number' ? v.toFixed(4) : String(v))).join(',')};`);
                 game.spawnSnowMist = mist('S');
                 game.spawnWaterMist = mist('W');

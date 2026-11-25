@@ -10,7 +10,8 @@
 //   node tools/trace-spiders.mjs --coverage     # 台本が通らなかった EnemySpider のメソッド
 //
 // 流し込むもの: 毎フレーム、スパイダーごとの自分の値の全部（数・文字・真偽、入れ子は浅く）と、
-// 撃った弾（EnemyBurstShell）と割れた破片の位置・速さ。30 フレームごとに draw の canvas 呼び出し。
+// 撃った弾（EnemyBurstShell）と割れた破片の位置・速さ、粒（game.particles）と破壊時の破片（本物の buildDebris）の
+// 全項目。30 フレームごとに draw の canvas 呼び出し。個体の乱数（rng）の状態そのものは入れない（動きを通して効く）。
 // 1200 フレーム目に半分のスパイダーへダメージを与える（被弾・破壊の経路）。
 // 自機は本物の Player ではなく、湧き位置のあいだを決まった順に巡る箱（スパイダーの動きだけを見たい。
 // 自機の物理が混ざると、そちらの変更でも指紋が動く）。Math.random は種つきの LCG に差し替える。
@@ -47,6 +48,7 @@ const { EnemySpider } = await import('../src/js/entities/EnemySpider.js');
 const { StageEnvironment } = await import('../src/js/world/StageEnvironment.js');
 const { SeededRNG } = await import('../src/js/utils/SeededRNG.js');
 const { makeFakeCtx } = await import('../tests/helpers/fake-ctx.js');
+const { buildDebris } = await import('../src/js/entities/debris/index.js');
 
 const SEEDS = [1, 7, 42, 99, 2026];
 const MISSIONS = [5, 6];
@@ -88,7 +90,9 @@ function run(seed, mission) {
         spawnSparks: (...a) => h.update(`spark${a.map(num).join(',')}`),
         spawnExplosion: (...a) => h.update(`boom${a.slice(0, 3).map(num).join(',')}`),
         addScore: (s) => h.update(`score${s}`),
-        spawnDebris: noop, spawnSmokeScreen: noop,
+        // 破壊時の破片は本物の buildDebris で作って全項目を記録する（debris/spiderParts.js の変更も拾う）
+        spawnDebris: (entity, kind) => { h.update(`debris:${kind}`); for (const d of buildDebris(entity, kind)) digest(h, d); },
+        spawnSmokeScreen: noop,
     };
     game.map = new GameMap(game, mission);
     game.env = new StageEnvironment(game, mission);
@@ -113,6 +117,9 @@ function run(seed, mission) {
         h.update(`f${f}`);
         for (const s of spiders) digest(h, s);
         for (const b of game.enemyBullets) h.update(`${b.constructor.name}:${num(b.x)},${num(b.y)},${num(b.vx)},${num(b.vy)};`);
+        // 粒（弾が割れたときの ImpactFlash など）も全項目を記録してから捨てる
+        h.update(`p${game.particles.length}`);
+        for (const q of game.particles) digest(h, q);
         game.particles.length = 0;
         if (f % 30 === 0) {
             for (const s of spiders) {
