@@ -131,6 +131,9 @@ for (const seed of SEEDS) {
                 const mist = (kind) => (...args) => h.update(`${kind}${args.map((v) => (typeof v === 'number' ? v.toFixed(4) : String(v))).join(',')};`);
                 game.spawnSnowMist = mist('S');
                 game.spawnWaterMist = mist('W');
+                // 噴射の泡（2026-11-26、_emitJetBubbles を hoverMist.js へ寄せたとき）。水の中かは spawnBubbles の側が
+                // 粒ごとに見るので、ここでは注文をそのまま記録する（陸の面でもホバーのたびに通る）
+                game.spawnBubbles = mist('B');
                 const spawns = game.map.enemyAttackerSpawns.slice(0, WALKERS_PER_MAP);
                 const input = makeInput(new SeededRNG(seed * 31 + mission));
                 game.input = input;
