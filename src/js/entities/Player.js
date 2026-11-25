@@ -12,20 +12,18 @@ import {
     BURST_FUEL_CONSUMPTION, BURST_MIN_FUEL, HOVER_FUEL_RECOVERY, HOVER_FUEL_RECOVERY_BOOST,
     HOVER_COOLDOWN_AFTER_BURST,
     PLAYER_MAX_HP, PLAYER_INITIAL_LIVES, PLAYER_RESPAWN_INVINCIBLE_FRAMES, EXTRA_LIFE_FLASH_FRAMES,
-    
     MISSILE_INITIAL_COUNT, GRENADE_INITIAL_COUNT,
     PLAYER_MG_BURST_SIZE, PLAYER_MG_RELOAD_TIME, MG_RELOAD_THRESHOLD_DEFAULT,
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     SLOPE_UPHILL_SCALE,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE,
-    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
-    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL,
     HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { SlopeBody } from './slopeBody.js';
 import { WalkerBody } from './walkerBody.js';
-import { floorSlide, groundSlide, groundClearance, groundSlopeDirection, snowMistOriginY, hoverGroundIsSnow, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { HoverMist } from './hoverMist.js';
+import { floorSlide, groundSlide } from '../utils/surface.js';
 import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
@@ -343,62 +341,6 @@ export class Player {
         if (landed) { this.game.spawnSnowKick(fx, fy, SNOW_KICK_LAND); return; }
         if (!this.onGround || Math.abs(this.vx) < 0.1) return;
         this.game.spawnSnowKick(fx, fy, this.slopeDir !== 0 ? SNOW_KICK_SLIDE : SNOW_KICK_WALK);
-    }
-
-    /**
-     * 雪面の1〜2ブロック上空をホバーしているときだけ、地表で粉雪が舞う。
-     * 接地中（着地・滑走・歩行）は _kickSnow の担当なので、ここでは onTerrain を
-     * 見て住み分ける。地面までの距離は groundClearance が持つ（副作用なし）。
-     */
-    _kickHoverSnowMist() {
-        // バーストの印は、この呼び出しで必ず使い切る（条件に合わず出せなかったときに、あとの呼び出しで古い印が効かないように）
-        const burst = this._burstSnowPuff;
-        this._burstSnowPuff = false;
-        if (!this.game.spawnSnowMist) return;
-        if (this.onTerrain) return;
-        if (this.motion.slide <= 0) return;
-        const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
-        if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
-        if (!hoverGroundIsSnow(this, this.game, clearance)) return;   // 無敵ブロックの上には雪が無い
-        const fx = this.x + this.width / 2;
-        const fy = snowMistOriginY(this, this.game, clearance);   // 岩の中から出さない（snowMistOriginY）
-        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
-        if (burst) {
-            // 飛び立つ瞬間は間引きを待たず、多めに 1 回。次のホバーの粉雪は INTERVAL 後
-            this._hoverMistTimer = 0;
-            this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_BURST_COUNT, onSlope);
-            return;
-        }
-        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
-        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
-        this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
-    }
-
-    /**
-     * 水面の少し上空をホバーしているとき（とバーストジャンプの直後）だけ、水面で水滴が舞う（_kickHoverSnowMist
-     * の水面版）。バーストの直後はホバーの待ち時間（HOVER_COOLDOWN_AFTER_BURST）で hovering が
-     * 立たないので、HOVER_WATER_MIST_BURST_FRAMES のあいだは別に数える（2026-10-11 実機の指摘）。雪は「床の slide」で面を判定したが、水面には onTerrain が
-     * 立たない（水は衝突しない）ので、面の種類は env.kind、距離は
-     * waterClearance で見る。すでに水に触れていれば null が返るので、
-     * その場合はしぶき(spawnSplash)に任せて何もしない。
-     */
-    _kickHoverWaterMist() {
-        // 早く抜ける条件より先に数える（水の面でなくてもバーストの時間は過ぎていく）
-        const bursting = this._burstMistFrames > 0;
-        if (bursting) this._burstMistFrames--;
-        if (!this.hovering && !bursting) return;
-        if (this.onGround || this.onTerrain) { this._burstMistFrames = 0; return; }
-        if (!this.game.spawnWaterMist) return;
-        if (!this.game.env || this.game.env.kind !== 'water') return;
-        const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
-        if (clearance === null || clearance < HOVER_WATER_MIST_MIN_ALT) return;
-        this._hoverWaterMistTimer = (this._hoverWaterMistTimer || 0) + 1;
-        if (this._hoverWaterMistTimer % HOVER_WATER_MIST_INTERVAL !== 0) return;
-        const fx = this.x + this.width / 2;
-        const fy = this.y + this.height + clearance;
-        const count = hoverWaterMistCount(clearance);
-        const closeness = hoverWaterMistCloseness(clearance);
-        this.game.spawnWaterMist(fx, fy, count, closeness);
     }
 
     /**
@@ -772,4 +714,4 @@ Player.prototype._webJoltDir = 0;
 
 // 坂を歩く・坂に当たる手順と地形の上を歩く手順（どちらも敵アタッカーと共通）と、描画（entities/player/draw.js）と、
 // 動いてぶつかったものから押し戻す手順（entities/player/collision.js）
-Object.assign(Player.prototype, SlopeBody, WalkerBody, PlayerDraw, PlayerCollision);
+Object.assign(Player.prototype, SlopeBody, WalkerBody, HoverMist, PlayerDraw, PlayerCollision);

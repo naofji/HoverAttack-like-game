@@ -9,8 +9,6 @@ import {
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
-    HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
-    HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL,
     HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import { JET_BUBBLE_DROP } from './thrusterFlame.js';
@@ -23,10 +21,11 @@ import { playDestruction } from './destruction.js';
 import { audioManager } from '../audio/AudioManager.js';
 import { applyDamage } from '../utils/damage.js';
 import { withinSight } from '../utils/Physics.js';
-import { floorSlide, groundSlide, approachVx, groundClearance, groundSlopeDirection, snowMistOriginY, hoverGroundIsSnow, waterClearance, hoverWaterMistCount, hoverWaterMistCloseness } from '../utils/surface.js';
+import { floorSlide, groundSlide, approachVx } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
 import { motionFor, LAND_MOTION, sightScaleFor, fallSpeedScaleFor } from '../world/StageEnvironment.js';
 import { AttackerLegs } from './attacker/legs.js';
+import { HoverMist } from './hoverMist.js';
 import { AttackerDraw } from './attacker/draw.js';
 import { AttackerCollision } from './attacker/collision.js';
 import { AttackerCombat } from './attacker/combat.js';
@@ -311,59 +310,6 @@ export class EnemyAttacker {
     }
 
     /**
-     * 雪面の1〜2ブロック上空をホバーしているときだけ、地表で粉雪が舞う。
-     * 接地中は _kickSnow の担当なので onTerrain を見て住み分ける。粒は自機と
-     * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
-     */
-    _kickHoverSnowMist() {
-        // ジャンプの印は、この呼び出しで必ず使い切る（画面外などで出せなかったときに、古い印があとで効かないように）
-        const burst = this._burstSnowPuff;
-        this._burstSnowPuff = false;
-        if (!this.game.spawnSnowMist) return;
-        if (this.onTerrain) return;
-        if (this.motion.slide <= 0) return;
-        if (this.game.camera && this.game.canvas
-            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
-        const clearance = groundClearance(this, this.game, HOVER_SNOW_MIST_MAX_ALT);
-        if (clearance === null || clearance < HOVER_SNOW_MIST_MIN_ALT) return;
-        if (!hoverGroundIsSnow(this, this.game, clearance)) return;   // 無敵ブロックの上には雪が無い
-        const onSlope = groundSlopeDirection(this, this.game, clearance) !== 0;
-        const fx = this.x + this.width / 2, fy = snowMistOriginY(this, this.game, clearance);   // 岩の中から出さない（snowMistOriginY）
-        if (burst) {
-            this._hoverMistTimer = 0;
-            this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_BURST_COUNT, onSlope);
-            return;
-        }
-        this._hoverMistTimer = (this._hoverMistTimer || 0) + 1;
-        if (this._hoverMistTimer % HOVER_SNOW_MIST_INTERVAL !== 0) return;
-        this.game.spawnSnowMist(fx, fy, HOVER_SNOW_MIST_COUNT, onSlope);
-    }
-
-    /**
-     * 水面の少し上空をホバーしているとき（とジャンプの直後 HOVER_WATER_MIST_BURST_FRAMES）だけ、
-     * 水面で水滴が舞う（_kickHoverSnowMist の水面版。自機と同じ規則）。面の種類は env.kind、距離は waterClearance で見る。粒は自機と
-     * 同じく画面内の敵だけ（画面外の9割で撒くと particles を食い潰す）。
-     */
-    _kickHoverWaterMist() {
-        // 早く抜ける条件（画面外など）より先に数える。画面外でもジャンプの時間は過ぎていく
-        const bursting = this._burstMistFrames > 0;
-        if (bursting) this._burstMistFrames--;
-        if (!this.hovering && !bursting) return;
-        if (this.onGround || this.onTerrain) { this._burstMistFrames = 0; return; }
-        if (!this.game.spawnWaterMist) return;
-        if (!this.game.env || this.game.env.kind !== 'water') return;
-        if (this.game.camera && this.game.canvas
-            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
-        const clearance = waterClearance(this, this.game, HOVER_WATER_MIST_MAX_ALT);
-        if (clearance === null || clearance < HOVER_WATER_MIST_MIN_ALT) return;
-        this._hoverWaterMistTimer = (this._hoverWaterMistTimer || 0) + 1;
-        if (this._hoverWaterMistTimer % HOVER_WATER_MIST_INTERVAL !== 0) return;
-        const count = hoverWaterMistCount(clearance);
-        const closeness = hoverWaterMistCloseness(clearance);
-        this.game.spawnWaterMist(this.x + this.width / 2, this.y + this.height + clearance, count, closeness);
-    }
-
-    /**
      * 水中でホバーしているあいだ、炎の先から泡が舞う（自機の _emitJetBubbles と同じ規則）。
      * kind が 'burst' ならジャンプ（movement.js の _jump）の一吹きで、ホバーも間引きも見ずに1回撒く。
      * 粒は自機と同じく画面内の敵だけ（泡は描画側の上限 WATER_BUBBLE_SPAWNED_MAX を自機と分け合う）
@@ -465,7 +411,7 @@ export class EnemyAttacker {
 Object.assign(
     EnemyAttacker.prototype,
     AttackerMovement, AttackerCombat, AttackerCollision, AttackerDraw, AttackerLegs,
-    AttackerAfterimage, AttackerRollerDash, SlopeBody, WalkerBody,
+    AttackerAfterimage, AttackerRollerDash, SlopeBody, WalkerBody, HoverMist,
 );
 
 // プロトタイプ既定値。既存テストの一部は `Object.create(EnemyAttacker.prototype)` で
@@ -477,3 +423,5 @@ EnemyAttacker.prototype.motion = LAND_MOTION;
 EnemyAttacker.prototype.slopeVx = 0;
 EnemyAttacker.prototype.slopeDir = 0;
 EnemyAttacker.prototype._prevOnTerrain = false;
+// ホバーの粉雪・水滴は画面内の敵だけ（hoverMist.js。画面外の9割で撒くと particles を食い潰す）
+EnemyAttacker.prototype.hoverMistOnScreenOnly = true;

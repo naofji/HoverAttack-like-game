@@ -12,9 +12,10 @@ import { PlayerDraw } from '../src/js/entities/player/draw.js';
 import { PlayerCollision } from '../src/js/entities/player/collision.js';
 import { SlopeBody } from '../src/js/entities/slopeBody.js';
 import { WalkerBody } from '../src/js/entities/walkerBody.js';
+import { HoverMist } from '../src/js/entities/hoverMist.js';
 import { EnemyAttacker } from '../src/js/entities/EnemyAttacker.js';
 
-const MIXINS = { SlopeBody, WalkerBody, PlayerDraw, PlayerCollision };
+const MIXINS = { SlopeBody, WalkerBody, HoverMist, PlayerDraw, PlayerCollision };
 
 test('Player の mixin どうしでメソッド名が重ならない', () => {
   const owner = {};
@@ -46,11 +47,22 @@ test('PlayerDraw の中身は関数だけ（値を混ぜると全インスタン
   }
 });
 
-test('敵アタッカーにも共通の手順（SlopeBody・WalkerBody）がそのまま入っている', () => {
+test('敵アタッカーにも共通の手順（SlopeBody・WalkerBody・HoverMist）がそのまま入っている', () => {
   // 自機と同じ部品を使っていることが寄せた理由なので、アタッカー側で同名に上書きされていないかも見る
-  for (const [mixinName, mixin] of Object.entries({ SlopeBody, WalkerBody })) {
+  for (const [mixinName, mixin] of Object.entries({ SlopeBody, WalkerBody, HoverMist })) {
     for (const key of Object.keys(mixin)) {
       assert.equal(EnemyAttacker.prototype[key], mixin[key], `${mixinName}.${key} が EnemyAttacker で別のものになっている`);
     }
   }
+});
+
+// ホバーの粉雪・水滴（hoverMist.js）は自機と敵で1つの手順を使い、違いは「敵は画面外では撒かない」だけ。
+// その切り替え（prototype の hoverMistOnScreenOnly）が敵にだけ効いていることを見る
+test('ホバーの粉雪・水滴を画面外で省くのは敵アタッカーだけ', () => {
+  const game = { camera: { x: 10000, y: 10000 }, canvas: { width: 960, height: 540 } };
+  const at = (Cls) => Object.assign(Object.create(Cls.prototype), { game, x: 0, y: 0, width: 20, height: 30 });
+  assert.equal(at(EnemyAttacker)._hoverMistOffScreen(), true, '画面外の敵が粒を撒く');
+  assert.equal(at(Player)._hoverMistOffScreen(), false, '自機が画面外扱いで粒を省かれる');
+  game.camera = { x: -100, y: -100 };
+  assert.equal(at(EnemyAttacker)._hoverMistOffScreen(), false, '画面内の敵が粒を省かれる');
 });
