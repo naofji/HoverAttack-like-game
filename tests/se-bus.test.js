@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { audioManager } from '../src/js/audio/AudioManager.js';
 import { Game } from '../src/js/main.js';
 import { BGMManager } from '../src/js/audio/BGMManager.js';
+import { MP3BGMManager } from '../src/js/audio/MP3BGMManager.js';
 import {
   SE_MASTER_GAIN, SE_COMP_THRESHOLD, SE_COMP_RATIO, SE_COMP_ATTACK,
   SE_FADE_OUT_SECONDS,
@@ -368,12 +368,30 @@ test('BGM は効果音のバスを通さない（BGM 音量と独立させるた
   });
 });
 
-// MP3BGMManager は createMediaElementSource と <audio> 要素を要り、node では
-// グラフを組めない。ソースを読むしかないので、ここだけは文字列で見る。
-// **見るのは「効果音バスを名指ししていない」ことだけ**にして、繋ぎ方そのものは
-// 上の BGMManager と同じ作りであることに委ねる。
-test('MP3 の BGM も効果音のバスを名指ししていない', () => {
-  const src = readFileSync(new URL('../src/js/audio/MP3BGMManager.js', import.meta.url), 'utf8');
-  assert.ok(!src.includes('seFade') && !src.includes('seMaster'),
-    'MP3BGMManager が効果音のバスを参照している');
+// MP3BGMManager は <audio> 要素と createMediaElementSource を要り、node にはどちらも無い。
+// 以前はここだけソースの文字列（'seFade' / 'seMaster' が無いこと）を見ていたが、上の
+// BGMManager のテストに書いたとおり文字列では別名の受け取りも実際の繋ぎ忘れも見えない。
+// 2つを偽物で差し込んで**実際に組み立てて経路を辿る**（2026-11-25）。
+test('MP3 の BGM も効果音のバスを通さない', () => {
+  const ctx = fakeAudioCtx();
+  ctx.createMediaElementSource = (el) => ctx._node('mediaElementSource', { mediaElement: el });
+  const hadAudio = 'Audio' in globalThis;
+  const savedAudio = globalThis.Audio;
+  globalThis.Audio = class { constructor() { this.loop = false; this.src = ''; } };
+  try {
+    withCtx(ctx, () => {
+      audioManager._createSeBus();
+      const bgm = new MP3BGMManager(ctx);
+      bgm._init();
+
+      assert.ok(bgm.source && bgm.gainNode, 'MP3 の BGM のグラフが組まれていない');
+      assert.ok(reaches(bgm.source, ctx.destination), 'MP3 の BGM が出力へ繋がっていない');
+      assert.ok(!reaches(bgm.source, audioManager.seFade),
+        'MP3 の BGM が効果音のフェード段を通っている（ゲームオーバーで BGM まで消える）');
+      assert.ok(!reaches(bgm.source, audioManager.seMaster),
+        'MP3 の BGM が効果音の底上げ段を通っている（SE 音量に引きずられる）');
+    });
+  } finally {
+    if (hadAudio) globalThis.Audio = savedAudio; else delete globalThis.Audio;
+  }
 });
