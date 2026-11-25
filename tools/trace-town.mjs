@@ -10,17 +10,19 @@
 //
 // 何を流し込むか（どれも 1 本のハッシュ。100 フレームごとに途中のハッシュも残し、差の出始めを追える）:
 // - 毎フレーム: 建物ごとの数（remaining / collapsed / exploded / 震え / alpha / 焦げ・焼けの数）、落ちる破片・
-//   瓦礫・震え・焼けたかけら・火（fires / flames / smoke）・注文（effects）の中身、game.particles の位置
+//   瓦礫・震え・焼けたかけら・火（fires / flames / smoke）・注文（effects）の中身、game.particles の全項目
 // - 30 フレームごと: 建物のかけらの表（cells）全部、town.draw と visibleRects の呼び出し、問い合わせ
 //   （buildingsAt / buildingsInCircle / buildingsUnder）
 // - canvas への呼び出し全部（建物の絵を欠かす clearRect も、draw の drawImage も）と、audioManager の呼び出し全部
 //
 // 台本（seed と面から SeededRNG で決める。Math.random も種つきの LCG に差し替える）:
 // - 0 フレーム目: 建物 4 棟の中心に爆風（粒 150 と 36）、爆発物 2 つを欠かせて引き金、建物を撃ち抜く弾 6 発
-//   （自機の弾・ミサイル・グレネード・敵の弾。毎フレーム動かして sweepProjectile）、ビーム 1 本
+//   （自機の弾・ミサイル・グレネード・敵の弾。game.projectiles に入れて毎フレーム動かし、update() が当たりを
+//   調べる）、自機のビームと、自機が重なる建物を通る敵のビーム
+// - 400〜419 フレーム目は遊んでいない（gameState = 'mission_clear'）
 // - 60 フレーム目: 建物 8 棟の支えの岩を map.destroyArea で壊す（onBlockDestroyed → 崩れ・倒れ・落下）
 // - 200 フレーム目: もう 4 棟に爆風
-// - 自機と敵 2 体を建物に重ねて置く。1体はつらら・荷の真下（重なりで薄くなる・落ちてきた破片や荷やつららが当たる）
+// - 自機・母艦・敵 2 体を建物に重ねて置く。敵の1体はつらら・荷の真下（重なりで薄くなる・落ちてきた破片や荷やつららが当たる）
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { SeededRNG } from '../src/js/utils/SeededRNG.js';
@@ -142,12 +144,15 @@ function run(seed, mission) {
     const player = makeBody(tb.x + 4, tb.y + 4, 28, 32, 'player');
     // 敵の1体は、つらら（5面）か荷のある建物（6面）があればその真下に置く（落ちてきたものが当たる経路を通すため）
     const dropper = bs.find((b) => b.brittle) || bs.find((b) => b.heavy);
+    // 母艦も建物に重ねる（敵の弾・ビームが欠かしてよい建物＝buildingsUnder([自機, 母艦]) に入る）
+    const cb = pick(bs);
+    const carrier = makeBody(cb.x - 20, cb.y + cb.height - 60, 120, 60, 'carrier');
     const enemies = [0, 1].map((i) => {
         const b = i === 1 && dropper ? dropper : pick(bs);
         return makeBody(b.x + 2, b.y + b.height + (b.brittle ? 40 : -30), 24, 24, `e${i}`);
     });
     const game = Object.assign({
-        particles: [], projectiles: [], enemies, landmines: [], player, carrier: null,
+        particles: [], projectiles: [], enemies, landmines: [], player, carrier,
         camera: { x: tb.x - 400, y: tb.y - 300 }, canvas: { width: 1366, height: 768 }, map,
         smokeScreens: [], enemyBullets: [], debris: [],
     }, SpawnEffects);
@@ -175,10 +180,14 @@ function run(seed, mission) {
     });
     const beamB = pick(bs);
     const [bx, by] = center(beamB);
-    town.sweepProjectile({
-        townKind: 'beam', alive: true, exploded: false, isPlayerOwned: true,
-        segments: () => [{ x1: bx - 200, y1: by - 10, x2: bx + 200, y2: by + 10 }],
-    });
+    // 弾は game.projectiles に入れて update() に当たりを調べさせる（main と同じ経路。敵の弾の例外の建物は
+    // update が自機・母艦の位置から作る）。ビームは自機の1本と、自機の建物を通る敵の1本
+    const [px, py] = center(tb);
+    game.projectiles.push(...shots,
+        { townKind: 'beam', alive: true, exploded: false, isPlayerOwned: true,
+            segments: () => [{ x1: bx - 200, y1: by - 10, x2: bx + 200, y2: by + 10 }] },
+        { townKind: 'beam', alive: true, exploded: false, isPlayerOwned: false,
+            segments: () => [{ x1: px - 200, y1: py + 6, x2: px + 200, y2: py - 6 }] });
 
     const checkpoints = [];
     for (let f = 0; f < FRAMES; f++) {
@@ -197,8 +206,11 @@ function run(seed, mission) {
             if (!p.alive) continue;
             p._prevX = p.x; p._prevY = p.y;
             p.x += p.vx; p.y += p.vy;
-            town.sweepProjectile(p, new Set([bs[0].id]));
         }
+        // ビームは 3 フレームだけ（同じビームは1棟1回しか欠かさないので、続けても変わらない）
+        if (f === 3) for (const p of game.projectiles) if (p.townKind === 'beam') p.alive = false;
+        // 遊んでいない区間（町の火の音を始めない・止める側の分岐を通す）
+        game.gameState = f >= 400 && f < 420 ? 'mission_clear' : 'playing';
         town.update(game);
 
         feed(`f${f}`);
@@ -207,7 +219,8 @@ function run(seed, mission) {
         digest(town.effects);
         digest(town.fire.fires); digest(town.fire.flames); digest(town.fire.smoke);
         feed(`p${game.particles.length}`);
-        for (const p of game.particles) feed(`${num(p.x)},${num(p.y)},${p.color}`);
+        // 粒は位置と色だけでなく、速さ・大きさ・寿命まで（作り方の変更を素通りさせない。最終レビュー指摘）
+        for (const p of game.particles) digest(p);
         game.particles.length = 0;
         feed(`hp:${player.hp},${enemies.map((e) => e.hp)},${num(player.vy)}`);
 

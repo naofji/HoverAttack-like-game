@@ -19,6 +19,13 @@ test('箱の中心どうしを結ぶ線が岩を通ると見えない', () => {
   assert.equal(hasLineOfSightBetween(box(40, 0), box(160, 0), wallMap), false);
 });
 
+test('横の中心も箱の幅の半分で取る（x 側の取り違えも落とす）', () => {
+  // 横向きの板（y が 100〜110、x は 20 以上だけ）。真下へ見下ろす。中心どうし (20,60)→(20,180) は板に当たり、
+  // x を左上のまま (0,·) で見ると板の左を抜ける。上の壁の置き方では y 側の取り違えしか区別できなかった（最終レビュー指摘）
+  const floorMap = { isSolidAtPixel: (x, y) => y >= 100 && y < 110 && x >= 20 };
+  assert.equal(hasLineOfSightBetween(box(0, 40), box(0, 160), floorMap), false);
+});
+
 test('岩が無ければ見える', () => {
   assert.equal(hasLineOfSightBetween(box(40, 0), box(160, 0), { isSolidAtPixel: () => false }), true);
 });

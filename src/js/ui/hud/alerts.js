@@ -16,31 +16,31 @@ export const HudAlerts = {
      * もとは draw() の中に直に書いてあった（2026-11-25 に他の警報と同じ置き場へ）。
      */
     _drawCruiseMissileWarning(ctx, w) {
-    if (this.game.base && this.game.base.cruiseWarning) {
-        const timerSec = Math.ceil(this.game.base.cruiseMissileTimer / 60);
-        if (Math.floor(Date.now() / 200) % 2 === 0) { // Blink quickly
-            const centerX = w / 2;
-            const centerY = this.game.canvas.height * 0.75;
+        if (this.game.base && this.game.base.cruiseWarning) {
+            const timerSec = Math.ceil(this.game.base.cruiseMissileTimer / 60);
+            if (Math.floor(Date.now() / 200) % 2 === 0) { // Blink quickly
+                const centerX = w / 2;
+                const centerY = this.game.canvas.height * 0.75;
                 
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
                 
-            // Draw semi-transparent background box for readability
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(centerX - 300, centerY - 25, 600, 50);
+                // Draw semi-transparent background box for readability
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(centerX - 300, centerY - 25, 600, 50);
                 
-            // Border for the box
-            ctx.strokeStyle = '#FF0000';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(centerX - 300, centerY - 25, 600, 50);
+                // Border for the box
+                ctx.strokeStyle = '#FF0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(centerX - 300, centerY - 25, 600, 50);
 
-            ctx.fillStyle = '#FF0000';
-            ctx.font = 'bold 24px "Space Mono", monospace';
-            ctx.fillText(`⚠️ WARNING: CRUISE MISSILE LAUNCH IN T-${timerSec}... ⚠️`, centerX, centerY);
-            ctx.restore();
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 24px "Space Mono", monospace';
+                ctx.fillText(`⚠️ WARNING: CRUISE MISSILE LAUNCH IN T-${timerSec}... ⚠️`, centerX, centerY);
+                ctx.restore();
+            }
         }
-    }
     },
 
     _drawBaseEmergencyAlert(ctx, w) {

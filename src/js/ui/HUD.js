@@ -19,7 +19,7 @@ import { HudWeapons } from './hud/weapons.js';
 import { HudUnits } from './hud/units.js';
 import { HudStatus } from './hud/status.js';
 
-// テストと ScreenRenderer が今までどおり HUD.js から読めるように
+// テストが今までどおり HUD.js から読めるように
 export { HUD_MIN_WIDTH, HUD_BUFF_TICK_COLOR, HUD_HP_DAMAGE_COLOR, BUFF_SPECS } from './hud/layout.js';
 
 /**

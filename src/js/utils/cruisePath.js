@@ -5,8 +5,8 @@
 // 基地の状態は出発点の座標しか読んでいないので、map と座標だけを取る純粋関数として
 // ここへ移した（2026-11-24、中身は1行も変えていない。tests/cruise-path.test.js が直接縛る）。
 //
-// 名前に注意: 視線の判定ではない。タレット・ドローンの _hasLineOfSight（utils/Physics.js の
-// hasLineOfSight＝中心の1本の線）と違い、こちらは進む向きの左右に 16px ずつの幅を持たせた
+// 名前に注意: 視線の判定ではない。タレット・ドローンの視線（utils/Physics.js の hasLineOfSightBetween
+// ＝箱の中心どうしの1本の線）と違い、こちらは進む向きの左右に 16px ずつの幅を持たせた
 // 「ミサイルの胴体が角に擦らずに通れるか」なので hasClearCorridor と呼ぶ。
 //
 // 敵アタッカー（artillery）の撃ち出す向きを決める _findPathToTarget（attacker/movement.js）は
