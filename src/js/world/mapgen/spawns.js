@@ -392,25 +392,21 @@ export const MapSpawns = {
         }
     },
 
-    /**
-     * 2面の Orb の置き場所（設計 2026-11-01-stage2-orb-design.md 4.2）。STAGE_ENVIRONMENTS の orbs が無い面は空。
-     * 「マップの上の方を初期位置に、坂の上でなくてよい」（ユーザー指定）ので、上から ORB_SPAWN_TOP_FRACTION 以内の
-     * 平らな床を候補にし、足りなければ 0.1 ずつ下へ広げる。横に散らすため、選んだものと列を ORB_SPAWN_MIN_COL_GAP 以上離す。
-     * 平らな床（真下のタイルが全部満ち）に限るのは、置いた瞬間に転がり出さないため（落とすのはプレイヤー）。
-     * 乱数は派生ストリーム（game.rng を消費しない＝敵の構成は変わらない）
-     * @returns {Array<{cx:number, cy:number, size:'small'|'large'}>}
-     */
-    _findSpiderPositions() {
-        // 6・7面だけ。範囲の外では乱数を作りもしない（他の面の生成に何も足さない）
-        if (this.missionLevel < SPIDER_MISSION || this.missionLevel > SPIDER_LAST_MISSION) return [];
-        // 派生ストリーム。game.rng を進めないので、敵の構成も地形も変わらない（週次の決定性）
-        const rng = new SeededRNG((this.game.rng.state ^ SPIDER_SPAWN_SALT) >>> 0);
-        const T = TILE_SIZE;
-        const S = SPIDER_SIZE;
+    /** 予約矩形（開始の部屋・基地の部屋。_reservedRects）にタイル (r, c) が入るかを返す関数 */
+    _inReservedRects() {
         const rects = this._reservedRects();
-        const inRects = (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
-        // 地雷・敵・基地の湧き位置の箱の周り 1 タイルには置かない（Orb と同じ。開始時に重なって弾き合わないように）
-        const keepOut = [
+        return (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
+    },
+
+    /**
+     * 地雷・敵・基地の湧き位置の箱 [x, y, w, h] の一覧。あとから置くもの（スパイダー・Orb）がこの周りを避ける。
+     * スパイダーと Orb が同じ一覧を別々に書いていたのを 2026-11-26 にここへまとめた。片方だけ直して食い違った
+     * 前歴があるため: Orb は予約矩形だけを避けていて、週の 13.5% で地雷に触れた位置に置かれて開始1ティック目に
+     * 爆発し、敵の湧き位置と重なると開始時に敵がずれた（最終レビュー Important 4）。新しい湧き物を足すときもここに1行。
+     * どれも地図が持っている値なので、乱数は使わない
+     */
+    _spawnKeepOutBoxes() {
+        return [
             ...this.landmineSpawns.map((p) => [p.x, p.y, LANDMINE_WIDTH, LANDMINE_HEIGHT]),
             ...this.enemyTankSpawns.map((p) => [p.x, p.y, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT]),
             ...this.enemyAttackerSpawns.map((p) => [p.x, p.y, PLAYER_WIDTH, PLAYER_HEIGHT]),
@@ -418,6 +414,18 @@ export const MapSpawns = {
             ...this.enemyTurretSpawns.map((p) => [p.x, p.y, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT]),
             ...(this.enemyBaseSpawn ? [[this.enemyBaseSpawn.x, this.enemyBaseSpawn.y, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT]] : []),
         ];
+    },
+
+    _findSpiderPositions() {
+        // 6・7面だけ。範囲の外では乱数を作りもしない（他の面の生成に何も足さない）
+        if (this.missionLevel < SPIDER_MISSION || this.missionLevel > SPIDER_LAST_MISSION) return [];
+        // 派生ストリーム。game.rng を進めないので、敵の構成も地形も変わらない（週次の決定性）
+        const rng = new SeededRNG((this.game.rng.state ^ SPIDER_SPAWN_SALT) >>> 0);
+        const T = TILE_SIZE;
+        const S = SPIDER_SIZE;
+        const inRects = this._inReservedRects();
+        // 地雷・敵・基地の湧き位置の箱の周り 1 タイルには置かない（Orb と同じ。開始時に重なって弾き合わないように）
+        const keepOut = this._spawnKeepOutBoxes();
         const nearSpawn = (x, y) => keepOut.some(([kx, ky, w, h]) =>
             x + S + T > kx && x - T < kx + w && y + S + T > ky && y - T < ky + h);
         const isSolid = (r, c) => this.isSolid(r, c);
@@ -453,24 +461,22 @@ export const MapSpawns = {
         return chosen.map(({ x, y, surface }) => ({ x, y, surface }));
     },
 
+    /**
+     * 2面の Orb の置き場所（設計 2026-11-01-stage2-orb-design.md 4.2）。STAGE_ENVIRONMENTS の orbs が無い面は空。
+     * 「マップの上の方を初期位置に、坂の上でなくてよい」（ユーザー指定）ので、上から ORB_SPAWN_TOP_FRACTION 以内の
+     * 平らな床を候補にし、足りなければ 0.1 ずつ下へ広げる。横に散らすため、選んだものと列を ORB_SPAWN_MIN_COL_GAP 以上離す。
+     * 平らな床（真下のタイルが全部満ち）に限るのは、置いた瞬間に転がり出さないため（落とすのはプレイヤー）。
+     * 乱数は派生ストリーム（game.rng を消費しない＝敵の構成は変わらない）
+     * @returns {Array<{cx:number, cy:number, size:'small'|'large'}>}
+     */
     _findOrbPositions() {
         const count = STAGE_ENVIRONMENTS[this.missionLevel % STAGE_ENVIRONMENTS.length].orbs || 0;
         if (count === 0) return [];
         const rng = new SeededRNG((this.game.rng.state ^ ORB_SPAWN_SALT) >>> 0);
         const sizes = shuffleWith(rng, [...ORB_SIZE_MIX]).slice(0, count);
-        const rects = this._reservedRects();
-        const inRects = (r, c) => rects.some((q) => r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1);
-        // 地雷・敵の湧き位置の周り 1 タイルにも置かない。予約矩形だけを避けていたら、週の 13.5% で Orb が地雷に
-        // 触れた位置に置かれて開始1ティック目に爆発し、敵の湧き位置と重なると開始時に敵がずれた（最終レビュー Important 4）。
-        // どれも地図が持っている値なので、乱数は使わない
-        const keepOut = [
-            ...this.landmineSpawns.map((p) => [p.x, p.y, LANDMINE_WIDTH, LANDMINE_HEIGHT]),
-            ...this.enemyTankSpawns.map((p) => [p.x, p.y, ENEMY_TANK_WIDTH, ENEMY_TANK_HEIGHT]),
-            ...this.enemyAttackerSpawns.map((p) => [p.x, p.y, PLAYER_WIDTH, PLAYER_HEIGHT]),
-            ...this.enemyDroneSpawns.map((p) => [p.x, p.y, ENEMY_DRONE_WIDTH, ENEMY_DRONE_HEIGHT]),
-            ...this.enemyTurretSpawns.map((p) => [p.x, p.y, ENEMY_TURRET_WIDTH, ENEMY_TURRET_HEIGHT]),
-            ...(this.enemyBaseSpawn ? [[this.enemyBaseSpawn.x, this.enemyBaseSpawn.y, ENEMY_BASE_WIDTH, ENEMY_BASE_HEIGHT]] : []),
-        ];
+        const inRects = this._inReservedRects();
+        // 地雷・敵の湧き位置の周り 1 タイルにも置かない（_spawnKeepOutBoxes の経緯）
+        const keepOut = this._spawnKeepOutBoxes();
         // 左上のタイル (r, c) から n×n タイルの箱を 1 タイル広げて、湧き位置の箱に掛かるか
         const nearSpawn = (r, c, n) => {
             const x0 = (c - 1) * TILE_SIZE, y0 = (r - 1) * TILE_SIZE, x1 = (c + n + 1) * TILE_SIZE, y1 = (r + n + 1) * TILE_SIZE;
