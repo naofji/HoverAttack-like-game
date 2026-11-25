@@ -39,28 +39,50 @@ export class Player {
         this.y = y;
         this.width = PLAYER_WIDTH;
         this.height = PLAYER_HEIGHT;
-        this.vx = 0;
-        this.vy = 0;
-        this.onGround = false;
-        // 接地面が地形か。滑りと雪煙がこれを見る（utils/surface.js）
+        // 接地面が地形か。滑りと雪煙がこれを見る（utils/surface.js）。復活では戻さない（毎フレーム決め直す）
         this.onTerrain = false;
-        this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
-        this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
         // 今フレームの環境係数。update() が毎フレーム引き直すが、docked 中や
         // 描画など update() を通らない経路でも undefined にならないよう陸上で初期化
         this.motion = LAND_MOTION;
+        this.facingRight = true;   // 復活では戻さない（前の命の向きのまま出る）
+        this.maxHp = PLAYER_MAX_HP;
+        this.lives = PLAYER_INITIAL_LIVES;
+
+        // Docking
+        this.docked = false;
+        // 新規に作った自機は常に満タン。resupply()/respawn() を通さずに
+        // docked = true にされる経路（起動時・ミッション遷移）でも「レディ」が
+        // 誤発火しないよう、ここで初期化しておく
+        this._dockAllFull = true;
+        this.invincibleTimer = 0; // frames of invincibility after respawn
+
+        this._resetLifeState();
+    }
+
+    /**
+     * 1機ぶんの命の状態（速さ・接地・資源・Auto Aim・オーバードライブ・しゃがみ・スタン・糸・反動・
+     * 歩きの絵・噴射の印・武器）を出撃時の値に戻す。constructor と respawn() の両方が呼ぶ。
+     * 以前は2か所に同じ約40行を書いていて、一時状態（ノックバックの反動・糸の絡まり）を足すたびに両方へ
+     * 書く必要があった（2026-11-26 に1つにまとめた。値も並びも当時の2か所と同じ）。
+     * 新しい一時状態はここに足す。復活で戻さないもの（向き・地形の上か・環境の係数＝毎フレーム決め直す）と、
+     * 作るときと復活とで値が違うもの（docked・無敵・_dockAllFull）は呼ぶ側に置く。
+     */
+    _resetLifeState() {
+        this.vx = 0;
+        this.vy = 0;
+        this.onGround = false;
+        this.wasOnGround = false;   // 着地音を1回だけ鳴らすための前フレームの接地状態
+        this.airborneFrames = 0;    // 連続して宙に浮いていたフレーム数
         // 今フレームに足が乗っている坂の向き（+1 = 右へ上る）。タイルの形（utils/tileShape.js）から読む。
         // 以前は階段・くの字の先端を isSolid の並びから見分け、絵だけを斜辺へ下げていたが、
-        // 今は判定そのものが斜辺を持つので、足は斜辺の上にある（描画のずらしは無い）
+        // 今は判定そのものが斜辺を持つので、足は斜辺の上にある（描画のずらしは無い）。
+        // 坂で死んだ直後に古い向きで加速・吸着しないよう、復活でも戻す
         this.slopeDir = 0;
         this._prevOnTerrain = false; // 前フレームに地形に接地していたか（坂を下るときの吸着の条件）
-        this.facingRight = true;
         this.alive = true;
 
         // Resources
         this.hp = PLAYER_MAX_HP;
-        this.maxHp = this.hp;
-        this.lives = PLAYER_INITIAL_LIVES;
         this.lifeUpTimer = 0;   // 残機を拾った直後の「1UP」表示の残りフレーム
         this.missiles = MISSILE_INITIAL_COUNT;
         this.grenades = GRENADE_INITIAL_COUNT;
@@ -79,13 +101,6 @@ export class Player {
         this.overdriveTimer = 0;
         this.overdriveMaxTimer = 0;
 
-        // Docking
-        this.docked = false;
-        // 新規に作った自機は常に満タン。resupply()/respawn() を通さずに
-        // docked = true にされる経路（起動時・ミッション遷移）でも「レディ」が
-        // 誤発火しないよう、ここで初期化しておく
-        this._dockAllFull = true;
-
         // Crouching & Stun
         this.crouching = false;
         this.stunTimer = 0;
@@ -102,24 +117,13 @@ export class Player {
         // Animation
         this.walkFrame = 2;
         this.walkTimer = 0;
-        this.invincibleTimer = 0; // frames of invincibility after respawn
         this.hoverCooldown = 0;   // frames before hover can activate after jump
         this._burstMistFrames = 0; // バーストの直後、水面に水滴を舞わせる残りフレーム（_kickHoverWaterMist）
         this._burstSnowPuff = false; // バーストで飛び立った直後、雪面に粉雪を 1 回出す印（_kickHoverSnowMist）
         this.missileCooldown = 0; // frames before next missile can be fired
 
-        // Machine Gun state
-        this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
-        this.mgFireTimer = 0;
-        this.mgReloadTimer = 0;
-        // 反動のばらつき（utils/mgSpread.js）。続けて撃った発数と、前の発から経った tick 数
-        this.mgStreak = 0;
-        this.mgSinceShot = Infinity;
-        // 「立てる」のは入力処理、「消す」のは読んだ側（シミュレーションティック）。
-        // gameSpeed 0.8 では 1 フレームに 0 ティックのことがあるので、立てた
-        // フレームで消すとティックに届かないことがある
-        this.mgSwitchedToMG = false;
-        this.mgManualReload = false;
+        // Machine Gun state（_resetMGState。反動のばらつき・切り替えの印の意味はそちら）
+        this._resetMGState();
 
         // Current weapon ('missile' or 'mg')
         this.currentWeapon = 'missile';
@@ -515,53 +519,13 @@ export class Player {
     respawn(x, y) {
         this.x = x;
         this.y = y;
-        this.vx = 0;
-        this.vy = 0;
-        this.onGround = false;
-        this.wasOnGround = false;
-        this.airborneFrames = 0;
-        this.hp = PLAYER_MAX_HP;
-        this.missiles = MISSILE_INITIAL_COUNT;
-        this.grenades = GRENADE_INITIAL_COUNT;
-        this.hoverFuel = HOVER_MAX_FUEL;
-        this.repairKits = 0;
-        this.autoAimTimer = 0;
-        this.autoAimMaxTimer = 0;
-        this.autoAimPaused = false;
-        this.overdriveTimer = 0;
-        this.overdriveMaxTimer = 0;
-        this.lifeUpTimer = 0;
-        this.alive = true;
+        this._resetLifeState();
         this.docked = true;
         this.invincibleTimer = PLAYER_RESPAWN_INVINCIBLE_FRAMES;
-
-        // Reset all transient states
-        this.hovering = false;
-        this.crouching = false;
-        this.stunTimer = 0;
-        this.webTimer = 0;
-        this._webLastDir = 0;
-        // 被弾ノックバックの反動の残りフレーム（onKnockback）。この間は左右の入力と摩擦を止める
-        this.recoilTimer = 0;
-        // 絡まってからのフレーム数（機体の糸が育つ）と、揺さぶった瞬間に糸がはねる残りフレーム・向き
-        this._webAge = 0;
-        this._webJolt = 0;
-        this._webJoltDir = 0;
-        this.hoverCooldown = 0;
-        this._burstMistFrames = 0;
-        this._burstSnowPuff = false;
-        this.missileCooldown = 0;
-        this.walkFrame = 2;
-        this.walkTimer = 0;
-        // 坂で死んだ直後に古い向きで加速・吸着しないように
-        this.slopeDir = 0;
-        this._prevOnTerrain = false;
-        this._resetMGState();
 
         audioManager.stopHover();
         audioManager.stopRepairHum();
         this._dockAllFull = this._isFullyStocked();
-        this.currentWeapon = 'missile';
     }
 
     /**
@@ -666,8 +630,12 @@ export class Player {
         this.mgBurstLeft = PLAYER_MG_BURST_SIZE;
         this.mgFireTimer = 0;
         this.mgReloadTimer = 0;
+        // 反動のばらつき（utils/mgSpread.js）。続けて撃った発数と、前の発から経った tick 数
         this.mgStreak = 0;
         this.mgSinceShot = Infinity;
+        // 「立てる」のは入力処理、「消す」のは読んだ側（シミュレーションティック）。
+        // gameSpeed 0.8 では 1 フレームに 0 ティックのことがあるので、立てた
+        // フレームで消すとティックに届かないことがある
         this.mgSwitchedToMG = false;
         this.mgManualReload = false;
     }
