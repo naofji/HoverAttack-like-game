@@ -157,6 +157,25 @@ export function hasLineOfSight(x1, y1, x2, y2, map) {
 }
 
 /**
+ * 2つの機体の箱の中心どうしの視線（hasLineOfSight を箱で呼ぶ形）。
+ *
+ * 砲台とドローンが同じ中身の _hasLineOfSight を1つずつ持っていたのをここへ寄せた（2026-11-25）。
+ * 中心は centerOf ではなく x + width / 2 で取る（もとの2つがそうしていた。originIsCenter の
+ * 機体を渡すと半分ずれるが、どちらも左上原点の機体どうしで呼んでいる）。
+ * @param {{x:number, y:number, width:number, height:number}} from
+ * @param {{x:number, y:number, width:number, height:number}} to
+ * @param {object} map - Must have isSolidAtPixel(x, y)
+ * @returns {boolean}
+ */
+export function hasLineOfSightBetween(from, to, map) {
+    return hasLineOfSight(
+        from.x + from.width / 2, from.y + from.height / 2,
+        to.x + to.width / 2, to.y + to.height / 2,
+        map
+    );
+}
+
+/**
  * 楕円の索敵判定。`dist < sightRange` の置き換え。
  *
  * 横半径は渡された range そのもの（＝ CANVAS_WIDTH に比例する既存の値）で、

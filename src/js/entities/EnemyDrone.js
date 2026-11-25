@@ -17,7 +17,7 @@ import {
     ENEMY_RECOIL_PROFILES,
     DRONE_MOVE_COOLDOWN, DRONE_MOVE_MIN_DISTANCE, TILE_SIZE
 } from '../utils/Constants.js';
-import { collidesWithTerrain, hasLineOfSight, withinSight } from '../utils/Physics.js';
+import { collidesWithTerrain, hasLineOfSightBetween, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { Grenade } from './Grenade.js';
@@ -278,7 +278,7 @@ export class EnemyDrone {
             const inSight = withinSight(dx, dy, ENEMY_DRONE_SIGHT_RANGE * sightScaleFor(this.game))
                 || (this.emergencyDefense
                     && dx * dx + dy * dy < EMERGENCY_DEFENSE_SIGHT_RANGE ** 2);
-            if (inSight && this._hasLineOfSight(target)) {
+            if (inSight && hasLineOfSightBetween(this, target, this.game.map)) {
                 return target;
             }
         }
@@ -485,14 +485,6 @@ export class EnemyDrone {
         ];
         // 5面の坂と面取りは形で当てる（体当たりが削れた空中で墜落しないように）。点を渡すので点だけで見る
         return collidesWithTerrain(this, this.game.map, points);
-    }
-
-    _hasLineOfSight(target) {
-        return hasLineOfSight(
-            this.x + this.width / 2, this.y + this.height / 2,
-            target.x + target.width / 2, target.y + target.height / 2,
-            this.game.map
-        );
     }
 
     takeDamage(amount) {

@@ -20,7 +20,7 @@ import {
     ENEMY_TURRET_TURN_SPEED, REFLECT_BEAM_TURN_SPEED, ENEMY_TURRET_AIM_TOLERANCE,
 } from '../utils/Constants.js';
 import { stepBarrelAngle, isBarrelAimed } from '../utils/turretAim.js';
-import { hasLineOfSight, withinSight } from '../utils/Physics.js';
+import { hasLineOfSightBetween, withinSight } from '../utils/Physics.js';
 import { sightScaleFor } from '../world/StageEnvironment.js';
 import { EnemyBullet } from './EnemyBullet.js';
 import { ReflectBeam } from './ReflectBeam.js';
@@ -281,19 +281,11 @@ export class EnemyTurret {
 
             // 霧では索敵半径が縮む（sightScaleFor、陸上/env無しは1倍）
             if (withinSight(dx, dy, ENEMY_TURRET_SIGHT_RANGE * sightScaleFor(this.game))
-                && (this.spec.ignoresLineOfSight || this._hasLineOfSight(target))) {
+                && (this.spec.ignoresLineOfSight || hasLineOfSightBetween(this, target, this.game.map))) {
                 return target;
             }
         }
         return null;
-    }
-
-    _hasLineOfSight(target) {
-        return hasLineOfSight(
-            this.x + this.width / 2, this.y + this.height / 2,
-            target.x + target.width / 2, target.y + target.height / 2,
-            this.game.map
-        );
     }
 
     /**
