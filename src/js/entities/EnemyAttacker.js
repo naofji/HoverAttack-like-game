@@ -9,9 +9,7 @@ import {
     ATTACKER_BOOST_MAX_FRAMES, EMERGENCY_DEFENSE_BASE_RADIUS, EMERGENCY_DEFENSE_SIGHT_RANGE,
     ENEMY_RECOIL_PROFILES,
     SNOW_KICK_WALK, ENEMY_SNOW_KICK_MIN_SPEED, VIEW_CULL_MARGIN,
-    HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
-import { JET_BUBBLE_DROP } from './thrusterFlame.js';
 import { spawnItem } from './itemKinds.js';
 import { decideAttackerDrop } from '../utils/drops.js';
 import { spawnStateRng } from '../utils/spawnState.js';
@@ -307,25 +305,6 @@ export class EnemyAttacker {
         if (this.game.camera && this.game.canvas
             && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
         this.game.spawnSnowKick(this.x + this.width / 2, this.y + this.height, SNOW_KICK_WALK);
-    }
-
-    /**
-     * 水中でホバーしているあいだ、炎の先から泡が舞う（自機の _emitJetBubbles と同じ規則）。
-     * kind が 'burst' ならジャンプ（movement.js の _jump）の一吹きで、ホバーも間引きも見ずに1回撒く。
-     * 粒は自機と同じく画面内の敵だけ（泡は描画側の上限 WATER_BUBBLE_SPAWNED_MAX を自機と分け合う）
-     * @param {'jet'|'burst'} [kind]
-     */
-    _emitJetBubbles(kind = 'jet') {
-        if (!this.game.spawnBubbles) return;
-        if (kind === 'jet') {
-            if (!this.hovering) return;
-            this._jetBubbleTimer = (this._jetBubbleTimer || 0) + 1;
-            if (this._jetBubbleTimer % HOVER_JET_BUBBLE_INTERVAL !== 0) return;
-        }
-        if (this.game.camera && this.game.canvas
-            && !isInView(this, this.game.camera, this.game.canvas, VIEW_CULL_MARGIN)) return;
-        const n = this._hoverNozzle();
-        this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, kind);
     }
 
     /**

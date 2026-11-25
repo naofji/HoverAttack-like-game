@@ -1,5 +1,5 @@
 // ============================================
-// HoverMist - ホバー中に地表・水面で舞う粉雪と水滴（自機と敵アタッカーの共通部品）
+// HoverMist - ホバー中に地表・水面で舞う粉雪と水滴、水中の噴射の泡（自機と敵アタッカーの共通部品）
 // ============================================
 //
 // 自機（Player）と敵アタッカー（EnemyAttacker）は、同じ中身の _kickHoverSnowMist / _kickHoverWaterMist を
@@ -8,6 +8,9 @@
 // 同じく1つにまとめた（意味は自機・敵のどちらとも変えていない。敵の元のコードとは、副作用の無い計算の
 // 順番と画面外の判定の書き方だけが違う）。
 // 母艦の同名のメソッドは船体を3等分して見る別の作りなので、ここには入れない。
+// 噴射の泡（_emitJetBubbles）も同じ事情で 2026-11-26 に合流した（自機は飛び立ちの泡を直に書いていた）。
+// 泡の出る点 _hoverNozzle() は自機（描画の矩形から）と敵（型の flameX/flameY としゃがみから）で中身が
+// 違うので、各クラスに残して呼ぶだけにしている。
 //
 // Object.assign で prototype へ混ぜる前提のオブジェクトリテラルで、`this` は機体。
 // 機体に要るもの: game・x/y/width/height・motion.slide・onGround/onTerrain・hovering、
@@ -19,12 +22,14 @@ import {
     VIEW_CULL_MARGIN,
     HOVER_SNOW_MIST_MIN_ALT, HOVER_SNOW_MIST_MAX_ALT, HOVER_SNOW_MIST_INTERVAL, HOVER_SNOW_MIST_COUNT, HOVER_SNOW_MIST_BURST_COUNT,
     HOVER_WATER_MIST_MIN_ALT, HOVER_WATER_MIST_MAX_ALT, HOVER_WATER_MIST_INTERVAL,
+    HOVER_JET_BUBBLE_INTERVAL,
 } from '../utils/Constants.js';
 import {
     groundClearance, groundSlopeDirection, snowMistOriginY, hoverGroundIsSnow,
     waterClearance, hoverWaterMistCount, hoverWaterMistCloseness,
 } from '../utils/surface.js';
 import { isInView } from '../utils/viewCull.js';
+import { JET_BUBBLE_DROP } from './thrusterFlame.js';
 
 export const HoverMist = {
     /** 粒を画面内の機体だけに絞る機体（hoverMistOnScreenOnly）で、いま画面の外にいるか */
@@ -89,5 +94,25 @@ export const HoverMist = {
         const count = hoverWaterMistCount(clearance);
         const closeness = hoverWaterMistCloseness(clearance);
         this.game.spawnWaterMist(fx, fy, count, closeness);
+    },
+
+    /**
+     * 水中でホバーしているあいだ、炎の先から泡が舞う（2026-10-11 ユーザー要望）。水の中かどうかは
+     * spawnBubbles が粒ごとに見るので、ここではホバーしているかと間引きだけ。泡は噴流に押されて
+     * いったん下へ向かい、浮力で昇りに転じる（BUBBLE_BURSTS.jet）。
+     * kind が 'burst' なら飛び立ち（自機のバーストジャンプ、敵の movement.js の _jump）の一吹きで、
+     * ホバーも間引きも見ずに1回撒く。泡は描画側の上限 WATER_BUBBLE_SPAWNED_MAX を自機と敵で分け合う
+     * @param {'jet'|'burst'} [kind]
+     */
+    _emitJetBubbles(kind = 'jet') {
+        if (!this.game.spawnBubbles) return;
+        if (kind === 'jet') {
+            if (!this.hovering) return;
+            this._jetBubbleTimer = (this._jetBubbleTimer || 0) + 1;
+            if (this._jetBubbleTimer % HOVER_JET_BUBBLE_INTERVAL !== 0) return;
+        }
+        if (this._hoverMistOffScreen()) return;
+        const n = this._hoverNozzle();
+        this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, kind);
     },
 };

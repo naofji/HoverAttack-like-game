@@ -17,7 +17,7 @@ import {
     DOCK_HP_RATE, DOCK_MISSILE_RATE, DOCK_GRENADE_RATE, DOCK_FUEL_RATE,
     SLOPE_UPHILL_SCALE,
     SNOW_KICK_WALK, SNOW_KICK_LAND, SNOW_KICK_SLIDE,
-    HOVER_WATER_MIST_BURST_FRAMES, HOVER_JET_BUBBLE_INTERVAL,
+    HOVER_WATER_MIST_BURST_FRAMES,
 } from '../utils/Constants.js';
 import { shouldStartMGReload, weaponKeyAction } from '../utils/mgReload.js';
 import { SlopeBody } from './slopeBody.js';
@@ -28,7 +28,6 @@ import { motionFor, LAND_MOTION, fallSpeedScaleFor } from '../world/StageEnviron
 import { audioManager } from '../audio/AudioManager.js';
 import { playerBodyParts, playerLegParts, playerWeaponParts } from './debris/playerParts.js';
 import { playDestruction } from './destruction.js';
-import { JET_BUBBLE_DROP } from './thrusterFlame.js';
 import { PlayerDraw } from './player/draw.js';
 import { PlayerCollision } from './player/collision.js';
 import { WebScrap } from './SpiderWeb.js';
@@ -344,19 +343,6 @@ export class Player {
     }
 
     /**
-     * 水中でホバーしているあいだ、炎の先から泡が舞う（2026-10-11 ユーザー要望）。水の中かどうかは
-     * spawnBubbles が粒ごとに見るので、ここではホバーしているかと間引きだけ。泡は噴流に押されて
-     * いったん下へ向かい、浮力で昇りに転じる（BUBBLE_BURSTS.jet）
-     */
-    _emitJetBubbles() {
-        if (!this.hovering || !this.game.spawnBubbles) return;
-        this._jetBubbleTimer = (this._jetBubbleTimer || 0) + 1;
-        if (this._jetBubbleTimer % HOVER_JET_BUBBLE_INTERVAL !== 0) return;
-        const n = this._hoverNozzle();
-        this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, 'jet');
-    }
-
-    /**
      * ホバーのノズルの位置（ワールド座標）。x はノズルの中心、y はノズルの下端。
      * 炎（_drawHoverExhaust）と噴射の泡（_emitJetBubbles）が同じ点から出るよう1か所で決める。
      *
@@ -391,11 +377,8 @@ export class Player {
                 this._burstMistFrames = HOVER_WATER_MIST_BURST_FRAMES;
                 // 雪面の上なら、飛び立つ瞬間に粉雪を 1 回（motion は今フレームの先頭で引いた値）
                 this._burstSnowPuff = this.motion.slide > 0;
-                // 水中なら一吹きぶんの泡（水の外では spawnBubbles が粒ごとに捨てる）
-                if (this.game.spawnBubbles) {
-                    const n = this._hoverNozzle();
-                    this.game.spawnBubbles(n.x, n.y + JET_BUBBLE_DROP, 'burst');
-                }
+                // 水中なら一吹きぶんの泡（水の外では spawnBubbles が粒ごとに捨てる。hoverMist.js）
+                this._emitJetBubbles('burst');
                 audioManager.playBurst();
             } else if (this.hoverCooldown <= 0 && this.hoverFuel > 0) {
                 // Hover (dynamic thrust based on remaining fuel)
