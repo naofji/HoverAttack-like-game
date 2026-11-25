@@ -6,40 +6,25 @@
 //
 // 面ごとの違いは Constants の STAGE_ENVIRONMENTS の1行にあり、ここはそれを
 // 「この座標の物理係数」と「索敵の倍率」に翻訳するだけ。エンティティは
-// motionFor / sightScaleFor の2つの純関数経由でしか環境を知らない
-// （game.env を直接読む箇所を増やさない。テストの簡易 game に env が無くても
-// 陸上として動くようにするため）。
+// motionFor / sightScaleFor の2つの純関数経由でしか環境を知らない（その2つと係数の値は utils/motion.js）。
 //
 // 描画は kind ごとのファイル（environment/）に分け、呼び出し口は4つ:
 // main.js から drawBehindTerrain（地形の下）・drawOverWorld（地形の上）・
 // drawOverlay（画面全体への重ね）の3回、加えて ScreenRenderer.js から
 // drawDemoOverlay（面別ランキングなどデモ画面での画面重ね）。
 
-import {
-    STAGE_ENVIRONMENTS, WATER_SPEED_SCALE, WATER_GRAVITY_SCALE, WATER_FALL_SPEED_SCALE,
-    WATERFALL_DOWNFORCE, WATERFALL_FALL_SPEED_SCALE,
-    ICE_SLIDE, FOG_SIGHT_SCALE, TILE_SIZE,
-} from '../utils/Constants.js';
+import { STAGE_ENVIRONMENTS, FOG_SIGHT_SCALE, TILE_SIZE } from '../utils/Constants.js';
+import { LAND_MOTION, WATER_MOTION, WATERFALL_MOTION, SNOW_MOTION } from '../utils/motion.js';
 import { createNoneRenderer, canvasAvailable } from './environment/none.js';
 import { createFogRenderer } from './environment/fog.js';
 import { createWaterRenderer } from './environment/water.js';
 import { createSnowRenderer } from './environment/snow.js';
 
-/** 陸上。陸上の面では全エンティティがこれを受け取り、掛けても値が変わらない。 */
-export const LAND_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: 0 });
-export const WATER_MOTION = Object.freeze({ speed: WATER_SPEED_SCALE, gravity: WATER_GRAVITY_SCALE, slide: 0 });
-/**
- * 滝（落下中の水柱）の中。**水中ではないので浮力も水の抵抗も無い**。
- * 以前は水中と同じ speed 0.5 / gravity 0.3 を掛けていたため、滝に触れた瞬間から
- * 実落下速度が 2.45px/frame（空気中 7.0 の 1/3）に落ち、「滝の中をゆっくり沈んで
- * いく」という実機の指摘になっていた。滝は空気と同じ重力・同じ速度で、
- * 上から水に打たれるぶんの押し下げ（downforce）だけが余分に掛かる。
- */
-export const WATERFALL_MOTION = Object.freeze({
-    speed: 1, gravity: 1, slide: 0,
-    downforce: WATERFALL_DOWNFORCE, fallSpeedScale: WATERFALL_FALL_SPEED_SCALE,
-});
-export const SNOW_MOTION = Object.freeze({ speed: 1, gravity: 1, slide: ICE_SLIDE });
+// 物理係数の値と純関数は utils/motion.js にある（utils/ → world/ の逆向きの依存をなくすため、2026-11-26）。
+// 使う側の import を変えずに済むよう、ここから同じ名前で再 export する
+export {
+    LAND_MOTION, WATER_MOTION, WATERFALL_MOTION, SNOW_MOTION, motionFor, fallSpeedScaleFor, sightScaleFor,
+} from '../utils/motion.js';
 
 const NONE_ROW = Object.freeze({ kind: 'none', backdrop: 'cave', terrain: 'cave' });
 
@@ -50,31 +35,6 @@ function createRenderer(kind, env) {
     if (kind === 'water' && env.game && env.game.map && env.game.map.water) return createWaterRenderer(env);
     if (kind === 'snow') return createSnowRenderer();
     return createNoneRenderer();
-}
-
-/**
- * 座標の物理係数。game.env が無い（テストの簡易 game）なら陸上。
- * @returns {{speed:number, gravity:number, slide:number}}
- */
-export function motionFor(game, x, y) {
-    return game && game.env ? game.env.motionAt(x, y) : LAND_MOTION;
-}
-
-/**
- * 落下速度の上限（空気中の MAX_FALLING_SPEED）に掛ける倍率。滝は自分の値を持ち、
- * 水中（speed < 1）は WATER_FALL_SPEED_SCALE、陸上は 1。
- * 自機・敵アタッカー・グレネード（と軌道予測）が同じ規則で沈むよう、ここ1つで決める。
- * 以前は4か所に同じ式があり、敵アタッカーだけ書かれておらず水中で自機の約2.4倍の
- * 速さで沈んでいた（実機の指摘、2026-10-10）。
- */
-export function fallSpeedScaleFor(motion) {
-    if (motion.fallSpeedScale !== undefined) return motion.fallSpeedScale;
-    return motion.speed < 1 ? WATER_FALL_SPEED_SCALE : 1;
-}
-
-/** 索敵の横半径に掛ける倍率。game.env が無ければ 1。 */
-export function sightScaleFor(game) {
-    return game && game.env ? game.env.sightScale : 1;
 }
 
 export class StageEnvironment {

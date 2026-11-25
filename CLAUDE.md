@@ -65,7 +65,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
   - `ScreenRenderer.js` は約170行まで減っていて、**画面をまたぐ共通部品だけ**が残っている（`_drawStartHint` の点滅ヒント、`_metallicText` の見出し文字、`drawDemoCycleDots`、`drawVolumeIndicator`）。ここも `Object.assign(ScreenRenderer.prototype, ...)` で `ui/screens/` の各画面を混ぜる形（`Game` の mixin と同じ理由・同じ作り）。**画面を1つ足すときは `ui/screens/` にファイルを作って末尾の Object.assign に足す。`ScreenRenderer.js` 本体には書かない。**
   - `ui/HUD.js` も同じ形で、本体は `constructor`・`draw()`（重ねる順の唯一の記述）・`drawCarrierArrow()` と、ミニマップも読む `carrierArrowScreenPos()` だけ。各ゾーンと警報は `ui/hud/`（`alerts` / `weapons` / `units` / `status`）、寸法と色は `ui/hud/layout.js`（実機で詰めた値なので理由のコメントを読んでから動かす）。名前の重なりは `tests/hud-mixins.test.js` が縛っている
   - パネルの寸法とランキング表の列座標は `ui/screens/layout.js`。**実機で見て決めた値なので、動かす前にあそこのコメントを読むこと**
-- `utils/` — 純ロジック。**テストが書きやすいものは積極的にここへ切り出す**（`scoring` / `modes` / `timestep` / `aimLead` / `mgReload` / `geo` など、いずれも `node --test` で直接テストされている）
+- `utils/` — 純ロジック。いちばん下の層で、`constants/` と `utils/` 自身しか import しない（`tests/utils-layering.test.js` が縛っている。面の環境の物理係数 `motionFor` などは `utils/motion.js` にあり、`world/StageEnvironment.js` が再 export する）。**テストが書きやすいものは積極的にここへ切り出す**（`scoring` / `modes` / `timestep` / `aimLead` / `mgReload` / `geo` など、いずれも `node --test` で直接テストされている）
 - `audio/` — 上記のとおり
 - `gas/` — オンラインランキングの Google Apps Script。**変更したらユーザーが手動で再デプロイする必要がある**
 

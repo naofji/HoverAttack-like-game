@@ -11,7 +11,7 @@
 //
 // DOM もマップの中身も要らない純関数なので、単体で試せる。
 
-import { motionFor } from '../world/StageEnvironment.js';
+import { motionFor } from './motion.js';
 import {
     TILE_SIZE,
     HOVER_WATER_MIST_MIN_ALT,

@@ -10,7 +10,7 @@
 import {
     GRENADE_GRAVITY, GRENADE_MAX_FALLING_SPEED, GRENADE_BOUNCE, GRENADE_FRICTION,
 } from './Constants.js';
-import { fallSpeedScaleFor } from '../world/StageEnvironment.js';
+import { fallSpeedScaleFor } from './motion.js';
 
 // 斜辺に触れた点を法線の向きへ浮かせる量（px、各軸）。誤差で岩の縁に乗らないための余白で、
 // 見た目には分からない大きさ。調整用の数値ではないのでここに置く
