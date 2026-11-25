@@ -225,7 +225,7 @@ export function buildFortressCeiling(style, rng, { room, maxHang }) {
     return lamp(rng, { maxHang });
 }
 
-/** 照明（baseParts.js）。7面は天井の低い区画が多いので棒は 24px まで（6面は 32） */
+/** 照明（baseParts.js）。棒の長さの上限は 7面 24px・6面 32px（どちらも元の値のまま） */
 function lamp(rng, { maxHang }) {
     return P.hangingLamp(rng, maxHang, 24, BODY.steel, DETAIL);
 }

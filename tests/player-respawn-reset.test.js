@@ -23,7 +23,7 @@ test('復活した自機は、作ったばかりの自機と同じ値に戻る�
     for (const k of Object.keys(p)) {
         if (KEPT.includes(k)) continue;
         const v = p[k];
-        if (typeof v === 'number') p[k] = v + 7.5;
+        if (typeof v === 'number') p[k] = Number.isFinite(v) ? v + 7.5 : 12345;   // Infinity（mgSinceShot）も変える
         else if (typeof v === 'boolean') p[k] = !v;
         else if (typeof v === 'string') p[k] = 'junk';
     }
