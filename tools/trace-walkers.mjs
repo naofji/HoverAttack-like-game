@@ -123,6 +123,11 @@ for (const seed of SEEDS) {
             let frame = 0;
             try {
                 const game = makeGame(seed, mission);
+                // ホバーの粉雪・水煙の注文も指紋に入れる（2026-11-25、自機とアタッカーの _kickHover* を共通部品へ
+                // 寄せたとき。game に無いと入口ですぐ戻り、その経路を一度も通らなかった）
+                const mist = (kind) => (...args) => h.update(`${kind}${args.map((v) => (typeof v === 'number' ? v.toFixed(4) : String(v))).join(',')};`);
+                game.spawnSnowMist = mist('S');
+                game.spawnWaterMist = mist('W');
                 const spawns = game.map.enemyAttackerSpawns.slice(0, WALKERS_PER_MAP);
                 const input = makeInput(new SeededRNG(seed * 31 + mission));
                 game.input = input;
@@ -136,6 +141,9 @@ for (const seed of SEEDS) {
                 for (frame = 0; frame < FRAMES; frame++) {
                     input.step(frame);
                     game.player.update();
+                    // カメラは本番と同じく自機を追う（敵の「画面外では粒を撒かない」が両側とも通るように）
+                    game.camera.x = game.player.x - game.canvas.width / 2;
+                    game.camera.y = game.player.y - game.canvas.height / 2;
                     for (const e of game.enemies) if (e.alive) e.update();
                     game.particles.length = 0;
                     game.enemyBullets.length = 0;
