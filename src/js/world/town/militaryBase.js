@@ -8,10 +8,13 @@
 // 壁はコンクリート（燃えにくい。瓦礫は灰色）、骨組み・屋根・機械は金属（燃えない。撃たれると縁が赤く焼ける）。
 // 木は使わない（spec 2章）。形の数値は描画専用のパラメータなのでここに置く（Constants.js ではない）。
 // 床の建物は mining.js と同じく「下端 = y 0、上へ y を負に」積んでから normalizeUp で下げる。
+// 7面の基地（fortressBase.js）と同じ形の部品（継ぎ目・窓の帯・縞・格納庫・レーダー・壁の足場・照明・床の建物の組み立て）は
+// baseParts.js にあり、ここからは6面の色を渡すだけ（形を変えると7面も変わる）。
 
 import { MAT_METAL, MAT_CONCRETE } from './chunks.js';
 import { rectWithLoose, step4, pick, normalizeUp } from './shapes.js';
 import { FACTORY_COLORS as BODY, FACTORY_DETAIL_COLORS as DETAIL, shade } from './palette.js';
+import * as P from './baseParts.js';
 
 // 部品を積む。描くだけの部品は、かけらにするとき木ではなく鉄にする（6面は木を使わない。手すり・筋交いが燃えないように）
 const rect = rectWithLoose(MAT_METAL);
@@ -19,32 +22,20 @@ const rect = rectWithLoose(MAT_METAL);
 // 屋根の張り出し・手すりが本体の外へ出るぶんの余白（外接矩形の左右）
 const EAVE = 4;
 
-/** 波板・コンクリートの継ぎ目（描くだけ）。every px ごとに 1px の影の筋 */
-function seams(parts, x, top, w, h, color, every) {
-    for (let px = x + every - 1; px < x + w - 1; px += every) rect(parts, px, top, 1, h, shade(color));
-}
-
-/** 窓の帯（描くだけ）。ガラスの 4x3 を 8px ごと。灯りは付けない（弾の黄色と見間違えないよう差し色の範囲で暗く） */
-function windowBand(parts, rng, x, y, w) {
-    for (let wx = x + 4; wx + 4 <= x + w - 4; wx += 8) {
-        if (rng.next() < 0.8) rect(parts, wx, y, 4, 3, DETAIL.glass);
-    }
-}
-
-/** 黄黒の警告の縞（描くだけ）。扉の上・機械の縁に */
-function hazardStripe(parts, x, y, w) {
-    rect(parts, x, y, w, 2, DETAIL.dark);
-    for (let px = x; px < x + w; px += 4) rect(parts, px, y, 2, 2, DETAIL.hazard);
-}
+// 共通の絵の部品（baseParts.js）に6面の色を渡す
+const { seams } = P;
+const windowBand = (parts, rng, x, y, w) => P.windowBand(parts, rng, x, y, w, DETAIL.glass, 0.8);
+const hazardStripe = (parts, x, y, w) => P.hazardStripe(parts, x, y, w, DETAIL);
 
 // --- 床の建物 ---
-// 各 kind の「建てられる最小の幅・高さ」。足りなければ候補から外す（step4 は hi < lo で lo を返すので先に弾く）
+// 各 kind の「建てられる最小の幅・高さ」。足りなければ候補から外す（step4 は hi < lo で lo を返すので先に弾く）。
+// maxW は幅の上限（足元）。工場棟と格納庫は広く、塔は細く
 const FLOOR_KINDS = {
-    warehouse: { minW: 24, minH: 24 },
-    hangar: { minW: 32, minH: 28 },
-    watchtower: { minW: 16, minH: 48 },
-    radar: { minW: 16, minH: 44 },   // 小屋 8 + 柱 12〜 + 皿 16 + 腕 4 + 床に埋まる分
-    factoryHall: { minW: 32, minH: 40 },
+    warehouse: { minW: 24, minH: 24, maxW: 56 },
+    hangar: { minW: 32, minH: 28, maxW: 64 },
+    watchtower: { minW: 16, minH: 48, maxW: 24 },
+    radar: { minW: 16, minH: 44, maxW: 24 },   // 小屋 8 + 柱 12〜 + 皿 16 + 腕 4 + 床に埋まる分
+    factoryHall: { minW: 32, minH: 40, maxW: 64 },
 };
 
 /** 倉庫: 平たいコンクリートの箱、波板の屋根、シャッター、屋上の換気口 */
@@ -72,26 +63,9 @@ function warehouse(parts, rng, x, footW, maxH) {
     }
 }
 
-/** 格納庫: かまぼこ屋根（4px の段で丸く見せる）と大きな扉 */
+/** 格納庫: かまぼこ屋根と大きな扉（baseParts.js）。6面だけ入口の灯りが付く */
 function hangar(parts, rng, x, footW, maxH) {
-    const wallH = step4(rng, 12, Math.min(20, maxH - 16));
-    const skin = pick(rng, BODY.steel);
-    rect(parts, x, -wallH, footW, wallH, skin, MAT_METAL, true);
-    seams(parts, x, -wallH, footW, wallH, skin, 4);
-    // 屋根: 上の段ほど左右を詰める。段の数は幅で決まり、高さの上限で打ち切る
-    let top = -wallH;
-    for (let i = 1; ; i++) {
-        const inset = [2, 4, 8, 14][i - 1];
-        if (inset === undefined || footW - inset * 2 < 8 || -(top - 4) > maxH) break;
-        rect(parts, x + inset, top - 4, footW - inset * 2, 4, skin, MAT_METAL, true);
-        top -= 4;
-    }
-    // 扉（半分ほどの幅、真ん中）と上の警告の縞
-    const dw = step4(rng, 12, Math.max(12, footW - 16));
-    const dx = x + Math.floor((footW - dw) / 8) * 4;
-    const dh = Math.min(wallH, 16);
-    rect(parts, dx, -dh, dw, dh, DETAIL.dark);
-    hazardStripe(parts, dx, -dh - 2, dw);
+    const { wallH } = P.hangar(parts, rng, x, footW, maxH, BODY.steel, DETAIL);
     if (rng.next() < 0.5) rect(parts, x + 2, -wallH + 2, 4, 3, DETAIL.lamp);   // 入口の灯り
 }
 
@@ -135,25 +109,10 @@ function radar(parts, rng, x, footW, maxH) {
     const hutH = 8;
     rect(parts, x, -hutH, footW, hutH, pick(rng, BODY.concrete), MAT_CONCRETE, true);
     rect(parts, x + 2, -hutH + 2, 4, 3, DETAIL.glass);
-    // 柱
-    const mx = x + Math.floor(footW / 8) * 4;
-    rect(parts, mx, -hutH - standH, 4, standH, steel, MAT_METAL, false);
-    rect(parts, mx + 1, -hutH - standH, 1, standH, DETAIL.rail);
-    // 皿: 左右どちらかへ傾いた段。下の段ほど狭い（受け皿の形）
-    const dishW = step4(rng, 16, Math.min(28, footW + EAVE * 2 - 4));
-    const top = -hutH - standH;
-    const face = rng.next() < 0.5 ? -1 : 1;
-    const paint = pick(rng, [...BODY.steel, ...BODY.blueSteel]);
-    const rows = [dishW, dishW - 4, dishW - 8, Math.max(4, dishW - 16)];
-    for (let i = 0; i < rows.length; i++) {
-        const rw = rows[i];
-        const cx = mx + 2 + face * i * 2;
-        let rx = Math.round(cx - rw / 2);
-        rx = Math.max(x - EAVE, Math.min(x + footW + EAVE - rw, rx));
-        rect(parts, rx, top - 16 + i * 4, rw, 4, i === 0 ? shade(paint) : paint, MAT_METAL, true);
-    }
-    // 受信器の細い腕
-    rect(parts, mx + 1, top - 20, 2, 4, DETAIL.rail, MAT_METAL, false);
+    // 柱と皿（皿は鋼か青い鋼）
+    P.radarMastAndDish(parts, rng, x, footW, {
+        hutH, standH, eave: EAVE, steel, paints: [...BODY.steel, ...BODY.blueSteel], detail: DETAIL,
+    });
 }
 
 /** 工場棟: 大きなコンクリートの棟、窓の帯、屋上の煙突・ダクト、脇の鉄骨の塔 */
@@ -192,18 +151,9 @@ function factoryHall(parts, rng, x, footW, maxH) {
 }
 
 const FLOOR_BUILDERS = { warehouse, hangar, watchtower, radar, factoryHall };
-// 幅の上限（足元）。工場棟と格納庫は広く、塔は細く
-const FLOOR_MAX_W = { warehouse: 56, hangar: 64, watchtower: 24, radar: 24, factoryHall: 64 };
 
 export function buildBaseBuilding(rng, { maxW, maxH }) {
-    const ok = Object.keys(FLOOR_KINDS).filter((k) => FLOOR_KINDS[k].minW <= maxW && FLOOR_KINDS[k].minH <= maxH);
-    if (ok.length === 0) return null;
-    const kind = pick(rng, ok);
-    const footW = step4(rng, FLOOR_KINDS[kind].minW, Math.min(FLOOR_MAX_W[kind], maxW));
-    const parts = [];
-    FLOOR_BUILDERS[kind](parts, rng, EAVE, footW, maxH);
-    const n = normalizeUp(parts);
-    return { kind, w: footW + EAVE * 2, h: n.h, footX: EAVE, footW, parts: n.parts };
+    return P.buildFloor(rng, FLOOR_KINDS, FLOOR_BUILDERS, EAVE, { maxW, maxH });
 }
 
 /**
@@ -217,12 +167,7 @@ export function buildControlRoom(rng, { maxReach }) {
     const x = 8;
     const legH = step4(rng, 8, 20);
     const steel = pick(rng, BODY.steel);
-    rect(parts, 0, -4, 8, legH + 8, steel, MAT_METAL, false);   // 壁に打ち込んだ金具と柱
-    rect(parts, 0, 0, x + footW + 2, 4, steel, MAT_METAL, false);   // 鉄の床板
-    const n = Math.max(1, Math.floor((x + footW - 8) / 2));
-    for (let i = 0; i < n; i++) {   // 筋交い: 壁の下から床板の先へ
-        rect(parts, 6 + i * 2, 4 + Math.round((legH - 4) * (1 - (i + 1) / (n + 1))), 2, 1, DETAIL.rail);
-    }
+    P.wallBracket(parts, x, footW, legH, steel, DETAIL);
     const h = step4(rng, 12, 16);
     const wall = pick(rng, [...BODY.steel, ...BODY.blueSteel, ...BODY.concrete]);
     const mat = BODY.concrete.includes(wall) ? MAT_CONCRETE : MAT_METAL;
@@ -288,11 +233,5 @@ export function buildCrane(rng, { span, maxHang }) {
 
 /** 工場の照明。天井から下がる棒（上端 4px が天井）と傘、暗い琥珀の灯り */
 export function buildFactoryLamp(rng, { maxHang }) {
-    const len = step4(rng, 4, Math.max(4, Math.min(32, maxHang - 8)));
-    const parts = [];
-    rect(parts, 2, 0, 4, len, null, MAT_METAL, false);
-    rect(parts, 3, 0, 1, len, DETAIL.rail);
-    rect(parts, 0, len, 8, 4, pick(rng, BODY.steel), MAT_METAL, false);   // 傘
-    rect(parts, 2, len + 3, 4, 1, DETAIL.lamp);
-    return { kind: 'lamp', w: 8, h: len + 4, parts };
+    return P.hangingLamp(rng, maxHang, 32, BODY.steel, DETAIL);
 }

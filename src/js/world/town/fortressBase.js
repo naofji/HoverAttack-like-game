@@ -9,10 +9,12 @@
 // 色は7面の要塞のパネルと同じ灰青の系統（palette.js の FORTRESS_BASE_COLORS）。研究室だけ白っぽい金属。
 // 形の数値は描画専用のパラメータなのでここに置く（Constants.js ではない）。
 // 床の建物は militaryBase.js と同じく「下端 = y 0、上へ y を負に」積んでから normalizeUp で下げる。
+// 6面と同じ形の部品は baseParts.js にあり、ここからは7面の色を渡すだけ（形を変えると6面も変わる）。
 
 import { MAT_METAL } from './chunks.js';
 import { rectWithLoose, step4, pick, normalizeUp } from './shapes.js';
 import { FORTRESS_BASE_COLORS as BODY, FORTRESS_BASE_DETAIL_COLORS as DETAIL, shade } from './palette.js';
+import * as P from './baseParts.js';
 
 // 部品を積む。描くだけの部品（窓・金網・筋交い）も、かけらにするときは鉄として数える（燃えない）
 const rect = rectWithLoose(MAT_METAL);
@@ -20,23 +22,9 @@ const rect = rectWithLoose(MAT_METAL);
 // 屋根の張り出し・手すりが本体の外へ出るぶんの余白（外接矩形の左右）
 const EAVE = 4;
 
-/** 波板・パネルの継ぎ目（描くだけ）。every px ごとに 1px の影の筋 */
-function seams(parts, x, top, w, h, color, every) {
-    for (let px = x + every - 1; px < x + w - 1; px += every) rect(parts, px, top, 1, h, shade(color));
-}
-
-/** 窓の帯（描くだけ）。4x3 のガラスを 8px ごと */
-function windowBand(parts, rng, x, y, w) {
-    for (let wx = x + 4; wx + 4 <= x + w - 4; wx += 8) {
-        if (rng.next() < 0.85) rect(parts, wx, y, 4, 3, DETAIL.glass);
-    }
-}
-
-/** 黄黒の警告の縞（描くだけ） */
-function hazardStripe(parts, x, y, w) {
-    rect(parts, x, y, w, 2, DETAIL.dark);
-    for (let px = x; px < x + w; px += 4) rect(parts, px, y, 2, 2, DETAIL.hazard);
-}
+// 共通の絵の部品（baseParts.js）に7面の色を渡す
+const { seams } = P;
+const hazardStripe = (parts, x, y, w) => P.hazardStripe(parts, x, y, w, DETAIL);
 
 // --- 床の建物（広い所: K） ---
 // 各 kind の「建てられる最小の幅・高さ」。足りなければ候補から外す（step4 は hi < lo で lo を返すので先に弾く）
@@ -47,24 +35,9 @@ const KEEP_KINDS = {
     lab: { minW: 32, minH: 28, maxW: 56 },
 };
 
-/** 格納庫: かまぼこ屋根（4px の段で丸く見せる）と大きな扉。6面の格納庫と同じ形を7面の色で */
+/** 格納庫: かまぼこ屋根と大きな扉。6面の格納庫と同じ形（baseParts.js）を7面の色で（入口の灯りは無い） */
 function hangar(parts, rng, x, footW, maxH) {
-    const wallH = step4(rng, 12, Math.min(20, maxH - 16));
-    const skin = pick(rng, BODY.steel);
-    rect(parts, x, -wallH, footW, wallH, skin, MAT_METAL, true);
-    seams(parts, x, -wallH, footW, wallH, skin, 4);
-    let top = -wallH;
-    for (let i = 1; ; i++) {
-        const inset = [2, 4, 8, 14][i - 1];
-        if (inset === undefined || footW - inset * 2 < 8 || -(top - 4) > maxH) break;
-        rect(parts, x + inset, top - 4, footW - inset * 2, 4, skin, MAT_METAL, true);
-        top -= 4;
-    }
-    const dw = step4(rng, 12, Math.max(12, footW - 16));
-    const dx = x + Math.floor((footW - dw) / 8) * 4;
-    const dh = Math.min(wallH, 16);
-    rect(parts, dx, -dh, dw, dh, DETAIL.dark);
-    hazardStripe(parts, dx, -dh - 2, dw);
+    P.hangar(parts, rng, x, footW, maxH, BODY.steel, DETAIL);
 }
 
 /** 司令塔: 低い基部の上に細い塔、上のほうに窓の帯（管制室）、屋上にアンテナ */
@@ -96,22 +69,7 @@ function radarDish(parts, rng, x, footW, maxH) {
     const hutH = 8;
     rect(parts, x, -hutH, footW, hutH, steel, MAT_METAL, true);
     rect(parts, x + 2, -hutH + 2, 4, 3, DETAIL.glass);
-    const mx = x + Math.floor(footW / 8) * 4;
-    rect(parts, mx, -hutH - standH, 4, standH, steel, MAT_METAL, false);
-    rect(parts, mx + 1, -hutH - standH, 1, standH, DETAIL.rail);
-    const dishW = step4(rng, 16, Math.min(28, footW + EAVE * 2 - 4));
-    const top = -hutH - standH;
-    const face = rng.next() < 0.5 ? -1 : 1;
-    const paint = pick(rng, BODY.blueSteel);
-    const rows = [dishW, dishW - 4, dishW - 8, Math.max(4, dishW - 16)];
-    for (let i = 0; i < rows.length; i++) {
-        const rw = rows[i];
-        const cx = mx + 2 + face * i * 2;
-        let rx = Math.round(cx - rw / 2);
-        rx = Math.max(x - EAVE, Math.min(x + footW + EAVE - rw, rx));
-        rect(parts, rx, top - 16 + i * 4, rw, 4, i === 0 ? shade(paint) : paint, MAT_METAL, true);
-    }
-    rect(parts, mx + 1, top - 20, 2, 4, DETAIL.rail, MAT_METAL, false);   // 受信器の腕
+    P.radarMastAndDish(parts, rng, x, footW, { hutH, standH, eave: EAVE, steel, paints: BODY.blueSteel, detail: DETAIL });
 }
 
 /**
@@ -143,7 +101,7 @@ const KEEP_BUILDERS = { hangar, commandTower, radarDish, lab };
 
 /** 広い所の床の建物。足りなければ null */
 export function buildFortressBuilding(rng, { maxW, maxH }) {
-    return buildFloor(rng, KEEP_KINDS, KEEP_BUILDERS, EAVE, { maxW, maxH });
+    return P.buildFloor(rng, KEEP_KINDS, KEEP_BUILDERS, EAVE, { maxW, maxH });
 }
 
 // --- 床の建物（狭い所: H） ---
@@ -151,7 +109,7 @@ const HUT_KINDS = {
     barracks: { minW: 24, minH: 16, maxW: 48 },
     commTower: { minW: 12, minH: 48, maxW: 16 },
     generator: { minW: 20, minH: 20, maxW: 32 },
-    fence: { minW: 24, minH: 12, maxW: 64 },
+    fence: { minW: 24, minH: 12, maxW: 64, noEave: true },   // 屋根の張り出しが無いので外接矩形 = 足元
 };
 
 /** 兵舎: 低い箱形、扉と小窓の並び、平らな屋根 */
@@ -208,23 +166,7 @@ const HUT_BUILDERS = { barracks, commTower, generator, fence };
 
 /** 狭い所の床の建物。足りなければ null */
 export function buildFortressHut(rng, { maxW, maxH }) {
-    return buildFloor(rng, HUT_KINDS, HUT_BUILDERS, EAVE, { maxW, maxH });
-}
-
-/**
- * 床の建物を1つ作る。条件を満たす kind から選び、足元の幅を決めて積む。
- * フェンスは張り出しが無いので余白 0（外接矩形 = 足元）
- */
-function buildFloor(rng, kinds, builders, eave, { maxW, maxH }) {
-    const ok = Object.keys(kinds).filter((k) => kinds[k].minW <= maxW && kinds[k].minH <= maxH);
-    if (ok.length === 0) return null;
-    const kind = pick(rng, ok);
-    const footW = step4(rng, kinds[kind].minW, Math.min(kinds[kind].maxW, maxW));
-    const pad = kind === 'fence' ? 0 : eave;
-    const parts = [];
-    builders[kind](parts, rng, pad, footW, maxH);
-    const n = normalizeUp(parts);
-    return { kind, w: footW + pad * 2, h: n.h, footX: pad, footW, parts: n.parts };
+    return P.buildFloor(rng, HUT_KINDS, HUT_BUILDERS, EAVE, { maxW, maxH });
 }
 
 // --- 壁 ---
@@ -244,10 +186,7 @@ function watchPost(rng, maxReach) {
     const x = 8;
     const legH = step4(rng, 8, 16);
     const steel = pick(rng, BODY.steel);
-    rect(parts, 0, -4, 8, legH + 8, steel, MAT_METAL, false);   // 壁に打ち込んだ金具と柱
-    rect(parts, 0, 0, x + footW + 2, 4, steel, MAT_METAL, false);   // 鉄の床板
-    const n = Math.max(1, Math.floor((x + footW - 8) / 2));
-    for (let i = 0; i < n; i++) rect(parts, 6 + i * 2, 4 + Math.round((legH - 4) * (1 - (i + 1) / (n + 1))), 2, 1, DETAIL.rail);
+    P.wallBracket(parts, x, footW, legH, steel, DETAIL);
     const h = step4(rng, 12, 16);
     const wall = pick(rng, BODY.blueSteel);
     rect(parts, x, -h, footW, h, wall, MAT_METAL, true);
@@ -286,14 +225,9 @@ export function buildFortressCeiling(style, rng, { room, maxHang }) {
     return lamp(rng, { maxHang });
 }
 
+/** 照明（baseParts.js）。7面は天井の低い区画が多いので棒は 24px まで（6面は 32） */
 function lamp(rng, { maxHang }) {
-    const len = step4(rng, 4, Math.max(4, Math.min(24, maxHang - 8)));
-    const parts = [];
-    rect(parts, 2, 0, 4, len, null, MAT_METAL, false);
-    rect(parts, 3, 0, 1, len, DETAIL.rail);
-    rect(parts, 0, len, 8, 4, pick(rng, BODY.steel), MAT_METAL, false);   // 傘
-    rect(parts, 2, len + 3, 4, 1, DETAIL.lamp);
-    return { kind: 'lamp', w: 8, h: len + 4, parts };
+    return P.hangingLamp(rng, maxHang, 24, BODY.steel, DETAIL);
 }
 
 function camera(rng, { maxHang }) {
