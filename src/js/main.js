@@ -18,7 +18,6 @@ import { Input } from './utils/Input.js';
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT,
     COLOR_CAVE_BG,
-    LANDMINE_SCORE,
     DEATH_HOLD_FRAMES,
     VOLUME_HUD_FRAMES,
     AUTO_AIM_LEAD_WINDOW, AUTO_AIM_LEAD_DEADZONE,
@@ -27,7 +26,6 @@ import {
     AUTO_AIM_HOLD_TENTHS_DEFAULT,
     VIEW_CULL_MARGIN,
     CONTINUE_COUNTDOWN_MS, GAMEOVER_WAIT_MS,
-    ENEMY_BASE_DRAW_OVERHANG, FLAG_HEIGHT,
     STAGE_COUNT,
 } from './utils/Constants.js';
 import { stepHoldKey, initialHoldState } from './utils/holdKey.js';
@@ -41,7 +39,6 @@ import { Camera } from './world/Camera.js';
 import { StageEnvironment } from './world/StageEnvironment.js';
 import { Player } from './entities/Player.js';
 import { Carrier } from './entities/Carrier.js';
-import { Flag } from './entities/Flag.js';
 import { HUD } from './ui/HUD.js';
 import { Crosshair } from './ui/Crosshair.js';
 import { ScreenRenderer } from './ui/ScreenRenderer.js';
@@ -57,7 +54,7 @@ import { audioManager } from './audio/AudioManager.js';
 import { AimLeadTracker } from './utils/aimLead.js';
 import { positionalVolume } from './utils/audioFalloff.js';
 import { MODES } from './utils/modes.js';
-import { computeTimeBonus, buildStageResult, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
+import { computeTimeBonus, TIME_BONUS_BASE_MULT } from './utils/scoring.js';
 import { advanceAccumulator, SIM_STEP, MAX_TICKS } from './utils/timestep.js';
 import { snapshotEntity, interpolateEntity, restoreEntity } from './utils/renderInterp.js';
 import { isInView } from './utils/viewCull.js';
@@ -70,6 +67,9 @@ import { SpawnEffects } from './systems/SpawnEffects.js';
 import { AutoAim } from './systems/AutoAim.js';
 import { LoopSounds } from './systems/LoopSounds.js';
 import { Alerts } from './systems/Alerts.js';
+import { Landmines } from './systems/Landmines.js';
+import { MissionClear } from './systems/MissionClear.js';
+import { EnemyHealthBar } from './ui/enemyHealthBar.js';
 import { DEMO_CYCLE_STATES, DEMO_SCREEN_DRAWERS } from './ui/flows/demoScreens.js';
 
 // テストと main.js 自身が使う。表の実体は ui/flows/demoScreens.js
@@ -713,38 +713,6 @@ export const Game = {
         }
     },
 
-    _updateLandmines() {
-        for (let i = this.landmines.length - 1; i >= 0; i--) {
-            const mine = this.landmines[i];
-            mine.update();
-
-            if (this.player && this.player.alive && !this.player.docked &&
-                this.player.invincibleTimer <= 0 && mine.collidesWith(this.player)) {
-                mine.detonate();
-            }
-
-            if (mine.alive) {
-                for (const proj of this.projectiles) {
-                    // 敵の弾では起爆しない（continue であって break ではない。敵の弾が
-                    // 先に並んでいても、後ろの自機の弾で起爆できないといけない）。
-                    // 地雷の爆風は game.enemies 全員に当たるので、敵の流れ弾で起爆すると
-                    // 敵が敵を巻き添えにしていた。誘爆させてよいのは自機の弾と、
-                    // 倒した敵機の爆発（destruction.js の detonatesMines）だけ
-                    if (!proj.isPlayerOwned) continue;
-                    if (proj.alive && !proj.exploded && mine.collidesWithPoint(proj.x, proj.y)) {
-                        mine.detonate();
-                        proj.alive = false;
-                        proj.exploded = true;
-                        this.addScore(LANDMINE_SCORE);
-                        break;
-                    }
-                }
-            }
-
-            if (!mine.alive) this.landmines.splice(i, 1);
-        }
-    },
-
     /**
      * オーバードライブの残り時間を1ティック減らす。
      *
@@ -757,59 +725,6 @@ export const Game = {
         if (!player || !player.alive || player.overdriveTimer <= 0) return;
         player.overdriveTimer--;
         if (player.overdriveTimer <= 0) player.overdriveMaxTimer = 0;
-    },
-
-    _checkMissionClear() {
-        if (this.base && !this.base.alive && !this.flag && this.gameState === 'playing') {
-            // 足元は箱の下端ではなく床の表面に合わせる。基地の箱は構造物の絵のはみ出し
-            // （ENEMY_BASE_DRAW_OVERHANG）ぶん床より上に置いてあるので、箱の下端に合わせると
-            // フラッグが 12px 浮いて見えた（実機の指摘）。
-            const floorY = this.base.y + this.base.height + ENEMY_BASE_DRAW_OVERHANG;
-            this.flag = new Flag(this, this.base.x + this.base.width / 2 - 6, floorY - FLAG_HEIGHT);
-        }
-
-        if (!this.flag) return;
-        this.flag.update();
-
-        if (this.player && this.player.alive && !this.player.docked && this.flag.collidesWith(this.player)) {
-            this._onFlagCaptured();
-        }
-    },
-
-    _onFlagCaptured() {
-        this.score += this.flag.scoreValue;
-        this.flag = null;
-        this.missionsCompleted++;
-
-        // Time bonus: the live decaying value at the moment of capture (see liveTimeBonus).
-        this.targetTimeBonus = this.liveTimeBonus().current;
-        this.currentTimeBonus = 0;
-
-        // Record this stage's result (finalised: kills + flag + time bonus).
-        const clearedStage = this.missionsCompleted; // already incremented above (1..STAGE_COUNT)
-        const stageResult = buildStageResult({
-            stage: clearedStage,
-            scoreNow: this.score,
-            stageStartScore: this.stageStartScore,
-            targetTimeBonus: this.targetTimeBonus,
-            timeMs: this.missionTimer,
-        });
-        this.stageResults.push(stageResult);
-
-        // Preliminary "would this make top 5?" notice for the mission-clear screen.
-        // Prefer online stage rankings if loaded, else local manager.
-        this.stageTop5Time = this._wouldStageRankTime(clearedStage, stageResult.timeMs);
-        this.stageTop5Score = this._wouldStageRankScore(clearedStage, stageResult.score);
-
-        this.slotRunning = true;
-
-        this.gameState = this.missionsCompleted >= STAGE_COUNT ? 'game_clear' : 'mission_clear';
-        this.stateTimer = 0;
-        audioManager.stopBGM();
-        // ここでシミュレーションが止まるので、鳴り続ける音は自分で止める。
-        // バスは引かない（この直後のファンファーレは同じバスを通るため）
-        audioManager.stopLoopingSe();
-        audioManager.playSuccess();
     },
 
     // ==========================================
@@ -1059,40 +974,6 @@ export const Game = {
         audioManager.playGameOver();
     },
 
-    /** Draw HP bar only if the entity exists and is damaged */
-    _drawHpBarIfDamaged(ctx, entity) {
-        if (!entity || entity.hp === undefined || entity.maxHp === undefined) return;
-        if (!entity.alive || entity.hp >= entity.maxHp) return;
-        this._drawEnemyHealthBar(ctx, entity);
-    },
-
-    /** Draw a small callout health bar above an entity */
-    _drawEnemyHealthBar(ctx, enemy) {
-        if (enemy.hp <= 0) return;
-        const hpRatio = enemy.hp / enemy.maxHp;
-
-        ctx.save();
-        ctx.translate(enemy.x + enemy.width - 4, enemy.y - 4);
-
-        // Callout line: diagonal → horizontal
-        ctx.strokeStyle = '#888888';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(8, -8);
-        ctx.lineTo(24, -8);
-        ctx.stroke();
-
-        // HP gauge
-        const barW = 16, barH = 3, bx = 8, by = -12;
-        ctx.fillStyle = '#FF0000';
-        ctx.fillRect(bx, by, barW, barH);
-        ctx.fillStyle = '#00FF00';
-        ctx.fillRect(bx, by, barW * hpRatio, barH);
-
-        ctx.restore();
-    },
-
     // ==========================================
     // GAME LOOP
     // ==========================================
@@ -1124,7 +1005,8 @@ export const Game = {
 // 画面フローなど、ループ本体と関係のないメソッド群は別ファイルに分けて
 // ここで `Game` に混ぜている。`this` の意味は変わらないので、
 // `Game._updateSettings.call(fakeGame)` というテストの呼び方もそのまま通る。
-Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions, SpawnEffects, AutoAim, LoopSounds, Alerts);
+Object.assign(Game, SettingsFlow, AttractFlow, OnlineFlow, CombatActions, SpawnEffects, AutoAim, LoopSounds, Alerts,
+    Landmines, MissionClear, EnemyHealthBar);
 
 // ============================================
 // Start (ES modules are deferred, DOM is ready)
