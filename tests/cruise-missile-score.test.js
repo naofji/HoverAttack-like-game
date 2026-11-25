@@ -10,9 +10,10 @@ import assert from 'node:assert/strict';
 import { CollisionManager } from '../src/js/systems/CollisionManager.js';
 import { CRUISE_MISSILE_SCORE } from '../src/js/utils/Constants.js';
 
-// 判定は constructor.name で巡航ミサイルを見分けるので、同じ名前の偽物でよい
+// 判定は isCruiseMissile フラグで巡航ミサイルを見分けるので、フラグを持つ偽物でよい
+// （本物が同じフラグを持つことは tests/enemy-bullet-type-flags.test.js が見る）
 class EnemyCruiseMissile {
-    constructor(hp) { this.x = 100; this.y = 100; this.hp = hp; this.alive = true; this.exploded = false; }
+    constructor(hp) { this.x = 100; this.y = 100; this.hp = hp; this.alive = true; this.exploded = false; this.isCruiseMissile = true; }
     _explode() { this.alive = false; this.exploded = true; }
 }
 

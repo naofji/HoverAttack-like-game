@@ -144,11 +144,11 @@ export class CollisionManager {
             damage = REFLECT_BEAM_DAMAGE;
             // 閃光・紫の火花・beamHit の音。Orb がレーザーを吸収するときも同じ演出なので entities/beamHit.js に出した
             playBeamHit(game, hx, hy);
-        } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
+        } else if (bullet.isCruiseMissile) {
             damage = CRUISE_MISSILE_DAMAGE;
             bullet._explode(true);   // 自機に当たって爆発。撃ち落とした爆発（下の迎撃）とは違い、町と地雷は巻き込まない
             knock = true;
-        } else if (bullet.constructor.name === 'EnemyHomingMissile') {
+        } else if (bullet.isHomingMissile) {
             damage = ENEMY_HOMING_MISSILE_DAMAGE;
             playBlast(game, bullet.x, bullet.y, 'homingHit', undefined, { fromEnemy: true });
             knock = true;
@@ -179,7 +179,7 @@ export class CollisionManager {
         for (const bullet of game.enemyBullets) {
             if (!bullet.alive) continue;
 
-            if (bullet.constructor.name === 'EnemyHomingMissile') {
+            if (bullet.isHomingMissile) {
                 if (this._distSq(proj, bullet) < HOMING_INTERCEPT_RADIUS_SQ) {
                     bullet.alive = false;
                     bullet.exploded = true;
@@ -201,7 +201,7 @@ export class CollisionManager {
                     }
                     return true;
                 }
-            } else if (bullet.constructor.name === 'EnemyCruiseMissile') {
+            } else if (bullet.isCruiseMissile) {
                 if (this._distSq(proj, bullet) < CRUISE_INTERCEPT_RADIUS_SQ) {
                     const damage = proj instanceof Missile ? PLAYER_MISSILE_DAMAGE : PLAYER_MG_DAMAGE;
                     bullet.hp -= damage;

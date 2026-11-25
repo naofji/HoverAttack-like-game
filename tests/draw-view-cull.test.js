@@ -127,6 +127,20 @@ test('画面外の敵は HP バーも描かない', () => {
     assert.deepEqual(hpBarFor, []);
 });
 
+test('敵基地（isBase）にはダメージバーを出さず、ほかの敵には出す', () => {
+    // 敵基地には吹き出しのバーを出さない（a96e7e2 からの決まり）。以前は constructor.name === 'EnemyBase' で
+    // 見分けていたのを isBase フラグにした（2026-11-26）。外しても落ちるテストが無かったのでここで縛る
+    const base = Object.assign(stubEnemy('base', 1500, 880), { isBase: true });
+    const tank = stubEnemy('tank', 1600, 880);
+    const world = makeWorld({ enemies: [base, tank] });
+    const hpBarFor = [];
+    world._drawHpBarIfDamaged = (ctx, e) => { if (e) hpBarFor.push(e.name); };
+
+    Game._drawWorld.call(world, makeFakeCtx());
+
+    assert.deepEqual(hpBarFor, ['tank']);
+});
+
 test('バリアのユニットにもダメージバーが出る（他の敵と同じ扱い）', async () => {
     // 壊せる的だと分からないと撃ってもらえない（実機の指摘）。
     // 画面内のバリアについて、上下2基ぶんが _drawHpBarIfDamaged へ渡ること

@@ -27,6 +27,8 @@ export class EnemyCruiseMissile {
         // x,y は左上ではなく中心。width/height は見た目の広がりを表すだけで、
         // 描画も translate(x,y) してから -width/2 を基準にしている（Physics.centerOf）
         this.originIsCenter = true;
+        // 判別子（isBurstShell・isBaseLaser と同じ作法。constructor.name は使わない）。CollisionManager が見る
+        this.isCruiseMissile = true;
         this.angle = initialAngle;
         this.speed = 0; // Starts from zero
         this.maxSpeed = CRUISE_MISSILE_MAX_SPEED;

@@ -854,7 +854,9 @@ export const Game = {
             // 描画以外の副作用が無いことは確認済み
             if (!isInView(enemy, this.camera, this.canvas, VIEW_CULL_MARGIN)) continue;
             enemy.draw(ctx);
-            if (enemy.alive && enemy.constructor.name !== 'EnemyBase' && enemy.constructor.name !== 'Landmine') {
+            // 敵基地にはダメージバーを出さない（a96e7e2 からの決まり）。地雷は game.landmines にあって
+            // ここ（game.enemies）には来ない（以前あった 'Landmine' の判定は一度も効いていなかったので消した）
+            if (enemy.alive && !enemy.isBase) {
                 hpBars.push(enemy);
             }
         }

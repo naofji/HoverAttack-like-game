@@ -21,6 +21,8 @@ export class EnemyHomingMissile {
         this.x = x;
         this.y = y;
         this.angle = initialAngle;
+        // 判別子（isBurstShell・isBaseLaser と同じ作法。constructor.name は使わない）。CollisionManager が見る
+        this.isHomingMissile = true;
         this.speed = 0; // Starts from zero as requested
         this.maxSpeed     = ENEMY_HOMING_MISSILE_MAX_SPEED;
         this.turnRate     = ENEMY_HOMING_MISSILE_TURN_RATE;
