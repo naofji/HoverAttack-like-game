@@ -60,6 +60,7 @@ npm test -- tests/xxx.test.js         # 1ファイルだけ
   - `world/Map.js` も層で分けてある（`EnemyAttacker` と同じ `Object.assign(Map.prototype, ...)` 方式）。**本体に残っているのは `constructor` と `_generate()`（生成の手順＝`game.rng` を引く順の唯一の記述）、破壊（`damageBlock` / `destroyArea` / `invalidateTileRegion`）、水を進める `update()`、`pixelToTile` だけ。** 描画は `mapRender.js`、ミニマップは `mapMiniMap.js`、水の問い合わせは `mapWater.js`、形・当たりは `mapShapes.js`、生成の各段は `mapgen/`（`carve` / `features` / `spawns`）。mixin どうしで名前が重なると黙って上書きされるので `tests/map-mixins.test.js` が縛っている。生成まわりを動かしたら `node tools/trace-map.mjs` の指紋で前後を比べる
 - `ui/` — HUD、照準、各画面。**画面は「更新」と「描画」で置き場が分かれている** — `ui/flows/` が更新側（どのキーで何が起きるか）、`ui/screens/` が描画側
   - `ScreenRenderer.js` は約170行まで減っていて、**画面をまたぐ共通部品だけ**が残っている（`_drawStartHint` の点滅ヒント、`_metallicText` の見出し文字、`drawDemoCycleDots`、`drawVolumeIndicator`）。ここも `Object.assign(ScreenRenderer.prototype, ...)` で `ui/screens/` の各画面を混ぜる形（`Game` の mixin と同じ理由・同じ作り）。**画面を1つ足すときは `ui/screens/` にファイルを作って末尾の Object.assign に足す。`ScreenRenderer.js` 本体には書かない。**
+  - `ui/HUD.js` も同じ形で、本体は `draw()`（重ねる順の唯一の記述）と `drawCarrierArrow()` だけ。各ゾーンと警報は `ui/hud/`（`alerts` / `weapons` / `units` / `status`）、寸法と色は `ui/hud/layout.js`（実機で詰めた値なので理由のコメントを読んでから動かす）。名前の重なりは `tests/hud-mixins.test.js` が縛っている
   - パネルの寸法とランキング表の列座標は `ui/screens/layout.js`。**実機で見て決めた値なので、動かす前にあそこのコメントを読むこと**
 - `utils/` — 純ロジック。**テストが書きやすいものは積極的にここへ切り出す**（`scoring` / `modes` / `timestep` / `aimLead` / `mgReload` / `geo` など、いずれも `node --test` で直接テストされている）
 - `audio/` — 上記のとおり
