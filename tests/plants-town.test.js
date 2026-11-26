@@ -201,3 +201,70 @@ test('穴の縁は暗い緑（町の茶色の焦げは、植物が焼けたよ�
     assert.ok(colors.includes(PLANT_CHAR_EDGE), '縁に暗い緑を重ねていない');
     assert.ok(!colors.includes(TOWN_CHAR_EDGE), '町の焦げ色を重ねた');
 });
+
+// --- 草（高いシダ以外）は弾を通す（ユーザー指定 2026-11-27）---
+// 弾・ミサイル・グレネードは草を素通りし、草は1発につき1回欠ける。高いシダ（ヤシの木のような木）だけは
+// これまでどおり厚い壁で、弾を止める・グレネードを跳ね返す（上のテスト群）。印は設計図の pass（generatePlants が付ける）
+
+/** 草の行で、左の外から右の外まで横切る線分の y（かけらが一番多い行の中ほど） */
+function rowThrough(b) {
+    let best = -1, bestN = 0;
+    for (let j = 0; j < b.ch; j++) {
+        let n = 0;
+        for (let i = 0; i < b.cw; i++) if (b.cells[j * b.cw + i] & SOLID) n++;
+        if (n > bestN) { bestN = n; best = j; }
+    }
+    return b.y + best * 4 + 2;
+}
+const grassBuilds = () => [buildLowFern(new SeededRNG(2), { maxH: 400 }), buildMoss(new SeededRNG(2), { maxW: 40 })];
+
+test('草は弾・ミサイル・グレネードを通し、1発につき1回だけ欠ける', () => {
+    for (const build of grassBuilds()) {
+        for (const kind of ['bullet', 'missile', 'grenade']) {
+            const town = makeTown([{ ...plantSpec(build), pass: true }]);
+            const b = town.buildings[0];
+            const y = rowThrough(b);
+            const before = b.remaining;
+            const p = bullet(b.x - 10, y, b.x + b.width + 10, y, kind);
+            const vx = p.vx, vy = p.vy;
+            town.sweepProjectile(p);
+            assert.equal(p.stopped, null, `${build.kind}/${kind}: 止まった`);
+            assert.equal(p.alive, true, `${build.kind}/${kind}`);
+            assert.deepEqual([p.vx, p.vy, p.x], [vx, vy, b.x + b.width + 10], `${build.kind}/${kind}: 跳ね返った・戻された`);
+            const lost = before - b.remaining;
+            assert.ok(lost > 0, `${build.kind}/${kind}: 欠けなかった`);
+            // 次の tick も同じ弾が草の中を進む。もう欠けない（1発1回）
+            p._prevX = p.x; p._prevY = p.y;
+            town.sweepProjectile(p);
+            assert.equal(before - b.remaining, lost, `${build.kind}/${kind}: 2回欠けた`);
+        }
+    }
+});
+
+test('敵の弾は草を通り、草は欠けない（町の敵の陣地のルール）。自機が重なる草だけ欠ける', () => {
+    for (const build of grassBuilds()) {
+        const town = makeTown([{ ...plantSpec(build), pass: true }]);
+        const b = town.buildings[0];
+        const y = rowThrough(b);
+        const before = b.remaining;
+        const p = bullet(b.x - 10, y, b.x + b.width + 10, y);
+        p.isPlayerOwned = false;
+        town.sweepProjectile(p);
+        assert.equal(p.alive, true);
+        assert.equal(b.remaining, before);
+        const q = bullet(b.x - 10, y, b.x + b.width + 10, y);
+        q.isPlayerOwned = false;
+        town.sweepProjectile(q, new Set([b.id]));
+        assert.equal(q.alive, true);
+        assert.ok(b.remaining < before);
+    }
+});
+
+test('pass の印が無い植物（高いシダ）は、これまでどおり弾を止める', () => {
+    const town = makeTown([plantSpec(tallFern())]);
+    const b = town.buildings[0];
+    const y = rowThrough(b);
+    const p = bullet(b.x - 10, y, b.x + b.width + 10, y);
+    town.sweepProjectile(p);
+    assert.ok(p.stopped);
+});

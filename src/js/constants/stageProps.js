@@ -9,10 +9,15 @@ import { TILE_SIZE } from './core.js';
 // 3面の町の仕組み（world/town/）に、燃えない・誘爆しない壊せる植物を載せる。絵は world/town/plants.js、
 // 置き場所は world/town/generatePlants.js。STAGE_ENVIRONMENTS の props: 'ferns' の面だけに置く。
 // 弾の止まり方・欠け方・落ち方は町と同じ（TOWN_PROJECTILE_IMPACT の表、TOWN_CHIP_JAGGED など）。
-// 植物は全部「厚い壁」にした: 弾がすり抜けるのに欠けるのでは、壊れることに筋が通らない（ユーザーの指摘）。
+// 当初は植物を全部「厚い壁」にしていた（弾がすり抜けるのに欠けるのでは、壊れることに筋が通らない、というユーザーの指摘）。
+// 2026-11-27 にユーザー指定で、草（下の PLANT_PASS_KINDS）は弾・ミサイル・グレネードを通し、通られた所が欠けるように変えた。
+// 高いシダ（ヤシの木のような木）だけは厚い壁のまま（弾を止め、グレネードを跳ね返す）。
 // 床の植物の混ぜ方。tall 以外の残りが苔。自機・アタッカーの高さは 24px（PLAYER_HEIGHT）で、
 // 苔は 4〜8px、低いシダは 24px 未満、高いシダは 24px を超える（絵は地面に 4px 埋まるので、見える高さは 1段ぶん引く）
 export const PLANT_FLOOR_MIX = { tall: 0.15, low: 0.3 };
+// 弾を通す植物の種類（plants.js の finish に渡す kind）。generatePlants がこの種類の設計図に pass: true を付け、
+// Town.sweepProjectile が「止めずに1発1回欠かす」（TOWN_PROJECTILE_IMPACT の passChip）。ここに無い tallFern は木として止める
+export const PLANT_PASS_KINDS = ['moss', 'lowFern', 'wallMoss', 'wallFern', 'vine'];
 // 高いシダの幹の高さ（px、2px 刻み）。冠の葉が上に 20px ほど乗る。置ける高さが足りなければ幹を切り詰める
 export const PLANT_TALL_TRUNK = [32, 72];
 // 村（villages.js）の濃さに掛ける。1 より大きくすると詰まる

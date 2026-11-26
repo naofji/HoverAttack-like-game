@@ -129,3 +129,13 @@ test('同じ建物の空きのかけらを通ってから厚い壁に当たっ�
         assert.ok(Math.abs(trajectory.points[i].x - actual[i].x) < 1e-4, `point[${i}].x ${trajectory.points[i].x} / ${actual[i].x}`);
     }
 });
+
+test('予測線は弾を通す草（pass）を素通りし、草も欠かさない', () => {
+    const grass = { ...block(200, 0, 32, 400), pass: true, soft: true };
+    const { game, town } = world({ blueprints: [grass] });
+    const b = town.buildings[0];
+    const before = b.remaining;
+    const trajectory = game._calcGrenadeTrajectory(60, 100, 0, 12);
+    assert.ok(Math.max(...trajectory.points.map((p) => p.x)) > 232, '草で止まった・跳ね返った');
+    assert.equal(b.remaining, before, '予測で草が欠けた');
+});

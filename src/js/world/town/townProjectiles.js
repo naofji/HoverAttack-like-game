@@ -27,6 +27,8 @@ export const TownProjectiles = {
      *   2) 自機側の弾は建物に当たり、欠かせる・火をつける・誘爆させる（TOWN_PROJECTILE_IMPACT の表のとおり）
      *   3) 敵の弾（p.isPlayerOwned === false）も建物に当たる（止まる・跳ね返る）が、建物は無傷（欠かさない・火も誘爆も無し）。
      *      町は敵の陣地で、敵の攻撃は friendly fire。待ちの面で敵が町を壊し尽くすと、自機が着いたときには何も残らない
+     *   草) 弾を通す建物（b.pass、4面の草）は止めず・跳ね返さず、1発につき1棟1回 passChip の半径で欠ける
+     *      （ユーザー指定 2026-11-27）。敵の弾は上の 3) と同じく無傷で通る。予測の弾（p.preview、グレネードの軌道）も欠かさない
      *   例外) vulnerable（自機・母艦が重なっている建物の番号）だけは、敵の弾でも欠け、火がつく。無傷で弾を止めると、
      *      自機は建物に重なっているだけで完全防御できてしまう（ユーザー指摘）。削れて壊れれば遮蔽でなくなる
      * @param {Set<number>} vulnerable 自機・母艦が重なっている建物。敵の弾でも欠ける（buildingsUnder() で作る）
@@ -36,7 +38,7 @@ export const TownProjectiles = {
         if (!spec || !p.alive || p.exploded) return;
         // 敵の弾は当たる（止まる）が、建物には何も起こさない。例外の建物（vulnerable）だけ自機側の弾と同じ
         const enemy = p.isPlayerOwned === false;
-        const harmless = (b) => enemy && !vulnerable.has(b.id);
+        const harmless = (b) => p.preview === true || (enemy && !vulnerable.has(b.id));
         if (spec.pierce) {
             if (!enemy) this._sweepBeam(p, spec);
             else if (vulnerable.size > 0) this._sweepBeam(p, spec, vulnerable);
@@ -53,7 +55,7 @@ export const TownProjectiles = {
         const n = Math.max(1, Math.ceil(Math.hypot(p.x - x0, p.y - y0) / TOWN_SWEEP_STEP));
         // 跳ね返す弾（グレネード）が側面か上面かを見るための、止まる壁の判定。ignore は本体の判定と同じ
         const wallAt = (x, y) => this.buildingsAt(x, y).some((b) => {
-            if (st.ignore.has(b.id)) return false;
+            if (st.ignore.has(b.id) || b.pass) return false;
             const k = this.cellAt(b, x, y);
             return k >= 0 && b.cells[k] && (b.cells[k] & SOLID);
         });
@@ -64,6 +66,14 @@ export const TownProjectiles = {
                 if (st.ignore.has(b.id)) continue;
                 const k = this.cellAt(b, px, py);
                 if (k < 0 || !b.cells[k]) continue;
+                if (b.pass) {
+                    // 草は通す。欠けるのは最初に触れた所の1回だけ（厚さのぶん毎歩欠かすと、弾の通り道が草を刈り取る溝になる）
+                    if (!st.thin.has(b.id)) {
+                        st.thin.add(b.id);
+                        if (!harmless(b) && spec.passChip > 0) this.chip(b, px, py, spec.passChip * this.chipScale);
+                    }
+                    continue;
+                }
                 if (b.cells[k] & SOLID) {
                     if (spec.bounce) {
                         // 壁に入る一歩手前の点まで戻し、動いた軸で側面（横）か上面（縦）かを見て跳ね返す。

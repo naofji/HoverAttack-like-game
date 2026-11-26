@@ -6,18 +6,22 @@
 // 「群生する所としない所」を作る。乱数は呼び出し側が渡す派生ストリームだけを使う
 // （game.rng を消費すると敵の構成が変わり、週の決定性が壊れる）。
 // 返す設計図は Town にそのまま渡せる。soft: true の建物は燃えず、崩壊の演出（爆発・地鳴り）を持たない。
+// pass: true（PLANT_PASS_KINDS の草）は弾を止めずに通し、通られた所が欠ける。乱数は引かない（印を付けるだけ）
 
 import {
     TILE_SIZE as T, TOWN_CHUNK as CH,
     TOWN_CEILING_CLEARANCE, TOWN_FOUNDATION_SINK, TOWN_VILLAGE_DENSE_FILL,
     PLANT_FLOOR_MIX, PLANT_FILL_SCALE, PLANT_WALL_SPACING, PLANT_WALL_CHANCE, PLANT_CEIL_CHANCE,
     PLANT_WALL_MIN_RUN, PLANT_WALL_MIN_REACH, PLANT_CEIL_MIN_RUN, PLANT_CEIL_MIN_DROP, PLANT_CEIL_KEEP_BELOW,
+    PLANT_PASS_KINDS,
 } from '../../utils/Constants.js';
 import { findSites } from './placement.js';
 import { placeVillages, villageFill } from './villages.js';
 import { makePlacer } from './placer.js';
 import { mirrorParts, step4 } from './shapes.js';
 import { buildMoss, buildLowFern, buildTallFern, buildWallPlant, buildHangingVine } from './plants.js';
+
+const passOf = (kind) => PLANT_PASS_KINDS.includes(kind);
 
 export function generatePlants({
     grid, rows, cols, excludeRects = [], rng, villages = placeVillages(rng, rows, cols),
@@ -44,7 +48,7 @@ export function generatePlants({
             else b = buildMoss(rng, { maxW: xEnd - x });
             if (!b) { x += 8; continue; }
             const spec = {
-                site: 'floor', style: 'P', soft: true, kind: b.kind,
+                site: 'floor', style: 'P', soft: true, pass: passOf(b.kind), kind: b.kind,
                 x: x - b.footX, y: groundY - b.h, w: b.w, h: b.h, parts: b.parts,
             };
             // 苔は幅いっぱいが根元。シダは 1 点が根元で、葉は段差や穴の上に張り出してよい
@@ -68,7 +72,7 @@ export function generatePlants({
             // 組み立ては「壁の右側に張り付く」向き。根元の列（footX）の 4px が壁のタイルに入る位置に置く
             const right = run.side === 'right';
             add({
-                site: 'wall', style: 'P', soft: true, kind: b.kind,
+                site: 'wall', style: 'P', soft: true, pass: passOf(b.kind), kind: b.kind,
                 x: right ? (run.c + 1) * T - CH - b.footX : run.c * T - (b.w - b.footX - CH),
                 y: r * T, w: b.w, h: b.h,
                 parts: right ? b.parts : mirrorParts(b.parts, b.w),
@@ -85,7 +89,7 @@ export function generatePlants({
             if (rng.next() > PLANT_CEIL_CHANCE * fillAt(c, run.r) / TOWN_VILLAGE_DENSE_FILL) { c++; continue; }
             const b = buildHangingVine(rng, { maxHang });
             if (!b) { c++; continue; }
-            add({ site: 'ceiling', style: 'P', soft: true, kind: b.kind, x: c * T + step4(rng, 0, 8) - b.footX, y, w: b.w, h: b.h, parts: b.parts }, false);
+            add({ site: 'ceiling', style: 'P', soft: true, pass: passOf(b.kind), kind: b.kind, x: c * T + step4(rng, 0, 8) - b.footX, y, w: b.w, h: b.h, parts: b.parts }, false);
             c += Math.max(2, Math.ceil(b.w / T)) + Math.floor(rng.next() * 3);
         }
     }

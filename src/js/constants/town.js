@@ -115,11 +115,14 @@ export const TOWN_RUBBLE_MAX_H = 10;
 //           爆発するのは寿命が尽きたときと、岩や地形に当たって爆発する条件のときだけ
 //           （ユーザー指定 2026-10-31。素通り→跳ね返りに考え直した。以前は厚い壁で爆発した）
 //   ignite: 当たった所に、かけらの材料の bulletIgnite の確率で火をつける（段3）
+//   passChip: 弾を通す建物（4面の草。設計図の pass）を通り抜けるときに欠かせる半径（px）。1発につき1棟1回で、
+//           止まらず・跳ね返らず・火もつけない。グレネードも草では欠かす（chip 0 は厚い壁で欠かさないという意味なので別の列）。
+//           初期値は弾の chip と同じ 4px（ユーザー指定 2026-11-27、実機で見て調整する）
 // 厚い壁で止まったときの反応は、弾ごとの onTownWall(x, y)（岩に当たったときと同じ。岩は壊さない）
 export const TOWN_PROJECTILE_IMPACT = {
-    bullet: { chip: 4, thin: 'chip', ignite: true },
-    missile: { chip: 4, thin: 'chip', ignite: true },
-    grenade: { chip: 0, thin: 'pass', bounce: true },
+    bullet: { chip: 4, thin: 'chip', ignite: true, passChip: 4 },
+    missile: { chip: 4, thin: 'chip', ignite: true, passChip: 4 },
+    grenade: { chip: 0, thin: 'pass', bounce: true, passChip: 4 },
     beam: { chip: 6, thin: 'chip', pierce: true },
 };
 // 弾の通り道を調べる刻み（px）。かけら 4px と同じにして、速い弾が薄い壁をすり抜けないように

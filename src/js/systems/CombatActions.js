@@ -236,14 +236,15 @@ export const CombatActions = {
         // 町（3〜5面の建物・木・植物）での跳ね返り。本物のグレネードと同じ Town.sweepProjectile を、
         // 予測用の弾（1発を最後まで使い回す）に通す。使い回すのは、発射位置に重なる建物を無視する記録
         // （Town の _projState）が弾ごとに1回だけ作られるため。毎回作ると、壁の中の点が「発射位置」になって素通りする。
-        // 跳ね返す弾（spec.bounce）だけ通す: そうでない表の行は欠け・火という副作用が出るので予測では呼ばない
+        // 跳ね返す弾（spec.bounce）だけ通す: そうでない表の行は欠け・火という副作用が出るので予測では呼ばない。
+        // グレネードも弾を通す草（4面）は欠かすので、preview: true で sweepProjectile に欠かさないよう伝える
         const town = map.town;
         const townSpec = TOWN_PROJECTILE_IMPACT.grenade;
         const sweepTown = !!(town && townSpec && townSpec.bounce);
         // 2面の Orb でも跳ね返る（本物と同じ sweepProjectileAgainstOrbs。予測のあいだ Orb は止まっているものとして扱う）
         const sweepOrbs = !!(this.orbs && this.orbs.length > 0);
         const virtual = sweepTown || sweepOrbs
-            ? { x, y, vx, vy, alive: true, townKind: 'grenade', isPlayerOwned: true } : null;
+            ? { x, y, vx, vy, alive: true, townKind: 'grenade', isPlayerOwned: true, preview: true } : null;
 
         for (let i = 0; i < GRENADE_LIFETIME; i++) {
             const g = virtual || { x, y, vx, vy };

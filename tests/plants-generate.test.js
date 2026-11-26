@@ -100,3 +100,9 @@ test('村の外（濃さ 0.1）より、密集した村の中のほうが植物�
     const count = (villages) => generatePlants({ grid, rows: ROWS, cols: COLS, rng: new SeededRNG(9), villages }).length;
     assert.ok(count(VILLAGES) > count([]) * 2);
 });
+
+test('草は弾を通す印 pass を持ち、高いシダ（木）だけは持たない', () => {
+    const specs = [1, 2, 3, 11].flatMap((seed) => gen(seed));
+    for (const s of specs) assert.equal(s.pass === true, s.kind !== 'tallFern', `${s.kind} の pass が ${s.pass}`);
+    assert.ok(specs.some((s) => s.kind === 'tallFern') && specs.some((s) => s.pass === true));
+});
